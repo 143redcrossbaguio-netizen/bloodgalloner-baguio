@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -5,23 +6,77 @@
     <meta charset="UTF-8">
 
     <style>
-        body { margin:0; font-family:Arial; background:#f4f4f4; }
-        header { background:#b30000; color:white; padding:15px; text-align:center; }
-        .logo { width:100px; display:block; margin:10px auto; }
-        .container { max-width:95%; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
-        table { width:100%; border-collapse:collapse; }
-        th, td { padding:8px; border:1px solid #ddd; text-align:center; }
-        th { background:#b30000; color:white; }
-        button { padding:5px 8px; margin:2px; border:none; border-radius:4px; cursor:pointer; color:white; }
+        body {
+            margin:0;
+            font-family:Arial;
+            background:#f4f4f4;
+        }
+
+        header {
+            background:#b30000;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
+        .logo {
+            width:100px;
+            display:block;
+            margin:10px auto;
+        }
+
+        .container {
+            max-width:95%;
+            margin:20px auto;
+            background:white;
+            padding:20px;
+            border-radius:10px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width:100%;
+            border-collapse:collapse;
+        }
+
+        th, td {
+            padding:8px;
+            border:1px solid #ddd;
+            text-align:center;
+        }
+
+        th {
+            background:#b30000;
+            color:white;
+        }
+
+        button {
+            padding:5px 8px;
+            margin:2px;
+            border:none;
+            border-radius:4px;
+            cursor:pointer;
+            color:white;
+        }
+
         .edit-btn { background:#1565c0; }
         .delete-btn { background:#c62828; }
         .view-btn { background:#6a1b9a; }
+
+        /* MATCHED RED HEADER COLOR */
         .top-btn { background:#b30000; }
-        .galloner-btn { background:#1e88e5; }
-        .bronze-btn { background:#cd7f32; }
-        .silver-btn { background:#9e9e9e; }
-        .gold-btn { background:#d4af37; color:black; }
-        .filter-btn { background:#222; font-weight:bold; }
+
+        .galloner-btn { background:#1e88e5; color:white; }
+        .bronze-btn   { background:#cd7f32; color:white; }
+        .silver-btn   { background:#9e9e9e; color:white; }
+        .gold-btn     { background:#d4af37; color:black; }
+
+        .filter-btn {
+            background:#222;
+            color:white;
+            font-weight:bold;
+        }
+
     </style>
 </head>
 
@@ -61,17 +116,17 @@ onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
 <br><br>
 
 <table>
-<thead>
-<tr>
-<th>#</th>
-<th>Name</th>
-<th>Blood Type</th>
-<th>Contact</th>
-<th>Serial Count</th>
-<th>Actions</th>
-</tr>
-</thead>
-<tbody id="donorTable"></tbody>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Blood Type</th>
+            <th>Contact</th>
+            <th>Serial Count</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="donorTable"></tbody>
 </table>
 
 </div>
@@ -83,12 +138,13 @@ function renderTable(category=null){
     let table = document.getElementById("donorTable");
     let selectedBloodType = document.getElementById("bloodFilter").value;
     table.innerHTML = "";
-    let count = 1;
 
     donors.forEach((donor,index)=>{
         let serialCount = donor.serials ? donor.serials.length : 0;
 
-        if(selectedBloodType && donor.bloodType !== selectedBloodType) return;
+        if(selectedBloodType !== "" && donor.bloodType !== selectedBloodType){
+            return;
+        }
 
         if(category){
             if(category==="galloner" && serialCount<8) return;
@@ -98,8 +154,8 @@ function renderTable(category=null){
         }
 
         table.innerHTML += `
-        <tr class="main-row" data-index="${index}">
-            <td>${count++}</td>
+        <tr>
+            <td>${index+1}</td>
             <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
             <td>${donor.bloodType || ""} ${donor.rhFactor || ""}</td>
             <td>${donor.contact || ""}</td>
@@ -112,7 +168,7 @@ function renderTable(category=null){
                 <button class="delete-btn" onclick="deleteDonor(${index})">Delete</button>
             </td>
         </tr>
-        <tr id="serialRow${index}" class="serial-row" style="display:none;">
+        <tr id="serialRow${index}" style="display:none;">
             <td colspan="6" id="serialList${index}"></td>
         </tr>
         `;
@@ -126,25 +182,30 @@ function toggleSerial(index){
 
     if(row.style.display==="none"){
         let serials = donors[index].serials || [];
-        container.innerHTML = serials.length===0 ? "No serial numbers." : "";
+        container.innerHTML = "";
 
-        serials.forEach((s,i)=>{
-            container.innerHTML += `
-            Serial: ${s.number || ""}
-            <button class="edit-btn" onclick="editSerial(${index},${i})">Edit</button>
-            <button class="delete-btn" onclick="deleteSerial(${index},${i})">Delete</button>
-            <br><br>`;
-        });
+        if(serials.length===0){
+            container.innerHTML="No serial numbers.";
+        }else{
+            serials.forEach((s,i)=>{
+                container.innerHTML += `
+                    Serial: ${s.number || ""}
+                    <button class="edit-btn" onclick="editSerial(${index},${i})">Edit</button>
+                    <button class="delete-btn" onclick="deleteSerial(${index},${i})">Delete</button>
+                    <br><br>
+                `;
+            });
+        }
 
         row.style.display="table-row";
-    } else {
+    }else{
         row.style.display="none";
     }
 }
 
 function editDonor(index){
     localStorage.setItem("editIndex", index);
-    localStorage.removeItem("editSerialIndex");
+    localStorage.removeItem("editSerialIndex"); // FIX repopulate conflict
     window.location.href="donor-entry.html";
 }
 
@@ -155,60 +216,60 @@ function editSerial(donorIndex, serialIndex){
 }
 
 function deleteSerial(donorIndex, serialIndex){
-    if(confirm("Are you sure you want to delete this serial number?")){
-        let donors = JSON.parse(localStorage.getItem("donors")) || [];
-        donors[donorIndex].serials.splice(serialIndex,1);
-        localStorage.setItem("donors",JSON.stringify(donors));
-        renderTable();
-    }
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors[donorIndex].serials.splice(serialIndex,1);
+    localStorage.setItem("donors",JSON.stringify(donors));
+    renderTable();
 }
 
 function deleteDonor(index){
-    if(confirm("Are you sure you want to delete this donor?")){
-        let donors = JSON.parse(localStorage.getItem("donors")) || [];
-        donors.splice(index,1);
-        localStorage.setItem("donors",JSON.stringify(donors));
-        renderTable();
-    }
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors.splice(index,1);
+    localStorage.setItem("donors",JSON.stringify(donors));
+    renderTable();
 }
 
-function filterByCategory(type){ renderTable(type); }
+function filterByCategory(type){
+    renderTable(type);
+}
 
 function searchDonor(){
-    let input = document.getElementById("searchInput").value.toLowerCase();
-    let rows = document.querySelectorAll(".main-row");
+    let input=document.getElementById("searchInput").value.toLowerCase();
+    let rows=document.querySelectorAll("#donorTable tr");
 
     rows.forEach(row=>{
-        let text = row.innerText.toLowerCase();
-        let index = row.getAttribute("data-index");
-        let serialRow = document.getElementById("serialRow"+index);
-
-        if(text.includes(input)){
-            row.style.display="";
-        } else {
-            row.style.display="none";
-            serialRow.style.display="none";
-        }
+        let text=row.innerText.toLowerCase();
+        row.style.display=text.includes(input)?"":"none";
     });
 }
 
-function goDashboard(){ window.location.href="dashboard.html"; }
+function goDashboard(){
+    window.location.href="dashboard.html";
+}
 
-function exportToGoogleSheet(){
+function exportToGoogleSheet() {
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
+
     let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
 
-    donors.forEach(donor=>{
-        csv += `${donor.bloodType||""},${donor.rhFactor||""},${donor.firstName||""},${donor.middleName||""},${donor.surname||""},${donor.birthday||""},${donor.contact||""}\n`;
+    donors.forEach(donor => {
+        csv += 
+            (donor.bloodType || "") + "," +
+            (donor.rhFactor || "") + "," +
+            (donor.firstName || "") + "," +
+            (donor.middleName || "") + "," +
+            (donor.surname || "") + "," +
+            (donor.birthday || "") + "," +
+            (donor.contact || "") + "\n";
     });
 
-    let blob=new Blob([csv],{type:"text/csv"});
-    let url=URL.createObjectURL(blob);
-    let a=document.createElement("a");
-    a.href=url;
-    a.download="donors.csv";
+    let blob = new Blob([csv], { type: "text/csv" });
+    let url = window.URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "donors.csv";
     a.click();
-    URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(url);
 }
 
 renderTable();
