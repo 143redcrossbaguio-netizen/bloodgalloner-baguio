@@ -3,16 +3,15 @@
 <head>
     <title>Galloners Club - Donor Entry</title>
     <meta charset="UTF-8">
-
     <style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
+            background: #f4f4f4;
         }
 
         header {
-            background-color: #b30000;
+            background: #b30000;
             color: white;
             padding: 15px;
             text-align: center;
@@ -28,80 +27,26 @@
             max-width: 600px;
             margin: 30px auto;
             background: white;
-            padding: 25px;
+            padding: 20px;
             border-radius: 10px;
             box-shadow: 0px 3px 10px rgba(0,0,0,0.1);
         }
 
-        .blood-types {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .blood-btn {
-            flex: 1;
-            margin: 5px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 2px solid transparent;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .type-a { background: blue; color: white; }
-        .type-b { background: yellow; color: black; }
-        .type-o { background: white; color: black; border: 1px solid #ccc; }
-        .type-ab { background: pink; color: black; }
-
-        .selected {
-            border: 3px solid #b30000 !important;
-            transform: scale(1.05);
-        }
-
-        input {
+        input, select {
             width: 100%;
-            padding: 10px;
+            padding: 8px;
             margin: 8px 0;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            box-sizing: border-box;
         }
 
-        .serial-row {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-            margin-top: 5px;
-        }
-
-        .serial-row input {
-            flex: 1;
-            margin: 0;
-        }
-
-        .serial-row button {
+        button {
             padding: 8px 12px;
-            background: #0066cc;
+            background: #b30000;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
         }
-
-        .main-btn {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            color: white;
-        }
-
-        .save-btn { background-color: #b30000; }
-        .tracking-btn { background-color: #ff4d4d; }
-        .back-btn { background-color: gray; }
     </style>
 </head>
 
@@ -109,122 +54,76 @@
 
 <header>
     <img src="images/logo.png" class="logo">
-    <h2 id="formTitle">Donor Entry</h2>
+    <h2>Donor Entry</h2>
 </header>
 
 <div class="container">
 
-    <div class="blood-types">
-        <button class="blood-btn type-a" onclick="setBloodType(this,'A')">A</button>
-        <button class="blood-btn type-b" onclick="setBloodType(this,'B')">B</button>
-        <button class="blood-btn type-o" onclick="setBloodType(this,'O')">O</button>
-        <button class="blood-btn type-ab" onclick="setBloodType(this,'AB')">AB</button>
-    </div>
-
-    <input type="hidden" id="bloodType">
-
     <input type="text" id="firstName" placeholder="First Name">
     <input type="text" id="middleName" placeholder="Middle Name">
     <input type="text" id="surname" placeholder="Surname">
-    <input type="date" id="birthday">
+
+    <!-- BLOOD TYPE OPTIONS ADDED -->
+    <select id="bloodType">
+        <option value="">Select Blood Type</option>
+        <option value="A+">A+</option>
+        <option value="A-">A-</option>
+        <option value="B+">B+</option>
+        <option value="B-">B-</option>
+        <option value="O+">O+</option>
+        <option value="O-">O-</option>
+        <option value="AB+">AB+</option>
+        <option value="AB-">AB-</option>
+    </select>
+
     <input type="text" id="contact" placeholder="Contact Number">
 
-    <!-- SERIAL SECTION -->
-    <div id="serialContainer">
-        <div class="serial-row">
-            <input type="text" class="serial-input" placeholder="Serial Number">
-            <input type="date" class="serial-date">
-            <button type="button" onclick="addSerialField()">+</button>
-        </div>
-    </div>
-
-    <button class="main-btn save-btn" onclick="saveDonor()">Save Donor</button>
-    <button class="main-btn tracking-btn" onclick="goTracking()">Go to Tracking</button>
-    <button class="main-btn back-btn" onclick="goBack()">Back to Dashboard</button>
+    <button onclick="saveDonor()">Save</button>
 
 </div>
 
 <script>
 
-var editIndex = localStorage.getItem("editIndex");
+function saveDonor(){
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
 
-function setBloodType(button, type) {
-    document.getElementById("bloodType").value = type;
-
-    var buttons = document.querySelectorAll(".blood-btn");
-    buttons.forEach(btn => btn.classList.remove("selected"));
-
-    button.classList.add("selected");
-}
-
-function addSerialField() {
-    var container = document.getElementById("serialContainer");
-
-    var div = document.createElement("div");
-    div.className = "serial-row";
-
-    div.innerHTML = `
-        <input type="text" class="serial-input" placeholder="Serial Number">
-        <input type="date" class="serial-date">
-    `;
-
-    container.appendChild(div);
-}
-
-function getSerialData() {
-    var serialRows = document.querySelectorAll(".serial-row");
-    var serialArray = [];
-
-    serialRows.forEach(function(row) {
-        var serial = row.querySelector(".serial-input").value.trim();
-        var date = row.querySelector(".serial-date").value;
-
-        if (serial !== "") {
-            serialArray.push({
-                number: serial,
-                date: date
-            });
-        }
-    });
-
-    return serialArray;
-}
-
-function saveDonor() {
-    var donors = JSON.parse(localStorage.getItem("donors")) || [];
-
-    var donorData = {
-        bloodType: document.getElementById("bloodType").value,
+    let donorData = {
         firstName: document.getElementById("firstName").value,
         middleName: document.getElementById("middleName").value,
         surname: document.getElementById("surname").value,
-        birthday: document.getElementById("birthday").value,
+        bloodType: document.getElementById("bloodType").value,
         contact: document.getElementById("contact").value,
-        serials: getSerialData()
+        serials: []
     };
 
-    if (editIndex !== null) {
+    let editIndex = localStorage.getItem("editIndex");
+
+    if(editIndex !== null){
+        donorData.serials = donors[editIndex].serials || [];
         donors[editIndex] = donorData;
         localStorage.removeItem("editIndex");
-        alert("Donor Updated Successfully!");
     } else {
         donors.push(donorData);
-        alert("Donor Saved Successfully!");
     }
 
     localStorage.setItem("donors", JSON.stringify(donors));
     window.location.href = "tracking.html";
 }
 
-function goBack() {
-    localStorage.removeItem("editIndex");
-    window.location.href = "dashboard.html";
-}
+window.onload = function(){
+    let editIndex = localStorage.getItem("editIndex");
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
 
-function goTracking() {
-    localStorage.removeItem("editIndex");
-    window.location.href = "tracking.html";
-}
+    if(editIndex !== null){
+        let donor = donors[editIndex];
+
+        document.getElementById("firstName").value = donor.firstName || "";
+        document.getElementById("middleName").value = donor.middleName || "";
+        document.getElementById("surname").value = donor.surname || "";
+        document.getElementById("bloodType").value = donor.bloodType || "";
+        document.getElementById("contact").value = donor.contact || "";
+    }
+};
 
 </script>
 
