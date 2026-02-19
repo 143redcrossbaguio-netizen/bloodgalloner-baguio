@@ -7,6 +7,10 @@
             font-family: Arial, sans-serif;
         }
 
+        .form-group {
+            margin-bottom: 15px;
+        }
+
         input, select {
             padding: 5px;
             margin: 5px 0;
@@ -15,10 +19,6 @@
         button {
             padding: 5px 10px;
             cursor: pointer;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -54,44 +54,28 @@
         <input type="text" id="contact">
     </div>
 
-    <!-- Blood Type + Rh (HORIZONTAL) -->
     <div class="form-group">
-        <div style="display:flex; align-items:center; gap:20px;">
-            
-            <div>
-                <label>Blood Type</label><br>
-                <select id="bloodType">
-                    <option value="">Select</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="AB">AB</option>
-                    <option value="O">O</option>
-                </select>
-            </div>
-
-            <div style="margin-top:22px;">
-                <label>
-                    <input type="radio" name="rhFactor" value="Positive"> Positive
-                </label>
-
-                <label style="margin-left:10px;">
-                    <input type="radio" name="rhFactor" value="Negative"> Negative
-                </label>
-            </div>
-
-        </div>
+        <label>Blood Type</label><br>
+        <select id="bloodType">
+            <option value="">Select</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="AB">AB</option>
+            <option value="O">O</option>
+        </select>
     </div>
 
-    <!-- Serial with + button -->
     <div class="form-group">
         <label>Serial Number</label><br>
-        <div style="display:flex; gap:10px; align-items:center;">
-            <input type="text" id="serialInput">
-            <input type="date" id="serialDate">
-            <button type="button" onclick="addSerial()">+</button>
+
+        <div id="serialContainer">
+            <div style="margin-bottom:5px;">
+                <input type="text" name="serial[]" placeholder="Serial Number">
+                <input type="date" name="serialDate[]">
+            </div>
         </div>
 
-        <div id="serialList"></div>
+        <button type="button" onclick="addSerialField()">+</button>
     </div>
 
     <button type="button" onclick="saveDonor()">Save</button>
@@ -100,45 +84,35 @@
 
 <script>
 
-let serials = [];
+function addSerialField() {
+    let container = document.getElementById("serialContainer");
 
-function addSerial() {
-    let serialValue = document.getElementById("serialInput").value;
-    let dateValue = document.getElementById("serialDate").value;
+    let newField = document.createElement("div");
+    newField.style.marginBottom = "5px";
 
-    if (serialValue === "" || dateValue === "") {
-        alert("Enter serial and date");
-        return;
-    }
+    newField.innerHTML = `
+        <input type="text" name="serial[]" placeholder="Serial Number">
+        <input type="date" name="serialDate[]">
+    `;
 
-    serials.push({
-        serial: serialValue,
-        date: dateValue
-    });
-
-    displaySerials();
-
-    document.getElementById("serialInput").value = "";
-    document.getElementById("serialDate").value = "";
-}
-
-function displaySerials() {
-    let container = document.getElementById("serialList");
-    container.innerHTML = "";
-
-    serials.forEach((item) => {
-        container.innerHTML += `
-            <div>
-                ${item.serial} - ${item.date}
-            </div>
-        `;
-    });
+    container.appendChild(newField);
 }
 
 function saveDonor() {
 
-    let rh = document.querySelector('input[name="rhFactor"]:checked');
-    let rhValue = rh ? rh.value : "";
+    let serialInputs = document.getElementsByName("serial[]");
+    let dateInputs = document.getElementsByName("serialDate[]");
+
+    let serials = [];
+
+    for (let i = 0; i < serialInputs.length; i++) {
+        if (serialInputs[i].value !== "") {
+            serials.push({
+                serial: serialInputs[i].value,
+                date: dateInputs[i].value
+            });
+        }
+    }
 
     let donor = {
         firstName: document.getElementById("firstName").value,
@@ -147,7 +121,6 @@ function saveDonor() {
         birthday: document.getElementById("birthday").value,
         contact: document.getElementById("contact").value,
         bloodType: document.getElementById("bloodType").value,
-        rhFactor: rhValue,
         serials: serials
     };
 
@@ -157,8 +130,12 @@ function saveDonor() {
 
     alert("Donor Saved");
     document.getElementById("donorForm").reset();
-    serials = [];
-    document.getElementById("serialList").innerHTML = "";
+    document.getElementById("serialContainer").innerHTML = `
+        <div style="margin-bottom:5px;">
+            <input type="text" name="serial[]" placeholder="Serial Number">
+            <input type="date" name="serialDate[]">
+        </div>
+    `;
 }
 
 </script>
