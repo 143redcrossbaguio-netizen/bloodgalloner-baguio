@@ -3,6 +3,7 @@
 <head>
     <title>Galloners Club - Donor Entry</title>
     <meta charset="UTF-8">
+
     <style>
         body {
             margin: 0;
@@ -66,6 +67,27 @@
             border-radius: 5px;
         }
 
+        .serial-row {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-top: 5px;
+        }
+
+        .serial-row input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .serial-row button {
+            padding: 8px 12px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
         .main-btn {
             width: 100%;
             padding: 10px;
@@ -87,7 +109,7 @@
 
 <header>
     <img src="images/logo.png" class="logo">
-    <h2>Donor Entry</h2>
+    <h2 id="formTitle">Donor Entry</h2>
 </header>
 
 <div class="container">
@@ -106,7 +128,15 @@
     <input type="text" id="surname" placeholder="Surname">
     <input type="date" id="birthday">
     <input type="text" id="contact" placeholder="Contact Number">
-    <input type="text" id="serial" placeholder="Serial Number">
+
+    <!-- SERIAL SECTION -->
+    <div id="serialContainer">
+        <div class="serial-row">
+            <input type="text" class="serial-input" placeholder="Serial Number">
+            <input type="date" class="serial-date">
+            <button type="button" onclick="addSerialField()">+</button>
+        </div>
+    </div>
 
     <button class="main-btn save-btn" onclick="saveDonor()">Save Donor</button>
     <button class="main-btn tracking-btn" onclick="goTracking()">Go to Tracking</button>
@@ -115,40 +145,87 @@
 </div>
 
 <script>
-    function setBloodType(button, type) {
-        document.getElementById("bloodType").value = type;
 
-        var buttons = document.querySelectorAll(".blood-btn");
-        buttons.forEach(btn => btn.classList.remove("selected"));
+var editIndex = localStorage.getItem("editIndex");
 
-        button.classList.add("selected");
-    }
+function setBloodType(button, type) {
+    document.getElementById("bloodType").value = type;
 
-    function saveDonor() {
-        var donor = {
-            bloodType: document.getElementById("bloodType").value,
-            firstName: document.getElementById("firstName").value,
-            middleName: document.getElementById("middleName").value,
-            surname: document.getElementById("surname").value,
-            birthday: document.getElementById("birthday").value,
-            contact: document.getElementById("contact").value,
-            serial: document.getElementById("serial").value
-        };
+    var buttons = document.querySelectorAll(".blood-btn");
+    buttons.forEach(btn => btn.classList.remove("selected"));
 
-        var donors = JSON.parse(localStorage.getItem("donors")) || [];
-        donors.push(donor);
-        localStorage.setItem("donors", JSON.stringify(donors));
+    button.classList.add("selected");
+}
 
+function addSerialField() {
+    var container = document.getElementById("serialContainer");
+
+    var div = document.createElement("div");
+    div.className = "serial-row";
+
+    div.innerHTML = `
+        <input type="text" class="serial-input" placeholder="Serial Number">
+        <input type="date" class="serial-date">
+    `;
+
+    container.appendChild(div);
+}
+
+function getSerialData() {
+    var serialRows = document.querySelectorAll(".serial-row");
+    var serialArray = [];
+
+    serialRows.forEach(function(row) {
+        var serial = row.querySelector(".serial-input").value.trim();
+        var date = row.querySelector(".serial-date").value;
+
+        if (serial !== "") {
+            serialArray.push({
+                number: serial,
+                date: date
+            });
+        }
+    });
+
+    return serialArray;
+}
+
+function saveDonor() {
+    var donors = JSON.parse(localStorage.getItem("donors")) || [];
+
+    var donorData = {
+        bloodType: document.getElementById("bloodType").value,
+        firstName: document.getElementById("firstName").value,
+        middleName: document.getElementById("middleName").value,
+        surname: document.getElementById("surname").value,
+        birthday: document.getElementById("birthday").value,
+        contact: document.getElementById("contact").value,
+        serials: getSerialData()
+    };
+
+    if (editIndex !== null) {
+        donors[editIndex] = donorData;
+        localStorage.removeItem("editIndex");
+        alert("Donor Updated Successfully!");
+    } else {
+        donors.push(donorData);
         alert("Donor Saved Successfully!");
     }
 
-    function goBack() {
-        window.location.href = "dashboard.html";
-    }
+    localStorage.setItem("donors", JSON.stringify(donors));
+    window.location.href = "tracking.html";
+}
 
-    function goTracking() {
-        window.location.href = "tracking.html";
-    }
+function goBack() {
+    localStorage.removeItem("editIndex");
+    window.location.href = "dashboard.html";
+}
+
+function goTracking() {
+    localStorage.removeItem("editIndex");
+    window.location.href = "tracking.html";
+}
+
 </script>
 
 </body>
