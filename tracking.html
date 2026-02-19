@@ -72,8 +72,12 @@
         .delete-btn { background: #d11a2a; color: white; }
         .missing-btn { background: orange; color: white; }
 
-        .inline-serial {
-            margin-top: 5px;
+        .count-badge {
+            background: #b30000;
+            color: white;
+            padding: 4px 7px;
+            border-radius: 50%;
+            font-size: 12px;
         }
 
         .inline-serial input {
@@ -81,12 +85,21 @@
             width: 120px;
         }
 
-        .count-badge {
-            background: #b30000;
-            color: white;
-            padding: 4px 7px;
-            border-radius: 50%;
-            font-size: 12px;
+        .top-controls {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .top-controls input {
+            padding: 6px;
+            width: 200px;
+            margin-right: 15px;
+        }
+
+        .level-display {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
 
         .back-btn {
@@ -109,12 +122,23 @@
 </header>
 
 <div class="container">
+
+    <div class="top-controls">
+        <input type="text" id="searchBox" placeholder="Search donor name..." onkeyup="searchDonor()">
+
+        <button class="btn" onclick="showLevel('galloners')">Galloners</button>
+        <button class="btn" onclick="showLevel('bronze')">Bronze</button>
+        <button class="btn" onclick="showLevel('silver')">Silver</button>
+        <button class="btn" onclick="showLevel('gold')">Gold</button>
+    </div>
+
+    <div id="levelDisplay" class="level-display"></div>
+
     <table>
         <thead>
             <tr>
                 <th>#</th>
                 <th>Name</th>
-                <th>Blood</th>
                 <th>Contact</th>
                 <th>Serial Count</th>
                 <th>Actions</th>
@@ -124,6 +148,7 @@
     </table>
 
     <button class="btn back-btn" onclick="goBack()">Back to Dashboard</button>
+
 </div>
 
 <script>
@@ -147,10 +172,27 @@ function loadDonors() {
 
         row.innerHTML = `
             <td>${index + 1}</td>
-            <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
-            <td>${donor.bloodType}</td>
+
+            <td>
+                ${donor.firstName} ${donor.middleName} ${donor.surname}
+                <span style="
+                    padding:3px 6px;
+                    border-radius:4px;
+                    margin-left:5px;
+                    font-size:12px;
+                    font-weight:bold;
+                    ${getBloodColor(donor.bloodType)}
+                ">
+                    ${donor.bloodType}
+                </span>
+            </td>
+
             <td>${donor.contact}</td>
-            <td><span class="count-badge">${donor.serials.length}</span></td>
+
+            <td>
+                <span class="count-badge">${donor.serials.length}</span>
+            </td>
+
             <td>
                 <button class="btn serial-btn" onclick="showSerialInput(${index})">+ Serial</button>
                 <button class="btn edit-btn" onclick="editDonor(${index})">Edit</button>
@@ -158,6 +200,7 @@ function loadDonors() {
                 <button class="btn missing-btn" onclick="toggleMissing(${index})">
                     ${donor.missing ? "Unmark" : "Missing"}
                 </button>
+
                 <div id="serialBox-${index}" class="inline-serial"></div>
             </td>
         `;
@@ -166,6 +209,14 @@ function loadDonors() {
     });
 
     localStorage.setItem("donors", JSON.stringify(donors));
+}
+
+function getBloodColor(type) {
+    if (type === "A") return "background:blue;color:white;";
+    if (type === "B") return "background:yellow;color:black;";
+    if (type === "O") return "background:white;color:black;border:1px solid #ccc;";
+    if (type === "AB") return "background:pink;color:black;";
+    return "";
 }
 
 function showSerialInput(index) {
@@ -213,6 +264,36 @@ function toggleMissing(index) {
     donors[index].missing = !donors[index].missing;
     localStorage.setItem("donors", JSON.stringify(donors));
     loadDonors();
+}
+
+function searchDonor() {
+    var input = document.getElementById("searchBox").value.toLowerCase();
+    var rows = document.querySelectorAll("#donorTable tr");
+
+    rows.forEach(function(row) {
+        if (row.innerText.toLowerCase().includes(input)) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+    });
+}
+
+function showLevel(level) {
+    var display = document.getElementById("levelDisplay");
+
+    if (level === "galloners") {
+        display.innerText = "Galloners - Total of 8 Serial Numbers";
+    }
+    if (level === "bronze") {
+        display.innerText = "Bronze - Total of 28 Serial Numbers";
+    }
+    if (level === "silver") {
+        display.innerText = "Silver - Total of 46 Serial Numbers";
+    }
+    if (level === "gold") {
+        display.innerText = "Gold - Total of 70 Serial Numbers";
+    }
 }
 
 function goBack() {
