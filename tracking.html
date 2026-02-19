@@ -22,6 +22,25 @@
         .silver-btn { background:#9e9e9e; color:white; }
         .gold-btn { background:#d4af37; color:black; }
         .filter-btn { background:#222; color:white; font-weight:bold; }
+
+        .serial-box {
+            background:#f9f9f9;
+            border:1px solid #ccc;
+            padding:10px;
+            border-radius:6px;
+        }
+
+        .serial-item {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:6px;
+        }
+
+        .serial-item input {
+            padding:4px;
+            margin-right:5px;
+        }
     </style>
 </head>
 
@@ -112,10 +131,66 @@ function renderTable(category=null){
             </td>
         </tr>
         <tr id="serialRow${index}" style="display:none;">
-            <td colspan="6" id="serialList${index}"></td>
+            <td colspan="6">
+                <div class="serial-box" id="serialList${index}"></div>
+            </td>
         </tr>
         `;
     });
+}
+
+function toggleSerial(index){
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    let row = document.getElementById("serialRow"+index);
+    let container = document.getElementById("serialList"+index);
+
+    if(row.style.display==="none"){
+        container.innerHTML="";
+        let serials = donors[index].serials || [];
+
+        serials.forEach((s,i)=>{
+            container.innerHTML += `
+                <div class="serial-item">
+                    <div>
+                        <input type="text" value="${s.serial}" id="serial${index}_${i}" disabled>
+                        <input type="date" value="${s.date}" id="date${index}_${i}" disabled>
+                    </div>
+                    <div>
+                        <button class="edit-btn" onclick="editSerial(${index},${i})">Edit</button>
+                        <button class="delete-btn" onclick="deleteSerial(${index},${i})">Delete</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        row.style.display="table-row";
+    } else {
+        row.style.display="none";
+    }
+}
+
+function editSerial(donorIndex, serialIndex){
+    let serialInput = document.getElementById(`serial${donorIndex}_${serialIndex}`);
+    let dateInput = document.getElementById(`date${donorIndex}_${serialIndex}`);
+
+    if(serialInput.disabled){
+        serialInput.disabled=false;
+        dateInput.disabled=false;
+    } else {
+        let donors = JSON.parse(localStorage.getItem("donors")) || [];
+        donors[donorIndex].serials[serialIndex].serial = serialInput.value;
+        donors[donorIndex].serials[serialIndex].date = dateInput.value;
+        localStorage.setItem("donors",JSON.stringify(donors));
+        serialInput.disabled=true;
+        dateInput.disabled=true;
+    }
+}
+
+function deleteSerial(donorIndex, serialIndex){
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors[donorIndex].serials.splice(serialIndex,1);
+    localStorage.setItem("donors",JSON.stringify(donors));
+    renderTable();
 }
 
 function editDonor(index){
