@@ -59,25 +59,23 @@
 
 <div class="container">
 
-<!-- FILTERS ADDED (NO LAYOUT CHANGES) -->
-<div style="margin-bottom:10px;">
-    <select onchange="filterBloodType(this.value)">
-        <option value="">All Blood Types</option>
-        <option value="A+">A+</option>
-        <option value="A-">A-</option>
-        <option value="B+">B+</option>
-        <option value="B-">B-</option>
-        <option value="O+">O+</option>
-        <option value="O-">O-</option>
-        <option value="AB+">AB+</option>
-        <option value="AB-">AB-</option>
-    </select>
+<!-- ADDED SEARCH + EXPORT + RETURN -->
+<input type="text" id="searchInput" placeholder="Search donor..."
+onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
 
-    <button class="filter-btn" onclick="filterByCategory('galloner')">Galloners</button>
-    <button class="filter-btn" onclick="filterByCategory('bronze')">Bronze</button>
-    <button class="filter-btn" onclick="filterByCategory('silver')">Silver</button>
-    <button class="filter-btn" onclick="filterByCategory('gold')">Gold</button>
-</div>
+<button onclick="exportToGoogleSheet()">Export to Google Sheet</button>
+<button onclick="goDashboard()">Return to Dashboard</button>
+
+<br><br>
+
+<!-- CATEGORY BUTTONS -->
+<button class="filter-btn" onclick="filterByCategory('galloner')">Galloners</button>
+<button class="filter-btn" onclick="filterByCategory('bronze')">Bronze</button>
+<button class="filter-btn" onclick="filterByCategory('silver')">Silver</button>
+<button class="filterByCategory('gold')" onclick="filterByCategory('gold')">Gold</button>
+<button onclick="renderTable()">Show All</button>
+
+<br><br>
 
 <table>
     <thead>
@@ -97,129 +95,117 @@
 
 <script>
 
-let currentFilter = "";
-let currentCategory = "";
-
-function renderTable() {
+function renderTable(filteredType=null){
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
     let table = document.getElementById("donorTable");
     table.innerHTML = "";
 
-    donors.forEach((donor, index) => {
-
+    donors.forEach((donor,index)=>{
         let serialCount = donor.serials ? donor.serials.length : 0;
 
-        if(currentFilter && donor.bloodType !== currentFilter) return;
-
-        if(currentCategory){
-            if(currentCategory === "galloner" && serialCount < 8) return;
-            if(currentCategory === "bronze" && serialCount < 28) return;
-            if(currentCategory === "silver" && serialCount < 46) return;
-            if(currentCategory === "gold" && serialCount < 70) return;
+        if(filteredType){
+            if(filteredType==="galloner" && serialCount<8) return;
+            if(filteredType==="bronze" && serialCount<28) return;
+            if(filteredType==="silver" && serialCount<46) return;
+            if(filteredType==="gold" && serialCount<70) return;
         }
 
         table.innerHTML += `
-            <tr>
-                <td>${index+1}</td>
-                <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
-                <td>${donor.bloodType || ""}</td>
-                <td>${donor.contact || ""}</td>
-                <td>
-                    ${serialCount}
-                    <button class="view-btn" onclick="toggleSerialList(${index})">View</button>
-                </td>
-                <td>
-                    <button class="edit-btn" onclick="editDonor(${index})">Edit</button>
-                    <button class="delete-btn" onclick="showDeleteOptions(${index})">Delete</button>
-                </td>
-            </tr>
-            <tr id="serialRow${index}" style="display:none;">
-                <td colspan="6" id="serialList${index}"></td>
-            </tr>
+        <tr>
+            <td>${index+1}</td>
+            <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
+            <td>${donor.bloodType || ""}</td>
+            <td>${donor.contact || ""}</td>
+            <td>
+                ${serialCount}
+                <button class="view-btn" onclick="toggleSerial(${index})">View</button>
+            </td>
+            <td>
+                <button class="edit-btn" onclick="editDonor(${index})">Edit</button>
+                <button class="delete-btn" onclick="deleteDonor(${index})">Delete</button>
+            </td>
+        </tr>
+        <tr id="serialRow${index}" style="display:none;">
+            <td colspan="6" id="serialList${index}"></td>
+        </tr>
         `;
     });
 }
 
-function filterBloodType(type){
-    currentFilter = type;
-    renderTable();
+function filterByCategory(type){
+    renderTable(type);
 }
 
-function filterByCategory(cat){
-    currentCategory = cat;
-    renderTable();
-}
-
-function toggleSerialList(index){
+function toggleSerial(index){
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
     let row = document.getElementById("serialRow"+index);
     let container = document.getElementById("serialList"+index);
 
-    if(row.style.display === "none"){
-
+    if(row.style.display==="none"){
         let serials = donors[index].serials || [];
+        container.innerHTML = "";
 
-        if(serials.length === 0){
-            container.innerHTML = "No serial numbers.";
-        } else {
-
-            container.innerHTML = `
-                <button class="delete-btn" onclick="deleteSelectedSerials(${index})">
-                    Delete Selected
-                </button><br><br>
-            `;
-
+        if(serials.length===0){
+            container.innerHTML="No serial numbers.";
+        }else{
             serials.forEach((s,i)=>{
                 container.innerHTML += `
-                    <input type="checkbox" id="chk${index}_${i}">
-                    ${s.number}
-                    <button class="delete-btn" onclick="deleteSingleSerial(${index},${i})">
-                        Delete
-                    </button>
-                    <br>
-                `;
+                ${s.number} 
+                <button class="delete-btn" onclick="deleteSerial(${index},${i})">
+                Delete
+                </button><br>`;
             });
         }
 
         row.style.display="table-row";
-    } else {
+    }else{
         row.style.display="none";
     }
 }
 
-function deleteSelectedSerials(index){
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
-    let serials = donors[index].serials || [];
-
-    donors[index].serials = serials.filter((s,i)=>{
-        let chk = document.getElementById("chk"+index+"_"+i);
-        return !chk.checked;
-    });
-
-    localStorage.setItem("donors", JSON.stringify(donors));
-    renderTable();
-}
-
-function deleteSingleSerial(donorIndex, serialIndex){
+function deleteSerial(donorIndex,serialIndex){
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
     donors[donorIndex].serials.splice(serialIndex,1);
-    localStorage.setItem("donors", JSON.stringify(donors));
+    localStorage.setItem("donors",JSON.stringify(donors));
     renderTable();
 }
 
-function showDeleteOptions(index){
-    let choice = confirm("Delete entire donor?");
-    if(choice){
-        let donors = JSON.parse(localStorage.getItem("donors")) || [];
-        donors.splice(index,1);
-        localStorage.setItem("donors", JSON.stringify(donors));
-        renderTable();
-    }
+function deleteDonor(index){
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors.splice(index,1);
+    localStorage.setItem("donors",JSON.stringify(donors));
+    renderTable();
 }
 
 function editDonor(index){
     localStorage.setItem("editIndex", index);
     window.location.href="donor-entry.html";
+}
+
+function searchDonor(){
+    let input=document.getElementById("searchInput").value.toLowerCase();
+    let rows=document.querySelectorAll("#donorTable tr");
+
+    rows.forEach(row=>{
+        let text=row.innerText.toLowerCase();
+        row.style.display=text.includes(input)?"":"none";
+    });
+}
+
+function exportToGoogleSheet(){
+    let donors=JSON.parse(localStorage.getItem("donors"))||[];
+
+    fetch("YOUR_GOOGLE_SCRIPT_URL",{
+        method:"POST",
+        body:JSON.stringify(donors),
+        headers:{"Content-Type":"application/json"}
+    })
+    .then(()=>alert("Exported successfully"))
+    .catch(()=>alert("Export failed"));
+}
+
+function goDashboard(){
+    window.location.href="dashboard.html";
 }
 
 renderTable();
