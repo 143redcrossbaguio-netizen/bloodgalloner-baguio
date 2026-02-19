@@ -6,31 +6,45 @@
 
     <style>
         body {
-            font-family: Arial, sans-serif;
             margin: 0;
-            background-color: #f4f4f4;
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
         }
 
         header {
-            background-color: #b30000;
+            background: #b30000;
             color: white;
             padding: 15px;
             text-align: center;
         }
 
         .logo {
-            width: 90px;
+            width: 100px;
             display: block;
             margin: 10px auto;
         }
 
         .container {
-            max-width: 1100px;
-            margin: 30px auto;
+            max-width: 95%;
+            margin: 20px auto;
             background: white;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0px 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .top-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        select, button {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            cursor: pointer;
         }
 
         table {
@@ -38,78 +52,21 @@
             border-collapse: collapse;
         }
 
-        th {
-            background-color: #b30000;
-            color: white;
-            padding: 10px;
-        }
-
-        td {
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
             text-align: center;
         }
 
-        tr:hover {
-            background-color: #f9f9f9;
-        }
-
-        .missing {
-            background-color: #ffe6e6 !important;
-        }
-
-        .btn {
-            padding: 5px 8px;
-            margin: 2px;
-            border: none;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .serial-btn { background: #0066cc; color: white; }
-        .edit-btn { background: #28a745; color: white; }
-        .delete-btn { background: #d11a2a; color: white; }
-        .missing-btn { background: orange; color: white; }
-
-        .count-badge {
+        th {
             background: #b30000;
             color: white;
-            padding: 4px 7px;
-            border-radius: 50%;
-            font-size: 12px;
         }
 
-        .inline-serial input {
-            padding: 4px;
-            width: 120px;
-        }
-
-        .top-controls {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .top-controls input {
-            padding: 6px;
-            width: 200px;
-            margin-right: 15px;
-        }
-
-        .level-display {
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .back-btn {
-            margin-top: 15px;
-            width: 100%;
-            padding: 10px;
-            background: gray;
-            color: white;
-            font-weight: bold;
-        }
+        .gold { background: gold; }
+        .silver { background: silver; }
+        .bronze { background: #cd7f32; color: white; }
+        .galloner { background: #4CAF50; color: white; }
 
     </style>
 </head>
@@ -123,193 +80,120 @@
 
 <div class="container">
 
+    <!-- FILTERS -->
     <div class="top-controls">
-        <input type="text" id="searchBox" placeholder="Search donor name..." onkeyup="searchDonor()">
 
-        <button class="btn" onclick="filterLevel('all')">All</button>
-        <button class="btn" onclick="filterLevel('galloners')">Galloners</button>
-        <button class="btn" onclick="filterLevel('bronze')">Bronze</button>
-        <button class="btn" onclick="filterLevel('silver')">Silver</button>
-        <button class="btn" onclick="filterLevel('gold')">Gold</button>
+        <select id="bloodFilter" onchange="renderTable()">
+            <option value="">All Blood Types</option>
+            <option value="A">Type A</option>
+            <option value="B">Type B</option>
+            <option value="O">Type O</option>
+            <option value="AB">Type AB</option>
+        </select>
+
+        <button onclick="setRankFilter('galloner')" class="galloner">Galloner (8)</button>
+        <button onclick="setRankFilter('bronze')" class="bronze">Bronze (28)</button>
+        <button onclick="setRankFilter('silver')" class="silver">Silver (46)</button>
+        <button onclick="setRankFilter('gold')" class="gold">Gold (70)</button>
+
+        <button onclick="clearRankFilter()">Clear Rank</button>
+
+        <button onclick="exportToGoogleSheet()">Export to Google Sheet</button>
+
     </div>
-
-    <div id="levelDisplay" class="level-display"></div>
 
     <table>
         <thead>
             <tr>
                 <th>#</th>
                 <th>Name</th>
-                <th>Contact</th>
+                <th>Blood Type</th>
                 <th>Serial Count</th>
-                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="donorTable"></tbody>
     </table>
 
-    <button class="btn back-btn" onclick="goBack()">Back to Dashboard</button>
-
 </div>
 
 <script>
 
-let currentLevelFilter = "all";
+let rankFilter = "";
 
-function loadDonors() {
-    var donors = JSON.parse(localStorage.getItem("donors")) || [];
-    var table = document.getElementById("donorTable");
-    table.innerHTML = "";
-
-    var filteredTotalSerials = 0;
-
-    donors.forEach(function(donor, index) {
-
-        if (!donor.serials) donor.serials = [];
-
-        var serialCount = donor.serials.length;
-        var level = getLevel(serialCount);
-
-        if (currentLevelFilter !== "all" && level !== currentLevelFilter) {
-            return;
-        }
-
-        filteredTotalSerials += serialCount;
-
-        var row = document.createElement("tr");
-
-        if (donor.missing) row.classList.add("missing");
-
-        row.innerHTML = `
-            <td>${index + 1}</td>
-
-            <td>
-                ${donor.firstName} ${donor.middleName} ${donor.surname}
-                <span style="
-                    padding:3px 6px;
-                    border-radius:4px;
-                    margin-left:5px;
-                    font-size:12px;
-                    font-weight:bold;
-                    ${getBloodColor(donor.bloodType)}
-                ">
-                    ${donor.bloodType}
-                </span>
-            </td>
-
-            <td>${donor.contact}</td>
-
-            <td>
-                <span class="count-badge">${serialCount}</span>
-            </td>
-
-            <td>
-                <button class="btn serial-btn" onclick="showSerialInput(${index})">+ Serial</button>
-                <button class="btn edit-btn" onclick="editDonor(${index})">Edit</button>
-                <button class="btn delete-btn" onclick="deleteDonor(${index})">Delete</button>
-                <button class="btn missing-btn" onclick="toggleMissing(${index})">
-                    ${donor.missing ? "Unmark" : "Missing"}
-                </button>
-
-                <div id="serialBox-${index}" class="inline-serial"></div>
-            </td>
-        `;
-
-        table.appendChild(row);
-    });
-
-    document.getElementById("levelDisplay").innerText =
-        currentLevelFilter.toUpperCase() +
-        " - Total Serial Numbers: " + filteredTotalSerials;
-
-    localStorage.setItem("donors", JSON.stringify(donors));
+function setRankFilter(rank) {
+    rankFilter = rank;
+    renderTable();
 }
 
-function getLevel(count) {
-    if (count >= 1 && count <= 7) return "galloners";
-    if (count >= 8 && count <= 27) return "bronze";
-    if (count >= 28 && count <= 45) return "silver";
-    if (count >= 46) return "gold";
-    return "none";
+function clearRankFilter() {
+    rankFilter = "";
+    renderTable();
 }
 
-function filterLevel(level) {
-    currentLevelFilter = level;
-    loadDonors();
-}
-
-function getBloodColor(type) {
-    if (type === "A") return "background:blue;color:white;";
-    if (type === "B") return "background:yellow;color:black;";
-    if (type === "O") return "background:white;color:black;border:1px solid #ccc;";
-    if (type === "AB") return "background:pink;color:black;";
+function getRank(count) {
+    if (count >= 70) return "gold";
+    if (count >= 46) return "silver";
+    if (count >= 28) return "bronze";
+    if (count >= 8) return "galloner";
     return "";
 }
 
-function showSerialInput(index) {
-    var box = document.getElementById("serialBox-" + index);
+function renderTable() {
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    let bloodFilter = document.getElementById("bloodFilter").value;
+    let table = document.getElementById("donorTable");
+    table.innerHTML = "";
 
-    if (box.innerHTML !== "") {
-        box.innerHTML = "";
-        return;
-    }
+    donors.forEach((donor, index) => {
 
-    box.innerHTML = `
-        <input type="text" id="newSerial-${index}" placeholder="Enter Serial">
-        <button onclick="saveSerial(${index})">Save</button>
-    `;
-}
+        let serialCount = donor.serials ? donor.serials.length : 0;
+        let rank = getRank(serialCount);
 
-function saveSerial(index) {
-    var donors = JSON.parse(localStorage.getItem("donors")) || [];
-    var value = document.getElementById("newSerial-" + index).value.trim();
+        if (bloodFilter && donor.bloodType !== bloodFilter) return;
+        if (rankFilter && rank !== rankFilter) return;
 
-    if (value !== "") {
-        donors[index].serials.push(value);
-        localStorage.setItem("donors", JSON.stringify(donors));
-        loadDonors();
-    }
-}
-
-function editDonor(index) {
-    localStorage.setItem("editIndex", index);
-    window.location.href = "donor-entry.html";
-}
-
-function deleteDonor(index) {
-    var donors = JSON.parse(localStorage.getItem("donors")) || [];
-    if (confirm("Delete this donor?")) {
-        donors.splice(index, 1);
-        localStorage.setItem("donors", JSON.stringify(donors));
-        loadDonors();
-    }
-}
-
-function toggleMissing(index) {
-    var donors = JSON.parse(localStorage.getItem("donors")) || [];
-    donors[index].missing = !donors[index].missing;
-    localStorage.setItem("donors", JSON.stringify(donors));
-    loadDonors();
-}
-
-function searchDonor() {
-    var input = document.getElementById("searchBox").value.toLowerCase();
-    var rows = document.querySelectorAll("#donorTable tr");
-
-    rows.forEach(function(row) {
-        if (row.innerText.toLowerCase().includes(input)) {
-            row.style.display = "";
-        } else {
-            row.style.display = "none";
-        }
+        table.innerHTML += `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
+                <td>${donor.bloodType}</td>
+                <td>${serialCount}</td>
+            </tr>
+        `;
     });
 }
 
-function goBack() {
-    window.location.href = "dashboard.html";
+function exportToGoogleSheet() {
+
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+
+    let rows = [
+        ["Name", "Blood Type", "Serial Count"]
+    ];
+
+    donors.forEach(donor => {
+        let serialCount = donor.serials ? donor.serials.length : 0;
+
+        rows.push([
+            donor.firstName + " " + donor.middleName + " " + donor.surname,
+            donor.bloodType,
+            serialCount
+        ]);
+    });
+
+    let csvContent = "data:text/csv;charset=utf-8,"
+        + rows.map(e => e.join(",")).join("\n");
+
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "donor_tracking.csv");
+    document.body.appendChild(link);
+
+    link.click();
 }
 
-loadDonors();
+renderTable();
 
 </script>
 
