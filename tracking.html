@@ -4,46 +4,80 @@
     <title>Galloners Club - Tracking</title>
     <meta charset="UTF-8">
     <style>
-        body { margin:0; font-family:Arial; background:#f4f4f4; }
-        header { background:#b30000; color:white; padding:15px; text-align:center; }
-        .logo { width:100px; display:block; margin:10px auto; }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+        }
+
+        header {
+            background: #b30000;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .logo {
+            width: 100px;
+            display: block;
+            margin: 10px auto;
+        }
+
         .container {
-            max-width:95%;
-            margin:20px auto;
-            background:white;
-            padding:20px;
-            border-radius:10px;
-            box-shadow:0px 3px 10px rgba(0,0,0,0.1);
+            max-width: 95%;
+            margin: 20px auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 3px 10px rgba(0,0,0,0.1);
         }
-        table { width:100%; border-collapse:collapse; }
-        th, td { padding:8px; border:1px solid #ddd; text-align:center; }
-        th { background:#b30000; color:white; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+
+        th {
+            background: #b30000;
+            color: white;
+        }
+
         button {
-            padding:5px 8px;
-            margin:2px;
-            border:none;
-            border-radius:4px;
-            cursor:pointer;
-            color:white;
+            padding: 5px 8px;
+            margin: 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: white;
         }
-        .add-btn { background:#4CAF50; }
-        .edit-btn { background:#2196F3; }
-        .delete-btn { background:#f44336; }
-        .view-btn { background:#9c27b0; }
+
+        .edit-btn { background: #2196F3; }
+        .delete-btn { background: #f44336; }
+        .view-btn { background: #9c27b0; }
+
         .modal {
-            display:none;
-            position:fixed;
-            top:0; left:0;
-            width:100%; height:100%;
-            background:rgba(0,0,0,0.5);
-            justify-content:center;
-            align-items:center;
+            display: none;
+            position: fixed;
+            top: 0; 
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
         }
+
         .modal-content {
-            background:white;
-            padding:20px;
-            border-radius:8px;
-            text-align:center;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
         }
     </style>
 </head>
@@ -63,6 +97,7 @@
             <th>#</th>
             <th>Name</th>
             <th>Blood Type</th>
+            <th>Contact Number</th>
             <th>Serial Count</th>
             <th>Actions</th>
         </tr>
@@ -76,7 +111,8 @@
 <div class="modal" id="confirmModal">
     <div class="modal-content">
         <p id="modalText"></p>
-        <button class="delete-btn" onclick="confirmDelete()">Yes</button>
+        <div id="modalButtons"></div>
+        <br>
         <button onclick="closeModal()">Cancel</button>
     </div>
 </div>
@@ -98,127 +134,107 @@ function renderTable() {
             <tr>
                 <td>${index + 1}</td>
                 <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
-                <td>
-                    ${donor.bloodType}
-                    <button class="add-btn" onclick="toggleAdd(${index})">+ Serial</button>
-                </td>
+                <td>${donor.bloodType || ""}</td>
+                <td>${donor.contact || ""}</td>
                 <td>
                     ${serialCount}
                     <button class="view-btn" onclick="toggleSerialList(${index})">View</button>
                 </td>
                 <td>
                     <button class="edit-btn" onclick="editDonor(${index})">Edit</button>
-                    <button class="delete-btn" onclick="prepareDeleteDonor(${index})">Delete</button>
-                </td>
-            </tr>
-
-            <tr id="addRow${index}" style="display:none;">
-                <td colspan="5">
-                    <input type="text" id="serial${index}" placeholder="Serial Number">
-                    <input type="date" id="date${index}">
-                    <button class="add-btn" onclick="addSerial(${index})">Save</button>
+                    <button class="delete-btn" onclick="showDeleteOptions(${index})">Delete</button>
                 </td>
             </tr>
 
             <tr id="serialRow${index}" style="display:none;">
-                <td colspan="5" id="serialList${index}"></td>
+                <td colspan="6" id="serialList${index}"></td>
             </tr>
         `;
     });
 }
 
-function toggleAdd(index) {
-    let row = document.getElementById("addRow"+index);
-    row.style.display = row.style.display==="none" ? "table-row" : "none";
-}
-
-function addSerial(index) {
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
-    let serialValue = document.getElementById("serial"+index).value.trim();
-    let dateValue = document.getElementById("date"+index).value;
-
-    if (!serialValue) {
-        alert("Enter serial number");
-        return;
-    }
-
-    if (!donors[index].serials) donors[index].serials = [];
-
-    // DUPLICATE CHECK
-    let duplicate = donors[index].serials.some(s => s.number === serialValue);
-    if (duplicate) {
-        alert("Duplicate serial number detected!");
-        return;
-    }
-
-    donors[index].serials.push({ number: serialValue, date: dateValue });
-
-    localStorage.setItem("donors", JSON.stringify(donors));
-    renderTable();
-}
-
 function toggleSerialList(index) {
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
-    let row = document.getElementById("serialRow"+index);
-    let container = document.getElementById("serialList"+index);
+    let row = document.getElementById("serialRow" + index);
+    let container = document.getElementById("serialList" + index);
 
-    if (row.style.display==="none") {
+    if (row.style.display === "none") {
+
         let list = donors[index].serials || [];
 
-        container.innerHTML = list.length===0 ? 
-            "No serial numbers." :
-            list.map((s,i)=>
-                `${s.number} (${s.date||"No date"})
-                 <button class="delete-btn" onclick="prepareDeleteSerial(${index},${i})">Delete</button>`
+        if (list.length === 0) {
+            container.innerHTML = "No serial numbers.";
+        } else {
+            container.innerHTML = list.map((s, i) =>
+                `${s.number} (${s.date || "No date"})
+                 <button class="delete-btn" onclick="confirmDeleteSerial(${index}, ${i})">
+                    Delete Serial
+                 </button>`
             ).join("<br>");
+        }
 
-        row.style.display="table-row";
+        row.style.display = "table-row";
     } else {
-        row.style.display="none";
+        row.style.display = "none";
     }
 }
 
 function editDonor(index) {
     localStorage.setItem("editIndex", index);
-    window.location.href="donor-entry.html";
+    window.location.href = "donor-entry.html";
 }
 
-/* DELETE LOGIC */
+/* DELETE OPTIONS */
 
-function prepareDeleteDonor(index) {
-    deleteData = {type:"donor", index:index};
-    document.getElementById("modalText").innerText="Delete entire donor?";
+function showDeleteOptions(index) {
+    document.getElementById("modalText").innerText = "Choose delete option:";
+    document.getElementById("modalButtons").innerHTML = `
+        <button class="delete-btn" onclick="deleteDonor(${index})">Delete Donor</button>
+        <button class="delete-btn" onclick="deleteAllSerial(${index})">Delete All Serial Numbers</button>
+    `;
     openModal();
 }
 
-function prepareDeleteSerial(donorIndex, serialIndex) {
-    deleteData = {type:"serial", donorIndex, serialIndex};
-    document.getElementById("modalText").innerText="Delete this serial number?";
-    openModal();
-}
-
-function confirmDelete() {
+function deleteDonor(index) {
     let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors.splice(index, 1);
+    localStorage.setItem("donors", JSON.stringify(donors));
+    closeModal();
+    renderTable();
+}
 
-    if (deleteData.type==="donor") {
-        donors.splice(deleteData.index,1);
-    }
+function deleteAllSerial(index) {
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors[index].serials = [];
+    localStorage.setItem("donors", JSON.stringify(donors));
+    closeModal();
+    renderTable();
+}
 
-    if (deleteData.type==="serial") {
-        donors[deleteData.donorIndex].serials.splice(deleteData.serialIndex,1);
-    }
+function confirmDeleteSerial(donorIndex, serialIndex) {
+    document.getElementById("modalText").innerText = "Delete this serial number?";
+    document.getElementById("modalButtons").innerHTML = `
+        <button class="delete-btn" onclick="deleteSingleSerial(${donorIndex}, ${serialIndex})">
+            Yes Delete
+        </button>
+    `;
+    openModal();
+}
 
+function deleteSingleSerial(donorIndex, serialIndex) {
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    donors[donorIndex].serials.splice(serialIndex, 1);
     localStorage.setItem("donors", JSON.stringify(donors));
     closeModal();
     renderTable();
 }
 
 function openModal() {
-    document.getElementById("confirmModal").style.display="flex";
+    document.getElementById("confirmModal").style.display = "flex";
 }
 
 function closeModal() {
-    document.getElementById("confirmModal").style.display="none";
+    document.getElementById("confirmModal").style.display = "none";
 }
 
 renderTable();
