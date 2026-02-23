@@ -17,11 +17,11 @@
         .delete-btn { background:#c62828; }
         .view-btn { background:#6a1b9a; }
         .top-btn { background:#b30000; }
-        .galloner-btn { background:#1e88e5; color:white; }
-        .bronze-btn { background:#cd7f32; color:white; }
-        .silver-btn { background:#9e9e9e; color:white; }
+        .galloner-btn { background:#1e88e5; }
+        .bronze-btn { background:#cd7f32; }
+        .silver-btn { background:#9e9e9e; }
         .gold-btn { background:#d4af37; color:black; }
-        .filter-btn { background:#222; color:white; font-weight:bold; }
+        .filter-btn { background:#222; }
 
         .serial-box {
             background:#f9f9f9;
@@ -97,13 +97,31 @@ onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
 
 <script>
 
+function getDonors(){
+    let data = localStorage.getItem("donors");
+    if(!data) return [];
+    try {
+        return JSON.parse(data);
+    } catch(e){
+        return [];
+    }
+}
+
 function renderTable(category=null){
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+
+    let donors = getDonors();
     let table = document.getElementById("donorTable");
     let selectedBloodType = document.getElementById("bloodFilter").value;
+
     table.innerHTML = "";
 
+    if(donors.length === 0){
+        table.innerHTML = `<tr><td colspan="6">No donors found</td></tr>`;
+        return;
+    }
+
     donors.forEach((donor,index)=>{
+
         let serialCount = donor.serials ? donor.serials.length : 0;
 
         if(selectedBloodType !== "" && donor.bloodType !== selectedBloodType) return;
@@ -118,7 +136,7 @@ function renderTable(category=null){
         table.innerHTML += `
         <tr>
             <td>${index+1}</td>
-            <td>${donor.firstName} ${donor.middleName} ${donor.surname}</td>
+            <td>${donor.firstName || ""} ${donor.middleName || ""} ${donor.surname || ""}</td>
             <td>${donor.bloodType || ""} ${donor.rhFactor || ""}</td>
             <td>${donor.contact || ""}</td>
             <td>
@@ -140,7 +158,7 @@ function renderTable(category=null){
 }
 
 function toggleSerial(index){
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    let donors = getDonors();
     let row = document.getElementById("serialRow"+index);
     let container = document.getElementById("serialList"+index);
 
@@ -152,12 +170,8 @@ function toggleSerial(index){
             container.innerHTML += `
                 <div class="serial-item">
                     <div>
-                        <input type="text" value="${s.serial}" id="serial${index}_${i}" disabled>
-                        <input type="date" value="${s.date}" id="date${index}_${i}" disabled>
-                    </div>
-                    <div>
-                        <button class="edit-btn" onclick="editSerial(${index},${i})">Edit</button>
-                        <button class="delete-btn" onclick="deleteSerial(${index},${i})">Delete</button>
+                        <input type="text" value="${s.serial}" disabled>
+                        <input type="date" value="${s.date}" disabled>
                     </div>
                 </div>
             `;
@@ -169,39 +183,15 @@ function toggleSerial(index){
     }
 }
 
-function editSerial(donorIndex, serialIndex){
-    let serialInput = document.getElementById(`serial${donorIndex}_${serialIndex}`);
-    let dateInput = document.getElementById(`date${donorIndex}_${serialIndex}`);
-
-    if(serialInput.disabled){
-        serialInput.disabled=false;
-        dateInput.disabled=false;
-    } else {
-        let donors = JSON.parse(localStorage.getItem("donors")) || [];
-        donors[donorIndex].serials[serialIndex].serial = serialInput.value;
-        donors[donorIndex].serials[serialIndex].date = dateInput.value;
-        localStorage.setItem("donors",JSON.stringify(donors));
-        serialInput.disabled=true;
-        dateInput.disabled=true;
-    }
-}
-
-function deleteSerial(donorIndex, serialIndex){
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
-    donors[donorIndex].serials.splice(serialIndex,1);
-    localStorage.setItem("donors",JSON.stringify(donors));
-    renderTable();
-}
-
 function editDonor(index){
     localStorage.setItem("editIndex", index);
     window.location.href="donor-entry.html";
 }
 
 function deleteDonor(index){
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    let donors = getDonors();
     donors.splice(index,1);
-    localStorage.setItem("donors",JSON.stringify(donors));
+    localStorage.setItem("donors", JSON.stringify(donors));
     renderTable();
 }
 
@@ -211,37 +201,19 @@ function searchDonor(){
     let input = document.getElementById("searchInput").value.toLowerCase();
     let rows = document.querySelectorAll("#donorTable tr");
 
-    rows.forEach((row,i)=>{
-        if(i % 2 === 0){ 
-            let text = row.innerText.toLowerCase();
-            let match = text.includes(input);
-            row.style.display = match ? "" : "none";
-
-            let serialRow = rows[i+1];
-            if(serialRow){
-                if(!match){
-                    serialRow.style.display="none";
-                }
-            }
-        }
+    rows.forEach(row=>{
+        row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
     });
 }
 
 function goDashboard(){ window.location.href="dashboard.html"; }
 
-function exportToGoogleSheet() {
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+function exportToGoogleSheet(){
+    let donors = getDonors();
     let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
 
-    donors.forEach(donor => {
-        csv += 
-            (donor.bloodType || "") + "," +
-            (donor.rhFactor || "") + "," +
-            (donor.firstName || "") + "," +
-            (donor.middleName || "") + "," +
-            (donor.surname || "") + "," +
-            (donor.birthday || "") + "," +
-            (donor.contact || "") + "\n";
+    donors.forEach(d=>{
+        csv += `${d.bloodType || ""},${d.rhFactor || ""},${d.firstName || ""},${d.middleName || ""},${d.surname || ""},${d.birthday || ""},${d.contact || ""}\n`;
     });
 
     let blob = new Blob([csv], { type: "text/csv" });
@@ -253,7 +225,9 @@ function exportToGoogleSheet() {
     window.URL.revokeObjectURL(url);
 }
 
-renderTable();
+window.onload = function(){
+    renderTable();
+};
 
 </script>
 
