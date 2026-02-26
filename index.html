@@ -1,30 +1,38 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Galloners Club - Settings</title>
+    <title>Galloners Club - Login</title>
     <meta charset="UTF-8">
 
     <style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-        }
-
-        header {
             background-color: #b30000;
-            color: white;
-            padding: 15px;
-            text-align: center;
         }
 
-        .container {
-            max-width: 400px;
-            margin: 50px auto;
-            background: white;
+        .login-box {
+            background-color: white;
+            width: 350px;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0px 3px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            box-shadow: 0px 5px 15px rgba(0,0,0,0.2);
+
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .logo {
+            width: 120px;
+            margin-bottom: 15px;
+        }
+
+        h2 {
+            color: #b30000;
+            margin-bottom: 20px;
         }
 
         input {
@@ -37,88 +45,72 @@
 
         button {
             width: 100%;
-            padding: 12px;
-            margin-top: 10px;
+            padding: 10px;
+            background-color: #b30000;
+            color: white;
             border: none;
             border-radius: 5px;
             font-weight: bold;
             cursor: pointer;
-            color: white;
         }
 
-        .save-btn {
-            background-color: #1e88e5;
-        }
-
-        .reset-btn {
-            background-color: #c62828;
-        }
-
-        .back-btn {
-            background-color: #444;
+        button:hover {
+            background-color: #800000;
         }
     </style>
 </head>
+
 <body>
 
-<header>
-    <h2>Settings</h2>
-</header>
+    <div class="login-box">
+        <img src="images/logo.png" alt="Galloners Club Logo" class="logo">
 
-<div class="container">
-    <h3>Change Username & Password</h3>
-    <input type="text" id="newUsername" placeholder="New Username">
-    <input type="password" id="newPassword" placeholder="New Password">
-    <button class="save-btn" onclick="saveCredentials()">Save</button>
+        <h2>Galloners Club</h2>
 
-    <hr>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
 
-    <h3>Master Reset</h3>
-    <button class="reset-btn" onclick="masterReset()">Reset to Default</button>
+        <button onclick="login()">Login</button>
+    </div>
 
-    <hr>
+    <script>
+        // Default credentials if not set
+        if(!localStorage.getItem("username")) localStorage.setItem("username", "admin");
+        if(!localStorage.getItem("password")) localStorage.setItem("password", "1234");
 
-    <button class="back-btn" onclick="goDashboard()">Back to Dashboard</button>
-</div>
+        const MASTER_USER = "master";
+        const MASTER_PASS = "master123";
 
-<script>
-    // Only allow access if logged in
-    window.onload = function() {
-        if(localStorage.getItem("isLoggedIn") !== "true") {
-            window.location.href = "login.html";
-        }
-    }
-
-    // Save new credentials
-    function saveCredentials() {
-        let user = document.getElementById("newUsername").value.trim();
-        let pass = document.getElementById("newPassword").value.trim();
-
-        if(user === "" || pass === "") {
-            alert("Enter both username and password!");
-            return;
+        // Prevent logged-in users from accessing login page
+        window.onload = function() {
+            if(localStorage.getItem("isLoggedIn") === "true") {
+                window.location.href = "dashboard.html";
+            }
         }
 
-        localStorage.setItem("username", user);
-        localStorage.setItem("password", pass);
-        alert("Credentials updated successfully!");
-        document.getElementById("newUsername").value = "";
-        document.getElementById("newPassword").value = "";
-    }
+        function login() {
+            var user = document.getElementById("username").value;
+            var pass = document.getElementById("password").value;
 
-    // Master reset (sets back to default admin credentials)
-    function masterReset() {
-        if(confirm("Are you sure you want to reset to default credentials?")) {
-            localStorage.setItem("username", "admin");
-            localStorage.setItem("password", "1234");
-            alert("Credentials reset to default!");
+            let savedUser = localStorage.getItem("username");
+            let savedPass = localStorage.getItem("password");
+
+            if ((user === savedUser && pass === savedPass) || (user === MASTER_USER && pass === MASTER_PASS)) {
+                localStorage.setItem("isLoggedIn", "true"); // ✅ Save login state
+                window.location.href = "dashboard.html";
+            } else {
+                alert("Invalid Username or Password");
+            }
         }
-    }
 
-    function goDashboard() {
-        window.location.href = "dashboard.html";
-    }
-</script>
+        // ✅ Function to change username/password (called from settings page)
+        function changeCredentials(newUser, newPass) {
+            localStorage.setItem("username", newUser);
+            localStorage.setItem("password", newPass);
+            alert("Username and password updated successfully!");
+        }
+
+    </script>
 
 </body>
 </html>
