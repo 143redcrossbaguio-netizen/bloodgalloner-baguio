@@ -56,6 +56,17 @@
         .filters {
             margin-bottom:15px;
         }
+
+        .save-btn {
+            background:#ff9800;
+            color:white;
+            padding:5px 10px;
+            border:none;
+            border-radius:4px;
+            cursor:pointer;
+            margin-left:5px;
+        }
+
     </style>
 </head>
 
@@ -132,26 +143,24 @@ function renderAwardees(){
 
             let serialCount = donor.serials ? donor.serials.length : 0;
 
-            // Check if donor qualifies for this category
             if(serialCount < categories[category]) return;
 
-            // Blood type filter
             if(bloodFilter && donor.bloodType !== bloodFilter) return;
 
-            // Status filter
             if(statusFilter && (!donor.awardStatus || !donor.awardStatus[statusFilter])) return;
 
             let fullName = `${donor.firstName || ""} ${donor.middleName || ""} ${donor.surname || ""}`;
 
             container.innerHTML += `
-                <div class="donor-row">
+                <div class="donor-row" id="donorRow${index}${category}">
                     <div>${fullName}</div>
                     <div>
-                        <button class="btn awarded" onclick="setStatus(${index},'awarded','${category}')">Awarded</button>
-                        <button class="btn notawarded" onclick="setStatus(${index},'notawarded','${category}')">Not Awarded</button>
-                        <button class="btn claimed" onclick="setStatus(${index},'claimed','${category}')">Claimed</button>
-                        <button class="btn unclaimed" onclick="setStatus(${index},'unclaimed','${category}')">Unclaimed</button>
-                        <span id="dateArea${index}${category}"></span>
+                        <button class="btn awarded" onclick="setTempStatus(${index},'awarded','${category}')">Awarded</button>
+                        <button class="btn notawarded" onclick="setTempStatus(${index},'notawarded','${category}')">Not Awarded</button>
+                        <button class="btn claimed" onclick="setTempStatus(${index},'claimed','${category}')">Claimed</button>
+                        <button class="btn unclaimed" onclick="setTempStatus(${index},'unclaimed','${category}')">Unclaimed</button>
+                        <input type="date" id="tempDate${index}${category}" style="display:none; margin-left:5px;">
+                        <button class="save-btn" id="saveBtn${index}${category}" style="display:none;" onclick="saveStatus(${index},'${category}')">Save</button>
                     </div>
                 </div>
             `;
@@ -159,27 +168,39 @@ function renderAwardees(){
     }
 }
 
-function setStatus(index,type,category){
+let tempStatusStore = {};
 
+function setTempStatus(index,type,category){
+    let dateInput = document.getElementById("tempDate"+index+category);
+    let saveBtn = document.getElementById("saveBtn"+index+category);
+
+    dateInput.style.display = "inline-block";
+    saveBtn.style.display = "inline-block";
+
+    tempStatusStore[index] = tempStatusStore[index] || {};
+    tempStatusStore[index][category] = { type: type, date: new Date().toISOString().split("T")[0] };
+
+    dateInput.value = tempStatusStore[index][category].date;
+}
+
+function saveStatus(index,category){
     let donors = getDonors();
-
     if(!donors[index].awardStatus){
         donors[index].awardStatus = {};
     }
 
-    donors[index].awardStatus[type] = new Date().toISOString().split("T")[0];
+    if(tempStatusStore[index] && tempStatusStore[index][category]){
+        let ts = tempStatusStore[index][category];
+        donors[index].awardStatus[ts.type] = ts.date;
+    }
 
     localStorage.setItem("donors", JSON.stringify(donors));
 
-    showDateInline(index,type,category);
-    renderAwardees(); // refresh view to apply status filter
-}
+    // hide inputs and save button after saving
+    document.getElementById("tempDate"+index+category).style.display = "none";
+    document.getElementById("saveBtn"+index+category).style.display = "none";
 
-function showDateInline(index,type,category){
-    let dateArea = document.getElementById("dateArea"+index+category);
-    if(dateArea){
-        dateArea.innerHTML = `<input type="date" value="${new Date().toISOString().split("T")[0]}">`;
-    }
+    renderAwardees();
 }
 
 function goDashboard(){
