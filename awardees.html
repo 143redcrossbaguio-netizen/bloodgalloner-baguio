@@ -45,6 +45,16 @@
             border:none;
             border-radius:5px;
             cursor:pointer;
+            margin-bottom:15px;
+        }
+
+        select {
+            padding:5px;
+            margin-right:10px;
+        }
+
+        .filters {
+            margin-bottom:15px;
         }
     </style>
 </head>
@@ -58,6 +68,24 @@
 <div class="container">
 
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
+
+<div class="filters">
+    <select id="bloodFilter" onchange="renderAwardees()">
+        <option value="">All Blood Types</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="AB">AB</option>
+        <option value="O">O</option>
+    </select>
+
+    <select id="statusFilter" onchange="renderAwardees()">
+        <option value="">All Statuses</option>
+        <option value="awarded">Awarded</option>
+        <option value="notawarded">Not Awarded</option>
+        <option value="claimed">Claimed</option>
+        <option value="unclaimed">Unclaimed</option>
+    </select>
+</div>
 
 <div id="awardContainer"></div>
 
@@ -73,7 +101,6 @@ function getDonors(){
 
 function getCategoryLimits(){
     let settings = localStorage.getItem("categorySettings");
-
     if(!settings){
         return { galloner:8, bronze:28, silver:46, gold:70 };
     }
@@ -85,6 +112,9 @@ function renderAwardees(){
     let donors = getDonors();
     let limits = getCategoryLimits();
     let container = document.getElementById("awardContainer");
+    let bloodFilter = document.getElementById("bloodFilter").value;
+    let statusFilter = document.getElementById("statusFilter").value;
+
     container.innerHTML = "";
 
     let categories = {
@@ -102,29 +132,34 @@ function renderAwardees(){
 
             let serialCount = donor.serials ? donor.serials.length : 0;
 
-            if(serialCount >= categories[category]){
+            // Check if donor qualifies for this category
+            if(serialCount < categories[category]) return;
 
-                let fullName = `${donor.firstName || ""} ${donor.middleName || ""} ${donor.surname || ""}`;
+            // Blood type filter
+            if(bloodFilter && donor.bloodType !== bloodFilter) return;
 
-                container.innerHTML += `
-                    <div class="donor-row">
-                        <div>${fullName}</div>
-                        <div>
-                            <button class="btn awarded" onclick="setStatus(${index},'awarded')">Awarded</button>
-                            <button class="btn notawarded" onclick="setStatus(${index},'notawarded')">Not Awarded</button>
-                            <button class="btn claimed" onclick="setStatus(${index},'claimed')">Claimed</button>
-                            <button class="btn unclaimed" onclick="setStatus(${index},'unclaimed')">Unclaimed</button>
-                            <span id="dateArea${index}${category}"></span>
-                        </div>
+            // Status filter
+            if(statusFilter && (!donor.awardStatus || !donor.awardStatus[statusFilter])) return;
+
+            let fullName = `${donor.firstName || ""} ${donor.middleName || ""} ${donor.surname || ""}`;
+
+            container.innerHTML += `
+                <div class="donor-row">
+                    <div>${fullName}</div>
+                    <div>
+                        <button class="btn awarded" onclick="setStatus(${index},'awarded','${category}')">Awarded</button>
+                        <button class="btn notawarded" onclick="setStatus(${index},'notawarded','${category}')">Not Awarded</button>
+                        <button class="btn claimed" onclick="setStatus(${index},'claimed','${category}')">Claimed</button>
+                        <button class="btn unclaimed" onclick="setStatus(${index},'unclaimed','${category}')">Unclaimed</button>
+                        <span id="dateArea${index}${category}"></span>
                     </div>
-                `;
-            }
-
+                </div>
+            `;
         });
     }
 }
 
-function setStatus(index,type){
+function setStatus(index,type,category){
 
     let donors = getDonors();
 
@@ -136,15 +171,12 @@ function setStatus(index,type){
 
     localStorage.setItem("donors", JSON.stringify(donors));
 
-    showDateInline(index,type);
+    showDateInline(index,type,category);
+    renderAwardees(); // refresh view to apply status filter
 }
 
-function showDateInline(index,type){
-    let dateArea = document.getElementById("dateArea"+index+"galloner")
-                || document.getElementById("dateArea"+index+"bronze")
-                || document.getElementById("dateArea"+index+"silver")
-                || document.getElementById("dateArea"+index+"gold");
-
+function showDateInline(index,type,category){
+    let dateArea = document.getElementById("dateArea"+index+category);
     if(dateArea){
         dateArea.innerHTML = `<input type="date" value="${new Date().toISOString().split("T")[0]}">`;
     }
