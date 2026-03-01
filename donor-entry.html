@@ -42,7 +42,6 @@
 <input type="text" id="contact" placeholder="Contact Number">
 
 <hr>
-
 <h3>Serial Records</h3>
 <input type="text" id="serialInput" placeholder="Serial Number">
 <input type="date" id="dateInput">
@@ -50,14 +49,13 @@
 <div id="serialList" class="serial-box"></div>
 
 <hr>
-
 <button onclick="saveDonor()">Save Donor</button>
 <button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 <button onclick="window.location.href='tracking.html'">Go to Tracking</button>
 
 </div>
 
-<!-- Firebase SDK -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
@@ -79,8 +77,13 @@ let serials = [];
 function addSerial(){
     let serial = document.getElementById("serialInput").value.trim();
     let date = document.getElementById("dateInput").value;
-    if(!serial || !date){ alert("Enter serial number and date."); return; }
-    serials.push({ serial, date });
+
+    if(serial === "" || date === ""){
+        alert("Enter serial number and date.");
+        return;
+    }
+
+    serials.push({ serial: serial, date: date });
     document.getElementById("serialInput").value = "";
     document.getElementById("dateInput").value = "";
     renderSerials();
@@ -90,64 +93,75 @@ function renderSerials(){
     let container = document.getElementById("serialList");
     container.innerHTML = "";
     serials.forEach((s,i)=>{
-        container.innerHTML += `<div>${s.serial} - ${s.date} <button onclick="removeSerial(${i})">Remove</button></div>`;
+        container.innerHTML += `
+            <div>
+                ${s.serial} - ${s.date} 
+                <button onclick="removeSerial(${i})">Remove</button>
+            </div>
+        `;
     });
 }
 
-function removeSerial(i){ serials.splice(i,1); renderSerials(); }
+function removeSerial(index){
+    serials.splice(index,1);
+    renderSerials();
+}
 
 async function saveDonor(){
-    const donorData = {
-        firstName: document.getElementById("firstName").value,
-        middleName: document.getElementById("middleName").value,
-        surname: document.getElementById("surname").value,
-        bloodType: document.getElementById("bloodType").value,
-        rhFactor: document.getElementById("rhFactor").value,
-        birthday: document.getElementById("birthday").value,
-        contact: document.getElementById("contact").value,
-        serials: serials
-    };
+    let firstName = document.getElementById("firstName").value.trim();
+    let middleName = document.getElementById("middleName").value.trim();
+    let surname = document.getElementById("surname").value.trim();
+    let bloodType = document.getElementById("bloodType").value;
+    let rhFactor = document.getElementById("rhFactor").value;
+    let birthday = document.getElementById("birthday").value;
+    let contact = document.getElementById("contact").value.trim();
 
-    try {
-        const snapshot = await database.ref('donors').get();
-        let donors = snapshot.exists() ? snapshot.val() : [];
-        let editIndex = localStorage.getItem("editIndex");
+    if(firstName === "" || surname === "" || bloodType === "" || rhFactor === ""){
+        alert("Please fill required fields.");
+        return;
+    }
 
-        // Duplicate check
-        if(donors.some((d, idx) => idx != editIndex && d.firstName===donorData.firstName && d.surname===donorData.surname && d.contact===donorData.contact)){
-            alert("Duplicate donor detected!"); return;
-        }
+    let donor = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
 
-        if(editIndex !== null){
-            donors[editIndex] = donorData;
-            localStorage.removeItem("editIndex");
-        } else {
-            donors.push(donorData);
-        }
+    // Check for duplicates
+    const snapshot = await database.ref('donors').get();
+    let donors = snapshot.exists() ? snapshot.val() : [];
+    let duplicate = donors.find(d => d.firstName===firstName && d.middleName===middleName && d.surname===surname && d.bloodType===bloodType && d.rhFactor===rhFactor);
+    if(duplicate){
+        if(!confirm("Donor with same data exists. Add anyway?")) return;
+    }
 
-        await database.ref('donors').set(donors);
-        alert("Donor saved successfully!");
-        window.location.href = "tracking.html";
-    } catch(e){ console.error(e); alert("Error saving donor."); }
+    let editIndex = localStorage.getItem("editIndex");
+    if(editIndex !== null){
+        donors[editIndex] = donor;
+        localStorage.removeItem("editIndex");
+    } else {
+        donors.push(donor);
+    }
+
+    await database.ref('donors').set(donors);
+    alert("Donor saved successfully!");
+    window.location.href = "tracking.html";
 }
 
 window.onload = async function(){
     let editIndex = localStorage.getItem("editIndex");
     if(editIndex !== null){
-        try {
-            const snapshot = await database.ref('donors').get();
-            let donors = snapshot.exists() ? snapshot.val() : [];
-            let donor = donors[editIndex];
-            document.getElementById("firstName").value = donor.firstName;
-            document.getElementById("middleName").value = donor.middleName;
-            document.getElementById("surname").value = donor.surname;
-            document.getElementById("bloodType").value = donor.bloodType;
-            document.getElementById("rhFactor").value = donor.rhFactor;
-            document.getElementById("birthday").value = donor.birthday;
-            document.getElementById("contact").value = donor.contact;
-            serials = donor.serials || [];
-            renderSerials();
-        } catch(e){ console.error(e); }
+        const snapshot = await database.ref('donors').get();
+        let donors = snapshot.exists() ? snapshot.val() : [];
+        let donor = donors[editIndex];
+        if(!donor) return;
+
+        document.getElementById("firstName").value = donor.firstName;
+        document.getElementById("middleName").value = donor.middleName;
+        document.getElementById("surname").value = donor.surname;
+        document.getElementById("bloodType").value = donor.bloodType;
+        document.getElementById("rhFactor").value = donor.rhFactor;
+        document.getElementById("birthday").value = donor.birthday;
+        document.getElementById("contact").value = donor.contact;
+
+        serials = donor.serials || [];
+        renderSerials();
     }
 }
 </script>
