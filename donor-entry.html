@@ -3,34 +3,19 @@
 <head>
     <title>Galloners Club - Donor Entry</title>
     <meta charset="UTF-8">
+
+    <!-- Firebase CDN scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
         header { background:#b30000; color:white; padding:15px; text-align:center; }
         .container { max-width:500px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
         input, select { width:100%; padding:8px; margin-bottom:10px; }
         button { padding:8px; margin-top:5px; background:#b30000; color:white; border:none; border-radius:5px; cursor:pointer; }
-        .serial-box { margin-top:10px; background:#f9f9f9; border:1px solid #ccc; padding:10px; border-radius:6px; }
+        .serial-box { margin-top:10px; }
     </style>
-
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
-        import { getDatabase, ref, push, set, get, child } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js";
-
-        const firebaseConfig = {
-          apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-          authDomain: "galloners-club.firebaseapp.com",
-          projectId: "galloners-club",
-          storageBucket: "galloners-club.appspot.com",
-          messagingSenderId: "213049860421",
-          appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-          measurementId: "G-XYXJH9JNXJ"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        window.firebaseDB = db;
-    </script>
 </head>
 
 <body>
@@ -41,116 +26,155 @@
 
 <div class="container">
 
-    <input type="text" id="firstName" placeholder="First Name">
-    <input type="text" id="middleName" placeholder="Middle Name">
-    <input type="text" id="surname" placeholder="Surname">
-    <select id="bloodType">
-        <option value="">Blood Type</option>
-        <option value="A">A</option>
-        <option value="B">B</option>
-        <option value="AB">AB</option>
-        <option value="O">O</option>
-    </select>
-    <select id="rhFactor">
-        <option value="">Rh Factor</option>
-        <option value="+">+</option>
-        <option value="-">-</option>
-    </select>
-    <input type="date" id="birthday">
-    <input type="text" id="contact" placeholder="Contact Number">
+<input type="text" id="firstName" placeholder="First Name">
+<input type="text" id="middleName" placeholder="Middle Name">
+<input type="text" id="surname" placeholder="Surname">
 
-    <h4>Serial Records</h4>
-    <input type="text" id="serialInput" placeholder="Serial Number">
-    <input type="date" id="dateInput">
-    <button onclick="addSerial()">Add Serial</button>
+<select id="bloodType">
+    <option value="">Blood Type</option>
+    <option value="A">A</option>
+    <option value="B">B</option>
+    <option value="AB">AB</option>
+    <option value="O">O</option>
+</select>
 
-    <div id="serialList" class="serial-box"></div>
+<select id="rhFactor">
+    <option value="">Rh Factor</option>
+    <option value="+">+</option>
+    <option value="-">-</option>
+</select>
 
-    <button onclick="saveDonor()">Save Donor</button>
-    <button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
-    <button onclick="window.location.href='tracking.html'">Go to Tracking</button>
+<input type="date" id="birthday">
+<input type="text" id="contact" placeholder="Contact Number">
+
+<hr>
+
+<h3>Serial Records</h3>
+
+<input type="text" id="serialInput" placeholder="Serial Number">
+<input type="date" id="dateInput">
+<button onclick="addSerial()">Add Serial</button>
+
+<div id="serialList" class="serial-box"></div>
+
+<hr>
+
+<button onclick="saveDonor()">Save Donor</button>
+<button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
+<button onclick="window.location.href='tracking.html'">Go to Tracking</button>
 
 </div>
 
-<script type="module">
-let serials = [];
-
-function addSerial(){
-    let s = document.getElementById("serialInput").value.trim();
-    let d = document.getElementById("dateInput").value;
-    if(!s || !d){ alert("Enter serial and date"); return; }
-    // Prevent duplicate serials
-    if(serials.some(x=>x.serial===s)){ alert("Serial already added"); return; }
-    serials.push({serial:s,date:d});
-    document.getElementById("serialInput").value="";
-    document.getElementById("dateInput").value="";
-    renderSerials();
-}
-
-function renderSerials(){
-    let container = document.getElementById("serialList");
-    container.innerHTML="";
-    serials.forEach((s,i)=>{
-        container.innerHTML += `<div>${s.serial} - ${s.date} <button onclick="removeSerial(${i})">Remove</button></div>`;
-    });
-}
-
-function removeSerial(i){ serials.splice(i,1); renderSerials(); }
-
-async function saveDonor(){
-    const donorData = {
-        firstName: document.getElementById("firstName").value.trim(),
-        middleName: document.getElementById("middleName").value.trim(),
-        surname: document.getElementById("surname").value.trim(),
-        bloodType: document.getElementById("bloodType").value,
-        rhFactor: document.getElementById("rhFactor").value,
-        birthday: document.getElementById("birthday").value,
-        contact: document.getElementById("contact").value.trim(),
-        serials
+<script>
+    // Firebase configuration
+    var firebaseConfig = {
+        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+        authDomain: "galloners-club.firebaseapp.com",
+        projectId: "galloners-club",
+        storageBucket: "galloners-club.appspot.com",
+        messagingSenderId: "213049860421",
+        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+        measurementId: "G-XYXJH9JNXJ"
     };
+    firebase.initializeApp(firebaseConfig);
+    var db = firebase.firestore();
 
-    if(!donorData.firstName || !donorData.surname){ alert("First and last name required"); return; }
+    let serials = [];
+    let editDocId = null;
 
-    const dbRef = ref(window.firebaseDB);
-    const snapshot = await get(child(dbRef, "donors"));
-    const donors = snapshot.val() || {};
-    // Duplicate detection
-    let duplicate = Object.values(donors).some(d => 
-        d.firstName===donorData.firstName && 
-        d.middleName===donorData.middleName && 
-        d.surname===donorData.surname && 
-        d.birthday===donorData.birthday
-    );
-    if(duplicate){ alert("Donor already exists!"); return; }
+    function addSerial(){
+        let serial = document.getElementById("serialInput").value.trim();
+        let date = document.getElementById("dateInput").value;
 
-    const editKey = localStorage.getItem("editKey");
-    if(editKey){
-        set(ref(window.firebaseDB, "donors/"+editKey), donorData)
-        .then(()=>{ localStorage.removeItem("editKey"); alert("Donor updated!"); location.href="tracking.html"; });
-    } else {
-        push(ref(window.firebaseDB, "donors"), donorData)
-        .then(()=>{ alert("Donor saved!"); location.href="tracking.html"; });
+        if(serial === "" || date === ""){
+            alert("Enter serial number and date.");
+            return;
+        }
+
+        if(serials.some(s => s.serial === serial)){
+            alert("Duplicate serial detected!");
+            return;
+        }
+
+        serials.push({ serial: serial, date: date });
+        document.getElementById("serialInput").value = "";
+        document.getElementById("dateInput").value = "";
+        renderSerials();
     }
-}
 
-window.onload = async ()=>{
-    const editKey = localStorage.getItem("editKey");
-    if(editKey){
-        const snapshot = await get(ref(window.firebaseDB,"donors/"+editKey));
-        const d = snapshot.val();
-        if(d){
-            document.getElementById("firstName").value = d.firstName;
-            document.getElementById("middleName").value = d.middleName;
-            document.getElementById("surname").value = d.surname;
-            document.getElementById("bloodType").value = d.bloodType;
-            document.getElementById("rhFactor").value = d.rhFactor;
-            document.getElementById("birthday").value = d.birthday;
-            document.getElementById("contact").value = d.contact;
-            serials = d.serials || [];
-            renderSerials();
+    function renderSerials(){
+        let container = document.getElementById("serialList");
+        container.innerHTML = "";
+        serials.forEach((s,i)=>{
+            container.innerHTML += `
+                <div>
+                    ${s.serial} - ${s.date}
+                    <button onclick="removeSerial(${i})">Remove</button>
+                </div>
+            `;
+        });
+    }
+
+    function removeSerial(index){
+        serials.splice(index,1);
+        renderSerials();
+    }
+
+    function saveDonor(){
+        let firstName = document.getElementById("firstName").value.trim();
+        let middleName = document.getElementById("middleName").value.trim();
+        let surname = document.getElementById("surname").value.trim();
+        let bloodType = document.getElementById("bloodType").value;
+        let rhFactor = document.getElementById("rhFactor").value;
+        let birthday = document.getElementById("birthday").value;
+        let contact = document.getElementById("contact").value.trim();
+
+        if(!firstName || !surname || !bloodType || !rhFactor){
+            alert("Fill required fields.");
+            return;
+        }
+
+        var donorData = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
+
+        if(editDocId){
+            db.collection("donors").doc(editDocId).update(donorData).then(()=>{
+                alert("Donor updated successfully!");
+                window.location.href = "tracking.html";
+            });
+        } else {
+            db.collection("donors").add(donorData).then(()=>{
+                alert("Donor saved successfully!");
+                window.location.href = "tracking.html";
+            });
         }
     }
-};
+
+    // Load edit data if URL has ?editId=
+    window.onload = function(){
+        let params = new URLSearchParams(window.location.search);
+        if(params.has("editId")){
+            editDocId = params.get("editId");
+            db.collection("donors").doc(editDocId).get().then(docSnap=>{
+                if(docSnap.exists){
+                    let d = docSnap.data();
+                    document.getElementById("firstName").value = d.firstName;
+                    document.getElementById("middleName").value = d.middleName;
+                    document.getElementById("surname").value = d.surname;
+                    document.getElementById("bloodType").value = d.bloodType;
+                    document.getElementById("rhFactor").value = d.rhFactor;
+                    document.getElementById("birthday").value = d.birthday;
+                    document.getElementById("contact").value = d.contact;
+                    serials = d.serials || [];
+                    renderSerials();
+                }
+            });
+        }
+    }
+
+    window.addSerial = addSerial;
+    window.removeSerial = removeSerial;
+    window.saveDonor = saveDonor;
 </script>
+
 </body>
 </html>
