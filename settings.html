@@ -51,24 +51,15 @@
 <label>Gold Limit</label>
 <input type="number" id="gold">
 
-<hr>
-
-<h3>Admin Account</h3>
-<label>Username</label>
-<input type="text" id="loginUsername">
-
-<label>Password</label>
-<input type="password" id="loginPassword">
-
 <button onclick="saveSettings()">Save Settings</button>
 
 </div>
 
-<!-- ✅ FIREBASE INTEGRATION -->
+<!-- Firebase CDN -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
     import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -83,60 +74,59 @@
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const db = getFirestore(app);
-
-    // Expose db globally
     window.db = db;
-</script>
 
-<script>
-async function loadSettings(){
-    // Load category settings from localStorage
-    let settings = localStorage.getItem("categorySettings");
-    if(settings){
-        settings = JSON.parse(settings);
-    } else {
-        settings = { galloner:8, bronze:28, silver:46, gold:70 };
+    async function loadSettings(){
+        // Load from localStorage first (for compatibility)
+        let settings = localStorage.getItem("categorySettings");
+        if(settings) settings = JSON.parse(settings);
+        else settings = { galloner:8, bronze:28, silver:46, gold:70 };
+
+        document.getElementById("galloner").value = settings.galloner;
+        document.getElementById("bronze").value = settings.bronze;
+        document.getElementById("silver").value = settings.silver;
+        document.getElementById("gold").value = settings.gold;
+
+        // Load from Firebase if exists
+        try {
+            const docRef = doc(db, "settings", "categoryLimits");
+            const docSnap = await getDoc(docRef);
+            if(docSnap.exists()){
+                const data = docSnap.data();
+                document.getElementById("galloner").value = data.galloner || settings.galloner;
+                document.getElementById("bronze").value = data.bronze || settings.bronze;
+                document.getElementById("silver").value = data.silver || settings.silver;
+                document.getElementById("gold").value = data.gold || settings.gold;
+            }
+        } catch(e){
+            console.error("Firebase load error:", e);
+        }
     }
 
-    document.getElementById("galloner").value = settings.galloner;
-    document.getElementById("bronze").value = settings.bronze;
-    document.getElementById("silver").value = settings.silver;
-    document.getElementById("gold").value = settings.gold;
+    async function saveSettings(){
+        const settings = {
+            galloner: parseInt(document.getElementById("galloner").value),
+            bronze: parseInt(document.getElementById("bronze").value),
+            silver: parseInt(document.getElementById("silver").value),
+            gold: parseInt(document.getElementById("gold").value)
+        };
 
-    // Load login credentials from Firebase
-    const loginDoc = await getDoc(doc(window.db, "admin", "credentials"));
-    if(loginDoc.exists()){
-        const data = loginDoc.data();
-        document.getElementById("loginUsername").value = data.username || "admin";
-        document.getElementById("loginPassword").value = data.password || "1234";
-    } else {
-        // Default values if not set
-        document.getElementById("loginUsername").value = "admin";
-        document.getElementById("loginPassword").value = "1234";
+        // Save to localStorage
+        localStorage.setItem("categorySettings", JSON.stringify(settings));
+
+        // Save to Firebase
+        try {
+            const docRef = doc(db, "settings", "categoryLimits");
+            await setDoc(docRef, settings);
+            alert("Settings saved successfully!");
+            window.location.href = "dashboard.html";
+        } catch(e){
+            console.error("Firebase save error:", e);
+            alert("Error saving settings to Firebase.");
+        }
     }
-}
 
-async function saveSettings(){
-    // Save category settings locally
-    let settings = {
-        galloner: parseInt(document.getElementById("galloner").value),
-        bronze: parseInt(document.getElementById("bronze").value),
-        silver: parseInt(document.getElementById("silver").value),
-        gold: parseInt(document.getElementById("gold").value)
-    };
-    localStorage.setItem("categorySettings", JSON.stringify(settings));
-
-    // Save login credentials to Firebase
-    const username = document.getElementById("loginUsername").value.trim();
-    const password = document.getElementById("loginPassword").value.trim();
-
-    await setDoc(doc(window.db, "admin", "credentials"), { username, password });
-
-    alert("Settings and Admin Account Saved!");
-    window.location.href="dashboard.html";
-}
-
-window.onload = loadSettings;
+    window.onload = loadSettings;
 </script>
 
 </body>
