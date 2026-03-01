@@ -55,7 +55,7 @@
 
 </div>
 
-<!-- Firebase -->
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
@@ -70,43 +70,34 @@ const firebaseConfig = {
     measurementId: "G-XYXJH9JNXJ"
 };
 firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+const db = firebase.database();
 
 let serials = [];
 
+// Add serial number
 function addSerial(){
-    let serial = document.getElementById("serialInput").value.trim();
-    let date = document.getElementById("dateInput").value;
-
-    if(serial === "" || date === ""){
-        alert("Enter serial number and date.");
-        return;
-    }
-
-    serials.push({ serial: serial, date: date });
+    let s = document.getElementById("serialInput").value.trim();
+    let d = document.getElementById("dateInput").value;
+    if(!s || !d){ alert("Enter serial and date"); return; }
+    serials.push({ serial: s, date: d });
     document.getElementById("serialInput").value = "";
     document.getElementById("dateInput").value = "";
     renderSerials();
 }
 
+// Render serial list
 function renderSerials(){
     let container = document.getElementById("serialList");
     container.innerHTML = "";
     serials.forEach((s,i)=>{
-        container.innerHTML += `
-            <div>
-                ${s.serial} - ${s.date} 
-                <button onclick="removeSerial(${i})">Remove</button>
-            </div>
-        `;
+        container.innerHTML += `<div>${s.serial} - ${s.date} <button onclick="removeSerial(${i})">Remove</button></div>`;
     });
 }
 
-function removeSerial(index){
-    serials.splice(index,1);
-    renderSerials();
-}
+// Remove serial
+function removeSerial(i){ serials.splice(i,1); renderSerials(); }
 
+// Save donor
 async function saveDonor(){
     let firstName = document.getElementById("firstName").value.trim();
     let middleName = document.getElementById("middleName").value.trim();
@@ -115,39 +106,37 @@ async function saveDonor(){
     let rhFactor = document.getElementById("rhFactor").value;
     let birthday = document.getElementById("birthday").value;
     let contact = document.getElementById("contact").value.trim();
-
-    if(firstName === "" || surname === "" || bloodType === "" || rhFactor === ""){
-        alert("Please fill required fields.");
-        return;
-    }
+    if(!firstName || !surname || !bloodType || !rhFactor){ alert("Fill required fields"); return; }
 
     let donor = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
 
-    // Check for duplicates
-    const snapshot = await database.ref('donors').orderByChild('fullName').equalTo(firstName+" "+middleName+" "+surname).get();
-    if(snapshot.exists()){
-        if(!confirm("Donor with same name exists. Add anyway?")) return;
+    let editIndex = localStorage.getItem("editIndex");
+
+    // Check duplicate name
+    const snapshot = await db.ref('donors').orderByChild('fullName').equalTo(firstName+" "+middleName+" "+surname).get();
+    if(snapshot.exists() && !editIndex){
+        if(!confirm("Donor exists. Add anyway?")) return;
     }
 
-    // Generate unique key for new donor
-    let editIndex = localStorage.getItem("editIndex");
-    if(editIndex !== null){
-        await database.ref('donors/'+editIndex).set(donor);
+    donor.fullName = firstName+" "+middleName+" "+surname;
+
+    if(editIndex){
+        await db.ref('donors/'+editIndex).set(donor);
         localStorage.removeItem("editIndex");
     } else {
-        const newRef = database.ref('donors').push();
+        const newRef = db.ref('donors').push();
         await newRef.set(donor);
     }
 
-    alert("Donor saved successfully!");
+    alert("Donor saved!");
     window.location.href = "tracking.html";
 }
 
-window.onload = async function(){
+// Load donor for edit
+window.onload = function(){
     let editIndex = localStorage.getItem("editIndex");
-    if(editIndex !== null){
-        const donorRef = database.ref('donors/'+editIndex);
-        donorRef.get().then(snapshot=>{
+    if(editIndex){
+        db.ref('donors/'+editIndex).get().then(snapshot=>{
             if(!snapshot.exists()) return;
             const donor = snapshot.val();
             document.getElementById("firstName").value = donor.firstName;
