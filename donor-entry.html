@@ -55,38 +55,22 @@
 
 </div>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
 <script>
-const firebaseConfig = {
-    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-    authDomain: "galloners-club.firebaseapp.com",
-    projectId: "galloners-club",
-    storageBucket: "galloners-club.appspot.com",
-    messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
 let serials = [];
 
-// Add serial number
-function addSerial(){
+// Add serial
+function addSerial() {
     let s = document.getElementById("serialInput").value.trim();
     let d = document.getElementById("dateInput").value;
-    if(!s || !d){ alert("Enter serial and date"); return; }
+    if(!s || !d) { alert("Enter serial number and date."); return; }
     serials.push({ serial: s, date: d });
     document.getElementById("serialInput").value = "";
     document.getElementById("dateInput").value = "";
     renderSerials();
 }
 
-// Render serial list
-function renderSerials(){
+// Render serials
+function renderSerials() {
     let container = document.getElementById("serialList");
     container.innerHTML = "";
     serials.forEach((s,i)=>{
@@ -98,7 +82,7 @@ function renderSerials(){
 function removeSerial(i){ serials.splice(i,1); renderSerials(); }
 
 // Save donor
-async function saveDonor(){
+function saveDonor() {
     let firstName = document.getElementById("firstName").value.trim();
     let middleName = document.getElementById("middleName").value.trim();
     let surname = document.getElementById("surname").value.trim();
@@ -106,49 +90,48 @@ async function saveDonor(){
     let rhFactor = document.getElementById("rhFactor").value;
     let birthday = document.getElementById("birthday").value;
     let contact = document.getElementById("contact").value.trim();
-    if(!firstName || !surname || !bloodType || !rhFactor){ alert("Fill required fields"); return; }
+
+    if(!firstName || !surname || !bloodType || !rhFactor){ alert("Fill required fields."); return; }
 
     let donor = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
 
+    // Get existing donors
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
     let editIndex = localStorage.getItem("editIndex");
 
-    // Check duplicate name
-    const snapshot = await db.ref('donors').orderByChild('fullName').equalTo(firstName+" "+middleName+" "+surname).get();
-    if(snapshot.exists() && !editIndex){
+    // Check duplicates
+    let fullName = firstName + " " + middleName + " " + surname;
+    if(!editIndex && donors.some(d => (d.firstName+" "+d.middleName+" "+d.surname) === fullName)){
         if(!confirm("Donor exists. Add anyway?")) return;
     }
 
-    donor.fullName = firstName+" "+middleName+" "+surname;
-
-    if(editIndex){
-        await db.ref('donors/'+editIndex).set(donor);
+    if(editIndex !== null){
+        donors[editIndex] = donor;
         localStorage.removeItem("editIndex");
     } else {
-        const newRef = db.ref('donors').push();
-        await newRef.set(donor);
+        donors.push(donor);
     }
 
-    alert("Donor saved!");
+    localStorage.setItem("donors", JSON.stringify(donors));
+    alert("Donor saved successfully!");
     window.location.href = "tracking.html";
 }
 
-// Load donor for edit
+// Load donor for editing
 window.onload = function(){
     let editIndex = localStorage.getItem("editIndex");
-    if(editIndex){
-        db.ref('donors/'+editIndex).get().then(snapshot=>{
-            if(!snapshot.exists()) return;
-            const donor = snapshot.val();
-            document.getElementById("firstName").value = donor.firstName;
-            document.getElementById("middleName").value = donor.middleName;
-            document.getElementById("surname").value = donor.surname;
-            document.getElementById("bloodType").value = donor.bloodType;
-            document.getElementById("rhFactor").value = donor.rhFactor;
-            document.getElementById("birthday").value = donor.birthday;
-            document.getElementById("contact").value = donor.contact;
-            serials = donor.serials || [];
-            renderSerials();
-        });
+    if(editIndex !== null){
+        let donors = JSON.parse(localStorage.getItem("donors")) || [];
+        let donor = donors[editIndex];
+        document.getElementById("firstName").value = donor.firstName;
+        document.getElementById("middleName").value = donor.middleName;
+        document.getElementById("surname").value = donor.surname;
+        document.getElementById("bloodType").value = donor.bloodType;
+        document.getElementById("rhFactor").value = donor.rhFactor;
+        document.getElementById("birthday").value = donor.birthday;
+        document.getElementById("contact").value = donor.contact;
+        serials = donor.serials || [];
+        renderSerials();
     }
 }
 </script>
