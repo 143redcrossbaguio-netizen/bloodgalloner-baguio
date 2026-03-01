@@ -45,8 +45,7 @@
 
 <hr>
 
-<h3>Serial Records</h3>
-
+<h3>Serial Records (Unlimited)</h3>
 <input type="text" id="serialInput" placeholder="Serial Number">
 <input type="date" id="dateInput">
 <button onclick="addSerial()">Add Serial</button>
@@ -61,38 +60,19 @@
 
 </div>
 
-<!-- 🔥 FIREBASE + CLOUD SAVE INTEGRATED -->
-<script type="module">
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-const firebaseConfig = {
-    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-    authDomain: "galloners-club.firebaseapp.com",
-    projectId: "galloners-club",
-    storageBucket: "galloners-club.firebasestorage.app",
-    messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
+<script>
 let serials = [];
 
-window.addSerial = function(){
-    let serial = document.getElementById("serialInput").value;
+function addSerial(){
+    let serial = document.getElementById("serialInput").value.trim();
     let date = document.getElementById("dateInput").value;
 
-    if(serial === "" || date === ""){
+    if(!serial || !date){
         alert("Enter serial number and date.");
         return;
     }
 
-    serials.push({ serial: serial, date: date });
-
+    serials.push({ serial, date });
     document.getElementById("serialInput").value = "";
     document.getElementById("dateInput").value = "";
 
@@ -102,45 +82,83 @@ window.addSerial = function(){
 function renderSerials(){
     let container = document.getElementById("serialList");
     container.innerHTML = "";
-
     serials.forEach((s,i)=>{
         container.innerHTML += `
             <div>
-                ${s.serial} - ${s.date}
+                ${s.serial} - ${s.date} 
                 <button onclick="removeSerial(${i})">Remove</button>
             </div>
         `;
     });
 }
 
-window.removeSerial = function(index){
-    serials.splice(index,1);
+function removeSerial(i){
+    serials.splice(i,1);
     renderSerials();
 }
 
-window.saveDonor = async function(){
+function saveDonor(){
+    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+    let editIndex = localStorage.getItem("editIndex");
 
     let donorData = {
-        firstName: document.getElementById("firstName").value,
-        middleName: document.getElementById("middleName").value,
-        surname: document.getElementById("surname").value,
+        firstName: document.getElementById("firstName").value.trim(),
+        middleName: document.getElementById("middleName").value.trim(),
+        surname: document.getElementById("surname").value.trim(),
         bloodType: document.getElementById("bloodType").value,
         rhFactor: document.getElementById("rhFactor").value,
         birthday: document.getElementById("birthday").value,
-        contact: document.getElementById("contact").value,
-        serials: serials,
-        createdAt: new Date()
+        contact: document.getElementById("contact").value.trim(),
+        serials: serials
     };
 
-    try {
-        await addDoc(collection(db, "donors"), donorData);
-        alert("Donor saved to cloud successfully!");
-        window.location.href = "tracking.html";
-    } catch (error) {
-        alert("Error saving donor: " + error);
+    // Prevent duplicate donor (same name + birthday + contact)
+    let duplicate = donors.some((d,i) => {
+        if(editIndex !== null && i == editIndex) return false; // skip self on edit
+        return d.firstName === donorData.firstName &&
+               d.middleName === donorData.middleName &&
+               d.surname === donorData.surname &&
+               d.birthday === donorData.birthday &&
+               d.contact === donorData.contact;
+    });
+
+    if(duplicate){
+        alert("Donor already exists! Please check the name, birthday, and contact.");
+        return;
     }
+
+    if(editIndex !== null){
+        donors[editIndex] = donorData;
+        localStorage.removeItem("editIndex");
+    } else {
+        donors.push(donorData);
+    }
+
+    localStorage.setItem("donors", JSON.stringify(donors));
+
+    // Optional: clear serials after save
+    serials = [];
+    window.location.href = "tracking.html";
 }
 
+window.onload = function(){
+    let editIndex = localStorage.getItem("editIndex");
+    if(editIndex !== null){
+        let donors = JSON.parse(localStorage.getItem("donors")) || [];
+        let donor = donors[editIndex];
+
+        document.getElementById("firstName").value = donor.firstName;
+        document.getElementById("middleName").value = donor.middleName;
+        document.getElementById("surname").value = donor.surname;
+        document.getElementById("bloodType").value = donor.bloodType;
+        document.getElementById("rhFactor").value = donor.rhFactor;
+        document.getElementById("birthday").value = donor.birthday;
+        document.getElementById("contact").value = donor.contact;
+
+        serials = donor.serials || [];
+        renderSerials();
+    }
+}
 </script>
 
 </body>
