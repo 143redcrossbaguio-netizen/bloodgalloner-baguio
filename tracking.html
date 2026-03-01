@@ -3,7 +3,6 @@
 <head>
     <title>Galloners Club - Tracking</title>
     <meta charset="UTF-8">
-
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
         header { background:#b30000; color:white; padding:15px; text-align:center; }
@@ -22,25 +21,6 @@
         .silver-btn { background:#9e9e9e; }
         .gold-btn { background:#d4af37; color:black; }
         .filter-btn { background:#222; }
-
-        .serial-box {
-            background:#f9f9f9;
-            border:1px solid #ccc;
-            padding:10px;
-            border-radius:6px;
-        }
-
-        .serial-item {
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            margin-bottom:6px;
-        }
-
-        .serial-item input {
-            padding:4px;
-            margin-right:5px;
-        }
     </style>
 </head>
 
@@ -53,29 +33,9 @@
 
 <div class="container">
 
-<input type="text" id="searchInput" placeholder="Search donor..."
-onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
+<input type="text" id="searchInput" placeholder="Search donor..." onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
 
-<button class="top-btn" onclick="exportToGoogleSheet()">Export CSV</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
-
-<br><br>
-
-<select id="bloodFilter" onchange="renderTable()">
-    <option value="">All Blood Types</option>
-    <option value="A">A</option>
-    <option value="B">B</option>
-    <option value="AB">AB</option>
-    <option value="O">O</option>
-</select>
-
-<br><br>
-
-<button class="galloner-btn" onclick="filterByCategory('galloner')">Galloners</button>
-<button class="bronze-btn" onclick="filterByCategory('bronze')">Bronze</button>
-<button class="silver-btn" onclick="filterByCategory('silver')">Silver</button>
-<button class="gold-btn" onclick="filterByCategory('gold')">Gold</button>
-<button class="filter-btn" onclick="renderTable()">Show All</button>
 
 <br><br>
 
@@ -95,41 +55,37 @@ onkeyup="searchDonor()" style="margin-bottom:10px; padding:5px;">
 
 </div>
 
-<script>
+<script type="module">
 
-function getDonors(){
-    let data = localStorage.getItem("donors");
-    if(!data) return [];
-    try {
-        return JSON.parse(data);
-    } catch(e){
-        return [];
-    }
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let donors = [];
+
+async function loadDonors(){
+    donors = [];
+    const querySnapshot = await getDocs(collection(db, "donors"));
+    querySnapshot.forEach((docSnap)=>{
+        donors.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    renderTable();
 }
 
-/* ✅ ADDED LIMITER FUNCTION */
-function getCategoryLimits(){
-    let settings = localStorage.getItem("categorySettings");
-
-    if(!settings){
-        return {
-            galloner: 8,
-            bronze: 28,
-            silver: 46,
-            gold: 70
-        };
-    }
-
-    return JSON.parse(settings);
-}
-
-function renderTable(category=null){
-
-    let donors = getDonors();
+function renderTable(){
     let table = document.getElementById("donorTable");
-    let selectedBloodType = document.getElementById("bloodFilter").value;
-    let limits = getCategoryLimits();
-
     table.innerHTML = "";
 
     if(donors.length === 0){
@@ -138,18 +94,7 @@ function renderTable(category=null){
     }
 
     donors.forEach((donor,index)=>{
-
         let serialCount = donor.serials ? donor.serials.length : 0;
-
-        if(selectedBloodType !== "" && donor.bloodType !== selectedBloodType) return;
-
-        /* ✅ UPDATED LIMIT LOGIC */
-        if(category){
-            if(category==="galloner" && serialCount < limits.galloner) return;
-            if(category==="bronze" && serialCount < limits.bronze) return;
-            if(category==="silver" && serialCount < limits.silver) return;
-            if(category==="gold" && serialCount < limits.gold) return;
-        }
 
         table.innerHTML += `
         <tr>
@@ -157,65 +102,21 @@ function renderTable(category=null){
             <td>${donor.firstName || ""} ${donor.middleName || ""} ${donor.surname || ""}</td>
             <td>${donor.bloodType || ""} ${donor.rhFactor || ""}</td>
             <td>${donor.contact || ""}</td>
+            <td>${serialCount}</td>
             <td>
-                ${serialCount}
-                <button class="view-btn" onclick="toggleSerial(${index})">View</button>
-            </td>
-            <td>
-                <button class="edit-btn" onclick="editDonor(${index})">Edit</button>
-                <button class="delete-btn" onclick="deleteDonor(${index})">Delete</button>
-            </td>
-        </tr>
-        <tr id="serialRow${index}" style="display:none;">
-            <td colspan="6">
-                <div class="serial-box" id="serialList${index}"></div>
+                <button class="delete-btn" onclick="deleteDonor('${donor.id}')">Delete</button>
             </td>
         </tr>
         `;
     });
 }
 
-function toggleSerial(index){
-    let donors = getDonors();
-    let row = document.getElementById("serialRow"+index);
-    let container = document.getElementById("serialList"+index);
-
-    if(row.style.display==="none"){
-        container.innerHTML="";
-        let serials = donors[index].serials || [];
-
-        serials.forEach((s,i)=>{
-            container.innerHTML += `
-                <div class="serial-item">
-                    <div>
-                        <input type="text" value="${s.serial}" disabled>
-                        <input type="date" value="${s.date}" disabled>
-                    </div>
-                </div>
-            `;
-        });
-
-        row.style.display="table-row";
-    } else {
-        row.style.display="none";
-    }
+window.deleteDonor = async function(id){
+    await deleteDoc(doc(db, "donors", id));
+    loadDonors();
 }
 
-function editDonor(index){
-    localStorage.setItem("editIndex", index);
-    window.location.href="donor-entry.html";
-}
-
-function deleteDonor(index){
-    let donors = getDonors();
-    donors.splice(index,1);
-    localStorage.setItem("donors", JSON.stringify(donors));
-    renderTable();
-}
-
-function filterByCategory(type){ renderTable(type); }
-
-function searchDonor(){
+window.searchDonor = function(){
     let input = document.getElementById("searchInput").value.toLowerCase();
     let rows = document.querySelectorAll("#donorTable tr");
 
@@ -224,28 +125,11 @@ function searchDonor(){
     });
 }
 
-function goDashboard(){ window.location.href="dashboard.html"; }
-
-function exportToGoogleSheet(){
-    let donors = getDonors();
-    let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
-
-    donors.forEach(d=>{
-        csv += `${d.bloodType || ""},${d.rhFactor || ""},${d.firstName || ""},${d.middleName || ""},${d.surname || ""},${d.birthday || ""},${d.contact || ""}\n`;
-    });
-
-    let blob = new Blob([csv], { type: "text/csv" });
-    let url = window.URL.createObjectURL(blob);
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "donors.csv";
-    a.click();
-    window.URL.revokeObjectURL(url);
+window.goDashboard = function(){
+    window.location.href="dashboard.html";
 }
 
-window.onload = function(){
-    renderTable();
-};
+loadDonors();
 
 </script>
 
