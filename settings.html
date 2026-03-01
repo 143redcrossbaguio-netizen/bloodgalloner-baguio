@@ -14,27 +14,16 @@
             border-radius:10px;
             box-shadow:0 3px 10px rgba(0,0,0,0.1);
         }
-        input {
-            width:100%;
-            padding:8px;
-            margin-bottom:10px;
-        }
-        button {
-            width:100%;
-            padding:10px;
-            background:#b30000;
-            color:white;
-            border:none;
-            border-radius:5px;
-            cursor:pointer;
-        }
+        input { width:100%; padding:8px; margin-bottom:10px; }
+        button { width:100%; padding:10px; background:#b30000; color:white; border:none; border-radius:5px; cursor:pointer; }
+        label { font-weight:bold; }
     </style>
 </head>
 
 <body>
 
 <header>
-    <h2>Category Settings</h2>
+    <h2>Category & Login Settings</h2>
 </header>
 
 <div class="container">
@@ -51,82 +40,97 @@
 <label>Gold Limit</label>
 <input type="number" id="gold">
 
+<hr>
+
+<label>Admin Username</label>
+<input type="text" id="adminUser">
+
+<label>Admin Password</label>
+<input type="password" id="adminPass">
+
 <button onclick="saveSettings()">Save Settings</button>
 
 </div>
 
-<!-- Firebase CDN -->
+<!-- Firebase -->
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.firebasestorage.app",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app);
+window.db = db;
+
+async function loadSettings(){
+    // LocalStorage defaults
+    let settings = localStorage.getItem("categorySettings");
+    if(settings) settings = JSON.parse(settings);
+    else settings = { galloner:8, bronze:28, silver:46, gold:70, username:"admin", password:"1234" };
+
+    // Populate limits
+    document.getElementById("galloner").value = settings.galloner;
+    document.getElementById("bronze").value = settings.bronze;
+    document.getElementById("silver").value = settings.silver;
+    document.getElementById("gold").value = settings.gold;
+
+    document.getElementById("adminUser").value = settings.username || "admin";
+    document.getElementById("adminPass").value = settings.password || "1234";
+
+    // Load from Firebase
+    try {
+        const docRef = doc(db, "settings", "categoryLimits");
+        const docSnap = await getDoc(docRef);
+        if(docSnap.exists()){
+            const data = docSnap.data();
+            document.getElementById("galloner").value = data.galloner || settings.galloner;
+            document.getElementById("bronze").value = data.bronze || settings.bronze;
+            document.getElementById("silver").value = data.silver || settings.silver;
+            document.getElementById("gold").value = data.gold || settings.gold;
+
+            document.getElementById("adminUser").value = data.username || settings.username;
+            document.getElementById("adminPass").value = data.password || settings.password;
+        }
+    } catch(e){ console.error("Firebase load error:", e); }
+}
+
+async function saveSettings(){
+    const settings = {
+        galloner: parseInt(document.getElementById("galloner").value),
+        bronze: parseInt(document.getElementById("bronze").value),
+        silver: parseInt(document.getElementById("silver").value),
+        gold: parseInt(document.getElementById("gold").value),
+        username: document.getElementById("adminUser").value.trim(),
+        password: document.getElementById("adminPass").value.trim()
     };
 
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getFirestore(app);
-    window.db = db;
+    // Save locally
+    localStorage.setItem("categorySettings", JSON.stringify(settings));
 
-    async function loadSettings(){
-        // Load from localStorage first (for compatibility)
-        let settings = localStorage.getItem("categorySettings");
-        if(settings) settings = JSON.parse(settings);
-        else settings = { galloner:8, bronze:28, silver:46, gold:70 };
-
-        document.getElementById("galloner").value = settings.galloner;
-        document.getElementById("bronze").value = settings.bronze;
-        document.getElementById("silver").value = settings.silver;
-        document.getElementById("gold").value = settings.gold;
-
-        // Load from Firebase if exists
-        try {
-            const docRef = doc(db, "settings", "categoryLimits");
-            const docSnap = await getDoc(docRef);
-            if(docSnap.exists()){
-                const data = docSnap.data();
-                document.getElementById("galloner").value = data.galloner || settings.galloner;
-                document.getElementById("bronze").value = data.bronze || settings.bronze;
-                document.getElementById("silver").value = data.silver || settings.silver;
-                document.getElementById("gold").value = data.gold || settings.gold;
-            }
-        } catch(e){
-            console.error("Firebase load error:", e);
-        }
+    // Save to Firebase
+    try {
+        const docRef = doc(db, "settings", "categoryLimits");
+        await setDoc(docRef, settings);
+        alert("Settings saved successfully!");
+        window.location.href = "dashboard.html";
+    } catch(e){
+        console.error("Firebase save error:", e);
+        alert("Error saving settings to Firebase.");
     }
+}
 
-    async function saveSettings(){
-        const settings = {
-            galloner: parseInt(document.getElementById("galloner").value),
-            bronze: parseInt(document.getElementById("bronze").value),
-            silver: parseInt(document.getElementById("silver").value),
-            gold: parseInt(document.getElementById("gold").value)
-        };
-
-        // Save to localStorage
-        localStorage.setItem("categorySettings", JSON.stringify(settings));
-
-        // Save to Firebase
-        try {
-            const docRef = doc(db, "settings", "categoryLimits");
-            await setDoc(docRef, settings);
-            alert("Settings saved successfully!");
-            window.location.href = "dashboard.html";
-        } catch(e){
-            console.error("Firebase save error:", e);
-            alert("Error saving settings to Firebase.");
-        }
-    }
-
-    window.onload = loadSettings;
+window.onload = loadSettings;
 </script>
 
 </body>
