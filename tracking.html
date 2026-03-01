@@ -105,6 +105,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// ---------- LOCAL STORAGE + FIREBASE HYBRID ----------
 let donors = [];
 
 async function loadDonors(){
@@ -113,20 +114,33 @@ async function loadDonors(){
     snapshot.forEach(docSnap=>{
         donors.push({ id: docSnap.id, ...docSnap.data() });
     });
+    // save to localStorage for edit functionality
+    localStorage.setItem("donors", JSON.stringify(donors));
     renderTable();
+}
+
+function getDonors(){
+    let data = localStorage.getItem("donors");
+    if(!data) return [];
+    try {
+        return JSON.parse(data);
+    } catch(e){
+        return [];
+    }
 }
 
 function renderTable(category=null){
     let table = document.getElementById("donorTable");
     let selectedBloodType = document.getElementById("bloodFilter").value;
+    let donorsList = getDonors();
     table.innerHTML = "";
 
-    if(donors.length === 0){
+    if(donorsList.length === 0){
         table.innerHTML = `<tr><td colspan="6">No donors found</td></tr>`;
         return;
     }
 
-    donors.forEach((donor,index)=>{
+    donorsList.forEach((donor,index)=>{
         let serialCount = donor.serials ? donor.serials.length : 0;
 
         if(selectedBloodType !== "" && donor.bloodType !== selectedBloodType) return;
@@ -142,7 +156,7 @@ function renderTable(category=null){
                 <button class="view-btn" onclick="toggleSerial(${index})">View</button>
             </td>
             <td>
-                <button class="edit-btn" onclick="editDonor('${donor.id}')">Edit</button>
+                <button class="edit-btn" onclick="editDonor(${index})">Edit</button>
                 <button class="delete-btn" onclick="deleteDonor('${donor.id}')">Delete</button>
             </td>
         </tr>
@@ -161,7 +175,8 @@ window.toggleSerial = function(index){
 
     if(row.style.display === "none"){
         container.innerHTML = "";
-        let serials = donors[index].serials || [];
+        let donor = getDonors()[index];
+        let serials = donor.serials || [];
         serials.forEach(s=>{
             container.innerHTML += `<div>${s.serial} - ${s.date}</div>`;
         });
@@ -171,8 +186,9 @@ window.toggleSerial = function(index){
     }
 }
 
-window.editDonor = function(id){
-    localStorage.setItem("editId", id);
+window.editDonor = function(index){
+    let donor = getDonors()[index];
+    localStorage.setItem("editIndex", index);
     window.location.href = "donor-entry.html";
 }
 
@@ -197,6 +213,7 @@ function searchDonor(){
 function goDashboard(){ window.location.href="dashboard.html"; }
 
 loadDonors();
+
 </script>
 
 </body>
