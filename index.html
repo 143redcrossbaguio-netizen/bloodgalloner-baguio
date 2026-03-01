@@ -75,7 +75,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -91,23 +91,32 @@
     const analytics = getAnalytics(app);
     const db = getFirestore(app);
 
-    // Make Firestore globally accessible for other pages
     window.db = db;
 </script>
 
-<!-- ✅ ORIGINAL LOGIN SCRIPT (UNCHANGED) -->
+<!-- ✅ ORIGINAL LOGIN LOGIC (UNCHANGED) -->
 <script>
-    window.onload = function() {
+    window.onload = async function() {
         if(localStorage.getItem("isLoggedIn") === "true") {
             window.location.href = "dashboard.html";
         }
+
+        // Fetch admin credentials from Firebase
+        const loginDoc = await getDoc(doc(window.db, "admin", "credentials"));
+        if(loginDoc.exists()){
+            window.adminCreds = loginDoc.data(); // store globally
+        } else {
+            // default fallback
+            window.adminCreds = { username: "admin", password: "1234" };
+        }
     }
 
-    function login() {
+    async function login() {
         var user = document.getElementById("username").value.trim();
         var pass = document.getElementById("password").value.trim();
 
-        if(user === "admin" && pass === "1234") {
+        // ✅ check against Firebase credentials
+        if(window.adminCreds && user === window.adminCreds.username && pass === window.adminCreds.password){
             localStorage.setItem("isLoggedIn", "true");
             window.location.href = "dashboard.html";
         } else {
