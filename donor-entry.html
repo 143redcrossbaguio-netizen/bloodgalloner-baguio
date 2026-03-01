@@ -79,6 +79,8 @@ function addSerial(){
     let s = document.getElementById("serialInput").value.trim();
     let d = document.getElementById("dateInput").value;
     if(!s || !d){ alert("Enter serial and date"); return; }
+    // Prevent duplicate serials
+    if(serials.some(x=>x.serial===s)){ alert("Serial already added"); return; }
     serials.push({serial:s,date:d});
     document.getElementById("serialInput").value="";
     document.getElementById("dateInput").value="";
@@ -112,7 +114,13 @@ async function saveDonor(){
     const dbRef = ref(window.firebaseDB);
     const snapshot = await get(child(dbRef, "donors"));
     const donors = snapshot.val() || {};
-    let duplicate = Object.values(donors).some(d => d.firstName===donorData.firstName && d.middleName===donorData.middleName && d.surname===donorData.surname && d.birthday===donorData.birthday);
+    // Duplicate detection
+    let duplicate = Object.values(donors).some(d => 
+        d.firstName===donorData.firstName && 
+        d.middleName===donorData.middleName && 
+        d.surname===donorData.surname && 
+        d.birthday===donorData.birthday
+    );
     if(duplicate){ alert("Donor already exists!"); return; }
 
     const editKey = localStorage.getItem("editKey");
