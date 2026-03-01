@@ -1,128 +1,251 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Galloners Club - Donor Entry</title>
+    <title>Galloners Club - Donor Entry & Tracking</title>
     <meta charset="UTF-8">
+
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
         header { background:#b30000; color:white; padding:15px; text-align:center; }
-        .container { max-width:500px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
+        .logo { width:100px; display:block; margin:10px auto; }
+        .container { max-width:95%; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:8px; border:1px solid #ddd; text-align:center; }
+        th { background:#b30000; color:white; }
+        button { padding:5px 8px; margin:2px; border:none; border-radius:4px; cursor:pointer; color:white; }
+        .edit-btn { background:#1565c0; }
+        .delete-btn { background:#c62828; }
+        .view-btn { background:#6a1b9a; }
+        .top-btn { background:#b30000; }
+        .galloner-btn { background:#1e88e5; }
+        .bronze-btn { background:#cd7f32; }
+        .silver-btn { background:#9e9e9e; }
+        .gold-btn { background:#d4af37; color:black; }
+        .filter-btn { background:#222; }
+
+        .serial-box { background:#f9f9f9; border:1px solid #ccc; padding:10px; border-radius:6px; }
+        .serial-item { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+        .serial-item input { padding:4px; margin-right:5px; }
+
         input, select { width:100%; padding:8px; margin-bottom:10px; }
-        button { padding:8px; margin-top:5px; background:#b30000; color:white; border:none; border-radius:5px; cursor:pointer; }
-        .serial-box { margin-top:10px; }
     </style>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
+        import { getDatabase, ref, set, push, get, child, remove } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+          authDomain: "galloners-club.firebaseapp.com",
+          projectId: "galloners-club",
+          storageBucket: "galloners-club.appspot.com",
+          messagingSenderId: "213049860421",
+          appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+          measurementId: "G-XYXJH9JNXJ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.firebaseDB = db;
+    </script>
 </head>
+
 <body>
 
 <header>
-    <h2>Donor Entry</h2>
+    <img src="images/logo.png" class="logo">
+    <h2>Donor Entry & Tracking</h2>
 </header>
 
 <div class="container">
+    <h3>Donor Entry</h3>
 
-<input type="text" id="firstName" placeholder="First Name">
-<input type="text" id="middleName" placeholder="Middle Name">
-<input type="text" id="surname" placeholder="Surname">
+    <input type="text" id="firstName" placeholder="First Name">
+    <input type="text" id="middleName" placeholder="Middle Name">
+    <input type="text" id="surname" placeholder="Surname">
+    <select id="bloodType">
+        <option value="">Blood Type</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="AB">AB</option>
+        <option value="O">O</option>
+    </select>
+    <select id="rhFactor">
+        <option value="">Rh Factor</option>
+        <option value="+">+</option>
+        <option value="-">-</option>
+    </select>
+    <input type="date" id="birthday">
+    <input type="text" id="contact" placeholder="Contact Number">
 
-<select id="bloodType">
-    <option value="">Blood Type</option>
-    <option value="A">A</option>
-    <option value="B">B</option>
-    <option value="AB">AB</option>
-    <option value="O">O</option>
-</select>
+    <h4>Serial Records</h4>
+    <input type="text" id="serialInput" placeholder="Serial Number">
+    <input type="date" id="dateInput">
+    <button onclick="addSerial()">Add Serial</button>
+    <div id="serialList" class="serial-box"></div>
 
-<select id="rhFactor">
-    <option value="">Rh Factor</option>
-    <option value="+">+</option>
-    <option value="-">-</option>
-</select>
-
-<input type="date" id="birthday">
-<input type="text" id="contact" placeholder="Contact Number">
-
-<hr>
-<h3>Serial Records</h3>
-<input type="text" id="serialInput" placeholder="Serial Number">
-<input type="date" id="dateInput">
-<button onclick="addSerial()">Add Serial</button>
-<div id="serialList" class="serial-box"></div>
-
-<hr>
-<button onclick="saveDonor()">Save Donor</button>
-<button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
-<button onclick="window.location.href='tracking.html'">Go to Tracking</button>
-
+    <button onclick="saveDonor()">Save Donor</button>
+    <button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 </div>
 
-<script>
-let serials = [];
+<hr>
 
-// Add serial
-function addSerial() {
-    let s = document.getElementById("serialInput").value.trim();
-    let d = document.getElementById("dateInput").value;
-    if(!s || !d) { alert("Enter serial number and date."); return; }
-    serials.push({ serial: s, date: d });
-    document.getElementById("serialInput").value = "";
-    document.getElementById("dateInput").value = "";
-    renderSerials();
-}
+<div class="container">
+    <h3>Tracking</h3>
 
-// Render serials
-function renderSerials() {
-    let container = document.getElementById("serialList");
-    container.innerHTML = "";
-    serials.forEach((s,i)=>{
-        container.innerHTML += `<div>${s.serial} - ${s.date} <button onclick="removeSerial(${i})">Remove</button></div>`;
-    });
-}
+    <input type="text" id="searchInput" placeholder="Search donor..." onkeyup="searchDonor()">
+    <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
 
-// Remove serial
-function removeSerial(i){ serials.splice(i,1); renderSerials(); }
+    <br><br>
+    <select id="bloodFilter" onchange="renderTable()">
+        <option value="">All Blood Types</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="AB">AB</option>
+        <option value="O">O</option>
+    </select>
 
-// Save donor
-function saveDonor() {
-    let firstName = document.getElementById("firstName").value.trim();
-    let middleName = document.getElementById("middleName").value.trim();
-    let surname = document.getElementById("surname").value.trim();
-    let bloodType = document.getElementById("bloodType").value;
-    let rhFactor = document.getElementById("rhFactor").value;
-    let birthday = document.getElementById("birthday").value;
-    let contact = document.getElementById("contact").value.trim();
+    <br><br>
+    <button class="galloner-btn" onclick="filterByCategory('galloner')">Galloners</button>
+    <button class="bronze-btn" onclick="filterByCategory('bronze')">Bronze</button>
+    <button class="silver-btn" onclick="filterByCategory('silver')">Silver</button>
+    <button class="gold-btn" onclick="filterByCategory('gold')">Gold</button>
+    <button class="filter-btn" onclick="renderTable()">Show All</button>
 
-    if(!firstName || !surname || !bloodType || !rhFactor){ alert("Fill required fields."); return; }
+    <br><br>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Blood Type</th>
+                <th>Contact</th>
+                <th>Serial Count</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="donorTable"></tbody>
+    </table>
+</div>
 
-    let donor = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
+<script type="module">
 
-    // Get existing donors
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
-    let editIndex = localStorage.getItem("editIndex");
+    let serials = [];
 
-    // Check duplicates
-    let fullName = firstName + " " + middleName + " " + surname;
-    if(!editIndex && donors.some(d => (d.firstName+" "+d.middleName+" "+d.surname) === fullName)){
-        if(!confirm("Donor exists. Add anyway?")) return;
+    // ----- Donor Entry Functions -----
+    function addSerial(){
+        let s = document.getElementById("serialInput").value.trim();
+        let d = document.getElementById("dateInput").value;
+        if(!s || !d){ alert("Enter serial and date"); return; }
+        serials.push({serial:s,date:d});
+        document.getElementById("serialInput").value="";
+        document.getElementById("dateInput").value="";
+        renderSerials();
     }
 
-    if(editIndex !== null){
-        donors[editIndex] = donor;
-        localStorage.removeItem("editIndex");
-    } else {
-        donors.push(donor);
+    function renderSerials(){
+        let container = document.getElementById("serialList");
+        container.innerHTML="";
+        serials.forEach((s,i)=>{
+            container.innerHTML += `<div>${s.serial} - ${s.date} <button onclick="removeSerial(${i})">Remove</button></div>`;
+        });
     }
 
-    localStorage.setItem("donors", JSON.stringify(donors));
-    alert("Donor saved successfully!");
-    window.location.href = "tracking.html";
-}
+    function removeSerial(i){ serials.splice(i,1); renderSerials(); }
 
-// Load donor for editing
-window.onload = function(){
-    let editIndex = localStorage.getItem("editIndex");
-    if(editIndex !== null){
-        let donors = JSON.parse(localStorage.getItem("donors")) || [];
-        let donor = donors[editIndex];
+    async function saveDonor(){
+        const donorData = {
+            firstName: document.getElementById("firstName").value.trim(),
+            middleName: document.getElementById("middleName").value.trim(),
+            surname: document.getElementById("surname").value.trim(),
+            bloodType: document.getElementById("bloodType").value,
+            rhFactor: document.getElementById("rhFactor").value,
+            birthday: document.getElementById("birthday").value,
+            contact: document.getElementById("contact").value.trim(),
+            serials
+        };
+
+        if(!donorData.firstName || !donorData.surname){ alert("First and last name required"); return; }
+
+        const dbRef = ref(window.firebaseDB);
+        const snapshot = await get(child(dbRef, "donors"));
+        const donors = snapshot.val() || {};
+        let duplicate = Object.values(donors).some(d => d.firstName===donorData.firstName && d.middleName===donorData.middleName && d.surname===donorData.surname && d.birthday===donorData.birthday);
+        if(duplicate){ alert("Donor already exists!"); return; }
+
+        const editKey = localStorage.getItem("editKey");
+        if(editKey){
+            set(ref(window.firebaseDB, "donors/"+editKey), donorData)
+            .then(()=>{ localStorage.removeItem("editKey"); localStorage.removeItem("editIndex"); location.reload(); });
+        } else {
+            push(ref(window.firebaseDB, "donors"), donorData)
+            .then(()=>{ location.reload(); });
+        }
+    }
+
+    // ----- Tracking Functions -----
+    async function getDonors(){
+        const snapshot = await get(child(ref(window.firebaseDB), "donors"));
+        return snapshot.val() ? Object.entries(snapshot.val()).map(([key,val])=>({...val,firebaseKey:key})) : [];
+    }
+
+    async function renderTable(category=null){
+        const donors = await getDonors();
+        const table = document.getElementById("donorTable");
+        const bloodFilter = document.getElementById("bloodFilter").value;
+        const limits = {galloner:8, bronze:28, silver:46, gold:70};
+        table.innerHTML="";
+
+        if(!donors.length){ table.innerHTML="<tr><td colspan='6'>No donors found</td></tr>"; return; }
+
+        donors.forEach((d,i)=>{
+            const serialCount = d.serials ? d.serials.length : 0;
+            if(bloodFilter && d.bloodType!==bloodFilter) return;
+            if(category){
+                if(category==="galloner" && serialCount<limits.galloner) return;
+                if(category==="bronze" && serialCount<limits.bronze) return;
+                if(category==="silver" && serialCount<limits.silver) return;
+                if(category==="gold" && serialCount<limits.gold) return;
+            }
+            table.innerHTML += `
+            <tr>
+                <td>${i+1}</td>
+                <td>${d.firstName} ${d.middleName || ""} ${d.surname}</td>
+                <td>${d.bloodType} ${d.rhFactor}</td>
+                <td>${d.contact}</td>
+                <td>${serialCount} <button class="view-btn" onclick="toggleSerial('${d.firebaseKey}')">View</button></td>
+                <td>
+                    <button class="edit-btn" onclick="editDonor(${i})">Edit</button>
+                    <button class="delete-btn" onclick="deleteDonor('${d.firebaseKey}')">Delete</button>
+                </td>
+            </tr>
+            <tr id="serialRow${d.firebaseKey}" style="display:none;">
+                <td colspan="6"><div class="serial-box" id="serialList${d.firebaseKey}"></div></td>
+            </tr>
+            `;
+        });
+    }
+
+    async function toggleSerial(key){
+        const donors = await getDonors();
+        const d = donors.find(x=>x.firebaseKey===key);
+        const row = document.getElementById("serialRow"+key);
+        const container = document.getElementById("serialList"+key);
+        if(row.style.display==="none"){
+            container.innerHTML="";
+            d.serials.forEach(s=>{
+                container.innerHTML += `<div>${s.serial} - ${s.date}</div>`;
+            });
+            row.style.display="table-row";
+        } else { row.style.display="none"; }
+    }
+
+    async function editDonor(index){
+        const donors = await getDonors();
+        const donor = donors[index];
+        localStorage.setItem("editIndex", index);
+        localStorage.setItem("editKey", donor.firebaseKey);
         document.getElementById("firstName").value = donor.firstName;
         document.getElementById("middleName").value = donor.middleName;
         document.getElementById("surname").value = donor.surname;
@@ -132,8 +255,41 @@ window.onload = function(){
         document.getElementById("contact").value = donor.contact;
         serials = donor.serials || [];
         renderSerials();
+        window.scrollTo({top:0, behavior:"smooth"});
     }
-}
+
+    function filterByCategory(cat){ renderTable(cat); }
+
+    async function deleteDonor(key){
+        if(confirm("Are you sure to delete this donor?")){
+            remove(ref(window.firebaseDB,"donors/"+key))
+            .then(()=>renderTable());
+        }
+    }
+
+    function searchDonor(){
+        const input = document.getElementById("searchInput").value.toLowerCase();
+        document.querySelectorAll("#donorTable tr").forEach(row=>{
+            row.style.display=row.innerText.toLowerCase().includes(input) ? "" : "none";
+        });
+    }
+
+    async function exportToCSV(){
+        const donors = await getDonors();
+        let csv = "Blood Type,Rh,First Name,Middle Name,Surname,Birthday,Contact\n";
+        donors.forEach(d=>{
+            csv+=`${d.bloodType || ""},${d.rhFactor || ""},${d.firstName},${d.middleName || ""},${d.surname},${d.birthday || ""},${d.contact}\n`;
+        });
+        const blob = new Blob([csv], {type:"text/csv"});
+        const a = document.createElement("a");
+        a.href=URL.createObjectURL(blob);
+        a.download="donors.csv";
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    window.onload = renderTable;
+
 </script>
 
 </body>
