@@ -3,6 +3,7 @@
 <head>
     <title>Partner Organization</title>
     <meta charset="UTF-8">
+
     <style>
         body { margin:0; font-family: Arial; background:#f4f4f4; }
         header { background:#2e7d32; color:white; padding:15px; text-align:center; }
@@ -16,11 +17,11 @@
             box-shadow:0 3px 10px rgba(0,0,0,0.1);
         }
 
-        input, select { padding:6px; }
+        input, select { padding:6px; margin:3px; }
 
         button {
-            padding:8px 12px;
-            margin:5px;
+            padding:6px 10px;
+            margin:3px;
             border:none;
             border-radius:5px;
             cursor:pointer;
@@ -30,6 +31,9 @@
         .save-btn { background:#2e7d32; }
         .print-btn { background:#6a1b9a; }
         .dashboard-btn { background:#444; }
+        .edit-btn { background:#1565c0; }
+        .view-btn { background:#6a1b9a; }
+        .export-btn { background:#ff9800; }
 
         table {
             width:100%;
@@ -44,6 +48,14 @@
         }
 
         th { background:#2e7d32; color:white; }
+
+        .hidden { display:none; }
+
+        @media print {
+            body * { visibility:hidden; }
+            #printArea, #printArea * { visibility:visible; }
+            #printArea { position:absolute; left:0; top:0; width:100%; }
+        }
     </style>
 </head>
 
@@ -57,32 +69,40 @@
 
     <!-- ENTRY -->
     <input type="text" id="orgName" placeholder="Organization Name">
-    <input type="number" id="donorCount" placeholder="Number of Donors">
-    <input type="date" id="orgDate">
     <button class="save-btn" id="savePartner">Save</button>
     <button class="print-btn" onclick="window.print()">Print</button>
+    <button class="export-btn" onclick="exportCSV()">Export CSV</button>
     <button class="dashboard-btn" onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 
     <hr>
-
-    <!-- SEARCH -->
-    <input type="text" id="searchBox" placeholder="Search Organization">
 
     <table>
         <thead>
             <tr>
                 <th>Organization</th>
-                <th>Date</th>
-                <th>Donors</th>
                 <th>Total ML</th>
-                <th>Award Type</th>
-                <th>Claimed</th>
-                <th>Date Claimed</th>
+                <th>Award</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="partnerTable"></tbody>
     </table>
 
+</div>
+
+<!-- PRINT AREA -->
+<div id="printArea" class="hidden">
+    <h2>Partner Organization Report</h2>
+    <table border="1" width="100%" cellpadding="5">
+        <thead>
+            <tr>
+                <th>Organization</th>
+                <th>Total ML</th>
+                <th>Award</th>
+            </tr>
+        </thead>
+        <tbody id="printTable"></tbody>
+    </table>
 </div>
 
 <script type="module">
@@ -101,120 +121,110 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-let partnerData = [];
-let awardTypes = [];
+let partners = [];
 
-/* LOAD AWARD TYPES FROM SETTINGS */
-async function loadAwardTypes() {
-    const snapshot = await getDocs(collection(db, "settings"));
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if(data.awardTypes){
-            awardTypes = data.awardTypes;
-        }
+/* LOAD */
+async function loadPartners(){
+    const snapshot = await getDocs(collection(db,"partners"));
+    partners=[];
+    snapshot.forEach(docSnap=>{
+        partners.push({id:docSnap.id, ...docSnap.data()});
     });
+    display();
 }
 
-/* LOAD PARTNERS */
-async function loadPartners() {
-    const snapshot = await getDocs(collection(db, "partners"));
-    partnerData = [];
-    snapshot.forEach(docSnap => {
-        partnerData.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    displayPartners(partnerData);
-}
+/* DISPLAY */
+function display(){
+    const table=document.getElementById("partnerTable");
+    const printTable=document.getElementById("printTable");
 
-/* DISPLAY TABLE */
-function displayPartners(data) {
-    const table = document.getElementById("partnerTable");
-    table.innerHTML = "";
+    table.innerHTML="";
+    printTable.innerHTML="";
 
-    data.forEach(item => {
-        const totalML = item.donorCount * 450;
+    partners.forEach(p=>{
+        const totalML = (p.entries||[]).reduce((sum,e)=>sum+e.donors*450,0);
 
-        let awardOptions = awardTypes.map(type =>
-            `<option value="${type}" ${item.awardType===type?'selected':''}>${type}</option>`
-        ).join("");
-
-        table.innerHTML += `
+        table.innerHTML+=`
         <tr>
-            <td>${item.name}</td>
-            <td>${item.date}</td>
-            <td>${item.donorCount}</td>
+            <td>${p.name}</td>
             <td>${totalML} ml</td>
-
+            <td>${p.awardType||""}</td>
             <td>
-                <select onchange="updateField('${item.id}','awardType',this.value)">
-                    <option value="">Select</option>
-                    ${awardOptions}
-                </select>
+                <button class="view-btn" onclick="viewDetails('${p.id}')">View</button>
+                <button class="edit-btn" onclick="editPartner('${p.id}')">Edit</button>
             </td>
+        </tr>
+        `;
 
-            <td>
-                <select onchange="updateField('${item.id}','claimedStatus',this.value)">
-                    <option value="No" ${item.claimedStatus==='No'?'selected':''}>Not Claimed</option>
-                    <option value="Yes" ${item.claimedStatus==='Yes'?'selected':''}>Claimed</option>
-                </select>
-            </td>
-
-            <td>
-                <input type="date" value="${item.claimedDate||''}"
-                onchange="updateField('${item.id}','claimedDate',this.value)">
-            </td>
+        printTable.innerHTML+=`
+        <tr>
+            <td>${p.name}</td>
+            <td>${totalML} ml</td>
+            <td>${p.awardType||""}</td>
         </tr>
         `;
     });
 }
 
-/* SAVE NEW PARTNER */
-document.getElementById("savePartner").addEventListener("click", async () => {
-
-    const name = document.getElementById("orgName").value.trim();
-    const donorCount = parseInt(document.getElementById("donorCount").value);
-    const date = document.getElementById("orgDate").value;
-
-    if(!name || !donorCount || !date){
-        alert("Fill all fields.");
-        return;
-    }
+/* SAVE NEW ORG */
+document.getElementById("savePartner").addEventListener("click", async ()=>{
+    const name=document.getElementById("orgName").value.trim();
+    if(!name){ alert("Enter organization name"); return; }
 
     await addDoc(collection(db,"partners"),{
         name,
-        donorCount,
-        date,
-        awardType:"",
-        claimedStatus:"No",
-        claimedDate:""
+        entries:[],
+        awardType:""
     });
 
     document.getElementById("orgName").value="";
-    document.getElementById("donorCount").value="";
-    document.getElementById("orgDate").value="";
-
     loadPartners();
 });
 
-/* UPDATE PER ROW */
-window.updateField = async function(id, field, value){
+/* EDIT */
+window.editPartner = async function(id){
+    const donors = prompt("Enter number of donors:");
+    const date = prompt("Enter date (YYYY-MM-DD):");
+
+    if(!donors || !date) return;
+
     const ref = doc(db,"partners",id);
-    await updateDoc(ref,{ [field]: value });
+    const partner = partners.find(p=>p.id===id);
+
+    const newEntries = partner.entries || [];
+    newEntries.push({ donors:parseInt(donors), date });
+
+    await updateDoc(ref,{ entries:newEntries });
+
+    loadPartners();
 };
 
-/* SEARCH */
-document.getElementById("searchBox").addEventListener("input", function(){
-    const val = this.value.toLowerCase();
-    const filtered = partnerData.filter(p =>
-        p.name.toLowerCase().includes(val)
-    );
-    displayPartners(filtered);
-});
-
-/* INIT */
-window.onload = async () => {
-    await loadAwardTypes();
-    await loadPartners();
+/* VIEW */
+window.viewDetails = function(id){
+    const partner = partners.find(p=>p.id===id);
+    let details="Entries:\n";
+    (partner.entries||[]).forEach(e=>{
+        details+=`Donors: ${e.donors} | Date: ${e.date}\n`;
+    });
+    alert(details);
 };
+
+/* EXPORT CSV */
+window.exportCSV = function(){
+    let csv="Organization,Total ML,Award\n";
+    partners.forEach(p=>{
+        const totalML=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
+        csv+=`${p.name},${totalML},${p.awardType||""}\n`;
+    });
+
+    const blob=new Blob([csv],{type:"text/csv"});
+    const link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    link.download="partner_organization.csv";
+    link.click();
+};
+
+window.onload=loadPartners;
 </script>
 
 </body>
