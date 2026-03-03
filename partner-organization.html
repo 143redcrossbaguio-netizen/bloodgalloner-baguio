@@ -12,11 +12,13 @@
         .add-btn { background:#b30000; }
         .edit-btn { background:#1565c0; }
         .delete-btn { background:#c62828; }
+        .view-btn { background:#6a1b9a; }
         .print-btn { background:#444; }
         .export-btn { background:#222; }
         table { width:100%; border-collapse:collapse; margin-top:10px; }
         th, td { padding:8px; border:1px solid #ddd; text-align:center; }
         th { background:#b30000; color:white; }
+        .details-box { background:#f9f9f9; padding:8px; border-radius:5px; display:none; margin-top:5px; }
     </style>
 </head>
 <body>
@@ -105,7 +107,15 @@ function renderTable(){
     organizations.forEach((org,index)=>{
         table.innerHTML += `<tr>
             <td>${index+1}</td>
-            <td>${org.name}</td>
+            <td><a href="javascript:void(0)" class="view-btn" onclick="toggleView('${org.id}')">${org.name}</a>
+                <div class="details-box" id="details-${org.id}">
+                    <p>Number of Donors: ${org.numDonors}</p>
+                    <p>Date: ${org.date}</p>
+                    <p>Total (ml): ${calculateTotalML(org.numDonors)}</p>
+                    <p>Awarded: ${org.awardStatus||''}</p>
+                    <p>Award Date: ${org.awardDate||''}</p>
+                </div>
+            </td>
             <td>${org.date}</td>
             <td>${org.numDonors}</td>
             <td>${calculateTotalML(org.numDonors)}</td>
@@ -117,6 +127,11 @@ function renderTable(){
             </td>
         </tr>`;
     });
+}
+
+function toggleView(id){
+    const box = document.getElementById("details-"+id);
+    box.style.display = box.style.display==="none"?"block":"none";
 }
 
 async function addOrganization(){
@@ -143,7 +158,6 @@ async function addOrganization(){
         organizations.push({id:docRef.id,name,numDonors,date,awardStatus,awardDate});
         renderTable();
 
-        // Reset input
         document.getElementById("orgName").value="";
         document.getElementById("numDonors").value="";
         document.getElementById("orgDate").value="";
@@ -160,6 +174,28 @@ async function deleteOrganization(id){
         await deleteDoc(doc(db,"partnerOrganizations",id));
         organizations = organizations.filter(o=>o.id!==id);
         renderTable();
+    }
+}
+
+async function editOrganization(id){
+    const org = organizations.find(o=>o.id===id);
+    if(!org) return;
+
+    const newNum = prompt("Enter number of donors", org.numDonors);
+    const newDate = prompt("Enter date", org.date);
+    if(!newNum || !newDate) return;
+
+    try{
+        await updateDoc(doc(db,"partnerOrganizations",id),{
+            numDonors:parseInt(newNum),
+            date:newDate
+        });
+        org.numDonors = parseInt(newNum);
+        org.date = newDate;
+        renderTable();
+    } catch(e){
+        console.error(e);
+        alert("Error updating organization.");
     }
 }
 
@@ -203,29 +239,6 @@ function goDashboard(){
     window.location.href="dashboard.html";
 }
 
-async function editOrganization(id){
-    const org = organizations.find(o=>o.id===id);
-    if(!org) return;
-
-    const newNum = prompt("Enter number of donors", org.numDonors);
-    const newDate = prompt("Enter date", org.date);
-    if(!newNum || !newDate) return;
-
-    try{
-        await updateDoc(doc(db,"partnerOrganizations",id),{
-            numDonors:parseInt(newNum),
-            date:newDate
-        });
-        org.numDonors = parseInt(newNum);
-        org.date = newDate;
-        renderTable();
-    } catch(e){
-        console.error(e);
-        alert("Error updating organization.");
-    }
-}
-
-// Assign add and dashboard buttons
 document.getElementById("addBtn").onclick = addOrganization;
 document.getElementById("dashboardBtn").onclick = goDashboard;
 
