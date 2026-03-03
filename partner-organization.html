@@ -17,7 +17,7 @@ border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
 
-input{padding:6px;margin:4px;}
+input,select{padding:6px;margin:4px;}
 
 button{
 padding:6px 10px;
@@ -31,7 +31,6 @@ color:white;
 .save-btn{background:#2e7d32;}
 .edit-btn{background:#1565c0;}
 .delete-btn{background:#c62828;}
-.claim-btn{background:#6a1b9a;}
 .print-btn{background:#000;}
 .export-btn{background:#ff9800;}
 .return-btn{background:#444;}
@@ -186,11 +185,20 @@ table.innerHTML+=`
 <td>${p.dateAdded}</td>
 <td>${total}</td>
 <td>${award}</td>
-<td>${p.awarded?"Yes":"No"}</td>
-<td>${p.dateAwarded||""}</td>
+<td>
+<select onchange="setAward('${p.id}', this.value)">
+<option value="No" ${!p.awarded?"selected":""}>No</option>
+<option value="Yes" ${p.awarded?"selected":""}>Yes</option>
+</select>
+</td>
+<td>
+${p.awarded ? 
+`<input type="date" value="${p.dateAwarded||""}" 
+onchange="setAwardDate('${p.id}', this.value)">`
+: ""}
+</td>
 <td>
 <button class="edit-btn" onclick="openModal('${p.id}')">Entries</button>
-<button class="claim-btn" onclick="toggleAward('${p.id}')">Award</button>
 <button class="delete-btn" onclick="deleteOrg('${p.id}')">Delete</button>
 </td>
 </tr>
@@ -225,6 +233,7 @@ awarded:false,
 dateAwarded:""
 });
 
+/* RESET FORM */
 document.getElementById("orgName").value="";
 document.getElementById("orgDate").value="";
 document.getElementById("initialDonors").value="";
@@ -254,31 +263,41 @@ if(!donors||!date)return;
 const p=partners.find(x=>x.id===currentId);
 p.entries.push({donors,date});
 
-await updateDoc(doc(db,"partners",currentId),{entries:p.entries});
+await updateDoc(doc(db,"partners",currentId),{
+entries:p.entries
+});
 
 document.getElementById("newDonors").value="";
 document.getElementById("newDate").value="";
+
 openModal(currentId);
 });
 
-/* DELETE ENTRY */
 window.deleteEntry=async function(index){
 const p=partners.find(x=>x.id===currentId);
 p.entries.splice(index,1);
-await updateDoc(doc(db,"partners",currentId),{entries:p.entries});
+await updateDoc(doc(db,"partners",currentId),{
+entries:p.entries
+});
 openModal(currentId);
 };
 
-/* TOGGLE AWARD */
-window.toggleAward=async function(id){
-const p=partners.find(x=>x.id===id);
+/* MANUAL AWARD */
+window.setAward=async function(id,value){
+const awarded=value==="Yes";
 await updateDoc(doc(db,"partners",id),{
-awarded:!p.awarded,
-dateAwarded:!p.awarded?new Date().toISOString().split("T")[0]:""
+awarded,
+dateAwarded: awarded ? new Date().toISOString().split("T")[0] : ""
 });
 };
 
-/* DELETE ORG */
+window.setAwardDate=async function(id,date){
+await updateDoc(doc(db,"partners",id),{
+dateAwarded:date
+});
+};
+
+/* DELETE */
 window.deleteOrg=async function(id){
 if(confirm("Delete organization?"))
 await deleteDoc(doc(db,"partners",id));
