@@ -86,7 +86,10 @@ import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot
 const firebaseConfig={
     apiKey:"YOUR_API_KEY",
     authDomain:"YOUR_AUTH_DOMAIN",
-    projectId:"YOUR_PROJECT_ID"
+    projectId:"YOUR_PROJECT_ID",
+    storageBucket:"YOUR_BUCKET",
+    messagingSenderId:"YOUR_SENDER_ID",
+    appId:"YOUR_APP_ID"
 };
 
 const app=initializeApp(firebaseConfig);
@@ -94,13 +97,10 @@ const db=getFirestore(app);
 
 let partners=[];
 let currentId=null;
-const thresholds={Bronze:1000,Silver:5000,Gold:10000,Platinum:20000};
 
-function calculateAward(total){
-    let award="";
-    Object.entries(thresholds).forEach(([k,v])=>{if(total>=v) award=k;});
-    return award;
-}
+// Award thresholds
+const thresholds={Bronze:1000,Silver:5000,Gold:10000,Platinum:20000};
+function calculateAward(total){let award="";Object.entries(thresholds).forEach(([k,v])=>{if(total>=v) award=k;});return award;}
 
 // Real-time listener
 const q=query(collection(db,"partners"),orderBy("dateAdded","asc"));
@@ -115,8 +115,7 @@ function display(){
     const table=document.getElementById("partnerTable");
     const printTable=document.getElementById("printTable");
     const search=document.getElementById("searchBox").value.toLowerCase();
-    table.innerHTML="";
-    printTable.innerHTML="";
+    table.innerHTML=""; printTable.innerHTML="";
     partners.forEach(p=>{
         if(search && !p.name.toLowerCase().includes(search)) return;
         const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
@@ -167,23 +166,13 @@ document.getElementById("savePartner").addEventListener("click",async()=>{
     } catch(e){console.error(e);alert("Error saving organization.");}
 });
 
-// Modal for entries
-window.openModal=function(id){
-    currentId=id;
-    renderEntries();
-    document.getElementById("modal").style.display="block";
-};
-
+// Modal & entries
+window.openModal=function(id){currentId=id;renderEntries();document.getElementById("modal").style.display="block";};
 function renderEntries(){
     const p=partners.find(x=>x.id===currentId);
-    const list=document.getElementById("entryList");
-    list.innerHTML="";
-    (p.entries||[]).forEach((e,i)=>{
-        list.innerHTML+=`<div>Donors:${e.donors} | Date:${e.date} <button onclick="deleteEntry(${i})">Delete</button></div>`;
-    });
+    const list=document.getElementById("entryList"); list.innerHTML="";
+    (p.entries||[]).forEach((e,i)=>{list.innerHTML+=`<div>Donors:${e.donors} | Date:${e.date} <button onclick="deleteEntry(${i})">Delete</button></div>`;});
 }
-
-// Add entry
 document.getElementById("saveEntryBtn").addEventListener("click",async()=>{
     const donors=parseInt(document.getElementById("newDonors").value);
     const date=document.getElementById("newDate").value;
@@ -191,53 +180,18 @@ document.getElementById("saveEntryBtn").addEventListener("click",async()=>{
     const p=partners.find(x=>x.id===currentId);
     const updated=[...(p.entries||[]),{donors,date}];
     await updateDoc(doc(db,"partners",currentId),{entries:updated});
-    document.getElementById("newDonors").value="";
-    document.getElementById("newDate").value="";
+    document.getElementById("newDonors").value=""; document.getElementById("newDate").value="";
     renderEntries();
 });
-
-// Delete entry
-window.deleteEntry=async function(index){
-    const p=partners.find(x=>x.id===currentId);
-    const updated=[...(p.entries||[])]; updated.splice(index,1);
-    await updateDoc(doc(db,"partners",currentId),{entries:updated});
-    renderEntries();
-};
-
-// Award
-window.setAward=async function(id,value){
-    await updateDoc(doc(db,"partners",id),{
-        awarded:value==="Yes",
-        dateAwarded:value==="Yes"?new Date().toISOString().split("T")[0]:""
-    });
-};
-window.setAwardDate=async function(id,date){
-    await updateDoc(doc(db,"partners",id),{dateAwarded:date});
-};
-
-// Delete organization
+window.deleteEntry=async function(index){const p=partners.find(x=>x.id===currentId);const updated=[...(p.entries||[])];updated.splice(index,1);await updateDoc(doc(db,"partners",currentId),{entries:updated});renderEntries();};
+window.setAward=async function(id,value){await updateDoc(doc(db,"partners",id),{awarded:value==="Yes",dateAwarded:value==="Yes"?new Date().toISOString().split("T")[0]:""});};
+window.setAwardDate=async function(id,date){await updateDoc(doc(db,"partners",id),{dateAwarded:date});};
 window.deleteOrg=async function(id){if(confirm("Delete organization?")) await deleteDoc(doc(db,"partners",id));};
-
 window.printReport=function(){window.print();};
-
-window.exportCSV=function(){
-    let csv="Organization,Total ML,Award\n";
-    partners.forEach(p=>{
-        const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
-        const award=calculateAward(total);
-        csv+=`${p.name},${total},${award}\n`;
-    });
-    const blob=new Blob([csv],{type:"text/csv"});
-    const link=document.createElement("a");
-    link.href=URL.createObjectURL(blob);
-    link.download="partner_report.csv";
-    link.click();
-};
-
+window.exportCSV=function(){let csv="Organization,Total ML,Award\n";partners.forEach(p=>{const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);const award=calculateAward(total);csv+=`${p.name},${total},${award}\n`;});const blob=new Blob([csv],{type:"text/csv"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="partner_report.csv";link.click();};
 window.closeModal=function(){document.getElementById("modal").style.display="none";};
 document.getElementById("searchBox").addEventListener("input",display);
 window.goDashboard=function(){window.location.href="dashboard.html";};
-
 </script>
 </body>
 </html>
