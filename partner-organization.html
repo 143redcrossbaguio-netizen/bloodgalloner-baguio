@@ -1,80 +1,316 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Settings</title>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: Arial; background:#f4f4f4; margin:0; }
-        header { background:#1565c0; color:white; padding:15px; text-align:center; }
-        .container {
-            max-width:500px;
-            margin:40px auto;
-            background:white;
-            padding:20px;
-            border-radius:10px;
-            box-shadow:0 3px 10px rgba(0,0,0,0.1);
-        }
-        input { width:100%; padding:8px; margin:5px 0; }
-        button {
-            width:100%;
-            padding:10px;
-            margin-top:10px;
-            background:#1565c0;
-            color:white;
-            border:none;
-            border-radius:5px;
-            cursor:pointer;
-        }
-    </style>
+<title>Partner Organization</title>
+<meta charset="UTF-8">
+
+<style>
+body { margin:0; font-family:Arial; background:#f4f4f4; }
+header { background:#2e7d32; color:white; padding:15px; text-align:center; }
+
+.container{
+    max-width:1200px;
+    margin:30px auto;
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+input,select{ padding:6px; margin:3px; }
+
+button{
+    padding:6px 10px;
+    margin:3px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    color:white;
+}
+
+.save-btn{background:#2e7d32;}
+.edit-btn{background:#1565c0;}
+.delete-btn{background:#c62828;}
+.view-btn{background:#6a1b9a;}
+.print-btn{background:#000;}
+.export-btn{background:#ff9800;}
+.return-btn{background:#444;}
+
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{border:1px solid #ddd;padding:6px;text-align:center;}
+th{background:#2e7d32;color:white;}
+
+#modal{
+    display:none;
+    position:fixed;
+    top:0;left:0;
+    width:100%;height:100%;
+    background:rgba(0,0,0,0.6);
+}
+#modalContent{
+    background:white;
+    padding:20px;
+    width:420px;
+    margin:100px auto;
+    border-radius:10px;
+}
+
+.entry-row{border-bottom:1px solid #ccc;padding:5px 0;}
+
+@media print{
+    body *{visibility:hidden;}
+    #printArea,#printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;}
+}
+</style>
 </head>
+
 <body>
 
-<header><h2>Settings</h2></header>
+<header>
+<h2>Partner Organization</h2>
+</header>
 
 <div class="container">
-    <h3>Award Thresholds (ML)</h3>
 
-    <input type="number" id="bronze" placeholder="Bronze Threshold">
-    <input type="number" id="silver" placeholder="Silver Threshold">
-    <input type="number" id="gold" placeholder="Gold Threshold">
-    <input type="number" id="platinum" placeholder="Platinum Threshold">
+<input type="text" id="orgName" placeholder="Organization Name">
+<button class="save-btn" id="savePartner">Save</button>
 
-    <button onclick="saveSettings()">Save Settings</button>
+<input type="text" id="searchBox" placeholder="Search Organization">
+
+<select id="awardFilter">
+<option value="">Filter Award</option>
+</select>
+
+<button class="print-btn" onclick="printReport()">Print</button>
+<button class="export-btn" onclick="exportCSV()">Export CSV</button>
+<button class="return-btn" onclick="window.location.href='dashboard.html'">Return</button>
+
+<table>
+<thead>
+<tr>
+<th>Organization</th>
+<th>Total ML</th>
+<th>Award</th>
+<th>Claimed</th>
+<th>Date Claimed</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="partnerTable"></tbody>
+</table>
+</div>
+
+<div id="printArea">
+<h2>Partner Organization Report</h2>
+<table border="1" width="100%" cellpadding="5">
+<thead>
+<tr>
+<th>Organization</th>
+<th>Total ML</th>
+<th>Award</th>
+</tr>
+</thead>
+<tbody id="printTable"></tbody>
+</table>
+</div>
+
+<!-- MODAL -->
+<div id="modal">
+<div id="modalContent">
+<h3>Add Donor Entry</h3>
+
+<input type="number" id="donorCount" placeholder="Number of Donors"><br>
+<input type="date" id="donorDate"><br>
+<button class="save-btn" onclick="saveEntry()">Save Entry</button>
+
+<hr>
+
+<h4>Existing Entries</h4>
+<div id="entryList"></div>
+
+<button class="delete-btn" onclick="closeModal()">Close</button>
+</div>
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID"
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig={
+apiKey:"YOUR_API_KEY",
+authDomain:"YOUR_AUTH_DOMAIN",
+projectId:"YOUR_PROJECT_ID"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const app=initializeApp(firebaseConfig);
+const db=getFirestore(app);
 
-async function loadSettings(){
-    const snap = await getDoc(doc(db,"settings","awards"));
-    if(snap.exists()){
-        const d = snap.data();
-        bronze.value=d.bronze;
-        silver.value=d.silver;
-        gold.value=d.gold;
-        platinum.value=d.platinum;
+let partners=[];
+let thresholds={Bronze:1000,Silver:5000,Gold:10000,Platinum:20000};
+let currentEditId=null;
+
+async function loadThresholds(){
+    const snap=await getDocs(collection(db,"settings"));
+    snap.forEach(d=>{
+        if(d.id==="awardThresholds") thresholds=d.data();
+    });
+    loadAwardFilter();
+}
+
+function loadAwardFilter(){
+    const select=document.getElementById("awardFilter");
+    select.innerHTML='<option value="">Filter Award</option>';
+    Object.keys(thresholds).forEach(a=>{
+        select.innerHTML+=`<option>${a}</option>`;
+    });
+}
+
+function calculateAward(totalML){
+    let award="";
+    Object.entries(thresholds).forEach(([key,value])=>{
+        if(totalML>=value) award=key;
+    });
+    return award;
+}
+
+async function loadPartners(){
+    const snap=await getDocs(collection(db,"partners"));
+    partners=[];
+    snap.forEach(d=>partners.push({id:d.id,...d.data()}));
+    display();
+}
+
+function display(){
+    const table=document.getElementById("partnerTable");
+    const printTable=document.getElementById("printTable");
+
+    const search=document.getElementById("searchBox").value.toLowerCase();
+    const filter=document.getElementById("awardFilter").value;
+
+    table.innerHTML="";
+    printTable.innerHTML="";
+
+    partners.forEach(p=>{
+        const totalML=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
+        const award=calculateAward(totalML);
+
+        if(search && !p.name.toLowerCase().includes(search)) return;
+        if(filter && award!==filter) return;
+
+        table.innerHTML+=`
+        <tr>
+        <td>${p.name}</td>
+        <td>${totalML}</td>
+        <td>${award}</td>
+        <td>${p.claimed?"Yes":"No"}</td>
+        <td>${p.dateClaimed||""}</td>
+        <td>
+        <button class="edit-btn" onclick="openModal('${p.id}')">View/Edit</button>
+        <button class="view-btn" onclick="toggleClaim('${p.id}')">Toggle Claim</button>
+        <button class="delete-btn" onclick="deletePartner('${p.id}')">Delete</button>
+        </td>
+        </tr>
+        `;
+
+        printTable.innerHTML+=`
+        <tr>
+        <td>${p.name}</td>
+        <td>${totalML}</td>
+        <td>${award}</td>
+        </tr>
+        `;
+    });
+}
+
+document.getElementById("savePartner").addEventListener("click",async()=>{
+    const name=document.getElementById("orgName").value.trim();
+    if(!name) return;
+    await addDoc(collection(db,"partners"),{name,entries:[],claimed:false});
+    document.getElementById("orgName").value="";
+    loadPartners();
+});
+
+window.openModal=function(id){
+    currentEditId=id;
+    const partner=partners.find(p=>p.id===id);
+    const list=document.getElementById("entryList");
+    list.innerHTML="";
+    (partner.entries||[]).forEach((e,index)=>{
+        list.innerHTML+=`
+        <div class="entry-row">
+        Donors: ${e.donors} | Date: ${e.date}
+        <button class="delete-btn" onclick="deleteEntry(${index})">Delete</button>
+        </div>`;
+    });
+    document.getElementById("modal").style.display="block";
+}
+
+window.deleteEntry=async function(index){
+    const partner=partners.find(p=>p.id===currentEditId);
+    partner.entries.splice(index,1);
+    await updateDoc(doc(db,"partners",currentEditId),{entries:partner.entries});
+    openModal(currentEditId);
+    loadPartners();
+}
+
+window.saveEntry=async function(){
+    const donors=parseInt(document.getElementById("donorCount").value);
+    const date=document.getElementById("donorDate").value;
+    if(!donors||!date) return;
+
+    const partner=partners.find(p=>p.id===currentEditId);
+    partner.entries.push({donors,date});
+    await updateDoc(doc(db,"partners",currentEditId),{entries:partner.entries});
+    closeModal();
+    loadPartners();
+}
+
+window.closeModal=function(){
+    document.getElementById("modal").style.display="none";
+}
+
+window.toggleClaim=async function(id){
+    const p=partners.find(x=>x.id===id);
+    await updateDoc(doc(db,"partners",id),{
+        claimed:!p.claimed,
+        dateClaimed:!p.claimed?new Date().toISOString().split("T")[0]:""
+    });
+    loadPartners();
+}
+
+window.deletePartner=async function(id){
+    if(confirm("Delete organization?")){
+        await deleteDoc(doc(db,"partners",id));
+        loadPartners();
     }
 }
-window.saveSettings = async function(){
-    await setDoc(doc(db,"settings","awards"),{
-        bronze:Number(bronze.value),
-        silver:Number(silver.value),
-        gold:Number(gold.value),
-        platinum:Number(platinum.value)
+
+window.printReport=function(){window.print();}
+
+window.exportCSV=function(){
+    let csv="Organization,Total ML,Award\n";
+    partners.forEach(p=>{
+        const totalML=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
+        const award=calculateAward(totalML);
+        csv+=`${p.name},${totalML},${award}\n`;
     });
-    alert("Settings Saved");
+    const blob=new Blob([csv],{type:"text/csv"});
+    const link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    link.download="partner_report.csv";
+    link.click();
 }
-window.onload=loadSettings;
+
+document.getElementById("searchBox").addEventListener("input",display);
+document.getElementById("awardFilter").addEventListener("change",display);
+
+window.onload=async function(){
+    await loadThresholds();
+    await loadPartners();
+}
+
 </script>
 
 </body>
