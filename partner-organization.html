@@ -42,6 +42,12 @@
             <option value="no">No</option>
         </select>
         <input type="date" id="awardDate">
+        <select id="claimedStatus">
+            <option value="">Claimed?</option>
+            <option value="claimed">Claimed</option>
+            <option value="unclaimed">Unclaimed</option>
+        </select>
+        <input type="date" id="claimDate">
         <button class="add-btn" id="addBtn">Add Organization</button>
     </div>
 
@@ -59,6 +65,8 @@
                 <th>Total (ml)</th>
                 <th>Awarded</th>
                 <th>Award Date</th>
+                <th>Claimed</th>
+                <th>Claim Date</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -108,20 +116,26 @@ function renderTable(){
     organizations.forEach((org,index)=>{
         table.innerHTML += `<tr>
             <td>${index+1}</td>
-            <td><a href="javascript:void(0)" class="view-btn" onclick="toggleView('${org.id}')">${org.name}</a>
-                <div class="details-box" id="details-${org.id}">
-                    <p>Number of Donors: ${org.numDonors}</p>
-                    <p>Date: ${org.date}</p>
-                    <p>Total (ml): ${calculateTotalML(org.numDonors)}</p>
-                    <p>Awarded: ${org.awardStatus||''}</p>
-                    <p>Award Date: ${org.awardDate||''}</p>
-                </div>
-            </td>
+            <td>${org.name}</td>
             <td>${org.date}</td>
             <td>${org.numDonors}</td>
             <td>${calculateTotalML(org.numDonors)}</td>
-            <td>${org.awardStatus || ""}</td>
-            <td>${org.awardDate || ""}</td>
+            <td>
+                <select onchange="updateField('${org.id}','awardStatus',this.value)">
+                    <option value="">Select</option>
+                    <option value="yes" ${org.awardStatus==='yes'?'selected':''}>Yes</option>
+                    <option value="no" ${org.awardStatus==='no'?'selected':''}>No</option>
+                </select>
+            </td>
+            <td><input type="date" value="${org.awardDate||''}" onchange="updateField('${org.id}','awardDate',this.value)"></td>
+            <td>
+                <select onchange="updateField('${org.id}','claimedStatus',this.value)">
+                    <option value="">Select</option>
+                    <option value="claimed" ${org.claimedStatus==='claimed'?'selected':''}>Claimed</option>
+                    <option value="unclaimed" ${org.claimedStatus==='unclaimed'?'selected':''}>Unclaimed</option>
+                </select>
+            </td>
+            <td><input type="date" value="${org.claimDate||''}" onchange="updateField('${org.id}','claimDate',this.value)"></td>
             <td>
                 <button class="edit-btn" onclick="editOrganization('${org.id}')">Edit</button>
                 <button class="delete-btn" onclick="deleteOrganization('${org.id}')">Delete</button>
@@ -130,9 +144,13 @@ function renderTable(){
     });
 }
 
-function toggleView(id){
-    const box = document.getElementById("details-"+id);
-    box.style.display = box.style.display==="none"?"block":"none";
+async function updateField(id, field, value){
+    const org = organizations.find(o=>o.id===id);
+    if(!org) return;
+    const obj = {};
+    obj[field] = value;
+    await updateDoc(doc(db,"partnerOrganizations",id),obj);
+    org[field] = value;
 }
 
 async function addOrganization(){
@@ -141,6 +159,8 @@ async function addOrganization(){
     const date = document.getElementById("orgDate").value;
     const awardStatus = document.getElementById("awardStatus").value;
     const awardDate = document.getElementById("awardDate").value;
+    const claimedStatus = document.getElementById("claimedStatus").value;
+    const claimDate = document.getElementById("claimDate").value;
 
     if(!name || !numDonors || !date){
         alert("Please fill all required fields.");
@@ -154,9 +174,9 @@ async function addOrganization(){
 
     try{
         const docRef = await addDoc(collection(db,"partnerOrganizations"),{
-            name,numDonors,date,awardStatus,awardDate
+            name,numDonors,date,awardStatus,awardDate,claimedStatus,claimDate
         });
-        organizations.push({id:docRef.id,name,numDonors,date,awardStatus,awardDate});
+        organizations.push({id:docRef.id,name,numDonors,date,awardStatus,awardDate,claimedStatus,claimDate});
         renderTable();
 
         document.getElementById("orgName").value="";
@@ -164,25 +184,20 @@ async function addOrganization(){
         document.getElementById("orgDate").value="";
         document.getElementById("awardStatus").value="";
         document.getElementById("awardDate").value="";
+        document.getElementById("claimedStatus").value="";
+        document.getElementById("claimDate").value="";
     } catch(e){
         console.error(e);
         alert("Error adding organization.");
     }
 }
 
-// Fixed Delete Button
-async function deleteOrganization(id){
-    if(confirm("Are you sure to delete?")){
-        await deleteDoc(doc(db,"partnerOrganizations",id));
-        organizations = organizations.filter(o=>o.id!==id);
-        renderTable();
-    }
-}
-
-// Fixed Edit Button to add donors and update date
+// Confirm Edit with prompt for adding donors and date
 async function editOrganization(id){
     const org = organizations.find(o=>o.id===id);
     if(!org) return;
+
+    if(!confirm("Do you want to edit this organization?")) return;
 
     const addDonors = parseInt(prompt("Add number of donors (current: "+org.numDonors+")", 0));
     if(isNaN(addDonors)) return;
@@ -202,6 +217,14 @@ async function editOrganization(id){
         console.error(e);
         alert("Error updating organization.");
     }
+}
+
+// Confirm Delete
+async function deleteOrganization(id){
+    if(!confirm("Are you sure you want to delete this organization?")) return;
+    await deleteDoc(doc(db,"partnerOrganizations",id));
+    organizations = organizations.filter(o=>o.id!==id);
+    renderTable();
 }
 
 function searchOrg(){
@@ -228,9 +251,9 @@ function printTable(){
 }
 
 function exportCSV(){
-    let csv = "Organization,Date,Number of Donors,Total (ml),Awarded,Award Date\n";
+    let csv = "Organization,Date,Number of Donors,Total (ml),Awarded,Award Date,Claimed,Claim Date\n";
     organizations.forEach(org=>{
-        csv += `${org.name},${org.date},${org.numDonors},${calculateTotalML(org.numDonors)},${org.awardStatus||''},${org.awardDate||''}\n`;
+        csv += `${org.name},${org.date},${org.numDonors},${calculateTotalML(org.numDonors)},${org.awardStatus||''},${org.awardDate||''},${org.claimedStatus||''},${org.claimDate||''}\n`;
     });
     const blob = new Blob([csv], {type:"text/csv"});
     const url = window.URL.createObjectURL(blob);
