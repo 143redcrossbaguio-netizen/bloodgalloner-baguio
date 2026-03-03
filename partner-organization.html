@@ -141,25 +141,30 @@ async function addOrganization(){
     }
 }
 
-// Edit button works
+// Unlimited edit: add donors and update date
 async function editOrganization(id){
     const org = organizations.find(o=>o.id===id);
     if(!org) return;
 
     if(!confirm("Do you want to edit this organization?")) return;
 
-    const addDonors = parseInt(prompt("Add number of donors (current: "+org.numDonors+")", 0));
-    if(isNaN(addDonors)) return;
+    let addDonors;
+    while(true){
+        addDonors = prompt("Add number of donors (current: "+org.numDonors+")", 0);
+        if(addDonors === null) return;
+        if(!isNaN(addDonors)) break;
+        alert("Please enter a valid number.");
+    }
 
     const newDate = prompt("Enter new date", org.date);
-    if(!newDate) return;
+    if(newDate === null) return;
 
     try{
         await updateDoc(doc(db,"partnerOrganizations",id),{
-            numDonors: org.numDonors + addDonors,
+            numDonors: org.numDonors + parseInt(addDonors),
             date: newDate
         });
-        org.numDonors += addDonors;
+        org.numDonors += parseInt(addDonors);
         org.date = newDate;
         renderTable();
     } catch(e){
@@ -168,7 +173,6 @@ async function editOrganization(id){
     }
 }
 
-// Delete button works
 async function deleteOrganization(id){
     if(!confirm("Are you sure you want to delete this organization?")) return;
     await deleteDoc(doc(db,"partnerOrganizations",id));
