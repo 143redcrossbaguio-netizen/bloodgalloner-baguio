@@ -17,11 +17,10 @@ border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
 
-input,select{padding:6px;margin:3px;}
-
+input{padding:6px;margin:4px;}
 button{
 padding:6px 10px;
-margin:3px;
+margin:4px;
 border:none;
 border-radius:5px;
 cursor:pointer;
@@ -34,7 +33,6 @@ color:white;
 .claim-btn{background:#6a1b9a;}
 .print-btn{background:#000;}
 .export-btn{background:#ff9800;}
-.return-btn{background:#444;}
 
 table{width:100%;border-collapse:collapse;margin-top:20px;}
 th,td{border:1px solid #ddd;padding:6px;text-align:center;}
@@ -47,12 +45,18 @@ top:0;left:0;
 width:100%;height:100%;
 background:rgba(0,0,0,0.6);
 }
+
 #modalContent{
 background:white;
 padding:20px;
-width:420px;
-margin:100px auto;
+width:450px;
+margin:80px auto;
 border-radius:10px;
+}
+
+.entry-row{
+border-bottom:1px solid #ccc;
+padding:5px 0;
 }
 
 @media print{
@@ -71,16 +75,17 @@ body *{visibility:hidden;}
 
 <div class="container">
 
+<h3>Add Organization</h3>
+
 <input type="text" id="orgName" placeholder="Organization Name">
 <input type="date" id="orgDate">
-<input type="number" id="initialDonors" placeholder="Initial Number of Donors">
+<input type="number" id="initialDonors" placeholder="Initial Donors">
 <button class="save-btn" id="savePartner" type="button">Save</button>
 
-<br>
+<br><br>
 
 <button class="print-btn" onclick="printReport()">Print</button>
 <button class="export-btn" onclick="exportCSV()">Export CSV</button>
-<button class="return-btn" onclick="window.location.href='dashboard.html'">Return</button>
 
 <table>
 <thead>
@@ -96,6 +101,7 @@ body *{visibility:hidden;}
 </thead>
 <tbody id="partnerTable"></tbody>
 </table>
+
 </div>
 
 <div id="printArea">
@@ -110,6 +116,22 @@ body *{visibility:hidden;}
 </thead>
 <tbody id="printTable"></tbody>
 </table>
+</div>
+
+<div id="modal">
+<div id="modalContent">
+<h3 id="modalTitle">Manage Entries</h3>
+
+<input type="number" id="newDonors" placeholder="Number of Donors">
+<input type="date" id="newDate">
+<button class="save-btn" onclick="addEntry()">Add Entry</button>
+
+<hr>
+<h4>Existing Entries</h4>
+<div id="entryList"></div>
+
+<button class="delete-btn" onclick="closeModal()">Close</button>
+</div>
 </div>
 
 <script type="module">
@@ -127,12 +149,14 @@ const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
 
 let partners=[];
-let thresholds={Bronze:1000,Silver:5000,Gold:10000,Platinum:20000};
+let currentId=null;
 
-function calculateAward(totalML){
+const thresholds={Bronze:1000,Silver:5000,Gold:10000,Platinum:20000};
+
+function calculateAward(total){
 let award="";
-Object.entries(thresholds).forEach(([key,value])=>{
-if(totalML>=value) award=key;
+Object.entries(thresholds).forEach(([k,v])=>{
+if(total>=v) award=k;
 });
 return award;
 }
@@ -151,20 +175,21 @@ table.innerHTML="";
 printTable.innerHTML="";
 
 partners.forEach(p=>{
-const totalML=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
-const award=calculateAward(totalML);
+const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
+const award=calculateAward(total);
 
 table.innerHTML+=`
 <tr>
 <td>${p.name}</td>
 <td>${p.dateAdded||""}</td>
-<td>${totalML}</td>
+<td>${total}</td>
 <td>${award}</td>
 <td>${p.claimed?"Yes":"No"}</td>
 <td>${p.dateClaimed||""}</td>
 <td>
+<button class="edit-btn" onclick="openModal('${p.id}')">Entries</button>
 <button class="claim-btn" onclick="toggleClaim('${p.id}')">Claim</button>
-<button class="delete-btn" onclick="deletePartner('${p.id}')">Delete</button>
+<button class="delete-btn" onclick="deleteOrg('${p.id}')">Delete</button>
 </td>
 </tr>
 `;
@@ -172,36 +197,33 @@ table.innerHTML+=`
 printTable.innerHTML+=`
 <tr>
 <td>${p.name}</td>
-<td>${totalML}</td>
+<td>${total}</td>
 <td>${award}</td>
 </tr>
 `;
 });
 }
 
-document.getElementById("savePartner").addEventListener("click",async function(){
+document.getElementById("savePartner").addEventListener("click",async()=>{
 
 const name=document.getElementById("orgName").value.trim();
 const date=document.getElementById("orgDate").value;
 const donors=parseInt(document.getElementById("initialDonors").value)||0;
 
 if(!name || !date){
-alert("Please complete all required fields.");
+alert("Complete required fields.");
 return;
 }
 
-// 🔴 DUPLICATE CHECK
-const duplicate=partners.find(p=>p.name.toLowerCase()===name.toLowerCase());
-if(duplicate){
-alert("Organization already exists. Duplicate not allowed.");
+if(partners.find(p=>p.name.toLowerCase()===name.toLowerCase())){
+alert("Organization already exists.");
 return;
 }
 
-try{
 await addDoc(collection(db,"partners"),{
-name:name,
+name,
 dateAdded:date,
-entries: donors>0 ? [{donors:donors,date:date}] : [],
+entries: donors>0?[{donors,date}]:[],
 claimed:false,
 dateClaimed:""
 });
@@ -210,34 +232,65 @@ document.getElementById("orgName").value="";
 document.getElementById("orgDate").value="";
 document.getElementById("initialDonors").value="";
 
-await loadPartners();
-
-}catch(error){
-console.error(error);
-alert("Error saving organization.");
-}
+loadPartners();
 });
+
+window.openModal=function(id){
+currentId=id;
+const p=partners.find(x=>x.id===id);
+const list=document.getElementById("entryList");
+list.innerHTML="";
+(p.entries||[]).forEach((e,i)=>{
+list.innerHTML+=`
+<div class="entry-row">
+Donors: ${e.donors} | Date: ${e.date}
+<button class="delete-btn" onclick="deleteEntry(${i})">Delete</button>
+</div>`;
+});
+document.getElementById("modal").style.display="block";
+}
+
+window.addEntry=async function(){
+const donors=parseInt(document.getElementById("newDonors").value);
+const date=document.getElementById("newDate").value;
+if(!donors||!date)return;
+
+const p=partners.find(x=>x.id===currentId);
+p.entries.push({donors,date});
+await updateDoc(doc(db,"partners",currentId),{entries:p.entries});
+
+document.getElementById("newDonors").value="";
+document.getElementById("newDate").value="";
+openModal(currentId);
+loadPartners();
+}
+
+window.deleteEntry=async function(index){
+const p=partners.find(x=>x.id===currentId);
+p.entries.splice(index,1);
+await updateDoc(doc(db,"partners",currentId),{entries:p.entries});
+openModal(currentId);
+loadPartners();
+}
 
 window.toggleClaim=async function(id){
 const p=partners.find(x=>x.id===id);
-
-try{
 await updateDoc(doc(db,"partners",id),{
 claimed:!p.claimed,
 dateClaimed:!p.claimed?new Date().toISOString().split("T")[0]:""
 });
-await loadPartners();
-}catch(error){
-console.error(error);
-alert("Error updating claim status.");
+loadPartners();
+}
+
+window.deleteOrg=async function(id){
+if(confirm("Delete organization?")){
+await deleteDoc(doc(db,"partners",id));
+loadPartners();
 }
 }
 
-window.deletePartner=async function(id){
-if(confirm("Delete organization?")){
-await deleteDoc(doc(db,"partners",id));
-await loadPartners();
-}
+window.closeModal=function(){
+document.getElementById("modal").style.display="none";
 }
 
 window.printReport=function(){window.print();}
@@ -245,9 +298,9 @@ window.printReport=function(){window.print();}
 window.exportCSV=function(){
 let csv="Organization,Total ML,Award\n";
 partners.forEach(p=>{
-const totalML=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
-const award=calculateAward(totalML);
-csv+=`${p.name},${totalML},${award}\n`;
+const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
+const award=calculateAward(total);
+csv+=`${p.name},${total},${award}\n`;
 });
 const blob=new Blob([csv],{type:"text/csv"});
 const link=document.createElement("a");
