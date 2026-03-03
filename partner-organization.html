@@ -1,207 +1,213 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Partner Organization</title>
+    <title>Galloners Club - Partner Organization</title>
     <meta charset="UTF-8">
     <style>
-        body {margin:0;font-family:Arial;background:#f4f4f4;}
-        header{background:#2e7d32;color:white;padding:15px;text-align:center;}
-        .container{max-width:1200px;margin:30px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
-        input,select{padding:6px;margin:4px;}
-        button{padding:6px 10px;margin:4px;border:none;border-radius:5px;cursor:pointer;color:white;}
-        .save-btn{background:#2e7d32;}
-        .edit-btn{background:#1565c0;}
-        .delete-btn{background:#c62828;}
-        .print-btn{background:#000;}
-        .export-btn{background:#ff9800;}
-        .return-btn{background:#444;}
-        table{width:100%;border-collapse:collapse;margin-top:20px;}
-        th,td{border:1px solid #ddd;padding:6px;text-align:center;}
-        th{background:#2e7d32;color:white;}
-        #modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);}
-        #modalContent{background:white;padding:20px;width:450px;margin:80px auto;border-radius:10px;}
-        @media print{body *{visibility:hidden;}#printArea,#printArea *{visibility:visible;}#printArea{position:absolute;left:0;top:0;width:100%;}}
+        body { margin:0; font-family:Arial; background:#f4f4f4; }
+        header { background:#b30000; color:white; padding:15px; text-align:center; }
+        .container { max-width:900px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
+        input, select { padding:6px; margin:5px 0; }
+        button { padding:6px 10px; margin:5px; border:none; border-radius:4px; cursor:pointer; }
+        .add-btn { background:#b30000; color:white; }
+        .edit-btn { background:#1565c0; color:white; }
+        .delete-btn { background:#c62828; color:white; }
+        table { width:100%; border-collapse:collapse; margin-top:15px; }
+        th, td { border:1px solid #ddd; padding:8px; text-align:center; }
+        th { background:#b30000; color:white; }
     </style>
 </head>
 <body>
 
-<header><h2>Partner Organization</h2></header>
+<header>
+    <h2>Partner Organization Entry</h2>
+</header>
 
 <div class="container">
 
 <h3>Add Organization</h3>
 <input type="text" id="orgName" placeholder="Organization Name">
-<input type="date" id="orgDate">
-<input type="number" id="initialDonors" placeholder="Initial Donors">
-<button class="save-btn" id="savePartner">Save</button>
+<input type="number" id="numDonors" placeholder="Number of Donors">
+<input type="date" id="orgDate" placeholder="Date">
+<select id="awardStatus">
+    <option value="">Awarded?</option>
+    <option value="yes">Yes</option>
+    <option value="no">No</option>
+</select>
+<input type="date" id="awardDate" placeholder="Award Date">
+<button class="add-btn" onclick="addOrganization()">Add Organization</button>
 
-<br><br>
+<h3>Search</h3>
+<input type="text" id="searchInput" placeholder="Search Organization..." onkeyup="searchOrg()">
 
-<input type="text" id="searchBox" placeholder="Search organization...">
-<button class="print-btn" onclick="printReport()">Print</button>
-<button class="export-btn" onclick="exportCSV()">Export CSV</button>
-<button class="return-btn" onclick="goDashboard()">Return to Dashboard</button>
-
+<h3>Partner Organizations</h3>
 <table>
-<thead>
-<tr>
-<th>Organization</th>
-<th>Date Added</th>
-<th>Total ML</th>
-<th>Award</th>
-<th>Awarded</th>
-<th>Date Awarded</th>
-<th>Actions</th>
-</tr>
-</thead>
-<tbody id="partnerTable"></tbody>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Organization</th>
+            <th>Number of Donors</th>
+            <th>Total ML</th>
+            <th>Date</th>
+            <th>Award Status</th>
+            <th>Award Date</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="orgTable"></tbody>
 </table>
 
-</div>
+<br>
+<button onclick="exportCSV()">Export to CSV</button>
+<button onclick="printOrgs()">Print</button>
+<button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 
-<div id="printArea">
-<h2>Partner Organization Report</h2>
-<table border="1" width="100%">
-<thead><tr><th>Organization</th><th>Total ML</th><th>Award</th></tr></thead>
-<tbody id="printTable"></tbody>
-</table>
-</div>
-
-<div id="modal">
-<div id="modalContent">
-<h3>Manage Entries</h3>
-<input type="number" id="newDonors" placeholder="Number of Donors">
-<input type="date" id="newDate">
-<button class="save-btn" id="saveEntryBtn">Add Entry</button>
-<hr>
-<div id="entryList"></div>
-<button class="delete-btn" onclick="closeModal()">Close</button>
-</div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
 
-// 🔹 Firebase Config
+// Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_BUCKET",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
 };
 
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const db = getFirestore(app);
+window.db = db;
 
-let partners = [];
-let currentId = null;
+let organizations = []; // local cache with IDs
 
-// Calculate total ML & award
-function calculateAward(total){
-  if(total>=20000) return "Platinum";
-  if(total>=10000) return "Gold";
-  if(total>=5000) return "Silver";
-  if(total>=1000) return "Bronze";
-  return "";
-}
-
-// Real-time listener
-const q = query(collection(db,"partners"),orderBy("dateAdded","asc"));
-onSnapshot(q, snapshot=>{
-  partners = [];
-  snapshot.forEach(docSnap => {partners.push({id:docSnap.id,...docSnap.data()});});
-  display();
-});
-
-// Display table
-function display(){
-  const table = document.getElementById("partnerTable");
-  const printTable = document.getElementById("printTable");
-  const search = document.getElementById("searchBox").value.toLowerCase();
-  table.innerHTML = ""; printTable.innerHTML = "";
-  partners.forEach(p=>{
-    if(search && !p.name.toLowerCase().includes(search)) return;
-    const total = (p.entries||[]).reduce((s,e)=>s+e.donors*450,0);
-    const award = calculateAward(total);
-    table.innerHTML += `
-      <tr>
-        <td>${p.name}</td>
-        <td>${p.dateAdded}</td>
-        <td>${total}</td>
-        <td>${award}</td>
-        <td>
-          <select onchange="setAward('${p.id}',this.value)">
-            <option value="No" ${!p.awarded?"selected":""}>No</option>
-            <option value="Yes" ${p.awarded?"selected":""}>Yes</option>
-          </select>
-        </td>
-        <td>
-          ${p.awarded ? `<input type="date" value="${p.dateAwarded||""}" onchange="setAwardDate('${p.id}',this.value)">` : ""}
-        </td>
-        <td>
-          <button class="edit-btn" onclick="openModal('${p.id}')">Entries</button>
-          <button class="delete-btn" onclick="deleteOrg('${p.id}')">Delete</button>
-        </td>
-      </tr>
-    `;
-    printTable.innerHTML += `<tr><td>${p.name}</td><td>${total}</td><td>${award}</td></tr>`;
-  });
-}
-
-// Save organization
-document.getElementById("savePartner").addEventListener("click", async()=>{
-  const name = document.getElementById("orgName").value.trim();
-  const date = document.getElementById("orgDate").value;
-  const donors = parseInt(document.getElementById("initialDonors").value)||0;
-  if(!name||!date) return alert("Fill required fields.");
-  if(partners.find(p=>p.name.toLowerCase()===name.toLowerCase())) return alert("Organization already exists.");
-  try{
-    await addDoc(collection(db,"partners"),{
-      name,
-      dateAdded:date,
-      entries: donors>0?[{donors,date}]:[],
-      awarded:false,
-      dateAwarded:""
+async function loadOrganizations(){
+    organizations = [];
+    const querySnapshot = await getDocs(collection(db,"partnerOrganizations"));
+    querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        data.id = docSnap.id;
+        organizations.push(data);
     });
-    document.getElementById("orgName").value="";
-    document.getElementById("orgDate").value="";
-    document.getElementById("initialDonors").value="";
-  } catch(e){console.error(e);alert("Error saving organization.");}
-});
-
-// Modal & entries
-window.openModal = function(id){currentId=id;renderEntries();document.getElementById("modal").style.display="block";};
-function renderEntries(){
-  const p = partners.find(x=>x.id===currentId);
-  const list = document.getElementById("entryList"); list.innerHTML="";
-  (p.entries||[]).forEach((e,i)=>{list.innerHTML+=`<div>Donors:${e.donors} | Date:${e.date} <button onclick="deleteEntry(${i})">Delete</button></div>`;});
+    renderTable();
 }
-document.getElementById("saveEntryBtn").addEventListener("click", async()=>{
-  const donors = parseInt(document.getElementById("newDonors").value);
-  const date = document.getElementById("newDate").value;
-  if(!donors||!date)return;
-  const p = partners.find(x=>x.id===currentId);
-  const updated = [...(p.entries||[]),{donors,date}];
-  await updateDoc(doc(db,"partners",currentId),{entries:updated});
-  document.getElementById("newDonors").value=""; document.getElementById("newDate").value="";
-  renderEntries();
-});
-window.deleteEntry = async function(index){
-  const p = partners.find(x=>x.id===currentId);
-  const updated = [...(p.entries||[])]; updated.splice(index,1);
-  await updateDoc(doc(db,"partners",currentId),{entries:updated}); renderEntries();
-};
-window.setAward=async function(id,value){await updateDoc(doc(db,"partners",id),{awarded:value==="Yes",dateAwarded:value==="Yes"?new Date().toISOString().split("T")[0]:""});};
-window.setAwardDate=async function(id,date){await updateDoc(doc(db,"partners",id),{dateAwarded:date});};
-window.deleteOrg=async function(id){if(confirm("Delete organization?")) await deleteDoc(doc(db,"partners",id));};
-window.printReport=function(){window.print();};
-window.exportCSV=function(){let csv="Organization,Total ML,Award\n";partners.forEach(p=>{const total=(p.entries||[]).reduce((s,e)=>s+e.donors*450,0);const award=calculateAward(total);csv+=`${p.name},${total},${award}\n`;});const blob=new Blob([csv],{type:"text/csv"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="partner_report.csv";link.click();};
-window.closeModal=function(){document.getElementById("modal").style.display="none";};
-document.getElementById("searchBox").addEventListener("input",display);
-window.goDashboard=function(){window.location.href="dashboard.html";};
+
+function renderTable(){
+    const table = document.getElementById("orgTable");
+    table.innerHTML = "";
+    let searchVal = document.getElementById("searchInput").value.toLowerCase();
+    organizations.forEach((org,i)=>{
+        if(org.name.toLowerCase().includes(searchVal)){
+            table.innerHTML += `
+                <tr>
+                    <td>${i+1}</td>
+                    <td>${org.name}</td>
+                    <td>${org.numDonors}</td>
+                    <td>${org.numDonors * 450}</td>
+                    <td>${org.date}</td>
+                    <td>${org.awardStatus || ''}</td>
+                    <td>${org.awardDate || ''}</td>
+                    <td>
+                        <button class="edit-btn" onclick="editOrganization('${org.id}')">Edit</button>
+                        <button class="delete-btn" onclick="deleteOrganization('${org.id}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }
+    });
+}
+
+async function addOrganization(){
+    const name = document.getElementById("orgName").value.trim();
+    const numDonors = parseInt(document.getElementById("numDonors").value);
+    const date = document.getElementById("orgDate").value;
+    const awardStatus = document.getElementById("awardStatus").value;
+    const awardDate = document.getElementById("awardDate").value;
+
+    if(!name || !numDonors || !date){
+        alert("Please fill all required fields.");
+        return;
+    }
+
+    // Prevent duplicate
+    if(organizations.some(o=>o.name.toLowerCase()===name.toLowerCase())){
+        alert("This organization already exists!");
+        return;
+    }
+
+    const orgData = {name,numDonors,date,awardStatus,awardDate};
+    const docRef = await addDoc(collection(db,"partnerOrganizations"), orgData);
+    orgData.id = docRef.id;
+    organizations.push(orgData);
+
+    renderTable();
+    document.getElementById("orgName").value="";
+    document.getElementById("numDonors").value="";
+    document.getElementById("orgDate").value="";
+    document.getElementById("awardStatus").value="";
+    document.getElementById("awardDate").value="";
+}
+
+async function deleteOrganization(id){
+    await deleteDoc(doc(db,"partnerOrganizations",id));
+    organizations = organizations.filter(o=>o.id!==id);
+    renderTable();
+}
+
+function searchOrg(){ renderTable(); }
+
+function printOrgs(){
+    let printContent = "<h1>Partner Organizations</h1><table border='1' cellpadding='5'><tr><th>Organization</th><th>Total ML</th><th>Award Status</th></tr>";
+    organizations.forEach(o=>{
+        printContent += `<tr><td>${o.name}</td><td>${o.numDonors*450}</td><td>${o.awardStatus || ''}</td></tr>`;
+    });
+    printContent += "</table>";
+    const w = window.open("");
+    w.document.write(printContent);
+    w.print();
+}
+
+function exportCSV(){
+    let csv = "Organization,Number of Donors,Total ML,Date,Award Status,Award Date\n";
+    organizations.forEach(o=>{
+        csv += `${o.name},${o.numDonors},${o.numDonors*450},${o.date},${o.awardStatus || ''},${o.awardDate || ''}\n`;
+    });
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "partner_organizations.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Edit organization inline
+function editOrganization(id){
+    const org = organizations.find(o=>o.id===id);
+    if(!org) return;
+
+    const newNumDonors = prompt("Enter number of donors:", org.numDonors);
+    const newDate = prompt("Enter date:", org.date);
+    const newAwardStatus = prompt("Awarded? yes/no:", org.awardStatus || "");
+    const newAwardDate = prompt("Award Date:", org.awardDate || "");
+
+    if(newNumDonors && newDate){
+        org.numDonors = parseInt(newNumDonors);
+        org.date = newDate;
+        org.awardStatus = newAwardStatus;
+        org.awardDate = newAwardDate;
+        setDoc(doc(db,"partnerOrganizations",id), org);
+        renderTable();
+    }
+}
+
+window.onload = loadOrganizations;
 </script>
 
 </body>
