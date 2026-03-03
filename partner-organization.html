@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Partner Organization</title>
+    <meta charset="UTF-8">
+
+    <style>
+        body { font-family: Arial; background:#f4f4f4; margin:0; }
+        header { background:#2e7d32; color:white; padding:15px; text-align:center; }
+        .container {
+            max-width:500px;
+            margin:30px auto;
+            background:white;
+            padding:20px;
+            border-radius:10px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.1);
+        }
+        input { width:100%; padding:10px; margin-bottom:10px; }
+        button {
+            width:100%;
+            padding:10px;
+            background:#2e7d32;
+            color:white;
+            border:none;
+            border-radius:5px;
+            cursor:pointer;
+        }
+        table {
+            width:100%;
+            margin-top:20px;
+            border-collapse: collapse;
+        }
+        th, td {
+            border:1px solid #ddd;
+            padding:8px;
+            text-align:center;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h2>Partner Organization</h2>
+</header>
+
+<div class="container">
+
+<input type="text" id="partnerName" placeholder="Organization Name">
+<input type="text" id="partnerContact" placeholder="Contact Person">
+
+<button id="savePartner">Save Partner</button>
+
+<table>
+    <thead>
+        <tr>
+            <th>Organization</th>
+            <th>Contact</th>
+        </tr>
+    </thead>
+    <tbody id="partnerTable"></tbody>
+</table>
+
+<br>
+<button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function loadPartners() {
+    const querySnapshot = await getDocs(collection(db, "partners"));
+    const table = document.getElementById("partnerTable");
+    table.innerHTML = "";
+
+    querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        table.innerHTML += `
+            <tr>
+                <td>${data.name}</td>
+                <td>${data.contact}</td>
+            </tr>
+        `;
+    });
+}
+
+document.getElementById("savePartner").addEventListener("click", async () => {
+
+    const name = document.getElementById("partnerName").value.trim();
+    const contact = document.getElementById("partnerContact").value.trim();
+
+    if(!name || !contact){
+        alert("Fill all fields.");
+        return;
+    }
+
+    await addDoc(collection(db, "partners"), {
+        name: name,
+        contact: contact
+    });
+
+    alert("Partner saved!");
+    document.getElementById("partnerName").value = "";
+    document.getElementById("partnerContact").value = "";
+    loadPartners();
+});
+
+window.onload = loadPartners;
+</script>
+
+</body>
+</html>
