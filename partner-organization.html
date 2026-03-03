@@ -7,7 +7,6 @@
 <style>
 body{margin:0;font-family:Arial;background:#f4f4f4;}
 header{background:#2e7d32;color:white;padding:15px;text-align:center;}
-
 .container{
 max-width:1200px;
 margin:30px auto;
@@ -16,9 +15,7 @@ padding:20px;
 border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
-
 input,select{padding:6px;margin:4px;}
-
 button{
 padding:6px 10px;
 margin:4px;
@@ -27,18 +24,15 @@ border-radius:5px;
 cursor:pointer;
 color:white;
 }
-
 .save-btn{background:#2e7d32;}
 .edit-btn{background:#1565c0;}
 .delete-btn{background:#c62828;}
 .print-btn{background:#000;}
 .export-btn{background:#ff9800;}
 .return-btn{background:#444;}
-
 table{width:100%;border-collapse:collapse;margin-top:20px;}
 th,td{border:1px solid #ddd;padding:6px;text-align:center;}
 th{background:#2e7d32;color:white;}
-
 #modal{
 display:none;
 position:fixed;
@@ -46,7 +40,6 @@ top:0;left:0;
 width:100%;height:100%;
 background:rgba(0,0,0,0.6);
 }
-
 #modalContent{
 background:white;
 padding:20px;
@@ -54,7 +47,6 @@ width:450px;
 margin:80px auto;
 border-radius:10px;
 }
-
 @media print{
 body *{visibility:hidden;}
 #printArea,#printArea *{visibility:visible;}
@@ -159,10 +151,12 @@ if(total>=v) award=k;
 return award;
 }
 
-/* REALTIME LISTENER */
-onSnapshot(collection(db,"partners"),(snapshot)=>{
+/* REALTIME — DATA WILL NEVER DISAPPEAR AFTER REFRESH */
+onSnapshot(collection(db,"partners"),snapshot=>{
 partners=[];
-snapshot.forEach(d=>partners.push({id:d.id,...d.data()}));
+snapshot.forEach(docSnap=>{
+partners.push({id:docSnap.id,...docSnap.data()});
+});
 display();
 });
 
@@ -192,10 +186,7 @@ table.innerHTML+=`
 </select>
 </td>
 <td>
-${p.awarded ? 
-`<input type="date" value="${p.dateAwarded||""}" 
-onchange="setAwardDate('${p.id}', this.value)">`
-: ""}
+${p.awarded ? `<input type="date" value="${p.dateAwarded||""}" onchange="setAwardDate('${p.id}', this.value)">` : ""}
 </td>
 <td>
 <button class="edit-btn" onclick="openModal('${p.id}')">Entries</button>
@@ -214,7 +205,7 @@ printTable.innerHTML+=`
 });
 }
 
-/* SAVE ORGANIZATION */
+/* SAVE ORGANIZATION — GUARANTEED RESET */
 document.getElementById("savePartner").addEventListener("click",async()=>{
 const name=document.getElementById("orgName").value.trim();
 const date=document.getElementById("orgDate").value;
@@ -233,7 +224,7 @@ awarded:false,
 dateAwarded:""
 });
 
-/* RESET FORM */
+/* HARD RESET */
 document.getElementById("orgName").value="";
 document.getElementById("orgDate").value="";
 document.getElementById("initialDonors").value="";
@@ -242,7 +233,12 @@ document.getElementById("initialDonors").value="";
 /* MODAL */
 window.openModal=function(id){
 currentId=id;
-const p=partners.find(x=>x.id===id);
+renderEntries();
+document.getElementById("modal").style.display="block";
+};
+
+function renderEntries(){
+const p=partners.find(x=>x.id===currentId);
 const list=document.getElementById("entryList");
 list.innerHTML="";
 (p.entries||[]).forEach((e,i)=>{
@@ -252,42 +248,49 @@ Donors:${e.donors} | Date:${e.date}
 <button onclick="deleteEntry(${i})">Delete</button>
 </div>`;
 });
-document.getElementById("modal").style.display="block";
-};
+}
 
+/* ADD ENTRY — INSTANT + FIREBASE SAFE */
 document.getElementById("saveEntryBtn").addEventListener("click",async()=>{
 const donors=parseInt(document.getElementById("newDonors").value);
 const date=document.getElementById("newDate").value;
 if(!donors||!date)return;
 
 const p=partners.find(x=>x.id===currentId);
-p.entries.push({donors,date});
+const updatedEntries=[...(p.entries||[]),{donors,date}];
 
 await updateDoc(doc(db,"partners",currentId),{
-entries:p.entries
+entries:updatedEntries
 });
+
+/* LOCAL UPDATE FOR INSTANT DISPLAY */
+p.entries=updatedEntries;
 
 document.getElementById("newDonors").value="";
 document.getElementById("newDate").value="";
 
-openModal(currentId);
+renderEntries();
 });
 
+/* DELETE ENTRY — INSTANT */
 window.deleteEntry=async function(index){
 const p=partners.find(x=>x.id===currentId);
-p.entries.splice(index,1);
+const updatedEntries=[...(p.entries||[])];
+updatedEntries.splice(index,1);
+
 await updateDoc(doc(db,"partners",currentId),{
-entries:p.entries
+entries:updatedEntries
 });
-openModal(currentId);
+
+p.entries=updatedEntries;
+
+renderEntries();
 };
 
-/* MANUAL AWARD */
 window.setAward=async function(id,value){
-const awarded=value==="Yes";
 await updateDoc(doc(db,"partners",id),{
-awarded,
-dateAwarded: awarded ? new Date().toISOString().split("T")[0] : ""
+awarded:value==="Yes",
+dateAwarded:value==="Yes"?new Date().toISOString().split("T")[0]:""
 });
 };
 
@@ -297,16 +300,13 @@ dateAwarded:date
 });
 };
 
-/* DELETE */
 window.deleteOrg=async function(id){
 if(confirm("Delete organization?"))
 await deleteDoc(doc(db,"partners",id));
 };
 
-/* PRINT */
 window.printReport=function(){window.print();};
 
-/* EXPORT */
 window.exportCSV=function(){
 let csv="Organization,Total ML,Award\n";
 partners.forEach(p=>{
