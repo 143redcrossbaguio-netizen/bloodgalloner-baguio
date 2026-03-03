@@ -5,35 +5,61 @@
     <meta charset="UTF-8">
 
     <style>
-        body { font-family: Arial; background:#f4f4f4; margin:0; }
-        header { background:#2e7d32; color:white; padding:15px; text-align:center; }
+        body {
+            margin:0;
+            font-family: Arial, sans-serif;
+            background:#f4f4f4;
+        }
+
+        header {
+            background:#2e7d32;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
         .container {
-            max-width:500px;
+            max-width:900px;
             margin:30px auto;
             background:white;
             padding:20px;
             border-radius:10px;
             box-shadow:0 3px 10px rgba(0,0,0,0.1);
         }
-        input { width:100%; padding:10px; margin-bottom:10px; }
+
+        input {
+            padding:8px;
+            margin:5px;
+        }
+
         button {
-            width:100%;
-            padding:10px;
-            background:#2e7d32;
-            color:white;
+            padding:8px 12px;
+            margin:5px;
             border:none;
             border-radius:5px;
             cursor:pointer;
+            color:white;
         }
+
+        .save-btn { background:#2e7d32; }
+        .print-btn { background:#6a1b9a; }
+        .dashboard-btn { background:#444; }
+
         table {
             width:100%;
-            margin-top:20px;
             border-collapse: collapse;
+            margin-top:20px;
         }
+
         th, td {
             border:1px solid #ddd;
-            padding:8px;
+            padding:10px;
             text-align:center;
+        }
+
+        th {
+            background:#2e7d32;
+            color:white;
         }
     </style>
 </head>
@@ -46,23 +72,25 @@
 
 <div class="container">
 
-<input type="text" id="partnerName" placeholder="Organization Name">
-<input type="text" id="partnerContact" placeholder="Contact Person">
+    <input type="text" id="orgName" placeholder="Organization Name">
+    <input type="number" id="donorCount" placeholder="Number of Donors">
+    <input type="date" id="orgDate">
 
-<button id="savePartner">Save Partner</button>
+    <button class="save-btn" id="savePartner">Save</button>
+    <button class="print-btn" onclick="window.print()">Print</button>
+    <button class="dashboard-btn" onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 
-<table>
-    <thead>
-        <tr>
-            <th>Organization</th>
-            <th>Contact</th>
-        </tr>
-    </thead>
-    <tbody id="partnerTable"></tbody>
-</table>
-
-<br>
-<button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
+    <table>
+        <thead>
+            <tr>
+                <th>Organization</th>
+                <th>Date</th>
+                <th>Number of Donors</th>
+                <th>Total ML</th>
+            </tr>
+        </thead>
+        <tbody id="partnerTable"></tbody>
+    </table>
 
 </div>
 
@@ -83,16 +111,21 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function loadPartners() {
+
     const querySnapshot = await getDocs(collection(db, "partners"));
     const table = document.getElementById("partnerTable");
     table.innerHTML = "";
 
     querySnapshot.forEach((doc) => {
         const data = doc.data();
+        const totalML = data.donorCount * 450;
+
         table.innerHTML += `
             <tr>
                 <td>${data.name}</td>
-                <td>${data.contact}</td>
+                <td>${data.date}</td>
+                <td>${data.donorCount}</td>
+                <td>${totalML} ml</td>
             </tr>
         `;
     });
@@ -100,26 +133,32 @@ async function loadPartners() {
 
 document.getElementById("savePartner").addEventListener("click", async () => {
 
-    const name = document.getElementById("partnerName").value.trim();
-    const contact = document.getElementById("partnerContact").value.trim();
+    const name = document.getElementById("orgName").value.trim();
+    const donorCount = parseInt(document.getElementById("donorCount").value);
+    const date = document.getElementById("orgDate").value;
 
-    if(!name || !contact){
+    if(!name || !donorCount || !date){
         alert("Fill all fields.");
         return;
     }
 
     await addDoc(collection(db, "partners"), {
         name: name,
-        contact: contact
+        donorCount: donorCount,
+        date: date
     });
 
-    alert("Partner saved!");
-    document.getElementById("partnerName").value = "";
-    document.getElementById("partnerContact").value = "";
+    alert("Partner saved successfully!");
+
+    document.getElementById("orgName").value = "";
+    document.getElementById("donorCount").value = "";
+    document.getElementById("orgDate").value = "";
+
     loadPartners();
 });
 
 window.onload = loadPartners;
+
 </script>
 
 </body>
