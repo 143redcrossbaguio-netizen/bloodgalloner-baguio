@@ -159,6 +159,7 @@ async function addOrganization(){
         organizations.push({id:docRef.id,name,numDonors,date,awardStatus,awardDate});
         renderTable();
 
+        // Reset input fields
         document.getElementById("orgName").value="";
         document.getElementById("numDonors").value="";
         document.getElementById("orgDate").value="";
@@ -170,6 +171,7 @@ async function addOrganization(){
     }
 }
 
+// ✅ Fixed delete button
 async function deleteOrganization(id){
     if(confirm("Are you sure to delete?")){
         await deleteDoc(doc(db,"partnerOrganizations",id));
@@ -178,20 +180,23 @@ async function deleteOrganization(id){
     }
 }
 
+// ✅ Fixed edit button to allow adding donors and updating date
 async function editOrganization(id){
     const org = organizations.find(o=>o.id===id);
     if(!org) return;
 
-    const newNum = prompt("Enter number of donors", org.numDonors);
-    const newDate = prompt("Enter date", org.date);
-    if(!newNum || !newDate) return;
+    const addDonors = parseInt(prompt("Add number of donors (current: "+org.numDonors+")", 0));
+    if(isNaN(addDonors)) return;
+
+    const newDate = prompt("Enter new date", org.date);
+    if(!newDate) return;
 
     try{
         await updateDoc(doc(db,"partnerOrganizations",id),{
-            numDonors:parseInt(newNum),
-            date:newDate
+            numDonors: org.numDonors + addDonors,
+            date: newDate
         });
-        org.numDonors = parseInt(newNum);
+        org.numDonors += addDonors;
         org.date = newDate;
         renderTable();
     } catch(e){
