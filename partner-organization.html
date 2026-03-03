@@ -18,6 +18,7 @@
         table { width:100%; border-collapse:collapse; margin-top:10px; }
         th, td { padding:8px; border:1px solid #ddd; text-align:center; }
         th { background:#b30000; color:white; }
+        .edit-row { background:#f9f9f9; }
     </style>
 </head>
 <body>
@@ -74,7 +75,7 @@ const db = getFirestore(app);
 
 let organizations = [];
 
-/* ================= LOAD ================= */
+/* LOAD */
 async function loadOrganizations(){
     organizations = [];
     const snapshot = await getDocs(collection(db,"partnerOrganizations"));
@@ -86,7 +87,7 @@ async function loadOrganizations(){
     renderTable();
 }
 
-/* ================= RENDER ================= */
+/* RENDER */
 function calculateTotalML(numDonors){
     return numDonors * 450;
 }
@@ -111,11 +112,11 @@ function renderTable(){
     });
 }
 
-/* ================= ADD ================= */
+/* ADD */
 async function addOrganization(){
-    const name = document.getElementById("orgName").value.trim();
-    const numDonors = parseInt(document.getElementById("numDonors").value);
-    const date = document.getElementById("orgDate").value;
+    const name = orgName.value.trim();
+    const numDonors = parseInt(numDonors.value);
+    const date = orgDate.value;
 
     if(!name || !numDonors || !date){
         alert("Please fill all required fields.");
@@ -129,63 +130,73 @@ async function addOrganization(){
     organizations.push({id:docRef.id,name,numDonors,date});
     renderTable();
 
-    document.getElementById("orgName").value="";
-    document.getElementById("numDonors").value="";
-    document.getElementById("orgDate").value="";
+    orgName.value="";
+    numDonors.value="";
+    orgDate.value="";
 }
 
-/* ================= FIXED EDIT ================= */
-window.editOrganization = async function(id){
-    const orgIndex = organizations.findIndex(o => o.id === id);
-    if(orgIndex === -1) return;
+/* INLINE UNLIMITED EDIT (NO PROMPT) */
+window.editOrganization = function(id){
 
-    const org = organizations[orgIndex];
+    const row = document.querySelector(`button[onclick="editOrganization('${id}')"]`).closest("tr");
 
-    if(!confirm("Do you want to edit this organization?")) return;
-
-    let addDonors = prompt("Add number of donors (current: "+org.numDonors+")", 0);
-    if(addDonors === null) return;
-    if(isNaN(addDonors)) {
-        alert("Invalid number.");
+    if(row.nextElementSibling && row.nextElementSibling.classList.contains("edit-row")){
         return;
     }
 
-    const newDate = prompt("Enter new date", org.date);
-    if(newDate === null || newDate === "") return;
+    const editRow = document.createElement("tr");
+    editRow.classList.add("edit-row");
 
-    try{
-        await updateDoc(doc(db,"partnerOrganizations",id),{
-            numDonors: org.numDonors + parseInt(addDonors),
-            date: newDate
-        });
+    editRow.innerHTML = `
+        <td colspan="6">
+            <input type="number" id="editDonors-${id}" placeholder="Add Donors">
+            <input type="date" id="editDate-${id}">
+            <button style="background:#2e7d32;" onclick="saveEdit('${id}')">Save</button>
+            <button style="background:#757575;" onclick="this.closest('tr').remove()">Cancel</button>
+        </td>
+    `;
 
-        organizations[orgIndex].numDonors += parseInt(addDonors);
-        organizations[orgIndex].date = newDate;
-
-        renderTable();
-    }catch(e){
-        console.error(e);
-        alert("Error updating organization.");
-    }
+    row.after(editRow);
 };
 
-/* ================= FIXED DELETE ================= */
+window.saveEdit = async function(id){
+
+    const addDonors = parseInt(document.getElementById(`editDonors-${id}`).value);
+    const newDate = document.getElementById(`editDate-${id}`).value;
+
+    if(!addDonors || !newDate){
+        alert("Enter donors and date.");
+        return;
+    }
+
+    const orgIndex = organizations.findIndex(o => o.id === id);
+    const org = organizations[orgIndex];
+
+    const updatedDonors = org.numDonors + addDonors;
+
+    await updateDoc(doc(db,"partnerOrganizations",id),{
+        numDonors: updatedDonors,
+        date: newDate
+    });
+
+    organizations[orgIndex].numDonors = updatedDonors;
+    organizations[orgIndex].date = newDate;
+
+    renderTable();
+};
+
+/* DELETE */
 window.deleteOrganization = async function(id){
     if(!confirm("Are you sure you want to delete this organization?")) return;
 
-    try{
-        await deleteDoc(doc(db,"partnerOrganizations",id));
-        organizations = organizations.filter(o => o.id !== id);
-        renderTable();
-    }catch(e){
-        console.error(e);
-        alert("Error deleting organization.");
-    }
+    await deleteDoc(doc(db,"partnerOrganizations",id));
+    organizations = organizations.filter(o => o.id !== id);
+    renderTable();
 };
 
-/* ================= OTHER ================= */
+/* OTHER */
 function searchOrg(){
-    const input = document.getElementById("searchInput").value.toLowerCase();
+    const input = searchInput.value.toLowerCase();
     document.querySelectorAll("#orgTable tr").forEach(row=>{
         row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
     });
@@ -206,18 +217,13 @@ function exportCSV(){
     URL.revokeObjectURL(url);
 }
 
-function printTable(){
-    window.print();
-}
+function printTable(){ window.print(); }
+function goDashboard(){ window.location.href="dashboard.html"; }
 
-function goDashboard(){
-    window.location.href="dashboard.html";
-}
-
-document.getElementById("addBtn").onclick = addOrganization;
-document.getElementById("dashboardBtn").onclick = goDashboard;
-document.getElementById("exportBtn").onclick = exportCSV;
-document.getElementById("printBtn").onclick = printTable;
+addBtn.onclick = addOrganization;
+dashboardBtn.onclick = goDashboard;
+exportBtn.onclick = exportCSV;
+printBtn.onclick = printTable;
 
 window.onload = loadOrganizations;
 
