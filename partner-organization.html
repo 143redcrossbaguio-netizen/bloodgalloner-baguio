@@ -59,7 +59,6 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -67,16 +66,15 @@ const firebaseConfig = {
     projectId: "galloners-club",
     storageBucket: "galloners-club.firebasestorage.app",
     messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const db = getFirestore(app);
 
 let organizations = [];
 
+/* ================= LOAD ================= */
 async function loadOrganizations(){
     organizations = [];
     const snapshot = await getDocs(collection(db,"partnerOrganizations"));
@@ -88,6 +86,7 @@ async function loadOrganizations(){
     renderTable();
 }
 
+/* ================= RENDER ================= */
 function calculateTotalML(numDonors){
     return numDonors * 450;
 }
@@ -95,8 +94,10 @@ function calculateTotalML(numDonors){
 function renderTable(){
     const table = document.getElementById("orgTable");
     table.innerHTML = "";
+
     organizations.forEach((org,index)=>{
-        table.innerHTML += `<tr>
+        table.innerHTML += `
+        <tr>
             <td>${index+1}</td>
             <td>${org.name}</td>
             <td>${org.date}</td>
@@ -110,6 +111,7 @@ function renderTable(){
     });
 }
 
+/* ================= ADD ================= */
 async function addOrganization(){
     const name = document.getElementById("orgName").value.trim();
     const numDonors = parseInt(document.getElementById("numDonors").value);
@@ -120,66 +122,68 @@ async function addOrganization(){
         return;
     }
 
-    if(organizations.some(o=>o.name.toLowerCase()===name.toLowerCase())){
-        alert("Organization already exists!");
-        return;
-    }
+    const docRef = await addDoc(collection(db,"partnerOrganizations"),{
+        name,numDonors,date
+    });
 
-    try{
-        const docRef = await addDoc(collection(db,"partnerOrganizations"),{
-            name,numDonors,date
-        });
-        organizations.push({id:docRef.id,name,numDonors,date});
-        renderTable();
+    organizations.push({id:docRef.id,name,numDonors,date});
+    renderTable();
 
-        document.getElementById("orgName").value="";
-        document.getElementById("numDonors").value="";
-        document.getElementById("orgDate").value="";
-    } catch(e){
-        console.error(e);
-        alert("Error adding organization.");
-    }
+    document.getElementById("orgName").value="";
+    document.getElementById("numDonors").value="";
+    document.getElementById("orgDate").value="";
 }
 
-// Unlimited edit: add donors and update date
-async function editOrganization(id){
-    const org = organizations.find(o=>o.id===id);
-    if(!org) return;
+/* ================= FIXED EDIT ================= */
+window.editOrganization = async function(id){
+    const orgIndex = organizations.findIndex(o => o.id === id);
+    if(orgIndex === -1) return;
+
+    const org = organizations[orgIndex];
 
     if(!confirm("Do you want to edit this organization?")) return;
 
-    let addDonors;
-    while(true){
-        addDonors = prompt("Add number of donors (current: "+org.numDonors+")", 0);
-        if(addDonors === null) return;
-        if(!isNaN(addDonors)) break;
-        alert("Please enter a valid number.");
+    let addDonors = prompt("Add number of donors (current: "+org.numDonors+")", 0);
+    if(addDonors === null) return;
+    if(isNaN(addDonors)) {
+        alert("Invalid number.");
+        return;
     }
 
     const newDate = prompt("Enter new date", org.date);
-    if(newDate === null) return;
+    if(newDate === null || newDate === "") return;
 
     try{
         await updateDoc(doc(db,"partnerOrganizations",id),{
             numDonors: org.numDonors + parseInt(addDonors),
             date: newDate
         });
-        org.numDonors += parseInt(addDonors);
-        org.date = newDate;
+
+        organizations[orgIndex].numDonors += parseInt(addDonors);
+        organizations[orgIndex].date = newDate;
+
         renderTable();
-    } catch(e){
+    }catch(e){
         console.error(e);
         alert("Error updating organization.");
     }
-}
+};
 
-async function deleteOrganization(id){
+/* ================= FIXED DELETE ================= */
+window.deleteOrganization = async function(id){
     if(!confirm("Are you sure you want to delete this organization?")) return;
-    await deleteDoc(doc(db,"partnerOrganizations",id));
-    organizations = organizations.filter(o=>o.id!==id);
-    renderTable();
-}
 
+    try{
+        await deleteDoc(doc(db,"partnerOrganizations",id));
+        organizations = organizations.filter(o => o.id !== id);
+        renderTable();
+    }catch(e){
+        console.error(e);
+        alert("Error deleting organization.");
+    }
+};
+
+/* ================= OTHER ================= */
 function searchOrg(){
     const input = document.getElementById("searchInput").value.toLowerCase();
     document.querySelectorAll("#orgTable tr").forEach(row=>{
@@ -187,33 +191,23 @@ function searchOrg(){
     });
 }
 
-function printTable(){
-    let content = "<h2>Partner Organization Report</h2><table border='1' cellpadding='5'><tr><th>Organization</th><th>Total (ml)</th></tr>";
-    organizations.forEach(org=>{
-        content += `<tr>
-            <td>${org.name}</td>
-            <td>${calculateTotalML(org.numDonors)}</td>
-        </tr>`;
-    });
-    content += "</table>";
-    const w = window.open("");
-    w.document.write(content);
-    w.document.close();
-    w.print();
-}
-
 function exportCSV(){
     let csv = "Organization,Date,Number of Donors,Total (ml)\n";
     organizations.forEach(org=>{
         csv += `${org.name},${org.date},${org.numDonors},${calculateTotalML(org.numDonors)}\n`;
     });
+
     const blob = new Blob([csv], {type:"text/csv"});
-    const url = window.URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "partner_organizations.csv";
     a.click();
-    window.URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
+}
+
+function printTable(){
+    window.print();
 }
 
 function goDashboard(){
@@ -226,6 +220,7 @@ document.getElementById("exportBtn").onclick = exportCSV;
 document.getElementById("printBtn").onclick = printTable;
 
 window.onload = loadOrganizations;
+
 </script>
 
 </body>
