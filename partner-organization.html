@@ -5,11 +5,7 @@
     <meta charset="UTF-8">
 
     <style>
-        body {
-            margin:0;
-            font-family: Arial, sans-serif;
-            background:#f4f4f4;
-        }
+        body { margin:0; font-family: Arial; background:#f4f4f4; }
 
         header {
             background:#2e7d32;
@@ -19,7 +15,7 @@
         }
 
         .container {
-            max-width:900px;
+            max-width:1100px;
             margin:30px auto;
             background:white;
             padding:20px;
@@ -27,7 +23,7 @@
             box-shadow:0 3px 10px rgba(0,0,0,0.1);
         }
 
-        input {
+        input, select {
             padding:8px;
             margin:5px;
         }
@@ -53,7 +49,7 @@
 
         th, td {
             border:1px solid #ddd;
-            padding:10px;
+            padding:8px;
             text-align:center;
         }
 
@@ -72,21 +68,45 @@
 
 <div class="container">
 
+    <!-- ENTRY SECTION -->
     <input type="text" id="orgName" placeholder="Organization Name">
     <input type="number" id="donorCount" placeholder="Number of Donors">
     <input type="date" id="orgDate">
+
+    <select id="awardType">
+        <option value="">Select Award Type</option>
+    </select>
+
+    <select id="claimedStatus">
+        <option value="No">Not Claimed</option>
+        <option value="Yes">Claimed</option>
+    </select>
+
+    <input type="date" id="claimedDate" placeholder="Date Claimed">
 
     <button class="save-btn" id="savePartner">Save</button>
     <button class="print-btn" onclick="window.print()">Print</button>
     <button class="dashboard-btn" onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 
+    <hr>
+
+    <!-- SEARCH + FILTER -->
+    <input type="text" id="searchBox" placeholder="Search Organization">
+    <select id="filterAward">
+        <option value="All">Filter by Award</option>
+    </select>
+
+    <!-- TABLE -->
     <table>
         <thead>
             <tr>
                 <th>Organization</th>
                 <th>Date</th>
-                <th>Number of Donors</th>
+                <th>Donors</th>
                 <th>Total ML</th>
+                <th>Award Type</th>
+                <th>Award Claimed</th>
+                <th>Date Claimed</th>
             </tr>
         </thead>
         <tbody id="partnerTable"></tbody>
@@ -110,55 +130,119 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-async function loadPartners() {
+let partnerData = [];
 
+/* ================= LOAD AWARD TYPES FROM SETTINGS ================= */
+async function loadAwardTypes() {
+    const snapshot = await getDocs(collection(db, "settings"));
+    const awardSelect = document.getElementById("awardType");
+    const filterSelect = document.getElementById("filterAward");
+
+    awardSelect.innerHTML = '<option value="">Select Award Type</option>';
+    filterSelect.innerHTML = '<option value="All">Filter by Award</option>';
+
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        if(data.awardTypes){
+            data.awardTypes.forEach(type => {
+                awardSelect.innerHTML += `<option value="${type}">${type}</option>`;
+                filterSelect.innerHTML += `<option value="${type}">${type}</option>`;
+            });
+        }
+    });
+}
+
+/* ================= LOAD PARTNERS ================= */
+async function loadPartners() {
     const querySnapshot = await getDocs(collection(db, "partners"));
+    partnerData = [];
+    querySnapshot.forEach(doc => {
+        partnerData.push(doc.data());
+    });
+    displayPartners(partnerData);
+}
+
+/* ================= DISPLAY FUNCTION ================= */
+function displayPartners(data) {
     const table = document.getElementById("partnerTable");
     table.innerHTML = "";
 
-    querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const totalML = data.donorCount * 450;
+    data.forEach(item => {
+        const totalML = item.donorCount * 450;
 
         table.innerHTML += `
             <tr>
-                <td>${data.name}</td>
-                <td>${data.date}</td>
-                <td>${data.donorCount}</td>
+                <td>${item.name}</td>
+                <td>${item.date}</td>
+                <td>${item.donorCount}</td>
                 <td>${totalML} ml</td>
+                <td>${item.awardType || ""}</td>
+                <td>${item.claimedStatus || "No"}</td>
+                <td>${item.claimedDate || ""}</td>
             </tr>
         `;
     });
 }
 
+/* ================= SAVE PARTNER ================= */
 document.getElementById("savePartner").addEventListener("click", async () => {
 
     const name = document.getElementById("orgName").value.trim();
     const donorCount = parseInt(document.getElementById("donorCount").value);
     const date = document.getElementById("orgDate").value;
+    const awardType = document.getElementById("awardType").value;
+    const claimedStatus = document.getElementById("claimedStatus").value;
+    const claimedDate = document.getElementById("claimedDate").value;
 
     if(!name || !donorCount || !date){
-        alert("Fill all fields.");
+        alert("Fill required fields.");
         return;
     }
 
     await addDoc(collection(db, "partners"), {
-        name: name,
-        donorCount: donorCount,
-        date: date
+        name,
+        donorCount,
+        date,
+        awardType,
+        claimedStatus,
+        claimedDate
     });
 
-    alert("Partner saved successfully!");
+    alert("Saved successfully!");
 
-    document.getElementById("orgName").value = "";
-    document.getElementById("donorCount").value = "";
-    document.getElementById("orgDate").value = "";
+    document.getElementById("orgName").value="";
+    document.getElementById("donorCount").value="";
+    document.getElementById("orgDate").value="";
+    document.getElementById("claimedDate").value="";
 
     loadPartners();
 });
 
-window.onload = loadPartners;
+/* ================= SEARCH ================= */
+document.getElementById("searchBox").addEventListener("input", function() {
+    const value = this.value.toLowerCase();
+    const filtered = partnerData.filter(p =>
+        p.name.toLowerCase().includes(value)
+    );
+    displayPartners(filtered);
+});
 
+/* ================= FILTER ================= */
+document.getElementById("filterAward").addEventListener("change", function() {
+    const value = this.value;
+    if(value === "All") {
+        displayPartners(partnerData);
+    } else {
+        const filtered = partnerData.filter(p => p.awardType === value);
+        displayPartners(filtered);
+    }
+});
+
+/* ================= INIT ================= */
+window.onload = async () => {
+    await loadAwardTypes();
+    await loadPartners();
+};
 </script>
 
 </body>
