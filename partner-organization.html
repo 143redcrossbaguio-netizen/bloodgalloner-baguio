@@ -14,11 +14,13 @@
         .delete-btn { background:#c62828; }
         .print-btn { background:#444; }
         .export-btn { background:#222; }
+        .view-btn { background:#6a1b9a; }
         #dashboardBtn { background:#1e88e5; }
         table { width:100%; border-collapse:collapse; margin-top:10px; }
         th, td { padding:8px; border:1px solid #ddd; text-align:center; }
         th { background:#b30000; color:white; }
         .edit-row { background:#f9f9f9; }
+        .view-row { background:#f3f3f3; }
     </style>
 </head>
 <body>
@@ -106,6 +108,7 @@ function renderTable(){
             <td>${calculateTotalML(org.numDonors)}</td>
             <td>
                 <button class="edit-btn" onclick="editOrganization('${org.id}')">Edit</button>
+                <button class="view-btn" onclick="viewOrganization('${org.id}')">View</button>
                 <button class="delete-btn" onclick="deleteOrganization('${org.id}')">Delete</button>
             </td>
         </tr>`;
@@ -135,7 +138,35 @@ async function addOrganization(){
     orgDate.value="";
 }
 
-/* INLINE UNLIMITED EDIT (NO PROMPT) */
+/* VIEW BUTTON FUNCTION */
+window.viewOrganization = function(id){
+
+    const row = document.querySelector(`button[onclick="viewOrganization('${id}')"]`).closest("tr");
+
+    // Toggle behavior
+    if(row.nextElementSibling && row.nextElementSibling.classList.contains("view-row")){
+        row.nextElementSibling.remove();
+        return;
+    }
+
+    const org = organizations.find(o => o.id === id);
+
+    const viewRow = document.createElement("tr");
+    viewRow.classList.add("view-row");
+
+    viewRow.innerHTML = `
+        <td colspan="6" style="text-align:left; padding:10px;">
+            <strong>Organization:</strong> ${org.name} <br>
+            <strong>Date:</strong> ${org.date} <br>
+            <strong>Total Donors:</strong> ${org.numDonors} <br>
+            <strong>Total ML:</strong> ${calculateTotalML(org.numDonors)}
+        </td>
+    `;
+
+    row.after(viewRow);
+};
+
+/* INLINE EDIT */
 window.editOrganization = function(id){
 
     const row = document.querySelector(`button[onclick="editOrganization('${id}')"]`).closest("tr");
