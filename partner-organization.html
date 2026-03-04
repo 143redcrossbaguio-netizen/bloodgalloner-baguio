@@ -84,16 +84,18 @@ async function loadOrganizations(){
     snapshot.forEach(docSnap=>{
         const data = docSnap.data();
         data.id = docSnap.id;
+        if(!data.history) data.history = [];
         organizations.push(data);
     });
     renderTable();
 }
 
-/* RENDER */
+/* CALCULATE */
 function calculateTotalML(numDonors){
     return numDonors * 450;
 }
 
+/* RENDER */
 function renderTable(){
     const table = document.getElementById("orgTable");
     table.innerHTML = "";
@@ -127,10 +129,23 @@ async function addOrganization(){
     }
 
     const docRef = await addDoc(collection(db,"partnerOrganizations"),{
-        name,numDonors,date
+        name,
+        numDonors,
+        date,
+        history: [{
+            donors: numDonors,
+            date: date
+        }]
     });
 
-    organizations.push({id:docRef.id,name,numDonors,date});
+    organizations.push({
+        id:docRef.id,
+        name,
+        numDonors,
+        date,
+        history:[{ donors:numDonors, date:date }]
+    });
+
     renderTable();
 
     orgName.value="";
@@ -138,12 +153,11 @@ async function addOrganization(){
     orgDate.value="";
 }
 
-/* VIEW BUTTON FUNCTION */
+/* VIEW FULL ENTRY HISTORY */
 window.viewOrganization = function(id){
 
     const row = document.querySelector(`button[onclick="viewOrganization('${id}')"]`).closest("tr");
 
-    // Toggle behavior
     if(row.nextElementSibling && row.nextElementSibling.classList.contains("view-row")){
         row.nextElementSibling.remove();
         return;
@@ -151,14 +165,29 @@ window.viewOrganization = function(id){
 
     const org = organizations.find(o => o.id === id);
 
+    let historyHTML = "";
+
+    if(org.history && org.history.length > 0){
+        org.history.forEach((entry,index)=>{
+            historyHTML += `
+                <div>
+                    Entry ${index+1} → Donors: ${entry.donors} | Date: ${entry.date}
+                </div>
+            `;
+        });
+    } else {
+        historyHTML = "No entry history available.";
+    }
+
     const viewRow = document.createElement("tr");
     viewRow.classList.add("view-row");
 
     viewRow.innerHTML = `
         <td colspan="6" style="text-align:left; padding:10px;">
-            <strong>Organization:</strong> ${org.name} <br>
-            <strong>Date:</strong> ${org.date} <br>
-            <strong>Total Donors:</strong> ${org.numDonors} <br>
+            <strong>${org.name}</strong><br><br>
+            ${historyHTML}
+            <br><br>
+            <strong>Total Donors:</strong> ${org.numDonors}<br>
             <strong>Total ML:</strong> ${calculateTotalML(org.numDonors)}
         </td>
     `;
@@ -205,13 +234,24 @@ window.saveEdit = async function(id){
 
     const updatedDonors = org.numDonors + addDonors;
 
+    if(!org.history){
+        org.history = [];
+    }
+
+    org.history.push({
+        donors: addDonors,
+        date: newDate
+    });
+
     await updateDoc(doc(db,"partnerOrganizations",id),{
         numDonors: updatedDonors,
-        date: newDate
+        date: newDate,
+        history: org.history
     });
 
     organizations[orgIndex].numDonors = updatedDonors;
     organizations[orgIndex].date = newDate;
+    organizations[orgIndex].history = org.history;
 
     renderTable();
 };
@@ -225,7 +265,7 @@ window.deleteOrganization = async function(id){
     renderTable();
 };
 
-/* OTHER */
+/* SEARCH */
 function searchOrg(){
     const input = searchInput.value.toLowerCase();
     document.querySelectorAll("#orgTable tr").forEach(row=>{
@@ -233,6 +273,7 @@ function searchOrg(){
     });
 }
 
+/* EXPORT */
 function exportCSV(){
     let csv = "Organization,Date,Number of Donors,Total (ml)\n";
     organizations.forEach(org=>{
