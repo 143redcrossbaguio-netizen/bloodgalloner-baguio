@@ -5,24 +5,7 @@
     <meta charset="UTF-8">
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
-
-        header { 
-            background:#b30000; 
-            color:white; 
-            padding:15px; 
-            text-align:center; 
-            position:relative;
-        }
-
-        /* SETTINGS ICON */
-        .settings-icon{
-            position:absolute;
-            right:20px;
-            top:15px;
-            font-size:22px;
-            cursor:pointer;
-        }
-
+        header { background:#b30000; color:white; padding:15px; text-align:center; }
         .container { max-width:95%; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
         input { padding:5px; margin:5px; }
         button { padding:5px 10px; margin:5px; border:none; border-radius:4px; cursor:pointer; color:white; }
@@ -38,33 +21,12 @@
         th { background:#b30000; color:white; }
         .edit-row { background:#f9f9f9; }
         .view-row { background:#f3f3f3; }
-
-        /* SETTINGS MODAL */
-        .modal{
-            display:none;
-            position:fixed;
-            top:0; left:0;
-            width:100%; height:100%;
-            background:rgba(0,0,0,0.5);
-            justify-content:center;
-            align-items:center;
-        }
-
-        .modal-content{
-            background:white;
-            padding:20px;
-            border-radius:10px;
-            width:300px;
-            text-align:center;
-        }
-
     </style>
 </head>
 <body>
 
 <header>
     <h2>Partner Organization</h2>
-    <div class="settings-icon" onclick="openSettings()">⚙</div>
 </header>
 
 <div class="container">
@@ -97,18 +59,6 @@
     </table>
 </div>
 
-<!-- SETTINGS MODAL -->
-<div class="modal" id="settingsModal">
-    <div class="modal-content">
-        <h3>Settings</h3>
-        <input type="number" id="mlLimit" placeholder="ML Limit">
-        <input type="text" id="rewardType" placeholder="Type of Reward">
-        <br><br>
-        <button style="background:#2e7d32;" onclick="saveSettings()">Save</button>
-        <button style="background:#757575;" onclick="closeSettings()">Close</button>
-    </div>
-</div>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -126,27 +76,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let organizations = [];
-
-/* SETTINGS VARIABLES */
-let mlLimit = 0;
-let rewardType = "";
-
-/* SETTINGS FUNCTIONS */
-window.openSettings = function(){
-    document.getElementById("settingsModal").style.display="flex";
-}
-
-window.closeSettings = function(){
-    document.getElementById("settingsModal").style.display="none";
-}
-
-window.saveSettings = function(){
-    mlLimit = parseInt(document.getElementById("mlLimit").value);
-    rewardType = document.getElementById("rewardType").value;
-    alert("Settings Saved");
-    closeSettings();
-    renderTable();
-}
 
 /* LOAD */
 async function loadOrganizations(){
@@ -166,32 +95,20 @@ function calculateTotalML(numDonors){
     return numDonors * 450;
 }
 
-/* CHECK AWARD */
-function checkAward(totalML){
-    if(mlLimit > 0 && totalML >= mlLimit){
-        return rewardType ? rewardType : "Qualified";
-    }
-    return "";
-}
-
 /* RENDER */
 function renderTable(){
     const table = document.getElementById("orgTable");
     table.innerHTML = "";
 
     organizations.forEach((org,index)=>{
-        const totalML = calculateTotalML(org.numDonors);
-        const award = checkAward(totalML);
-
         table.innerHTML += `
         <tr>
             <td>${index+1}</td>
             <td>${org.name}</td>
             <td>${org.date}</td>
             <td>${org.numDonors}</td>
-            <td>${totalML}</td>
+            <td>${calculateTotalML(org.numDonors)}</td>
             <td>
-                ${award ? "<div><b>"+award+"</b></div>" : ""}
                 <button class="edit-btn" onclick="editOrganization('${org.id}')">Edit</button>
                 <button class="view-btn" onclick="viewOrganization('${org.id}')">View</button>
                 <button class="delete-btn" onclick="deleteOrganization('${org.id}')">Delete</button>
@@ -200,8 +117,187 @@ function renderTable(){
     });
 }
 
-/* EVERYTHING ELSE BELOW REMAINS 100% UNCHANGED */
-/* (Your full original logic continues exactly same — omitted here for brevity in explanation but remains intact in your implementation) */
+/* ADD */
+async function addOrganization(){
+    const name = orgName.value.trim();
+    const numDonors = parseInt(numDonors.value);
+    const date = orgDate.value;
+
+    if(!name || !numDonors || !date){
+        alert("Please fill all required fields.");
+        return;
+    }
+
+    const docRef = await addDoc(collection(db,"partnerOrganizations"),{
+        name,
+        numDonors,
+        date,
+        history: [{
+            donors: numDonors,
+            date: date
+        }]
+    });
+
+    organizations.push({
+        id:docRef.id,
+        name,
+        numDonors,
+        date,
+        history:[{ donors:numDonors, date:date }]
+    });
+
+    renderTable();
+
+    orgName.value="";
+    numDonors.value="";
+    orgDate.value="";
+}
+
+/* VIEW FULL ENTRY HISTORY */
+window.viewOrganization = function(id){
+
+    const row = document.querySelector(`button[onclick="viewOrganization('${id}')"]`).closest("tr");
+
+    if(row.nextElementSibling && row.nextElementSibling.classList.contains("view-row")){
+        row.nextElementSibling.remove();
+        return;
+    }
+
+    const org = organizations.find(o => o.id === id);
+
+    let historyHTML = "";
+
+    if(org.history && org.history.length > 0){
+        org.history.forEach((entry,index)=>{
+            historyHTML += `
+                <div>
+                    Entry ${index+1} → Donors: ${entry.donors} | Date: ${entry.date}
+                </div>
+            `;
+        });
+    } else {
+        historyHTML = "No entry history available.";
+    }
+
+    const viewRow = document.createElement("tr");
+    viewRow.classList.add("view-row");
+
+    viewRow.innerHTML = `
+        <td colspan="6" style="text-align:left; padding:10px;">
+            <strong>${org.name}</strong><br><br>
+            ${historyHTML}
+            <br><br>
+            <strong>Total Donors:</strong> ${org.numDonors}<br>
+            <strong>Total ML:</strong> ${calculateTotalML(org.numDonors)}
+        </td>
+    `;
+
+    row.after(viewRow);
+};
+
+/* INLINE EDIT */
+window.editOrganization = function(id){
+
+    const row = document.querySelector(`button[onclick="editOrganization('${id}')"]`).closest("tr");
+
+    if(row.nextElementSibling && row.nextElementSibling.classList.contains("edit-row")){
+        return;
+    }
+
+    const editRow = document.createElement("tr");
+    editRow.classList.add("edit-row");
+
+    editRow.innerHTML = `
+        <td colspan="6">
+            <input type="number" id="editDonors-${id}" placeholder="Add Donors">
+            <input type="date" id="editDate-${id}">
+            <button style="background:#2e7d32;" onclick="saveEdit('${id}')">Save</button>
+            <button style="background:#757575;" onclick="this.closest('tr').remove()">Cancel</button>
+        </td>
+    `;
+
+    row.after(editRow);
+};
+
+window.saveEdit = async function(id){
+
+    const addDonors = parseInt(document.getElementById(`editDonors-${id}`).value);
+    const newDate = document.getElementById(`editDate-${id}`).value;
+
+    if(!addDonors || !newDate){
+        alert("Enter donors and date.");
+        return;
+    }
+
+    const orgIndex = organizations.findIndex(o => o.id === id);
+    const org = organizations[orgIndex];
+
+    const updatedDonors = org.numDonors + addDonors;
+
+    if(!org.history){
+        org.history = [];
+    }
+
+    org.history.push({
+        donors: addDonors,
+        date: newDate
+    });
+
+    await updateDoc(doc(db,"partnerOrganizations",id),{
+        numDonors: updatedDonors,
+        date: newDate,
+        history: org.history
+    });
+
+    organizations[orgIndex].numDonors = updatedDonors;
+    organizations[orgIndex].date = newDate;
+    organizations[orgIndex].history = org.history;
+
+    renderTable();
+};
+
+/* DELETE */
+window.deleteOrganization = async function(id){
+    if(!confirm("Are you sure you want to delete this organization?")) return;
+
+    await deleteDoc(doc(db,"partnerOrganizations",id));
+    organizations = organizations.filter(o => o.id !== id);
+    renderTable();
+};
+
+/* SEARCH */
+function searchOrg(){
+    const input = searchInput.value.toLowerCase();
+    document.querySelectorAll("#orgTable tr").forEach(row=>{
+        row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
+    });
+}
+
+/* EXPORT */
+function exportCSV(){
+    let csv = "Organization,Date,Number of Donors,Total (ml)\n";
+    organizations.forEach(org=>{
+        csv += `${org.name},${org.date},${org.numDonors},${calculateTotalML(org.numDonors)}\n`;
+    });
+
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "partner_organizations.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function printTable(){ window.print(); }
+function goDashboard(){ window.location.href="dashboard.html"; }
+
+addBtn.onclick = addOrganization;
+dashboardBtn.onclick = goDashboard;
+exportBtn.onclick = exportCSV;
+printBtn.onclick = printTable;
+
+window.onload = loadOrganizations;
 
 </script>
 
