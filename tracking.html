@@ -20,6 +20,7 @@
         .edit-btn { background:#1565c0; }
         .delete-btn { background:#c62828; }
         .view-btn { background:#6a1b9a; }
+        .notes-btn { background:#2e7d32; }
         .top-btn { background:#b30000; }
         .galloner-btn { background:#1e88e5; }
         .bronze-btn { background:#cd7f32; }
@@ -99,141 +100,159 @@
 </div>
 
 <script>
-    // Firebase configuration
-    var firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.appspot.com",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
-    };
-    firebase.initializeApp(firebaseConfig);
-    var db = firebase.firestore();
 
-    let donorsData = [];
-    let currentCategory = null;
+var firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.appspot.com",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
+};
 
-    function goDashboard(){ window.location.href="dashboard.html"; }
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
 
-    function fetchDonors(){
-        db.collection("donors").get().then(snapshot=>{
-            donorsData = [];
-            snapshot.forEach(doc=>{
-                let data = doc.data();
-                data.id = doc.id;
-                donorsData.push(data);
-            });
-            renderTable(currentCategory);
+let donorsData = [];
+let currentCategory = null;
+
+function goDashboard(){ window.location.href="dashboard.html"; }
+
+function fetchDonors(){
+    db.collection("donors").get().then(snapshot=>{
+        donorsData = [];
+        snapshot.forEach(doc=>{
+            let data = doc.data();
+            data.id = doc.id;
+            donorsData.push(data);
         });
+        renderTable(currentCategory);
+    });
+}
+
+function getCategoryLimits(){
+    let limits = localStorage.getItem("categorySettings");
+    if(!limits) return {galloner:8, bronze:28, silver:46, gold:70};
+    return JSON.parse(limits);
+}
+
+function renderTable(category=null){
+    currentCategory = category;
+    let table = document.getElementById("donorTable");
+    let bloodFilter = document.getElementById("bloodFilter").value;
+    let limits = getCategoryLimits();
+
+    table.innerHTML = "";
+
+    if(donorsData.length === 0){
+        table.innerHTML = "<tr><td colspan='6'>No donors found</td></tr>";
+        return;
     }
 
-    function getCategoryLimits(){
-        let limits = localStorage.getItem("categorySettings");
-        if(!limits) return {galloner:8, bronze:28, silver:46, gold:70};
-        return JSON.parse(limits);
-    }
+    donorsData.forEach((d,index)=>{
 
-    function renderTable(category=null){
-        currentCategory = category;
-        let table = document.getElementById("donorTable");
-        let bloodFilter = document.getElementById("bloodFilter").value;
-        let limits = getCategoryLimits();
+        let serialCount = d.serials ? d.serials.length : 0;
 
-        table.innerHTML = "";
-        if(donorsData.length === 0){
-            table.innerHTML = "<tr><td colspan='6'>No donors found</td></tr>";
-            return;
+        if(bloodFilter !== "" && d.bloodType !== bloodFilter) return;
+
+        if(category){
+            if(category==="galloner" && serialCount < limits.galloner) return;
+            if(category==="bronze" && serialCount < limits.bronze) return;
+            if(category==="silver" && serialCount < limits.silver) return;
+            if(category==="gold" && serialCount < limits.gold) return;
         }
 
-        donorsData.forEach((d,index)=>{
-            let serialCount = d.serials ? d.serials.length : 0;
+        table.innerHTML += `
+        <tr>
+            <td>${index+1}</td>
+            <td>${d.firstName || ""} ${d.middleName || ""} ${d.surname || ""}</td>
+            <td>${d.bloodType || ""} ${d.rhFactor || ""}</td>
+            <td>${d.contact || ""}</td>
+            <td>${serialCount} <button class="view-btn" onclick="toggleSerial(${index})">View</button></td>
+            <td>
+                <button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>
+                <button class="notes-btn" onclick="addNotes('${d.id}')">Notes</button>
+                <button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>
+            </td>
+        </tr>
+        <tr id="serialRow${index}" style="display:none;">
+            <td colspan="6">
+                <div class="serial-box" id="serialList${index}"></div>
+            </td>
+        </tr>
+        `;
+    });
+}
 
-            if(bloodFilter !== "" && d.bloodType !== bloodFilter) return;
+function toggleSerial(index){
+    let row = document.getElementById("serialRow"+index);
+    let container = document.getElementById("serialList"+index);
 
-            if(category){
-                if(category==="galloner" && serialCount < limits.galloner) return;
-                if(category==="bronze" && serialCount < limits.bronze) return;
-                if(category==="silver" && serialCount < limits.silver) return;
-                if(category==="gold" && serialCount < limits.gold) return;
-            }
+    if(row.style.display==="none"){
+        container.innerHTML="";
+        let serials = donorsData[index].serials || [];
+        serials.forEach(s=>{
+            container.innerHTML += `<div>${s.serial} - ${s.date}</div>`;
+        });
+        row.style.display="table-row";
+    } else {
+        row.style.display="none";
+    }
+}
 
-            table.innerHTML += `
-            <tr>
-                <td>${index+1}</td>
-                <td>${d.firstName || ""} ${d.middleName || ""} ${d.surname || ""}</td>
-                <td>${d.bloodType || ""} ${d.rhFactor || ""}</td>
-                <td>${d.contact || ""}</td>
-                <td>${serialCount} <button class="view-btn" onclick="toggleSerial(${index})">View</button></td>
-                <td>
-                    <button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>
-                    <button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>
-                </td>
-            </tr>
-            <tr id="serialRow${index}" style="display:none;">
-                <td colspan="6">
-                    <div class="serial-box" id="serialList${index}"></div>
-                </td>
-            </tr>
-            `;
+function editDonor(id){
+    window.location.href = "donor-entry.html?editId=" + id;
+}
+
+function deleteDonor(id){
+    if(confirm("Delete this donor?")){
+        db.collection("donors").doc(id).delete().then(()=>{
+            fetchDonors();
         });
     }
+}
 
-    function toggleSerial(index){
-        let row = document.getElementById("serialRow"+index);
-        let container = document.getElementById("serialList"+index);
+/* NOTES FUNCTION */
+function addNotes(id){
+    let note = prompt("Enter note for this donor:");
 
-        if(row.style.display==="none"){
-            container.innerHTML="";
-            let serials = donorsData[index].serials || [];
-            serials.forEach(s=>{
-                container.innerHTML += `<div>${s.serial} - ${s.date}</div>`;
-            });
-            row.style.display="table-row";
-        } else {
-            row.style.display="none";
-        }
-    }
-
-    function editDonor(id){
-        window.location.href = "donor-entry.html?editId=" + id;
-    }
-
-    function deleteDonor(id){
-        if(confirm("Delete this donor?")){
-            db.collection("donors").doc(id).delete().then(()=>{
-                fetchDonors();
-            });
-        }
-    }
-
-    function filterByCategory(cat){ renderTable(cat); }
-
-    function searchDonor(){
-        let input = document.getElementById("searchInput").value.toLowerCase();
-        let rows = document.querySelectorAll("#donorTable tr");
-
-        rows.forEach(row=>{
-            row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
+    if(note !== null){
+        db.collection("donors").doc(id).update({
+            notes: note
+        }).then(()=>{
+            alert("Note saved");
         });
     }
+}
 
-    function exportToCSV(){
-        let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
-        donorsData.forEach(d=>{
-            csv += `${d.bloodType || ""},${d.rhFactor || ""},${d.firstName || ""},${d.middleName || ""},${d.surname || ""},${d.birthday || ""},${d.contact || ""}\n`;
-        });
-        let blob = new Blob([csv], { type: "text/csv" });
-        let url = window.URL.createObjectURL(blob);
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = "donors.csv";
-        a.click();
-        window.URL.revokeObjectURL(url);
-    }
+function filterByCategory(cat){ renderTable(cat); }
 
-    window.onload = fetchDonors;
+function searchDonor(){
+    let input = document.getElementById("searchInput").value.toLowerCase();
+    let rows = document.querySelectorAll("#donorTable tr");
+
+    rows.forEach(row=>{
+        row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
+    });
+}
+
+function exportToCSV(){
+    let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
+    donorsData.forEach(d=>{
+        csv += `${d.bloodType || ""},${d.rhFactor || ""},${d.firstName || ""},${d.middleName || ""},${d.surname || ""},${d.birthday || ""},${d.contact || ""}\n`;
+    });
+    let blob = new Blob([csv], { type: "text/csv" });
+    let url = window.URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "donors.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+window.onload = fetchDonors;
+
 </script>
 
 </body>
