@@ -45,13 +45,7 @@
         .serial-item input {
             padding:4px;
             margin-right:5px;
-        }
-
-        .note-text {
             width:70%;
-            padding:4px;
-            border:none;
-            background:#f0f0f0;
         }
 
     </style>
@@ -108,7 +102,6 @@
 </div>
 
 <script>
-
 var firebaseConfig = {
     apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
     authDomain: "galloners-club.firebaseapp.com",
@@ -118,7 +111,6 @@ var firebaseConfig = {
     appId: "1:213049860421:web:4156aaa52b945f48711e2c",
     measurementId: "G-XYXJH9JNXJ"
 };
-
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
@@ -133,6 +125,8 @@ function fetchDonors(){
         snapshot.forEach(doc=>{
             let data = doc.data();
             data.id = doc.id;
+            // Ensure notes is always array for inline editing
+            if(!Array.isArray(data.notes)) data.notes = data.notes ? [data.notes] : [];
             donorsData.push(data);
         });
         renderTable(currentCategory);
@@ -222,7 +216,7 @@ function toggleNotes(index){
 
     if(row.style.display==="none"){
         container.innerHTML="";
-        let notes = donorsData[index].notes || [];
+        let notes = donorsData[index].notes;
 
         if(notes.length === 0){
             container.innerHTML = "<i>No notes yet.</i>";
@@ -239,7 +233,7 @@ function toggleNotes(index){
             });
         }
 
-        // Add new note input
+        // Add new note
         container.innerHTML += `
         <br>
         <input class="note-text" id="newNoteInput${index}" placeholder="Enter new note">
@@ -295,7 +289,6 @@ function searchDonor(){ let input = document.getElementById("searchInput").value
 function exportToCSV(){ let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n"; donorsData.forEach(d=>{ csv += `${d.bloodType || ""},${d.rhFactor || ""},${d.firstName || ""},${d.middleName || ""},${d.surname || ""},${d.birthday || ""},${d.contact || ""}\n`; }); let blob = new Blob([csv], { type: "text/csv" }); let url = window.URL.createObjectURL(blob); let a = document.createElement("a"); a.href = url; a.download = "donors.csv"; a.click(); window.URL.revokeObjectURL(url); }
 
 window.onload = fetchDonors;
-
 </script>
 
 </body>
