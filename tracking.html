@@ -172,13 +172,24 @@ function renderTable(category=null){
             <td>${serialCount} <button class="view-btn" onclick="toggleSerial(${index})">View</button></td>
             <td>
                 <button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>
-                <button class="notes-btn" onclick="addNotes('${d.id}')">Notes</button>
+                <button class="notes-btn" onclick="toggleNotes(${index},'${d.id}')">Notes</button>
                 <button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>
             </td>
         </tr>
         <tr id="serialRow${index}" style="display:none;">
             <td colspan="6">
                 <div class="serial-box" id="serialList${index}"></div>
+            </td>
+        </tr>
+        <tr id="notesRow${index}" style="display:none;">
+            <td colspan="6">
+                <div class="serial-box">
+                    <div id="notesDisplay${index}">${d.notes || "No notes yet."}</div>
+                    <br>
+                    <textarea id="notesInput${index}" style="width:100%;height:60px;" placeholder="Enter note"></textarea>
+                    <br><br>
+                    <button class="notes-btn" onclick="saveNotes('${d.id}',${index})">Save Note</button>
+                </div>
             </td>
         </tr>
         `;
@@ -201,6 +212,23 @@ function toggleSerial(index){
     }
 }
 
+function toggleNotes(index,id){
+    let row = document.getElementById("notesRow"+index);
+    row.style.display = row.style.display==="none" ? "table-row" : "none";
+}
+
+function saveNotes(id,index){
+    let noteText = document.getElementById("notesInput"+index).value;
+
+    db.collection("donors").doc(id).update({
+        notes: noteText
+    }).then(()=>{
+        donorsData[index].notes = noteText;
+        document.getElementById("notesDisplay"+index).innerText = noteText;
+        document.getElementById("notesInput"+index).value="";
+    });
+}
+
 function editDonor(id){
     window.location.href = "donor-entry.html?editId=" + id;
 }
@@ -209,19 +237,6 @@ function deleteDonor(id){
     if(confirm("Delete this donor?")){
         db.collection("donors").doc(id).delete().then(()=>{
             fetchDonors();
-        });
-    }
-}
-
-/* NOTES FUNCTION */
-function addNotes(id){
-    let note = prompt("Enter note for this donor:");
-
-    if(note !== null){
-        db.collection("donors").doc(id).update({
-            notes: note
-        }).then(()=>{
-            alert("Note saved");
         });
     }
 }
