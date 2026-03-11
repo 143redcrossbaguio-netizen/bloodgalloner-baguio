@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
 
@@ -277,11 +276,11 @@ databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
 projectId:"YOUR-PROJECT"
 };
 
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
 /* SAVE RELEASING DATA */
-window.saveData=function(){
+window.saveData = function() {
 push(ref(db,"releasing"),{
 date:date.value,
 facility:facility.value,
@@ -299,61 +298,69 @@ issuedQty:issuedQty.value
 alert("Saved successfully");
 }
 
-/* FACILITY AUTOCOMPLETE & LOAD TABLE */
-const facilityList=document.getElementById("facilityList");
+/* SETTINGS & AUTOCOMPLETE */
+const facilityList = document.getElementById("facilityList");
 
-function loadFacilities(){
-facilityList.innerHTML="";
-const tbody=document.querySelector("#facilityTable tbody");
-tbody.innerHTML="";
-onValue(ref(db,"facilities"),snapshot=>{
-snapshot.forEach(child=>{
-let name=child.val().name;
-// autocomplete
-let option=document.createElement("option");
-option.value=name;
-facilityList.appendChild(option);
-// table
-let row=document.createElement("tr");
-row.innerHTML=`<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
-tbody.appendChild(row);
-});
-});
+function loadFacilities() {
+    facilityList.innerHTML="";
+    const tbody = document.querySelector("#facilityTable tbody");
+    onValue(ref(db,"facilities"), snapshot => {
+        tbody.innerHTML="";
+        snapshot.forEach(child => {
+            const name = child.val().name;
+            // autocomplete
+            const option = document.createElement("option");
+            option.value = name;
+            facilityList.appendChild(option);
+            // table
+            const row = document.createElement("tr");
+            row.innerHTML = `<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
+            tbody.appendChild(row);
+        });
+    });
 }
 
 loadFacilities();
 
-/* SETTINGS MODAL */
-window.openSettings=function(){document.getElementById("settingsModal").style.display="block";}
-window.closeSettings=function(){document.getElementById("settingsModal").style.display="none";}
-window.goBack=function(){window.location.href="releasing.html";}
+/* MODAL CONTROL */
+window.openSettings = function(){ document.getElementById("settingsModal").style.display = "block"; }
+window.closeSettings = function(){ document.getElementById("settingsModal").style.display = "none"; }
+window.goBack = function(){ window.location.href = "releasing.html"; }
 
-/* PASTE FACILITIES FROM BULK TEXTAREA */
-window.pasteFacilities=function(){
-const text=document.getElementById("facilityBulk").value;
-const lines=text.split("\n");
-const tbody=document.querySelector("#facilityTable tbody");
-lines.forEach(line=>{
-let name=line.trim();
-if(name==="") return;
-let row=document.createElement("tr");
-row.innerHTML=`<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
-tbody.appendChild(row);
-});
-document.getElementById("facilityBulk").value="";
+/* PASTE FACILITIES */
+window.pasteFacilities = function() {
+    const text = document.getElementById("facilityBulk").value;
+    const lines = text.split("\n");
+    const tbody = document.querySelector("#facilityTable tbody");
+    lines.forEach(line => {
+        const name = line.trim();
+        if(name === "") return;
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
+        tbody.appendChild(row);
+    });
+    document.getElementById("facilityBulk").value="";
 }
 
-/* SAVE FACILITIES TO FIREBASE & VIEW FULL LIST */
-window.saveFacilities=function(){
-remove(ref(db,"facilities")).then(()=>{
-const tbody=document.querySelector("#facilityTable tbody");
-tbody.querySelectorAll("tr").forEach(tr=>{
-let name=tr.querySelector("td").innerText.trim();
-if(name!=="") push(ref(db,"facilities"),{name:name});
-});
-alert("Facilities saved! You can view the full list in the table below.");
-loadFacilities(); // reload table + autocomplete
-});
+/* SAVE FACILITIES TO FIREBASE */
+window.saveFacilities = async function() {
+    const tbody = document.querySelector("#facilityTable tbody");
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    if(rows.length === 0) { alert("No facilities to save!"); return; }
+
+    // Remove all old facilities
+    await remove(ref(db, "facilities"));
+
+    // Push all new facilities
+    for(const tr of rows){
+        const name = tr.querySelector("td").innerText.trim();
+        if(name !== "") {
+            await push(ref(db, "facilities"), {name});
+        }
+    }
+
+    alert("Facilities saved! Full list is visible below.");
+    loadFacilities(); // refresh table + autocomplete
 }
 </script>
 
