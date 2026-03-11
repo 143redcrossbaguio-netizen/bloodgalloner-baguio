@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
 
 <style>
-
 body{
 margin:0;
 font-family:Arial;
@@ -30,7 +28,6 @@ cursor:pointer;
 }
 
 /* MAIN FORM */
-
 .container{
 max-width:650px;
 margin:40px auto;
@@ -76,7 +73,6 @@ cursor:pointer;
 .back{background:#444;color:white}
 
 /* SETTINGS WINDOW */
-
 .modal{
 display:none;
 position:fixed;
@@ -90,17 +86,27 @@ background:rgba(0,0,0,0.4);
 .modal-content{
 background:white;
 width:700px;
-margin:60px auto;
+max-height:90vh;
+margin:30px auto;
 padding:20px;
 border-radius:8px;
+display:flex;
+flex-direction:column;
+}
+
+/* SCROLLABLE TABLE CONTAINER */
+.table-container{
+flex:1;
+overflow-y:auto;
+margin-top:10px;
+border:1px solid #ccc;
+border-radius:5px;
 }
 
 /* EXCEL STYLE TABLE */
-
 table{
 width:100%;
 border-collapse:collapse;
-margin-top:10px;
 }
 
 th,td{
@@ -113,20 +119,35 @@ th{
 background:#f0f0f0;
 }
 
-td{
-background:white;
+td button{
+background:#e53935;
+color:white;
+border:none;
+padding:4px 8px;
+border-radius:4px;
+cursor:pointer;
 }
 
-td input{
-border:none;
+textarea{
 width:100%;
-outline:none;
+height:100px;
+padding:10px;
+border-radius:5px;
+border:1px solid #ccc;
+margin-top:10px;
+resize:none;
+}
+
+.modal-buttons{
+margin-top:10px;
+display:flex;
+gap:10px;
+justify-content:flex-end;
 }
 
 .addRow{
 background:#2e7d32;
 color:white;
-margin-top:10px;
 }
 
 .saveFacilities{
@@ -138,27 +159,14 @@ color:white;
 background:#444;
 color:white;
 }
-
-textarea{
-width:100%;
-height:150px;
-padding:10px;
-border-radius:5px;
-border:1px solid #ccc;
-margin-top:10px;
-}
-
 </style>
 </head>
 
 <body>
 
 <header>
-
 <h2>Blood Releasing Entry</h2>
-
 <div class="settings" onclick="openSettings()">⚙</div>
-
 </header>
 
 <div class="container">
@@ -227,42 +235,38 @@ margin-top:10px;
 </div>
 
 <button class="save" onclick="saveData()">SAVE</button>
-
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 </div>
 
-
 <!-- SETTINGS MODAL -->
-
 <div class="modal" id="settingsModal">
-
 <div class="modal-content">
 
 <h3>Facility Manager (Paste from Excel)</h3>
-
-<p>Paste one facility per line below:</p>
+<p>Paste one facility per line in the box below:</p>
 <textarea id="facilityBulk" placeholder="Paste Excel column here..."></textarea>
 
+<div class="modal-buttons">
 <button class="addRow" onclick="pasteFacilities()">ADD / UPDATE FACILITIES</button>
+</div>
 
+<div class="table-container">
 <table id="facilityTable">
-<thead>
-<tr><th>Facility Name</th><th>Delete</th></tr>
-</thead>
+<thead><tr><th>Facility Name</th><th>Delete</th></tr></thead>
 <tbody></tbody>
 </table>
+</div>
 
+<div class="modal-buttons">
 <button class="saveFacilities" onclick="saveFacilities()">SAVE TO DATABASE</button>
 <button class="closeBtn" onclick="closeSettings()">CLOSE</button>
-
 </div>
 
 </div>
-
+</div>
 
 <script type="module">
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
@@ -274,7 +278,6 @@ projectId:"YOUR-PROJECT"
 
 const app=initializeApp(firebaseConfig);
 const db=getDatabase(app);
-
 
 /* SAVE RELEASING DATA */
 window.saveData=function(){
@@ -295,13 +298,12 @@ issuedQty:issuedQty.value
 alert("Saved successfully");
 }
 
-
-
-/* LOAD FACILITY LIST & AUTOCOMPLETE */
+/* FACILITY AUTOCOMPLETE */
 const facilityList=document.getElementById("facilityList");
 
-onValue(ref(db,"facilities"),snapshot=>{
+function updateAutocomplete(){
 facilityList.innerHTML="";
+onValue(ref(db,"facilities"),snapshot=>{
 const tbody=document.querySelector("#facilityTable tbody");
 tbody.innerHTML="";
 snapshot.forEach(child=>{
@@ -316,13 +318,14 @@ row.innerHTML=`<td>${name}</td><td><button onclick="this.closest('tr').remove()"
 tbody.appendChild(row);
 });
 });
+}
 
+updateAutocomplete();
 
 /* SETTINGS MODAL */
 window.openSettings=function(){document.getElementById("settingsModal").style.display="block";}
 window.closeSettings=function(){document.getElementById("settingsModal").style.display="none";}
 window.goBack=function(){window.location.href="releasing.html";}
-
 
 /* PASTE FACILITIES FROM BULK TEXTAREA */
 window.pasteFacilities=function(){
@@ -341,7 +344,6 @@ tbody.appendChild(row);
 document.getElementById("facilityBulk").value="";
 }
 
-
 /* SAVE FACILITIES TO FIREBASE */
 window.saveFacilities=function(){
 remove(ref(db,"facilities"));
@@ -351,8 +353,8 @@ let name=tr.querySelector("td").innerText.trim();
 if(name!=="") push(ref(db,"facilities"),{name:name});
 });
 alert("Facilities saved!");
+updateAutocomplete(); // refresh autocomplete
 }
-
 </script>
 
 </body>
