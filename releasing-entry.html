@@ -3,7 +3,6 @@
 <head>
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
-
 <style>
 body{
     margin:0;
@@ -42,21 +41,13 @@ label{
     display:block;
 }
 
-input,select{
+input,select,textarea{
     width:100%;
     padding:10px;
     margin-top:5px;
     border:1px solid #ccc;
     border-radius:5px;
 }
-
-.row{
-    display:flex;
-    gap:10px;
-}
-
-.row select{flex:2}
-.row input{flex:1}
 
 button{
     width:100%;
@@ -83,57 +74,10 @@ button{
 
 .modal-content{
     background:white;
-    width:700px;
-    margin:60px auto;
+    width:500px;
+    margin:80px auto;
     padding:20px;
     border-radius:8px;
-    max-height:80vh;
-    overflow:auto;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:10px;
-}
-
-th,td{
-    border:1px solid #ccc;
-    padding:8px;
-    text-align:left;
-}
-
-th{
-    background:#f0f0f0;
-}
-
-td[contenteditable]{
-    background:#fffbe6;
-}
-
-textarea{
-    width:100%;
-    height:150px;
-    padding:10px;
-    border-radius:5px;
-    border:1px solid #ccc;
-    margin-top:10px;
-}
-
-.addRow{
-    background:#2e7d32;
-    color:white;
-    margin-top:10px;
-}
-
-.saveFacilities{
-    background:#1565c0;
-    color:white;
-}
-
-.closeBtn{
-    background:#444;
-    color:white;
 }
 </style>
 </head>
@@ -221,32 +165,20 @@ textarea{
 
 </div>
 
+<!-- SIMPLE SETTINGS MODAL -->
 <div class="modal" id="settingsModal">
 <div class="modal-content">
-<h3>Facility Manager (Excel Style)</h3>
-<p>Paste facilities from Excel OR edit directly.</p>
-<textarea id="facilityBulk" placeholder="Paste Excel column here..."></textarea>
-<button class="addRow" onclick="pasteFacilities()">PASTE FACILITIES</button>
-
-<table id="facilityTable">
-<thead>
-<tr>
-<th>#</th>
-<th>Facility Name</th>
-<th>Clear</th>
-</tr>
-</thead>
-<tbody id="facilityBody"></tbody>
-</table>
-
-<button class="saveFacilities" onclick="saveFacilities()">SAVE TO DATABASE</button>
-<button class="closeBtn" onclick="closeSettings()">CLOSE</button>
+<h3>Facility Manager</h3>
+<p>Type or paste one facility per line:</p>
+<textarea id="facilityBulk" placeholder="Enter or paste facilities here..."></textarea>
+<button class="save" onclick="saveFacilities()">SAVE TO DATABASE</button>
+<button class="back" onclick="closeSettings()">CLOSE</button>
 </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig={
 apiKey:"YOUR-API-KEY",
@@ -277,99 +209,47 @@ discount:discount.value
 })
 .then(()=>{
 alert("Saved successfully!");
-// Clear inputs after save
+// Clear inputs
 date.value=""; facility.value=""; surname.value=""; firstname.value="";
 age.value=""; sex.value=""; bloodtype.value=""; or.value="";
 request.value="WB"; requestQty.value=""; issued.value="WB"; issuedQty.value="";
 amountPaid.value=""; discount.value="";
 })
-.catch(err=>{
-console.error(err);
-alert("Error saving data!");
-});
-
-/* Entry will now appear in tracking automatically as saved in Firebase */
+.catch(err=>{console.error(err); alert("Error saving data!");});
 }
 
-/* AUTOCOMPLETE FACILITY */
+/* FACILITY AUTOCOMPLETE */
 const facilityList=document.getElementById("facilityList")
-onValue(ref(db,"facilities"),snapshot=>{
-    facilityList.innerHTML=""
-    snapshot.forEach(child=>{
-        let option=document.createElement("option")
-        option.value=child.val().name
-        facilityList.appendChild(option)
-    })
-})
-
-/* SETTINGS */
-window.openSettings=function(){
-    document.getElementById("settingsModal").style.display="block"
-    createExcelGrid()
-    loadFacilities()
-}
-window.closeSettings=function(){ document.getElementById("settingsModal").style.display="none" }
-window.goBack=function(){ window.location.href="releasing.html" }
-
-/* EXCEL GRID WITH UNLIMITED ROWS */
-function createExcelGrid(){ const tbody=document.getElementById("facilityBody"); tbody.innerHTML=""; addRow(); }
-function addRow(value=""){
-    const tbody=document.getElementById("facilityBody")
-    let rowNumber=tbody.children.length+1
-    let row=document.createElement("tr")
-    row.innerHTML=`
-    <td>${rowNumber}</td>
-    <td contenteditable="true">${value}</td>
-    <td><button onclick="this.closest('tr').remove()">X</button></td>`
-    tbody.appendChild(row)
-    row.children[1].addEventListener("input",function(){
-        if(row===tbody.lastChild){ addRow() }
-    })
-}
-
-/* LOAD SAVED FACILITIES */
-function loadFacilities(){
-    const tbody=document.getElementById("facilityBody")
-    tbody.innerHTML=""
-    onValue(ref(db,"facilities"), snapshot=>{
-        tbody.innerHTML=""
+function loadFacilityList(){
+    onValue(ref(db,"facilities"),snapshot=>{
+        facilityList.innerHTML=""
         snapshot.forEach(child=>{
-            addRow(child.val().name)
+            const option=document.createElement("option")
+            option.value=child.val().name
+            facilityList.appendChild(option)
         })
-        addRow()
-    }, {onlyOnce:true})
-}
-
-/* PASTE FROM EXCEL */
-window.pasteFacilities=function(){
-    const text=document.getElementById("facilityBulk").value.trim()
-    if(text==="") return
-    const lines=text.split("\n")
-    lines.forEach(line=>{
-        let name=line.trim()
-        if(name!==""){ addRow(name) }
     })
-    document.getElementById("facilityBulk").value=""
 }
+loadFacilityList()
 
-/* SAVE FACILITIES PERMANENTLY */
-window.saveFacilities=async function(){
-    const rows=document.querySelectorAll("#facilityBody tr")
-    const facilityRef=ref(db,"facilities")
-    try{
-        await remove(facilityRef) // delete previous
-        for(let row of rows){
-            let name=row.children[1].innerText.trim()
-            if(name!==""){
-                await push(facilityRef,{ name:name.toUpperCase() })
-            }
-        }
-        alert("Facilities saved permanently!")
-        loadFacilities()
-    }catch(err){
-        console.error(err)
-        alert("Error saving facilities!")
-    }
+/* SIMPLE SETTINGS */
+window.openSettings=function(){ document.getElementById("settingsModal").style.display="block"; loadFacilityList(); }
+window.closeSettings=function(){ document.getElementById("settingsModal").style.display="none"; }
+window.goBack=function(){ window.location.href="releasing.html"; }
+
+/* SAVE FACILITIES */
+window.saveFacilities=function(){
+const text=document.getElementById("facilityBulk").value.trim()
+if(text===""){ alert("No data to save"); return; }
+const lines=text.split("\n").map(l=>l.trim()).filter(l=>l!=="")
+const facilityRef=ref(db,"facilities")
+remove(facilityRef).then(()=>{
+    lines.forEach(line=>{
+        push(facilityRef,{ name:line.toUpperCase() })
+    })
+    alert("Facilities saved permanently!")
+    loadFacilityList()
+})
 }
 </script>
 
