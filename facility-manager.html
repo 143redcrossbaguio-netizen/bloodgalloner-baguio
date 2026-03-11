@@ -1,154 +1,250 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Facility Manager</title>
+<title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
 <style>
-body{
-    margin:0;
-    font-family:Arial;
-    background:#f4f4f4;
-}
-header{
-    background:#2e7d32;
-    color:white;
-    padding:15px;
-    text-align:center;
-}
-.container{
-    max-width:600px;
-    margin:40px auto;
-    background:white;
-    padding:30px;
-    border-radius:10px;
-    box-shadow:0 3px 10px rgba(0,0,0,0.1);
-}
-input{
-    width:70%;
-    padding:10px;
-    margin-right:10px;
-    border:1px solid #ccc;
-    border-radius:5px;
-}
-button{
-    padding:10px 15px;
-    border:none;
-    border-radius:5px;
-    font-weight:bold;
-    cursor:pointer;
-}
-.addBtn{background:#2e7d32;color:white;}
-.backBtn{background:#444;color:white;margin-top:10px;}
-table{
-    width:100%;
-    margin-top:20px;
-    border-collapse:collapse;
-}
-th,td{
-    border:1px solid #ccc;
-    padding:8px;
-    text-align:left;
-}
-th{
-    background:#f0f0f0;
-}
-td button{
-    margin-right:5px;
-    padding:5px 8px;
-}
+body{margin:0;font-family:Arial;background:#f4f4f4;}
+header{background:#ff9800;color:white;padding:15px;text-align:center;position:relative;}
+.container{max-width:650px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+label{font-weight:bold;margin-top:10px;display:block;}
+input,select{width:100%;padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:5px;}
+.row{display:flex;gap:10px;}
+.row select{flex:2}
+.row input{flex:1}
+button{width:100%;padding:12px;margin-top:15px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;}
+.save{background:#ff9800;color:white}
+.back{background:#444;color:white}
+.facilityManager{background:#2e7d32;color:white}
+
+/* Facility List Table */
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border:1px solid #ccc;padding:8px;text-align:left;}
+th{background:#f0f0f0;}
+td button{margin-right:5px;padding:5px 8px;}
 </style>
 </head>
 <body>
 
 <header>
-<h2>Facility Manager</h2>
+<h2>Blood Releasing Entry</h2>
 </header>
 
 <div class="container">
-<input type="text" id="facilityInput" placeholder="Enter facility name">
-<button class="addBtn" onclick="addFacility()">ADD FACILITY</button>
 
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Facility Name</th>
-<th>Actions</th>
-</tr>
-</thead>
-<tbody id="facilityList"></tbody>
-</table>
+<label>DATE</label>
+<input type="date" id="date">
 
-<button class="backBtn" onclick="goBack()">BACK</button>
+<label>FACILITY</label>
+<input list="facilityList" id="facility">
+<datalist id="facilityList"></datalist>
+
+<button class="facilityManager" onclick="toggleFacilityManager()">FACILITY MANAGER</button>
+
+<!-- Facility Manager -->
+<div id="facilityManagerDiv" style="display:none; margin-top:15px; border:1px solid #ccc; padding:10px; border-radius:5px;">
+    <input type="text" id="newFacility" placeholder="Enter facility name">
+    <button onclick="addFacility()">ADD FACILITY</button>
+
+    <table>
+        <thead>
+            <tr><th>#</th><th>Facility Name</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="facilityTableBody"></tbody>
+    </table>
+</div>
+
+<label>1. SURNAME</label>
+<input type="text" id="surname">
+
+<label>2. FIRST NAME</label>
+<input type="text" id="firstname">
+
+<label>3. AGE</label>
+<input type="number" id="age">
+
+<label>4. SEX</label>
+<select id="sex">
+<option value="">Select</option>
+<option>Male</option>
+<option>Female</option>
+</select>
+
+<label>5. BLOOD TYPE</label>
+<select id="bloodtype">
+<option value="">Select</option>
+<option>A+</option>
+<option>A-</option>
+<option>B+</option>
+<option>B-</option>
+<option>AB+</option>
+<option>AB-</option>
+<option>O+</option>
+<option>O-</option>
+</select>
+
+<label>6. OR (Optional)</label>
+<input type="text" id="or">
+
+<label>7. REQUEST</label>
+<div class="row">
+<select id="request">
+<option>WB</option>
+<option>PRBC</option>
+<option>PC</option>
+<option>FFP</option>
+<option>CRYO</option>
+</select>
+<input type="number" id="requestQty" placeholder="Qty">
+</div>
+
+<label>8. ISSUED</label>
+<div class="row">
+<select id="issued">
+<option>WB</option>
+<option>PRBC</option>
+<option>PC</option>
+<option>FFP</option>
+<option>CRYO</option>
+</select>
+<input type="number" id="issuedQty" placeholder="Qty">
+</div>
+
+<label>9. AMOUNT PAID</label>
+<input type="number" id="amountPaid">
+
+<label>10. DISCOUNT</label>
+<input type="number" id="discount">
+
+<button class="save" onclick="saveEntry()">SAVE ENTRY</button>
+<button class="back" onclick="goBack()">BACK TO RELEASING</button>
+
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// --- Firebase Config ---
-const firebaseConfig={
-    apiKey:"YOUR-API-KEY",
-    databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-    projectId:"YOUR-PROJECT"
+// --- Firebase config ---
+const firebaseConfig = {
+apiKey:"YOUR-API-KEY",
+databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+projectId:"YOUR-PROJECT"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const facilityRef = ref(db,"facilities");
+const facilitiesRef = ref(db,"facilities");
+const releasingRef = ref(db,"releasing");
 
 // --- DOM Elements ---
 const facilityListEl = document.getElementById("facilityList");
-const facilityInput = document.getElementById("facilityInput");
+const facilityTableBody = document.getElementById("facilityTableBody");
+const facilityManagerDiv = document.getElementById("facilityManagerDiv");
+const newFacilityInput = document.getElementById("newFacility");
+
+// --- Load Facilities to autocomplete and table ---
+function loadFacilities(){
+    facilityListEl.innerHTML="";
+    facilityTableBody.innerHTML="";
+    onValue(facilitiesRef, snapshot=>{
+        let i=1;
+        snapshot.forEach(child=>{
+            const key = child.key;
+            const name = child.val().name;
+            // Add to datalist
+            const option = document.createElement("option");
+            option.value = name;
+            facilityListEl.appendChild(option);
+            // Add to table
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${i}</td>
+                            <td>${name}</td>
+                            <td>
+                                <button onclick="editFacility('${key}','${name}')">EDIT</button>
+                                <button onclick="deleteFacility('${key}')">DELETE</button>
+                            </td>`;
+            facilityTableBody.appendChild(tr);
+            i++;
+        });
+    });
+}
+
+// --- Toggle Facility Manager ---
+window.toggleFacilityManager = function(){
+    if(facilityManagerDiv.style.display==="none"){
+        facilityManagerDiv.style.display="block";
+    } else {
+        facilityManagerDiv.style.display="none";
+    }
+}
 
 // --- Add Facility ---
 window.addFacility = function(){
-    let name = facilityInput.value.trim();
+    const name = newFacilityInput.value.trim();
     if(name==="") return;
-    push(facilityRef, {name});
-    facilityInput.value="";
+    push(facilitiesRef,{name});
+    newFacilityInput.value="";
 }
-
-// --- Load Facilities from Firebase ---
-onValue(facilityRef, snapshot=>{
-    facilityListEl.innerHTML="";
-    let i=1;
-    snapshot.forEach(child=>{
-        const key = child.key;
-        const data = child.val();
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${i}</td>
-            <td>${data.name}</td>
-            <td>
-                <button onclick="editFacility('${key}','${data.name}')">EDIT</button>
-                <button onclick="deleteFacility('${key}')">DELETE</button>
-            </td>
-        `;
-        facilityListEl.appendChild(tr);
-        i++;
-    });
-});
 
 // --- Edit Facility ---
 window.editFacility = function(key, oldName){
     const newName = prompt("Edit Facility Name:", oldName);
     if(newName && newName.trim()!==""){
-        update(ref(db,"facilities/"+key), {name:newName.trim()});
+        update(ref(db,"facilities/"+key),{name:newName.trim()});
     }
 }
 
 // --- Delete Facility ---
 window.deleteFacility = function(key){
-    if(confirm("Are you sure you want to delete this facility?")){
+    if(confirm("Delete this facility?")){
         remove(ref(db,"facilities/"+key));
     }
 }
 
-// --- Back Button ---
-window.goBack = function(){
-    window.location.href="releasing-entry.html";
+// --- Save Entry ---
+window.saveEntry = function(){
+    push(releasingRef,{
+        date:document.getElementById("date").value,
+        facility:document.getElementById("facility").value,
+        surname:document.getElementById("surname").value,
+        firstname:document.getElementById("firstname").value,
+        age:document.getElementById("age").value,
+        sex:document.getElementById("sex").value,
+        bloodtype:document.getElementById("bloodtype").value,
+        or:document.getElementById("or").value,
+        request:document.getElementById("request").value,
+        requestQty:document.getElementById("requestQty").value,
+        issued:document.getElementById("issued").value,
+        issuedQty:document.getElementById("issuedQty").value,
+        amountPaid:document.getElementById("amountPaid").value,
+        discount:document.getElementById("discount").value
+    });
+    alert("Entry saved!");
+    // Clear form for new entry
+    document.getElementById("date").value="";
+    document.getElementById("facility").value="";
+    document.getElementById("surname").value="";
+    document.getElementById("firstname").value="";
+    document.getElementById("age").value="";
+    document.getElementById("sex").value="";
+    document.getElementById("bloodtype").value="";
+    document.getElementById("or").value="";
+    document.getElementById("request").value="WB";
+    document.getElementById("requestQty").value="";
+    document.getElementById("issued").value="WB";
+    document.getElementById("issuedQty").value="";
+    document.getElementById("amountPaid").value="";
+    document.getElementById("discount").value="";
 }
+
+// --- Back to Releasing ---
+window.goBack = function(){
+    window.location.href="releasing.html";
+}
+
+// --- Initial load ---
+loadFacilities();
 </script>
 
 </body>
