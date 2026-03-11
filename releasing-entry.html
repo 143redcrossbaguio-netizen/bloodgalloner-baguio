@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
 
@@ -28,6 +27,8 @@ top:15px;
 font-size:22px;
 cursor:pointer;
 }
+
+/* MAIN FORM */
 
 .container{
 max-width:650px;
@@ -73,7 +74,8 @@ cursor:pointer;
 .save{background:#ff9800;color:white}
 .back{background:#444;color:white}
 
-/* SETTINGS MODAL */
+
+/* SETTINGS WINDOW */
 
 .modal{
 display:none;
@@ -87,23 +89,57 @@ background:rgba(0,0,0,0.4);
 
 .modal-content{
 background:white;
-width:450px;
-margin:100px auto;
-padding:25px;
+width:600px;
+margin:60px auto;
+padding:20px;
 border-radius:8px;
 }
 
-textarea{
+/* EXCEL STYLE TABLE */
+
+table{
 width:100%;
-height:150px;
-padding:10px;
+border-collapse:collapse;
 margin-top:10px;
+}
+
+th,td{
 border:1px solid #ccc;
-border-radius:5px;
+padding:8px;
+text-align:left;
+}
+
+th{
+background:#f0f0f0;
+}
+
+td{
+background:white;
+}
+
+td input{
+border:none;
+width:100%;
+outline:none;
+}
+
+.addRow{
+background:#2e7d32;
+color:white;
+margin-top:10px;
+}
+
+.saveFacilities{
+background:#1565c0;
+color:white;
+}
+
+.closeBtn{
+background:#444;
+color:white;
 }
 
 </style>
-
 </head>
 
 <body>
@@ -159,7 +195,6 @@ border-radius:5px;
 
 <label>7. REQUEST</label>
 <div class="row">
-
 <select id="request">
 <option>WB</option>
 <option>PRBC</option>
@@ -167,14 +202,11 @@ border-radius:5px;
 <option>FFP</option>
 <option>CRYO</option>
 </select>
-
 <input type="number" id="requestQty" placeholder="Qty">
-
 </div>
 
 <label>8. ISSUED</label>
 <div class="row">
-
 <select id="issued">
 <option>WB</option>
 <option>PRBC</option>
@@ -182,9 +214,7 @@ border-radius:5px;
 <option>FFP</option>
 <option>CRYO</option>
 </select>
-
 <input type="number" id="issuedQty" placeholder="Qty">
-
 </div>
 
 <button class="save" onclick="saveData()">SAVE</button>
@@ -194,23 +224,32 @@ border-radius:5px;
 </div>
 
 
-<!-- SETTINGS MODAL -->
+<!-- SETTINGS WINDOW -->
 
 <div class="modal" id="settingsModal">
 
 <div class="modal-content">
 
-<h3>Facility List</h3>
+<h3>Facility Manager</h3>
 
-<p>Paste facilities from Excel / Google Sheets (one per line)</p>
+<table id="facilityTable">
 
-<textarea id="facilityBulk"></textarea>
+<thead>
+<tr>
+<th>Facility Name</th>
+<th>Delete</th>
+</tr>
+</thead>
 
-<button onclick="saveFacilities()">SAVE FACILITY LIST</button>
+<tbody></tbody>
 
-<button onclick="deleteFacilities()">DELETE ALL FACILITIES</button>
+</table>
 
-<button onclick="closeSettings()">CLOSE</button>
+<button class="addRow" onclick="addRow()">ADD ROW</button>
+
+<button class="saveFacilities" onclick="saveFacilities()">SAVE CHANGES</button>
+
+<button class="closeBtn" onclick="closeSettings()">CLOSE</button>
 
 </div>
 
@@ -220,137 +259,121 @@ border-radius:5px;
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-
-import { 
-getDatabase,
-ref,
-push,
-onValue,
-remove
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
 
 apiKey:"YOUR-API-KEY",
-authDomain:"YOUR-PROJECT.firebaseapp.com",
 databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId:"YOUR-PROJECT",
-storageBucket:"YOUR-PROJECT.appspot.com",
-messagingSenderId:"XXXX",
-appId:"XXXX"
+projectId:"YOUR-PROJECT"
 
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
 
 
 /* SAVE RELEASING DATA */
 
 window.saveData=function(){
 
-const date=document.getElementById("date").value;
-const facility=document.getElementById("facility").value;
-const surname=document.getElementById("surname").value;
-const firstname=document.getElementById("firstname").value;
-const age=document.getElementById("age").value;
-const sex=document.getElementById("sex").value;
-const bloodtype=document.getElementById("bloodtype").value;
-const orNumber=document.getElementById("or").value;
-
-const request=document.getElementById("request").value;
-const requestQty=document.getElementById("requestQty").value;
-
-const issued=document.getElementById("issued").value;
-const issuedQty=document.getElementById("issuedQty").value;
-
 push(ref(db,"releasing"),{
 
-date,
-facility,
-surname,
-firstname,
-age,
-sex,
-bloodtype,
-orNumber,
-request,
-requestQty,
-issued,
-issuedQty
+date:date.value,
+facility:facility.value,
+surname:surname.value,
+firstname:firstname.value,
+age:age.value,
+sex:sex.value,
+bloodtype:bloodtype.value,
+or:or.value,
+request:request.value,
+requestQty:requestQty.value,
+issued:issued.value,
+issuedQty:issuedQty.value
 
 });
 
-alert("Saved successfully");
+alert("Saved");
 
 }
 
 
-
-/* LOAD FACILITY LIST */
+/* FACILITY AUTOCOMPLETE */
 
 const facilityList=document.getElementById("facilityList");
 
 onValue(ref(db,"facilities"),snapshot=>{
 
 facilityList.innerHTML="";
+document.querySelector("#facilityTable tbody").innerHTML="";
 
 snapshot.forEach(child=>{
 
-let option=document.createElement("option");
-option.value=child.val().name;
+let name=child.val().name;
 
+let option=document.createElement("option");
+option.value=name;
 facilityList.appendChild(option);
 
-});
+/* table row */
+
+let row=`
+<tr>
+<td><input value="${name}"></td>
+<td><button onclick="this.closest('tr').remove()">X</button></td>
+</tr>
+`;
+
+document.querySelector("#facilityTable tbody").innerHTML+=row;
 
 });
 
+});
 
 
-/* SAVE BULK FACILITIES */
+/* ADD ROW */
+
+window.addRow=function(){
+
+let row=`
+<tr>
+<td><input></td>
+<td><button onclick="this.closest('tr').remove()">X</button></td>
+</tr>
+`;
+
+document.querySelector("#facilityTable tbody").innerHTML+=row;
+
+}
+
+
+/* SAVE FACILITIES */
 
 window.saveFacilities=function(){
 
-const text=document.getElementById("facilityBulk").value;
-
-const lines=text.split("\n");
-
-lines.forEach(name=>{
-
-if(name.trim()!=""){
-
-push(ref(db,"facilities"),{
-name:name.trim()
-});
-
-}
-
-});
-
-alert("Facilities saved");
-
-document.getElementById("facilityBulk").value="";
-
-}
-
-
-
-/* DELETE ALL FACILITIES */
-
-window.deleteFacilities=function(){
-
 remove(ref(db,"facilities"));
 
-alert("All facilities deleted");
+const rows=document.querySelectorAll("#facilityTable tbody tr");
+
+rows.forEach(r=>{
+
+let name=r.querySelector("input").value;
+
+if(name!=""){
+
+push(ref(db,"facilities"),{name:name});
+
+}
+
+});
+
+alert("Facilities updated");
 
 }
 
 
-
-/* SETTINGS MODAL */
+/* SETTINGS */
 
 window.openSettings=function(){
 
@@ -365,8 +388,7 @@ document.getElementById("settingsModal").style.display="none";
 }
 
 
-
-/* BACK BUTTON */
+/* BACK */
 
 window.goBack=function(){
 
