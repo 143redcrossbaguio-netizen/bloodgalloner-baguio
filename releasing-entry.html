@@ -246,7 +246,7 @@ textarea{
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, onValue, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig={
 apiKey:"YOUR-API-KEY",
@@ -353,20 +353,24 @@ window.pasteFacilities=function(){
 }
 
 /* SAVE FACILITIES PERMANENTLY */
-window.saveFacilities=function(){
+window.saveFacilities=async function(){
     const rows=document.querySelectorAll("#facilityBody tr")
-    remove(ref(db,"facilities"))
-    .then(()=>{
-        rows.forEach(row=>{
+    const facilityRef=ref(db,"facilities")
+    try{
+        await remove(facilityRef) // delete previous
+        for(let row of rows){
             let name=row.children[1].innerText.trim()
-            if(name!==""){ push(ref(db,"facilities"),{ name:name.toUpperCase() }) }
-        })
+            if(name!==""){
+                await push(facilityRef,{ name:name.toUpperCase() })
+            }
+        }
         alert("Facilities saved permanently!")
         loadFacilities()
-    })
-    .catch(err=>{ console.error(err); alert("Error saving facilities!"); })
+    }catch(err){
+        console.error(err)
+        alert("Error saving facilities!")
+    }
 }
-
 </script>
 
 </body>
