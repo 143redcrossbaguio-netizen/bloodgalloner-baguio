@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
 
@@ -72,7 +73,7 @@ cursor:pointer;
 .save{background:#ff9800;color:white}
 .back{background:#444;color:white}
 
-/* SETTINGS WINDOW */
+/* SETTINGS MODAL */
 .modal{
 display:none;
 position:fixed;
@@ -244,7 +245,7 @@ color:white;
 <div class="modal-content">
 
 <h3>Facility Manager (Paste from Excel)</h3>
-<p>Paste one facility per line in the box below:</p>
+<p>Paste one facility per line:</p>
 <textarea id="facilityBulk" placeholder="Paste Excel column here..."></textarea>
 
 <div class="modal-buttons">
@@ -298,21 +299,21 @@ issuedQty:issuedQty.value
 alert("Saved successfully");
 }
 
-/* FACILITY AUTOCOMPLETE */
+/* FACILITY AUTOCOMPLETE & LOAD TABLE */
 const facilityList=document.getElementById("facilityList");
 
-function updateAutocomplete(){
+function loadFacilities(){
 facilityList.innerHTML="";
-onValue(ref(db,"facilities"),snapshot=>{
 const tbody=document.querySelector("#facilityTable tbody");
 tbody.innerHTML="";
+onValue(ref(db,"facilities"),snapshot=>{
 snapshot.forEach(child=>{
 let name=child.val().name;
+// autocomplete
 let option=document.createElement("option");
 option.value=name;
 facilityList.appendChild(option);
-
-/* table row */
+// table
 let row=document.createElement("tr");
 row.innerHTML=`<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
 tbody.appendChild(row);
@@ -320,7 +321,7 @@ tbody.appendChild(row);
 });
 }
 
-updateAutocomplete();
+loadFacilities();
 
 /* SETTINGS MODAL */
 window.openSettings=function(){document.getElementById("settingsModal").style.display="block";}
@@ -332,7 +333,6 @@ window.pasteFacilities=function(){
 const text=document.getElementById("facilityBulk").value;
 const lines=text.split("\n");
 const tbody=document.querySelector("#facilityTable tbody");
-
 lines.forEach(line=>{
 let name=line.trim();
 if(name==="") return;
@@ -340,20 +340,20 @@ let row=document.createElement("tr");
 row.innerHTML=`<td>${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
 tbody.appendChild(row);
 });
-
 document.getElementById("facilityBulk").value="";
 }
 
-/* SAVE FACILITIES TO FIREBASE */
+/* SAVE FACILITIES TO FIREBASE & VIEW FULL LIST */
 window.saveFacilities=function(){
-remove(ref(db,"facilities"));
+remove(ref(db,"facilities")).then(()=>{
 const tbody=document.querySelector("#facilityTable tbody");
 tbody.querySelectorAll("tr").forEach(tr=>{
 let name=tr.querySelector("td").innerText.trim();
 if(name!=="") push(ref(db,"facilities"),{name:name});
 });
-alert("Facilities saved!");
-updateAutocomplete(); // refresh autocomplete
+alert("Facilities saved! You can view the full list in the table below.");
+loadFacilities(); // reload table + autocomplete
+});
 }
 </script>
 
