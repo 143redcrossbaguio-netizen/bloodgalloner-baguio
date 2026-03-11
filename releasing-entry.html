@@ -87,10 +87,19 @@ background:rgba(0,0,0,0.4);
 
 .modal-content{
 background:white;
-width:400px;
-margin:120px auto;
+width:450px;
+margin:100px auto;
 padding:25px;
 border-radius:8px;
+}
+
+textarea{
+width:100%;
+height:150px;
+padding:10px;
+margin-top:10px;
+border:1px solid #ccc;
+border-radius:5px;
 }
 
 </style>
@@ -150,6 +159,7 @@ border-radius:8px;
 
 <label>7. REQUEST</label>
 <div class="row">
+
 <select id="request">
 <option>WB</option>
 <option>PRBC</option>
@@ -159,10 +169,12 @@ border-radius:8px;
 </select>
 
 <input type="number" id="requestQty" placeholder="Qty">
+
 </div>
 
 <label>8. ISSUED</label>
 <div class="row">
+
 <select id="issued">
 <option>WB</option>
 <option>PRBC</option>
@@ -172,6 +184,7 @@ border-radius:8px;
 </select>
 
 <input type="number" id="issuedQty" placeholder="Qty">
+
 </div>
 
 <button class="save" onclick="saveData()">SAVE</button>
@@ -180,17 +193,22 @@ border-radius:8px;
 
 </div>
 
+
 <!-- SETTINGS MODAL -->
 
 <div class="modal" id="settingsModal">
 
 <div class="modal-content">
 
-<h3>Add Facility</h3>
+<h3>Facility List</h3>
 
-<input type="text" id="newFacility" placeholder="Enter facility name">
+<p>Paste facilities from Excel / Google Sheets (one per line)</p>
 
-<button onclick="addFacility()">ADD FACILITY</button>
+<textarea id="facilityBulk"></textarea>
+
+<button onclick="saveFacilities()">SAVE FACILITY LIST</button>
+
+<button onclick="deleteFacilities()">DELETE ALL FACILITIES</button>
 
 <button onclick="closeSettings()">CLOSE</button>
 
@@ -207,19 +225,20 @@ import {
 getDatabase,
 ref,
 push,
-onValue
+onValue,
+remove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 
 const firebaseConfig = {
 
-apiKey: "YOUR-API-KEY",
-authDomain: "YOUR-PROJECT.firebaseapp.com",
-databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId: "YOUR-PROJECT",
-storageBucket: "YOUR-PROJECT.appspot.com",
-messagingSenderId: "XXXX",
-appId: "XXXX"
+apiKey:"YOUR-API-KEY",
+authDomain:"YOUR-PROJECT.firebaseapp.com",
+databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+projectId:"YOUR-PROJECT",
+storageBucket:"YOUR-PROJECT.appspot.com",
+messagingSenderId:"XXXX",
+appId:"XXXX"
 
 };
 
@@ -247,7 +266,6 @@ const requestQty=document.getElementById("requestQty").value;
 const issued=document.getElementById("issued").value;
 const issuedQty=document.getElementById("issuedQty").value;
 
-
 push(ref(db,"releasing"),{
 
 date,
@@ -266,8 +284,6 @@ issuedQty
 });
 
 alert("Saved successfully");
-
-document.querySelectorAll("input").forEach(i=>i.value="");
 
 }
 
@@ -294,27 +310,47 @@ facilityList.appendChild(option);
 
 
 
-/* ADD FACILITY */
+/* SAVE BULK FACILITIES */
 
-window.addFacility=function(){
+window.saveFacilities=function(){
 
-const name=document.getElementById("newFacility").value;
+const text=document.getElementById("facilityBulk").value;
+
+const lines=text.split("\n");
+
+lines.forEach(name=>{
+
+if(name.trim()!=""){
 
 push(ref(db,"facilities"),{
+name:name.trim()
+});
 
-name:name
+}
 
 });
 
-alert("Facility added");
+alert("Facilities saved");
 
-document.getElementById("newFacility").value="";
+document.getElementById("facilityBulk").value="";
 
 }
 
 
 
-/* SETTINGS */
+/* DELETE ALL FACILITIES */
+
+window.deleteFacilities=function(){
+
+remove(ref(db,"facilities"));
+
+alert("All facilities deleted");
+
+}
+
+
+
+/* SETTINGS MODAL */
 
 window.openSettings=function(){
 
