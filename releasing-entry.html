@@ -18,10 +18,19 @@ background:#ff9800;
 color:white;
 padding:15px;
 text-align:center;
+position:relative;
+}
+
+.settings{
+position:absolute;
+right:20px;
+top:15px;
+font-size:22px;
+cursor:pointer;
 }
 
 .container{
-max-width:600px;
+max-width:650px;
 margin:40px auto;
 background:white;
 padding:30px;
@@ -46,27 +55,42 @@ border-radius:5px;
 .row{
 display:flex;
 gap:10px;
-margin-top:5px;
 }
 
-.row select{
-flex:2;
-}
-
-.row input{
-flex:1;
-}
+.row select{flex:2}
+.row input{flex:1}
 
 button{
 width:100%;
 padding:12px;
-margin-top:20px;
+margin-top:15px;
 border:none;
 border-radius:5px;
-background:#ff9800;
-color:white;
 font-weight:bold;
 cursor:pointer;
+}
+
+.save{background:#ff9800;color:white}
+.back{background:#444;color:white}
+
+/* SETTINGS MODAL */
+
+.modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.4);
+}
+
+.modal-content{
+background:white;
+width:400px;
+margin:120px auto;
+padding:25px;
+border-radius:8px;
 }
 
 </style>
@@ -76,13 +100,21 @@ cursor:pointer;
 <body>
 
 <header>
+
 <h2>Blood Releasing Entry</h2>
+
+<div class="settings" onclick="openSettings()">⚙</div>
+
 </header>
 
 <div class="container">
 
+<label>DATE</label>
+<input type="date" id="date">
+
 <label>FACILITY</label>
-<input type="text" id="facility">
+<input list="facilityList" id="facility">
+<datalist id="facilityList"></datalist>
 
 <label>1. SURNAME</label>
 <input type="text" id="surname">
@@ -142,14 +174,42 @@ cursor:pointer;
 <input type="number" id="issuedQty" placeholder="Qty">
 </div>
 
-<button onclick="saveData()">SAVE</button>
+<button class="save" onclick="saveData()">SAVE</button>
+
+<button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 </div>
+
+<!-- SETTINGS MODAL -->
+
+<div class="modal" id="settingsModal">
+
+<div class="modal-content">
+
+<h3>Add Facility</h3>
+
+<input type="text" id="newFacility" placeholder="Enter facility name">
+
+<button onclick="addFacility()">ADD FACILITY</button>
+
+<button onclick="closeSettings()">CLOSE</button>
+
+</div>
+
+</div>
+
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+import { 
+getDatabase,
+ref,
+push,
+onValue
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
 
 const firebaseConfig = {
 
@@ -166,8 +226,13 @@ appId: "XXXX"
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-window.saveData = function(){
 
+
+/* SAVE RELEASING DATA */
+
+window.saveData=function(){
+
+const date=document.getElementById("date").value;
 const facility=document.getElementById("facility").value;
 const surname=document.getElementById("surname").value;
 const firstname=document.getElementById("firstname").value;
@@ -182,8 +247,10 @@ const requestQty=document.getElementById("requestQty").value;
 const issued=document.getElementById("issued").value;
 const issuedQty=document.getElementById("issuedQty").value;
 
+
 push(ref(db,"releasing"),{
 
+date,
 facility,
 surname,
 firstname,
@@ -198,9 +265,76 @@ issuedQty
 
 });
 
-alert("Releasing saved successfully!");
+alert("Saved successfully");
 
 document.querySelectorAll("input").forEach(i=>i.value="");
+
+}
+
+
+
+/* LOAD FACILITY LIST */
+
+const facilityList=document.getElementById("facilityList");
+
+onValue(ref(db,"facilities"),snapshot=>{
+
+facilityList.innerHTML="";
+
+snapshot.forEach(child=>{
+
+let option=document.createElement("option");
+option.value=child.val().name;
+
+facilityList.appendChild(option);
+
+});
+
+});
+
+
+
+/* ADD FACILITY */
+
+window.addFacility=function(){
+
+const name=document.getElementById("newFacility").value;
+
+push(ref(db,"facilities"),{
+
+name:name
+
+});
+
+alert("Facility added");
+
+document.getElementById("newFacility").value="";
+
+}
+
+
+
+/* SETTINGS */
+
+window.openSettings=function(){
+
+document.getElementById("settingsModal").style.display="block";
+
+}
+
+window.closeSettings=function(){
+
+document.getElementById("settingsModal").style.display="none";
+
+}
+
+
+
+/* BACK BUTTON */
+
+window.goBack=function(){
+
+window.location.href="releasing.html";
 
 }
 
