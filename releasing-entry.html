@@ -231,13 +231,11 @@ color:white;
 
 <h3>Facility Manager (Excel Style)</h3>
 
-<p>Paste facilities from Excel OR edit directly below.</p>
+<p>Paste facilities from Excel OR edit directly.</p>
 
 <textarea id="facilityBulk" placeholder="Paste Excel column here..."></textarea>
 
 <button class="addRow" onclick="pasteFacilities()">PASTE FACILITIES</button>
-
-<button class="addRow" onclick="addRow()">ADD ROW</button>
 
 <table id="facilityTable">
 
@@ -245,11 +243,11 @@ color:white;
 <tr>
 <th>#</th>
 <th>Facility Name</th>
-<th>Delete</th>
+<th>Clear</th>
 </tr>
 </thead>
 
-<tbody></tbody>
+<tbody id="facilityBody"></tbody>
 
 </table>
 
@@ -267,7 +265,7 @@ color:white;
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-const firebaseConfig = {
+const firebaseConfig={
 apiKey:"YOUR-API-KEY",
 databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
 projectId:"YOUR-PROJECT"
@@ -276,13 +274,11 @@ projectId:"YOUR-PROJECT"
 const app=initializeApp(firebaseConfig);
 const db=getDatabase(app);
 
-
-/* SAVE RELEASING DATA */
+/* SAVE ENTRY */
 
 window.saveData=function(){
 
 push(ref(db,"releasing"),{
-
 date:date.value,
 facility:facility.value,
 surname:surname.value,
@@ -295,16 +291,13 @@ request:request.value,
 requestQty:requestQty.value,
 issued:issued.value,
 issuedQty:issuedQty.value
-
-});
+})
 
 alert("Saved successfully")
 
 }
 
-
-
-/* LOAD FACILITY LIST */
+/* AUTOCOMPLETE FACILITY */
 
 const facilityList=document.getElementById("facilityList")
 
@@ -322,12 +315,14 @@ facilityList.appendChild(option)
 
 })
 
-
 /* SETTINGS */
 
 window.openSettings=function(){
 
 document.getElementById("settingsModal").style.display="block"
+
+createExcelGrid()
+
 loadFacilities()
 
 }
@@ -344,78 +339,56 @@ window.location.href="releasing.html"
 
 }
 
+/* CREATE EXCEL GRID */
 
-/* LOAD FACILITIES INTO TABLE */
+function createExcelGrid(){
 
-function loadFacilities(){
-
-const tbody=document.querySelector("#facilityTable tbody")
-
-tbody.innerHTML=""
-
-onValue(ref(db,"facilities"),snapshot=>{
+const tbody=document.getElementById("facilityBody")
 
 tbody.innerHTML=""
 
-snapshot.forEach(child=>{
-
-let name=child.val().name
+for(let i=1;i<=50;i++){
 
 let row=document.createElement("tr")
 
 row.innerHTML=`
-<td></td>
-<td contenteditable="true">${name}</td>
-<td><button onclick="this.closest('tr').remove();updateNumbers()">X</button></td>
+<td>${i}</td>
+<td contenteditable="true"></td>
+<td><button onclick="this.closest('tr').children[1].innerText=''">X</button></td>
 `
 
 tbody.appendChild(row)
 
-})
+}
 
-updateNumbers()
+}
+
+/* LOAD FACILITIES */
+
+function loadFacilities(){
+
+const rows=document.querySelectorAll("#facilityBody tr")
+
+onValue(ref(db,"facilities"),snapshot=>{
+
+let i=0
+
+snapshot.forEach(child=>{
+
+if(rows[i]){
+
+rows[i].children[1].innerText=child.val().name
+i++
+
+}
+
+})
 
 },{onlyOnce:true})
 
 }
 
-
-/* NUMBER ROWS */
-
-function updateNumbers(){
-
-document.querySelectorAll("#facilityTable tbody tr")
-.forEach((tr,i)=>{
-
-tr.children[0].innerText=i+1
-
-})
-
-}
-
-
-/* ADD EMPTY ROW */
-
-window.addRow=function(){
-
-const tbody=document.querySelector("#facilityTable tbody")
-
-let row=document.createElement("tr")
-
-row.innerHTML=`
-<td></td>
-<td contenteditable="true"></td>
-<td><button onclick="this.closest('tr').remove();updateNumbers()">X</button></td>
-`
-
-tbody.appendChild(row)
-
-updateNumbers()
-
-}
-
-
-/* PASTE FACILITIES */
+/* PASTE FROM EXCEL */
 
 window.pasteFacilities=function(){
 
@@ -423,32 +396,26 @@ const text=document.getElementById("facilityBulk").value
 
 const lines=text.split("\n")
 
-const tbody=document.querySelector("#facilityTable tbody")
+const rows=document.querySelectorAll("#facilityBody tr")
+
+let i=0
 
 lines.forEach(line=>{
 
 let name=line.trim()
 
-if(name==="")return
+if(name!=="" && rows[i]){
 
-let row=document.createElement("tr")
+rows[i].children[1].innerText=name
+i++
 
-row.innerHTML=`
-<td></td>
-<td contenteditable="true">${name}</td>
-<td><button onclick="this.closest('tr').remove();updateNumbers()">X</button></td>
-`
-
-tbody.appendChild(row)
+}
 
 })
-
-updateNumbers()
 
 document.getElementById("facilityBulk").value=""
 
 }
-
 
 /* SAVE FACILITIES */
 
@@ -456,11 +423,11 @@ window.saveFacilities=function(){
 
 remove(ref(db,"facilities"))
 
-const rows=document.querySelectorAll("#facilityTable tbody tr")
+const rows=document.querySelectorAll("#facilityBody tr")
 
-rows.forEach(tr=>{
+rows.forEach(row=>{
 
-let name=tr.children[1].innerText.trim()
+let name=row.children[1].innerText.trim()
 
 if(name!==""){
 
@@ -470,7 +437,7 @@ push(ref(db,"facilities"),{name:name})
 
 })
 
-alert("Facilities updated!")
+alert("Facilities updated")
 
 }
 
