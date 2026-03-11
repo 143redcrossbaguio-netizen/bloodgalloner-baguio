@@ -42,7 +42,7 @@ td button{margin-right:5px;padding:5px 8px;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// 🔑 Replace with YOUR config
+// 🔑 Replace these with your actual Firebase credentials
 const firebaseConfig = {
   apiKey: "YOUR-API-KEY",
   databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
@@ -52,16 +52,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Reference to facilities node
 const facilitiesRef = ref(db, "facilities");
-
-// Elements
 const facilityInput = document.getElementById("facilityInput");
 const facilityTableBody = document.getElementById("facilityTableBody");
 
 // Listen and display facilities
 onValue(facilitiesRef, snapshot => {
-    facilityTableBody.innerHTML = ""; // clear first
+    facilityTableBody.innerHTML = "";
     let index = 1;
     snapshot.forEach(child => {
         const key = child.key;
@@ -83,36 +80,26 @@ onValue(facilitiesRef, snapshot => {
 // Add facility
 window.addFacility = function() {
     const name = facilityInput.value.trim();
-    if (!name) {
-        alert("Please enter a facility name");
-        return;
-    }
-    push(facilitiesRef, { name: name.toUpperCase() })
-        .then(() => {
-            facilityInput.value = "";
-        })
-        .catch(err => {
-            alert("Error saving: " + err);
-            console.error(err);
-        });
+    if(!name) return alert("Enter facility name");
+    push(facilitiesRef, {name: name.toUpperCase()})
+      .then(()=>{ facilityInput.value=""; })
+      .catch(err=>alert("Error saving: "+err));
 }
 
 // Edit facility
 window.editFacility = function(key, oldName) {
     const newName = prompt("Edit Facility Name:", oldName);
-    if (newName && newName.trim() !== "") {
-        update(ref(db, "facilities/" + key), { name: newName.trim().toUpperCase() });
+    if(newName && newName.trim()!=="") {
+        update(ref(db, "facilities/"+key), {name: newName.trim().toUpperCase()});
     }
 }
 
 // Delete facility
 window.deleteFacility = function(key) {
-    if (confirm("Delete this facility?")) {
-        remove(ref(db, "facilities/" + key));
-    }
+    if(confirm("Delete this facility?")) remove(ref(db,"facilities/"+key));
 }
 
-// Back to releasing
+// Back button
 window.goBack = function() {
     window.location.href = "releasing-entry.html";
 }
