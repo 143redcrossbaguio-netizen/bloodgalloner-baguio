@@ -7,34 +7,38 @@
 <style>
 body{margin:0;font-family:Arial;background:#f4f4f4;}
 header{background:#ff9800;color:white;padding:15px;text-align:center;position:relative;z-index:100;}
-.settings{position:absolute;right:20px;top:15px;font-size:22px;cursor:pointer;z-index:1000;}
+.settings{position:absolute;right:20px;top:15px;font-size:22px;cursor:pointer;}
 
-/* MAIN FORM */
-.container{max-width:650px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);position:relative;z-index:100;}
+.container{max-width:650px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
 label{font-weight:bold;margin-top:10px;display:block;}
 input,select{width:100%;padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:5px;}
 .row{display:flex;gap:10px;}
 .row select{flex:2}
 .row input{flex:1}
 button{width:100%;padding:12px;margin-top:15px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;}
-.save{background:#ff9800;color:white;z-index:100;}
-.back{background:#444;color:white;position:relative;z-index:100;}
+.save{background:#ff9800;color:white;}
+.back{background:#444;color:white;}
 
 /* SETTINGS MODAL */
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:500;}
-.modal-content{background:white;width:700px;max-height:90vh;margin:30px auto;padding:20px;border-radius:8px;display:flex;flex-direction:column;position:relative;z-index:600;}
+.modal-content{background:white;width:750px;max-height:90vh;margin:30px auto;padding:20px;border-radius:8px;display:flex;flex-direction:column;}
+
 .table-container{flex:1;overflow-y:auto;margin-top:10px;border:1px solid #ccc;border-radius:5px;}
 table{width:100%;border-collapse:collapse;}
 th,td{border:1px solid #ccc;padding:8px;text-align:left;}
 th{background:#f0f0f0;}
 td button{background:#e53935;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;}
-td[contenteditable]{background:#fffbe6;}
+
 .modal-buttons{margin-top:10px;display:flex;gap:10px;justify-content:flex-end;}
 .saveFacilities{background:#1565c0;color:white;}
 .closeBtn{background:#444;color:white;}
-</style>
-</head>
 
+.hidden-textarea {
+  width:1px; height:1px; opacity:0; position:absolute; left:-9999px;
+}
+</style>
+
+</head>
 <body>
 
 <header>
@@ -115,12 +119,15 @@ td[contenteditable]{background:#fffbe6;}
 <!-- SETTINGS MODAL -->
 <div class="modal" id="settingsModal">
 <div class="modal-content">
-<h3>Facility Manager (Paste directly from Excel)</h3>
-<p>You can paste multiple facilities at once. Edit cells or delete rows as needed.</p>
+
+<h3>Facility Manager — Paste from Excel</h3>
+<p>Click inside the table below and press <b>Ctrl+V</b> to paste. You can edit or delete rows.</p>
 
 <div class="table-container">
 <table id="facilityTable">
-<thead><tr><th>Facility Name</th><th>Delete</th></tr></thead>
+<thead>
+<tr><th>Facility Name</th><th>Delete</th></tr>
+</thead>
 <tbody></tbody>
 </table>
 </div>
@@ -130,6 +137,8 @@ td[contenteditable]{background:#fffbe6;}
 <button class="closeBtn" onclick="closeSettings()">CLOSE</button>
 </div>
 
+<textarea id="pasteSink" class="hidden-textarea"></textarea>
+
 </div>
 </div>
 
@@ -138,81 +147,86 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-apiKey:"YOUR-API-KEY",
-databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId:"YOUR-PROJECT"
+apiKey: "YOUR-API-KEY",
+databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+projectId: "YOUR-PROJECT"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* SAVE RELEASING DATA */
+/* SAVE RELEASING ENTRY */
 window.saveData = function() {
-push(ref(db,"releasing"),{
-date:date.value,
-facility:facility.value,
-surname:surname.value,
-firstname:firstname.value,
-age:age.value,
-sex:sex.value,
-bloodtype:bloodtype.value,
-or:or.value,
-request:request.value,
-requestQty:requestQty.value,
-issued:issued.value,
-issuedQty:issuedQty.value
-});
-alert("Saved successfully");
+    push(ref(db,"releasing"),{
+        date:date.value,
+        facility:facility.value,
+        surname:surname.value,
+        firstname:firstname.value,
+        age:age.value,
+        sex:sex.value,
+        bloodtype:bloodtype.value,
+        or:or.value,
+        request:request.value,
+        requestQty:requestQty.value,
+        issued:issued.value,
+        issuedQty:issuedQty.value
+    });
+    alert("Releasing saved!");
 }
 
-/* AUTOCOMPLETE */
+/* LOAD AUTOCOMPLETE */
 const facilityList = document.getElementById("facilityList");
 function loadAutocomplete(){
     onValue(ref(db,"facilities"), snapshot => {
-        facilityList.innerHTML = "";
+        facilityList.innerHTML="";
         snapshot.forEach(child => {
             const name = child.val().name;
-            const option = document.createElement("option");
-            option.value = name;
-            facilityList.appendChild(option);
+            const opt = document.createElement("option");
+            opt.value = name;
+            facilityList.appendChild(opt);
         });
     });
 }
 loadAutocomplete();
 
-/* SETTINGS MODAL CONTROL */
-function openSettings(){ 
+/* SETTINGS CONTROL */
+function openSettings(){
     document.getElementById("settingsModal").style.display="block";
-    loadTable(); 
+    loadTable();
 }
-function closeSettings(){ document.getElementById("settingsModal").style.display="none"; }
-function goBack(){ window.location.href="releasing.html"; }
+function closeSettings(){
+    document.getElementById("settingsModal").style.display="none";
+}
+function goBack(){
+    window.location.href="releasing.html";
+}
 
-/* LOAD TABLE */
+/* LOAD TABLE FROM DATABASE */
 function loadTable(){
     const tbody = document.querySelector("#facilityTable tbody");
-    tbody.innerHTML="";
-    onValue(ref(db,"facilities"), snapshot=>{
-        tbody.innerHTML="";
-        snapshot.forEach(child=>{
+    tbody.innerHTML = "";
+    onValue(ref(db,"facilities"), snapshot => {
+        tbody.innerHTML = "";
+        snapshot.forEach(child => {
             const name = child.val().name;
-            const row = document.createElement("tr");
-            row.innerHTML = `<td contenteditable="true">${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
-            tbody.appendChild(row);
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td contenteditable="true">${name}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
+            tbody.appendChild(tr);
         });
     }, {onlyOnce:true});
 }
 
-/* PASTE DIRECTLY: handle Excel paste inside table */
-document.getElementById("facilityTable").addEventListener("paste", function(e){
+/* INTERCEPT PASTE */
+const pasteSink = document.getElementById("pasteSink");
+pasteSink.addEventListener("paste",(e)=>{
     e.preventDefault();
-    const text = (e.clipboardData || window.clipboardData).getData('text');
-    const rows = text.split(/\r?\n/);
-    const tbody = this.querySelector("tbody");
-    rows.forEach(r=>{
-        if(r.trim()==="") return;
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    const lines = text.split(/\r?\n/);
+    const tbody = document.querySelector("#facilityTable tbody");
+    lines.forEach(line=>{
+        if(line.trim()==="") return;
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td contenteditable="true">${r.trim()}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
+        tr.innerHTML = `<td contenteditable="true">${line.trim()}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
         tbody.appendChild(tr);
     });
 });
@@ -221,15 +235,15 @@ document.getElementById("facilityTable").addEventListener("paste", function(e){
 window.saveFacilities = async function(){
     const tbody = document.querySelector("#facilityTable tbody");
     const rows = Array.from(tbody.querySelectorAll("tr"));
-    if(rows.length === 0){ alert("No facilities to save!"); return; }
-
+    if(rows.length===0){ alert("Nothing to save"); return;}
     await remove(ref(db,"facilities"));
     for(const tr of rows){
         const name = tr.querySelector("td").innerText.trim();
-        if(name !== "") await push(ref(db,"facilities"), {name});
+        if(name!=="") await push(ref(db,"facilities"),{name});
     }
-    alert("Facilities saved! Full list visible below.");
-    loadTable(); // reload table after save
+    alert("Saved facilities!");
+    loadTable();
+    loadAutocomplete();
 }
 </script>
 
