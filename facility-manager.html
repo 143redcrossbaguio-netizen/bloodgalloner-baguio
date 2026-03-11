@@ -42,11 +42,11 @@ td button{margin-right:5px;padding:5px 8px;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// --- Firebase config ---
+// Firebase config
 const firebaseConfig = {
-apiKey:"YOUR-API-KEY",
-databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId:"YOUR-PROJECT"
+  apiKey:"YOUR-API-KEY",
+  databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+  projectId:"YOUR-PROJECT"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -56,39 +56,43 @@ const facilitiesRef = ref(db,"facilities");
 const facilityInput = document.getElementById("facilityInput");
 const facilityTableBody = document.getElementById("facilityTableBody");
 
-// --- Load Facilities ---
+// --- Load and display facilities ---
 function loadFacilities(){
-    facilityTableBody.innerHTML="";
-    onValue(facilitiesRef, snapshot=>{
-        facilityTableBody.innerHTML="";
+    facilityTableBody.innerHTML = "";
+    onValue(facilitiesRef, snapshot => {
+        facilityTableBody.innerHTML = "";
         let i=1;
         snapshot.forEach(child=>{
             const key = child.key;
             const name = child.val().name;
             const tr = document.createElement("tr");
-            tr.innerHTML = `<td>${i}</td>
-                            <td>${name}</td>
-                            <td>
-                                <button onclick="editFacility('${key}','${name}')">EDIT</button>
-                                <button onclick="deleteFacility('${key}')">DELETE</button>
-                            </td>`;
+            tr.innerHTML = `
+                <td>${i}</td>
+                <td>${name}</td>
+                <td>
+                    <button onclick="editFacility('${key}','${name}')">EDIT</button>
+                    <button onclick="deleteFacility('${key}')">DELETE</button>
+                </td>
+            `;
             facilityTableBody.appendChild(tr);
             i++;
         });
     });
 }
 
-// --- Add Facility ---
+// --- Add a facility ---
 window.addFacility = function(){
     const name = facilityInput.value.trim();
-    if(name==="") return;
-    push(facilitiesRef,{name});
-    facilityInput.value="";
-    // Reload list immediately
-    loadFacilities();
+    if(name==="") return alert("Please enter a facility name");
+    push(facilitiesRef,{name})
+      .then(() => {
+          facilityInput.value = "";
+          loadFacilities(); // refresh list immediately
+      })
+      .catch(err => alert("Error saving: "+err));
 }
 
-// --- Edit Facility ---
+// --- Edit a facility ---
 window.editFacility = function(key, oldName){
     const newName = prompt("Edit Facility Name:", oldName);
     if(newName && newName.trim()!==""){
@@ -96,14 +100,14 @@ window.editFacility = function(key, oldName){
     }
 }
 
-// --- Delete Facility ---
+// --- Delete a facility ---
 window.deleteFacility = function(key){
     if(confirm("Delete this facility?")){
         remove(ref(db,"facilities/"+key));
     }
 }
 
-// --- Back to Releasing ---
+// --- Back to releasing ---
 window.goBack = function(){
     window.location.href="releasing-entry.html";
 }
