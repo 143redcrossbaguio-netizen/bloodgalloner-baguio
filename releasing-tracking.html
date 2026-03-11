@@ -1,139 +1,175 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Blood Releasing Tracking</title>
-  <meta charset="UTF-8">
-  <style>
-    body {
-      margin:0;
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-    }
-
-    header {
-      background: #ff9800;
-      color: white;
-      text-align: center;
-      padding: 15px;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 30px auto;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-      text-transform: uppercase;
-    }
-
-    th {
-      background: #ff9800;
-      color: white;
-    }
-
-    button {
-      padding: 10px 15px;
-      margin-top: 15px;
-      border: none;
-      border-radius: 5px;
-      font-weight: bold;
-      cursor: pointer;
-      background: #444;
-      color: white;
-    }
-
-  </style>
+<title>Blood Releasing Tracking</title>
+<meta charset="UTF-8">
+<style>
+body{margin:0;font-family:Arial;background:#f4f4f4;}
+header{background:#ff9800;color:white;text-align:center;padding:15px;}
+.container{max-width:1200px;margin:20px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;}
+.controls input,.controls select,.controls button{padding:8px 12px;border-radius:5px;border:1px solid #ccc;font-weight:bold;text-transform:uppercase;}
+.controls button{border:none;cursor:pointer;background:#2e7d32;color:white;}
+.month-header{background:#eee;padding:8px;font-weight:bold;cursor:pointer;margin-top:10px;}
+.hidden{display:none;}
+table{width:100%;border-collapse:collapse;margin-top:5px;}
+th,td{border:1px solid #ccc;padding:8px;text-align:center;text-transform:uppercase;}
+th{background:#ff9800;color:white;}
+button.edit{background:#1976d2;color:white;margin:0 2px;padding:5px 8px;}
+button.delete{background:#c62828;color:white;margin:0 2px;padding:5px 8px;}
+button.back{background:#444;color:white;padding:10px 12px;margin-top:15px;border-radius:5px;border:none;cursor:pointer;}
+</style>
 </head>
-
 <body>
-
-<header>
-  <h2>Blood Releasing Tracking</h2>
-</header>
-
+<header><h2>Blood Releasing Tracking</h2></header>
 <div class="container">
-  <table>
-    <thead>
-      <tr>
-        <th>DATE</th>
-        <th>FACILITY</th>
-        <th>SURNAME</th>
-        <th>FIRST NAME</th>
-        <th>AGE</th>
-        <th>SEX</th>
-        <th>BLOOD TYPE</th>
-        <th>OR (OPTIONAL)</th>
-        <th>REQUEST</th>
-        <th>REQUEST QTY</th>
-        <th>ISSUED</th>
-        <th>ISSUED QTY</th>
-      </tr>
-    </thead>
-    <tbody id="trackingTableBody">
-      <!-- Data will populate here -->
-    </tbody>
-  </table>
+  <div class="controls">
+    <input type="text" id="search" placeholder="SEARCH">
+    <input type="date" id="dateFilter">
+    <select id="facilityFilter"><option value="">ALL FACILITIES</option></select>
+    <button onclick="exportCSV()">EXPORT CSV</button>
+  </div>
 
-  <button onclick="goBack()">BACK TO BLOOD RELEASING</button>
+  <div id="trackingContainer"></div>
+  <button class="back" onclick="goBack()">BACK TO BLOOD RELEASING</button>
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  const firebaseConfig = {
-    apiKey: "YOUR-API-KEY",
-    databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-    projectId: "YOUR-PROJECT"
-  };
+const firebaseConfig = {
+  apiKey: "YOUR-API-KEY",
+  databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR-PROJECT"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+let allData = {}; // store all releasing entries
+const trackingContainer = document.getElementById("trackingContainer");
 
-  const tableBody = document.getElementById("trackingTableBody");
+onValue(ref(db, "releasing"), snapshot => {
+  allData = {};
+  snapshot.forEach(child => {
+    allData[child.key] = child.val();
+  });
+  populateFacilityFilter();
+  renderData();
+});
 
-  // Load all releasing entries
-  onValue(ref(db, "releasing"), snapshot => {
-    tableBody.innerHTML = ""; // Clear table first
-    snapshot.forEach(child => {
-      const data = child.val();
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${data.date || ""}</td>
-        <td>${data.facility || ""}</td>
-        <td>${data.surname || ""}</td>
-        <td>${data.firstname || ""}</td>
-        <td>${data.age || ""}</td>
-        <td>${data.sex || ""}</td>
-        <td>${data.bloodtype || ""}</td>
-        <td>${data.or || ""}</td>
-        <td>${data.request || ""}</td>
-        <td>${data.requestQty || ""}</td>
-        <td>${data.issued || ""}</td>
-        <td>${data.issuedQty || ""}</td>
-      `;
-      tableBody.appendChild(row);
-    });
+// Facility filter
+function populateFacilityFilter() {
+  const select = document.getElementById("facilityFilter");
+  select.innerHTML = '<option value="">ALL FACILITIES</option>';
+  const facilities = new Set(Object.values(allData).map(r => r.facility));
+  facilities.forEach(f => {
+    const opt = document.createElement("option");
+    opt.value = f;
+    opt.textContent = f;
+    select.appendChild(opt);
+  });
+}
+
+// Render grouped table
+function renderData() {
+  trackingContainer.innerHTML = "";
+  const search = document.getElementById("search").value.toUpperCase();
+  const dateFilter = document.getElementById("dateFilter").value;
+  const facilityFilter = document.getElementById("facilityFilter").value;
+
+  const grouped = {};
+  Object.entries(allData).forEach(([key,row]) => {
+    const text = JSON.stringify(row).toUpperCase();
+    if(search && !text.includes(search)) return;
+    if(dateFilter && row.date !== dateFilter) return;
+    if(facilityFilter && row.facility !== facilityFilter) return;
+    const month = row.date ? row.date.slice(0,7) : "UNKNOWN";
+    if(!grouped[month]) grouped[month] = [];
+    grouped[month].push({key, ...row});
   });
 
-  function goBack() {
-    window.location.href = "releasing.html"; // Link back to releasing module
-  }
-</script>
+  Object.keys(grouped).sort().reverse().forEach(month => {
+    const monthDiv = document.createElement("div");
+    const header = document.createElement("div");
+    header.className = "month-header";
+    header.textContent = month;
+    const tableDiv = document.createElement("div");
+    tableDiv.classList.add("hidden");
 
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = `<tr>
+      <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th><th>AGE</th>
+      <th>SEX</th><th>BLOOD</th><th>OR</th><th>REQUEST</th><th>REQ QTY</th><th>ISSUED</th><th>ISS QTY</th>
+      <th>ACTION</th>
+    </tr>`;
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+
+    grouped[month].forEach(row => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.date||""}</td>
+        <td>${row.facility||""}</td>
+        <td>${row.surname||""}</td>
+        <td>${row.firstname||""}</td>
+        <td>${row.age||""}</td>
+        <td>${row.sex||""}</td>
+        <td>${row.bloodtype||""}</td>
+        <td>${row.or||""}</td>
+        <td>${row.request||""}</td>
+        <td>${row.requestQty||""}</td>
+        <td>${row.issued||""}</td>
+        <td>${row.issuedQty||""}</td>
+        <td>
+          <button class="edit" onclick="editEntry('${row.key}')">EDIT</button>
+          <button class="delete" onclick="deleteEntry('${row.key}')">DELETE</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableDiv.appendChild(table);
+    header.onclick = () => tableDiv.classList.toggle("hidden");
+    monthDiv.appendChild(header);
+    monthDiv.appendChild(tableDiv);
+    trackingContainer.appendChild(monthDiv);
+  });
+}
+
+document.getElementById("search").oninput = renderData;
+document.getElementById("dateFilter").onchange = renderData;
+document.getElementById("facilityFilter").onchange = renderData;
+
+// Delete entry
+window.deleteEntry = function(key){
+  if(confirm("DELETE THIS ENTRY?")){
+    remove(ref(db, "releasing/" + key));
+  }
+}
+
+// Edit entry (redirect to entry with editID)
+window.editEntry = function(key){
+  window.location.href = "releasing-entry.html?editID=" + key;
+}
+
+// CSV Export
+window.exportCSV = function(){
+  let csv = "DATE,FACILITY,SURNAME,FIRSTNAME,AGE,SEX,BLOOD,OR,REQUEST,REQ_QTY,ISSUED,ISS_QTY\n";
+  Object.values(allData).forEach(r => {
+    csv += `${r.date},${r.facility},${r.surname},${r.firstname},${r.age},${r.sex},${r.bloodtype},${r.or},${r.request},${r.requestQty},${r.issued},${r.issuedQty}\n`;
+  });
+  const blob = new Blob([csv],{type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "release_tracking.csv";
+  a.click();
+}
+
+// Back button
+function goBack(){window.location.href="releasing.html";}
+</script>
 </body>
 </html>
