@@ -3,6 +3,7 @@
 <head>
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
+
 <style>
 body{
     margin:0;
@@ -15,15 +16,6 @@ header{
     color:white;
     padding:15px;
     text-align:center;
-    position:relative;
-}
-
-.settings{
-    position:absolute;
-    right:20px;
-    top:15px;
-    font-size:22px;
-    cursor:pointer;
 }
 
 .container{
@@ -41,13 +33,21 @@ label{
     display:block;
 }
 
-input,select,textarea{
+input,select{
     width:100%;
     padding:10px;
     margin-top:5px;
     border:1px solid #ccc;
     border-radius:5px;
 }
+
+.row{
+    display:flex;
+    gap:10px;
+}
+
+.row select{flex:2}
+.row input{flex:1}
 
 button{
     width:100%;
@@ -62,23 +62,6 @@ button{
 .save{background:#ff9800;color:white}
 .back{background:#444;color:white}
 
-.modal{
-    display:none;
-    position:fixed;
-    top:0;
-    left:0;
-    width:100%;
-    height:100%;
-    background:rgba(0,0,0,0.4);
-}
-
-.modal-content{
-    background:white;
-    width:500px;
-    margin:80px auto;
-    padding:20px;
-    border-radius:8px;
-}
 </style>
 </head>
 
@@ -86,7 +69,6 @@ button{
 
 <header>
 <h2>Blood Releasing Entry</h2>
-<div class="settings" onclick="openSettings()">⚙</div>
 </header>
 
 <div class="container">
@@ -155,102 +137,74 @@ button{
 </div>
 
 <label>9. AMOUNT PAID</label>
-<input type="number" id="amountPaid" placeholder="Amount Paid">
+<input type="number" id="amountPaid">
 
 <label>10. DISCOUNT</label>
-<input type="number" id="discount" placeholder="Discount">
+<input type="number" id="discount">
 
 <button class="save" onclick="saveData()">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 </div>
 
-<!-- SIMPLE SETTINGS MODAL -->
-<div class="modal" id="settingsModal">
-<div class="modal-content">
-<h3>Facility Manager</h3>
-<p>Type or paste one facility per line:</p>
-<textarea id="facilityBulk" placeholder="Enter or paste facilities here..."></textarea>
-<button class="save" onclick="saveFacilities()">SAVE TO DATABASE</button>
-<button class="back" onclick="closeSettings()">CLOSE</button>
-</div>
-</div>
-
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// 🔑 Replace with your Firebase config
 const firebaseConfig={
-apiKey:"YOUR-API-KEY",
-databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId:"YOUR-PROJECT"
+    apiKey:"YOUR-API-KEY",
+    databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+    projectId:"YOUR-PROJECT"
 };
 
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-/* SAVE ENTRY */
-window.saveData=function(){
-push(ref(db,"releasing"),{
-date:date.value,
-facility:facility.value.toUpperCase(),
-surname:surname.value.toUpperCase(),
-firstname:firstname.value.toUpperCase(),
-age:age.value,
-sex:sex.value.toUpperCase(),
-bloodtype:bloodtype.value.toUpperCase(),
-or:or.value.toUpperCase(),
-request:request.value.toUpperCase(),
-requestQty:requestQty.value,
-issued:issued.value.toUpperCase(),
-issuedQty:issuedQty.value,
-amountPaid:amountPaid.value,
-discount:discount.value
-})
-.then(()=>{
-alert("Saved successfully!");
-// Clear inputs
-date.value=""; facility.value=""; surname.value=""; firstname.value="";
-age.value=""; sex.value=""; bloodtype.value=""; or.value="";
-request.value="WB"; requestQty.value=""; issued.value="WB"; issuedQty.value="";
-amountPaid.value=""; discount.value="";
-})
-.catch(err=>{console.error(err); alert("Error saving data!");});
+// Autocomplete facility from Firebase
+const facilityList = document.getElementById("facilityList");
+const facilityRef = ref(db,"facilities");
+
+onValue(facilityRef, snapshot=>{
+    facilityList.innerHTML="";
+    snapshot.forEach(child=>{
+        const option = document.createElement("option");
+        option.value = child.val().name;
+        facilityList.appendChild(option);
+    });
+});
+
+// Save entry
+window.saveData = function(){
+    push(ref(db,"releasing"),{
+        date: date.value,
+        facility: facility.value.toUpperCase(),
+        surname: surname.value.toUpperCase(),
+        firstname: firstname.value.toUpperCase(),
+        age: age.value,
+        sex: sex.value.toUpperCase(),
+        bloodtype: bloodtype.value.toUpperCase(),
+        or: or.value.toUpperCase(),
+        request: request.value.toUpperCase(),
+        requestQty: requestQty.value,
+        issued: issued.value.toUpperCase(),
+        issuedQty: issuedQty.value,
+        amountPaid: amountPaid.value,
+        discount: discount.value
+    });
+    alert("Saved successfully!");
+    // Clear form
+    date.value=""; facility.value=""; surname.value=""; firstname.value=""; age.value="";
+    sex.value=""; bloodtype.value=""; or.value=""; request.value="WB"; requestQty.value="";
+    issued.value="WB"; issuedQty.value=""; amountPaid.value=""; discount.value="";
 }
 
-/* FACILITY AUTOCOMPLETE */
-const facilityList=document.getElementById("facilityList")
-function loadFacilityList(){
-    onValue(ref(db,"facilities"),snapshot=>{
-        facilityList.innerHTML=""
-        snapshot.forEach(child=>{
-            const option=document.createElement("option")
-            option.value=child.val().name
-            facilityList.appendChild(option)
-        })
-    })
+// Back button
+window.goBack = function(){
+    window.location.href="releasing.html";
 }
-loadFacilityList()
 
-/* SIMPLE SETTINGS */
-window.openSettings=function(){ document.getElementById("settingsModal").style.display="block"; loadFacilityList(); }
-window.closeSettings=function(){ document.getElementById("settingsModal").style.display="none"; }
-window.goBack=function(){ window.location.href="releasing.html"; }
-
-/* SAVE FACILITIES */
-window.saveFacilities=function(){
-const text=document.getElementById("facilityBulk").value.trim()
-if(text===""){ alert("No data to save"); return; }
-const lines=text.split("\n").map(l=>l.trim()).filter(l=>l!=="")
-const facilityRef=ref(db,"facilities")
-remove(facilityRef).then(()=>{
-    lines.forEach(line=>{
-        push(facilityRef,{ name:line.toUpperCase() })
-    })
-    alert("Facilities saved permanently!")
-    loadFacilityList()
-})
-}
 </script>
 
 </body>
