@@ -1,21 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Releasing Tracking</title>
+<title>Blood Releasing Tracking</title>
 <meta charset="UTF-8">
 <style>
 body {margin:0; font-family:Arial; background:#f4f4f4;}
 header {background:#ff9800; color:white; text-align:center; padding:15px;}
-.container {max-width:1200px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+.container {max-width:1400px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+input, select {padding:8px; margin-right:5px; border-radius:4px; border:1px solid #ccc;}
+button {padding:8px 12px; border:none; border-radius:4px; cursor:pointer;}
 table {width:100%; border-collapse:collapse; margin-top:20px;}
 th, td {border:1px solid #ccc; padding:8px; text-align:center; text-transform:uppercase;}
 th {background:#ff9800; color:white;}
-button.back {background:#444;color:white;padding:10px 12px;margin-top:15px;border-radius:5px;border:none;cursor:pointer;}
+button.back {background:#444;color:white;padding:10px 12px;margin-top:15px;border-radius:5px;cursor:pointer;}
+button.edit {background:#1565c0;color:white;}
+button.delete {background:#b30000;color:white;}
+button.export {background:#2e7d32;color:white;margin-left:10px;}
+.month-row {background:#f0f0f0;font-weight:bold; cursor:pointer;}
+.hidden {display:none;}
 </style>
 </head>
 <body>
 <header><h2>Blood Releasing Tracking</h2></header>
 <div class="container">
+<div>
+<input type="text" id="searchBox" placeholder="SEARCH..." />
+<input type="date" id="startDate" />
+<input type="date" id="endDate" />
+<select id="facilityFilter"><option value="">ALL FACILITIES</option></select>
+<button class="export" onclick="exportCSV()">EXPORT CSV</button>
+</div>
 <table>
 <thead>
 <tr>
@@ -31,6 +45,7 @@ button.back {background:#444;color:white;padding:10px 12px;margin-top:15px;borde
 <th>REQ QTY</th>
 <th>ISSUED</th>
 <th>ISS QTY</th>
+<th>ACTIONS</th>
 </tr>
 </thead>
 <tbody id="tableBody"></tbody>
@@ -40,9 +55,8 @@ button.back {background:#444;color:white;padding:10px 12px;margin-top:15px;borde
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// 🔑 Replace these with your actual Firebase config
 const firebaseConfig = {
   apiKey: "YOUR-API-KEY",
   databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
@@ -51,30 +65,148 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+let allData = []; // store all entries
 const tableBody = document.getElementById("tableBody");
+const searchBox = document.getElementById("searchBox");
+const startDate = document.getElementById("startDate");
+const endDate = document.getElementById("endDate");
+const facilityFilter = document.getElementById("facilityFilter");
 
-onValue(ref(db, "releasing"), snapshot => {
-  tableBody.innerHTML = ""; // clear table first
-  snapshot.forEach(child => {
-    const row = child.val();
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.date || ""}</td>
-      <td>${row.facility || ""}</td>
-      <td>${row.surname || ""}</td>
-      <td>${row.firstname || ""}</td>
-      <td>${row.age || ""}</td>
-      <td>${row.sex || ""}</td>
-      <td>${row.bloodtype || ""}</td>
-      <td>${row.or || ""}</td>
-      <td>${row.request || ""}</td>
-      <td>${row.requestQty || ""}</td>
-      <td>${row.issued || ""}</td>
-      <td>${row.issuedQty || ""}</td>
-    `;
-    tableBody.appendChild(tr);
-  });
+function renderTable(data) {
+    tableBody.innerHTML = "";
+    // Group by month
+    let months = {};
+    data.forEach(item => {
+        let month = item.date ? item.date.slice(0,7) : "UNKNOWN"; // YYYY-MM
+        if(!months[month]) months[month]=[];
+        months[month].push(item);
+    });
+    Object.keys(months).sort().forEach(month => {
+        const trMonth = document.createElement("tr");
+        trMonth.classList.add("month-row");
+        trMonth.innerHTML = `<td colspan="13">${month} ▼</td>`;
+        tableBody.appendChild(trMonth);
+        months[month].forEach(item=>{
+            const tr = document.createElement("tr");
+            tr.classList.add("data-row");
+            tr.dataset.month = month;
+            tr.dataset.facility = item.facility.toUpperCase();
+            tr.dataset.date = item.date;
+            tr.innerHTML = `
+              <td>${item.date||""}</td>
+              <td>${item.facility||""}</td>
+              <td>${item.surname||""}</td>
+              <td>${item.firstname||""}</td>
+              <td>${item.age||""}</td>
+              <td>${item.sex||""}</td>
+              <td>${item.bloodtype||""}</td>
+              <td>${item.or||""}</td>
+              <td>${item.request||""}</td>
+              <td>${item.requestQty||""}</td>
+              <td>${item.issued||""}</td>
+              <td>${item.issuedQty||""}</td>
+              <td>
+                <button class="edit" onclick="editEntry('${item.key}')">EDIT</button>
+                <button class="delete" onclick="deleteEntry('${item.key}')">DELETE</button>
+              </td>
+            `;
+            tableBody.appendChild(tr);
+        });
+        // Add collapse/expand functionality
+        trMonth.addEventListener("click", ()=>{
+            months[month].forEach(item=>{
+                const rows = Array.from(document.querySelectorAll(".data-row"));
+                rows.forEach(r=>{
+                    if(r.dataset.month===month) r.classList.toggle("hidden");
+                });
+            });
+        });
+    });
+}
+
+// Fetch all data
+onValue(ref(db,"releasing"), snapshot=>{
+    allData=[];
+    let facilitiesSet = new Set();
+    snapshot.forEach(child=>{
+        const item = child.val();
+        item.key = child.key;
+        allData.push(item);
+        if(item.facility) facilitiesSet.add(item.facility.toUpperCase());
+    });
+    renderTable(allData);
+    // Populate facility filter
+    facilityFilter.innerHTML='<option value="">ALL FACILITIES</option>';
+    Array.from(facilitiesSet).sort().forEach(f=>{
+        const opt=document.createElement("option");
+        opt.value=f;
+        opt.textContent=f;
+        facilityFilter.appendChild(opt);
+    });
 });
+
+// Search and filter
+function applyFilters(){
+    const search = searchBox.value.toUpperCase();
+    const start = startDate.value;
+    const end = endDate.value;
+    const fac = facilityFilter.value.toUpperCase();
+    const filtered = allData.filter(item=>{
+        const text = `${item.facility} ${item.surname} ${item.firstname} ${item.or} ${item.request}`.toUpperCase();
+        let match=true;
+        if(search && !text.includes(search)) match=false;
+        if(fac && item.facility.toUpperCase()!==fac) match=false;
+        if(start && item.date<start) match=false;
+        if(end && item.date>end) match=false;
+        return match;
+    });
+    renderTable(filtered);
+}
+searchBox.addEventListener("input", applyFilters);
+startDate.addEventListener("change", applyFilters);
+endDate.addEventListener("change", applyFilters);
+facilityFilter.addEventListener("change", applyFilters);
+
+// Edit entry
+window.editEntry=function(key){
+    localStorage.setItem("editKey",key);
+    window.location.href="releasing-entry.html"; // entry page will need to handle edit via editKey
+}
+
+// Delete entry
+window.deleteEntry=function(key){
+    if(confirm("ARE YOU SURE YOU WANT TO DELETE THIS ENTRY?")){
+        remove(ref(db,"releasing/"+key));
+    }
+}
+
+// Export CSV
+window.exportCSV=function(){
+    let csv="DATE,FACILITY,SURNAME,FIRSTNAME,AGE,SEX,BLOODTYPE,OR,REQUEST,REQ QTY,ISSUED,ISS QTY\n";
+    allData.forEach(item=>{
+        csv+=[
+            item.date||"",
+            item.facility||"",
+            item.surname||"",
+            item.firstname||"",
+            item.age||"",
+            item.sex||"",
+            item.bloodtype||"",
+            item.or||"",
+            item.request||"",
+            item.requestQty||"",
+            item.issued||"",
+            item.issuedQty||""
+        ].map(v=>`"${v}"`).join(",")+"\n";
+    });
+    const blob=new Blob([csv],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="releasing_tracking.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>
