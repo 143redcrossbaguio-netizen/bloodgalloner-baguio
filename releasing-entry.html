@@ -3,7 +3,6 @@
 <head>
 <title>Blood Releasing Entry</title>
 <meta charset="UTF-8">
-
 <style>
 body{margin:0;font-family:Arial;background:#f4f4f4;}
 header{background:#ff9800;color:white;padding:15px;text-align:center;position:relative;}
@@ -68,7 +67,7 @@ textarea{width:100%;height:150px;padding:10px;border-radius:5px;border:1px solid
 <input type="number" id="amountPaid">
 <label>DISCOUNT</label>
 <input type="number" id="discount">
-<button class="save" id="saveBtn">SAVE</button>
+<button class="save" onclick="saveData()">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 </div>
 
@@ -96,15 +95,12 @@ apiKey:"YOUR-API-KEY",
 databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
 projectId:"YOUR-PROJECT"
 };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
-
-// SAVE ENTRY
-const saveBtn = document.getElementById("saveBtn");
-saveBtn.addEventListener("click", () => {
-    const entryRef = push(ref(db, "releasing"));
-    set(entryRef, {
+// GLOBAL SAVE FUNCTION
+window.saveData = function() {
+    const data = {
         date: document.getElementById("date").value,
         facility: document.getElementById("facility").value,
         surname: document.getElementById("surname").value,
@@ -119,15 +115,23 @@ saveBtn.addEventListener("click", () => {
         issuedQty: document.getElementById("issuedQty").value,
         amountPaid: document.getElementById("amountPaid").value,
         discount: document.getElementById("discount").value
-    })
+    };
+
+    const entryRef = push(ref(db, "releasing"));
+    set(entryRef, data)
     .then(() => {
         alert("Saved permanently!");
-        ["date","facility","surname","firstname","age","sex","bloodtype","or","requestQty","issuedQty","amountPaid","discount"].forEach(id => document.getElementById(id).value = "");
-        document.getElementById("request").value = "WB";
-        document.getElementById("issued").value = "WB";
+        // CLEAR FIELDS AFTER SAVE
+        document.querySelectorAll("input, select").forEach(el => {
+            if(el.tagName=="SELECT") el.value=el.options[0].value;
+            else el.value="";
+        });
     })
-    .catch(err => {console.error(err); alert("Error saving");});
-});
+    .catch(err => {
+        console.error(err);
+        alert("Error saving data.");
+    });
+};
 
 // AUTOCOMPLETE FACILITY
 const facilityList = document.getElementById("facilityList");
@@ -147,24 +151,10 @@ window.goBack = function(){window.location.href="releasing.html";}
 
 // EXCEL GRID UNLIMITED ROWS
 function createExcelGrid(){const tbody=document.getElementById("facilityBody"); tbody.innerHTML=""; addRow();}
-function addRow(value=""){
-    const tbody=document.getElementById("facilityBody");
-    let rowNumber = tbody.children.length+1;
-    let row = document.createElement("tr");
-    row.innerHTML=`<td>${rowNumber}</td><td contenteditable="true">${value}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`;
-    tbody.appendChild(row);
-    row.children[1].addEventListener("input", function(){ if(row===tbody.lastChild){ addRow(); } });
-}
-
-// LOAD SAVED FACILITIES
+function addRow(value=""){const tbody=document.getElementById("facilityBody"); let rowNumber=tbody.children.length+1; let row=document.createElement("tr"); row.innerHTML=`<td>${rowNumber}</td><td contenteditable="true">${value}</td><td><button onclick="this.closest('tr').remove()">X</button></td>`; tbody.appendChild(row); row.children[1].addEventListener("input",function(){if(row===tbody.lastChild){addRow();}});}
 function loadFacilities(){onValue(ref(db,"facilities"), snapshot => {snapshot.forEach(child=>addRow(child.val().name)); addRow();},{onlyOnce:true});}
-
-// PASTE FROM EXCEL
 window.pasteFacilities = function(){const text = document.getElementById("facilityBulk").value.trim(); if(text==="") return; text.split("\n").forEach(line=>{if(line.trim()!=="") addRow(line.trim());}); document.getElementById("facilityBulk").value="";}
-
-// SAVE FACILITIES
 window.saveFacilities = function(){remove(ref(db,"facilities")); document.querySelectorAll("#facilityBody tr").forEach(row=>{let name=row.children[1].innerText.trim(); if(name!=="") push(ref(db,"facilities"),{name:name}); }); alert("Facilities updated");}
 </script>
-
 </body>
 </html>
