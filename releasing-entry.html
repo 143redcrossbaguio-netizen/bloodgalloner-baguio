@@ -216,6 +216,12 @@ color:white;
 <input type="number" id="issuedQty" placeholder="Qty">
 </div>
 
+<label>AMOUNT PAID</label>
+<input type="number" id="amountPaid" placeholder="Enter amount paid">
+
+<label>DISCOUNT</label>
+<input type="number" id="discount" placeholder="Enter discount">
+
 <button class="save" onclick="saveData()">SAVE</button>
 
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
@@ -261,7 +267,7 @@ color:white;
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig={
 apiKey:"YOUR-API-KEY",
@@ -273,11 +279,15 @@ const app=initializeApp(firebaseConfig);
 const db=getDatabase(app);
 
 
-/* SAVE ENTRY */
+/* SAVE ENTRY PERMANENTLY */
 
 window.saveData=function(){
 
-push(ref(db,"releasing"),{
+// Create a unique key for each entry
+const newRef = ref(db, "releasing");
+const newEntryRef = push(newRef);
+
+set(newEntryRef, {
 date:date.value,
 facility:facility.value,
 surname:surname.value,
@@ -289,10 +299,32 @@ or:or.value,
 request:request.value,
 requestQty:requestQty.value,
 issued:issued.value,
-issuedQty:issuedQty.value
+issuedQty:issuedQty.value,
+amountPaid:amountPaid.value,
+discount:discount.value
 })
-
-alert("Saved successfully")
+.then(()=>{
+alert("Saved permanently!");
+// Clear all fields for new entry
+date.value="";
+facility.value="";
+surname.value="";
+firstname.value="";
+age.value="";
+sex.value="";
+bloodtype.value="";
+or.value="";
+request.value="WB";
+requestQty.value="";
+issued.value="WB";
+issuedQty.value="";
+amountPaid.value="";
+discount.value="";
+})
+.catch((err)=>{
+console.error("Error saving:", err);
+alert("Error saving data. Check console.");
+});
 
 }
 
