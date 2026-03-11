@@ -122,12 +122,6 @@ border:1px solid #ccc;
 margin-top:10px;
 }
 
-.addRow{
-background:#2e7d32;
-color:white;
-margin-top:10px;
-}
-
 .saveFacilities{
 background:#1565c0;
 color:white;
@@ -222,28 +216,26 @@ color:white;
 
 </div>
 
-
-<!-- SETTINGS MODAL -->
+<!-- SETTINGS -->
 
 <div class="modal" id="settingsModal">
 
 <div class="modal-content">
 
-<h3>Facility Manager (Excel Style)</h3>
+<h3>Facility Manager (Unlimited Excel Style)</h3>
 
-<p>Paste facilities from Excel OR edit directly.</p>
+<p>Paste from Excel OR edit the grid below.</p>
 
 <textarea id="facilityBulk" placeholder="Paste Excel column here..."></textarea>
 
-<button class="addRow" onclick="pasteFacilities()">PASTE FACILITIES</button>
+<button onclick="pasteFacilities()">PASTE FACILITIES</button>
 
-<table id="facilityTable">
+<table>
 
 <thead>
 <tr>
 <th>#</th>
 <th>Facility Name</th>
-<th>Clear</th>
 </tr>
 </thead>
 
@@ -252,13 +244,10 @@ color:white;
 </table>
 
 <button class="saveFacilities" onclick="saveFacilities()">SAVE TO DATABASE</button>
-
 <button class="closeBtn" onclick="closeSettings()">CLOSE</button>
 
 </div>
-
 </div>
-
 
 <script type="module">
 
@@ -297,7 +286,7 @@ alert("Saved successfully")
 
 }
 
-/* AUTOCOMPLETE FACILITY */
+/* FACILITY AUTOCOMPLETE */
 
 const facilityList=document.getElementById("facilityList")
 
@@ -306,11 +295,9 @@ onValue(ref(db,"facilities"),snapshot=>{
 facilityList.innerHTML=""
 
 snapshot.forEach(child=>{
-
 let option=document.createElement("option")
 option.value=child.val().name
 facilityList.appendChild(option)
-
 })
 
 })
@@ -320,9 +307,7 @@ facilityList.appendChild(option)
 window.openSettings=function(){
 
 document.getElementById("settingsModal").style.display="block"
-
-createExcelGrid()
-
+createRow()
 loadFacilities()
 
 }
@@ -339,27 +324,34 @@ window.location.href="releasing.html"
 
 }
 
-/* CREATE EXCEL GRID */
+/* CREATE ROW */
 
-function createExcelGrid(){
+function createRow(value=""){
 
 const tbody=document.getElementById("facilityBody")
 
-tbody.innerHTML=""
-
-for(let i=1;i<=50;i++){
-
 let row=document.createElement("tr")
 
+let index=tbody.children.length+1
+
 row.innerHTML=`
-<td>${i}</td>
-<td contenteditable="true"></td>
-<td><button onclick="this.closest('tr').children[1].innerText=''">X</button></td>
+<td>${index}</td>
+<td contenteditable="true">${value}</td>
 `
 
 tbody.appendChild(row)
 
+/* auto add new row when typing */
+
+row.children[1].addEventListener("input",function(){
+
+if(row===tbody.lastChild){
+
+createRow()
+
 }
+
+})
 
 }
 
@@ -367,22 +359,16 @@ tbody.appendChild(row)
 
 function loadFacilities(){
 
-const rows=document.querySelectorAll("#facilityBody tr")
+const tbody=document.getElementById("facilityBody")
+tbody.innerHTML=""
 
 onValue(ref(db,"facilities"),snapshot=>{
 
-let i=0
-
 snapshot.forEach(child=>{
-
-if(rows[i]){
-
-rows[i].children[1].innerText=child.val().name
-i++
-
-}
-
+createRow(child.val().name)
 })
+
+createRow()
 
 },{onlyOnce:true})
 
@@ -393,24 +379,13 @@ i++
 window.pasteFacilities=function(){
 
 const text=document.getElementById("facilityBulk").value
-
 const lines=text.split("\n")
 
-const rows=document.querySelectorAll("#facilityBody tr")
-
-let i=0
-
 lines.forEach(line=>{
-
 let name=line.trim()
-
-if(name!=="" && rows[i]){
-
-rows[i].children[1].innerText=name
-i++
-
+if(name!==""){
+createRow(name)
 }
-
 })
 
 document.getElementById("facilityBulk").value=""
