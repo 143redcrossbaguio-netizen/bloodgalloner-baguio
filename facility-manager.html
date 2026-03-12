@@ -3,20 +3,71 @@
 <head>
 <title>Facility Manager</title>
 <meta charset="UTF-8">
+
 <style>
 body{margin:0;font-family:Arial;background:#f4f4f4;}
-header{background:#2e7d32;color:white;padding:15px;text-align:center;}
-.container{max-width:500px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
-input{width:100%;padding:10px;margin-top:10px;border:1px solid #ccc;border-radius:5px;}
-button{width:100%;padding:12px;margin-top:12px;border:none;border-radius:5px;color:white;font-weight:bold;cursor:pointer;}
+
+header{
+background:#2e7d32;
+color:white;
+padding:15px;
+text-align:center;
+}
+
+.container{
+max-width:500px;
+margin:40px auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+input{
+width:100%;
+padding:10px;
+margin-top:10px;
+border:1px solid #ccc;
+border-radius:5px;
+}
+
+button{
+width:100%;
+padding:12px;
+margin-top:12px;
+border:none;
+border-radius:5px;
+color:white;
+font-weight:bold;
+cursor:pointer;
+}
+
 .save{background:#2e7d32;}
 .back{background:#444;}
-table{width:100%;border-collapse:collapse;margin-top:15px;}
-th,td{border:1px solid #ccc;padding:8px;text-align:left;}
-th{background:#f0f0f0;}
-td button{margin-right:5px;padding:5px 8px;}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:8px;
+text-align:left;
+}
+
+th{
+background:#f0f0f0;
+}
+
+td button{
+margin-right:5px;
+padding:5px 8px;
+}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -25,84 +76,138 @@ td button{margin-right:5px;padding:5px 8px;}
 
 <div class="container">
 
-<input type="text" id="facilityInput" placeholder="Enter facility name">
-<button class="save" onclick="addFacility()">SAVE FACILITY</button>
-<button class="back" onclick="goBack()">BACK TO RELEASING</button>
+<input id="facilityInput" placeholder="Enter facility name">
+
+<button class="save" id="saveBtn">SAVE FACILITY</button>
+
+<button class="back" onclick="window.location.href='releasing-entry.html'">
+BACK TO RELEASING
+</button>
 
 <table>
 <thead>
-<tr><th>#</th><th>Facility Name</th><th>Actions</th></tr>
+<tr>
+<th>#</th>
+<th>Facility</th>
+<th>Action</th>
+</tr>
 </thead>
-<tbody id="facilityTableBody"></tbody>
+
+<tbody id="facilityTable"></tbody>
+
 </table>
 
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// 🔑 Replace these with your actual Firebase credentials
-const firebaseConfig = {
-  apiKey: "YOUR-API-KEY",
-  databaseURL: "https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR-PROJECT"
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove, update } 
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"YOUR-API-KEY",
+databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
+projectId:"YOUR-PROJECT"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
 
-const facilitiesRef = ref(db, "facilities");
-const facilityInput = document.getElementById("facilityInput");
-const facilityTableBody = document.getElementById("facilityTableBody");
+const facilityRef=ref(db,"facilities");
 
-// Listen and display facilities
-onValue(facilitiesRef, snapshot => {
-    facilityTableBody.innerHTML = "";
-    let index = 1;
-    snapshot.forEach(child => {
-        const key = child.key;
-        const name = child.val().name;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${index}</td>
-            <td>${name}</td>
-            <td>
-                <button onclick="editFacility('${key}', '${name}')">EDIT</button>
-                <button onclick="deleteFacility('${key}')">DELETE</button>
-            </td>
-        `;
-        facilityTableBody.appendChild(tr);
-        index++;
-    });
+const input=document.getElementById("facilityInput");
+const saveBtn=document.getElementById("saveBtn");
+const table=document.getElementById("facilityTable");
+
+
+// SAVE FACILITY
+saveBtn.addEventListener("click",()=>{
+
+let name=input.value.trim();
+
+if(name===""){
+alert("Enter facility name");
+return;
+}
+
+push(facilityRef,{
+name:name.toUpperCase()
 });
 
-// Add facility
-window.addFacility = function() {
-    const name = facilityInput.value.trim();
-    if(!name) return alert("Enter facility name");
-    push(facilitiesRef, {name: name.toUpperCase()})
-      .then(()=>{ facilityInput.value=""; })
-      .catch(err=>alert("Error saving: "+err));
+input.value="";
+
+});
+
+
+// SHOW LIST
+onValue(facilityRef,(snapshot)=>{
+
+table.innerHTML="";
+
+let i=1;
+
+snapshot.forEach(child=>{
+
+let data=child.val();
+let key=child.key;
+
+table.innerHTML+=`
+
+<tr>
+<td>${i}</td>
+<td>${data.name}</td>
+
+<td>
+
+<button onclick="editFacility('${key}','${data.name}')">
+EDIT
+</button>
+
+<button onclick="deleteFacility('${key}')">
+DELETE
+</button>
+
+</td>
+
+</tr>
+
+`;
+
+i++;
+
+});
+
+});
+
+
+// EDIT
+window.editFacility=(key,oldName)=>{
+
+let newName=prompt("Edit facility:",oldName);
+
+if(newName){
+
+update(ref(db,"facilities/"+key),{
+name:newName.toUpperCase()
+});
+
 }
 
-// Edit facility
-window.editFacility = function(key, oldName) {
-    const newName = prompt("Edit Facility Name:", oldName);
-    if(newName && newName.trim()!=="") {
-        update(ref(db, "facilities/"+key), {name: newName.trim().toUpperCase()});
-    }
 }
 
-// Delete facility
-window.deleteFacility = function(key) {
-    if(confirm("Delete this facility?")) remove(ref(db,"facilities/"+key));
+
+// DELETE
+window.deleteFacility=(key)=>{
+
+if(confirm("Delete facility?")){
+
+remove(ref(db,"facilities/"+key));
+
 }
 
-// Back button
-window.goBack = function() {
-    window.location.href = "releasing-entry.html";
 }
+
 </script>
 
 </body>
