@@ -1,21 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Facility Manager</title>
 <meta charset="UTF-8">
 
 <style>
-body{margin:0;font-family:Arial;background:#f4f4f4;}
+
+body{
+margin:0;
+font-family:Arial;
+background:#f4f4f4;
+}
 
 header{
 background:#2e7d32;
 color:white;
-padding:15px;
+padding:20px;
 text-align:center;
 }
 
 .container{
-max-width:500px;
+max-width:600px;
 margin:40px auto;
 background:white;
 padding:30px;
@@ -25,7 +31,7 @@ box-shadow:0 3px 10px rgba(0,0,0,0.1);
 
 input{
 width:100%;
-padding:10px;
+padding:12px;
 margin-top:10px;
 border:1px solid #ccc;
 border-radius:5px;
@@ -34,16 +40,15 @@ border-radius:5px;
 button{
 width:100%;
 padding:12px;
-margin-top:12px;
+margin-top:10px;
 border:none;
 border-radius:5px;
-color:white;
 font-weight:bold;
 cursor:pointer;
 }
 
-.save{background:#2e7d32;}
-.back{background:#444;}
+.save{background:#2e7d32;color:white}
+.back{background:#444;color:white}
 
 table{
 width:100%;
@@ -53,7 +58,7 @@ margin-top:20px;
 
 th,td{
 border:1px solid #ccc;
-padding:8px;
+padding:10px;
 text-align:left;
 }
 
@@ -61,11 +66,14 @@ th{
 background:#f0f0f0;
 }
 
-td button{
+.action button{
+width:auto;
+padding:5px 10px;
 margin-right:5px;
-padding:5px 8px;
 }
+
 </style>
+
 </head>
 
 <body>
@@ -76,15 +84,14 @@ padding:5px 8px;
 
 <div class="container">
 
-<input id="facilityInput" placeholder="Enter facility name">
+<input type="text" id="facilityName" placeholder="Enter facility name">
 
-<button class="save" id="saveBtn">SAVE FACILITY</button>
+<button class="save" onclick="saveFacility()">SAVE FACILITY</button>
 
-<button class="back" onclick="window.location.href='releasing-entry.html'">
-BACK TO RELEASING
-</button>
+<button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 <table>
+
 <thead>
 <tr>
 <th>#</th>
@@ -93,22 +100,25 @@ BACK TO RELEASING
 </tr>
 </thead>
 
-<tbody id="facilityTable"></tbody>
+<tbody id="facilityList"></tbody>
 
 </table>
 
 </div>
 
+
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove, update } 
-from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+
+/* FIREBASE CONFIG */
 
 const firebaseConfig={
 apiKey:"YOUR-API-KEY",
-databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-projectId:"YOUR-PROJECT"
+databaseURL:"https://YOUR-PROJECT-ID-default-rtdb.firebaseio.com",
+projectId:"YOUR-PROJECT-ID"
 };
 
 const app=initializeApp(firebaseConfig);
@@ -116,15 +126,14 @@ const db=getDatabase(app);
 
 const facilityRef=ref(db,"facilities");
 
-const input=document.getElementById("facilityInput");
-const saveBtn=document.getElementById("saveBtn");
-const table=document.getElementById("facilityTable");
+const list=document.getElementById("facilityList");
 
 
-// SAVE FACILITY
-saveBtn.addEventListener("click",()=>{
+/* SAVE FACILITY */
 
-let name=input.value.trim();
+window.saveFacility=function(){
+
+const name=document.getElementById("facilityName").value.trim();
 
 if(name===""){
 alert("Enter facility name");
@@ -135,30 +144,31 @@ push(facilityRef,{
 name:name.toUpperCase()
 });
 
-input.value="";
+document.getElementById("facilityName").value="";
 
-});
+};
 
 
-// SHOW LIST
+/* SHOW LIST */
+
 onValue(facilityRef,(snapshot)=>{
 
-table.innerHTML="";
+list.innerHTML="";
 
 let i=1;
 
 snapshot.forEach(child=>{
 
-let data=child.val();
-let key=child.key;
+const data=child.val();
+const key=child.key;
 
-table.innerHTML+=`
+const row=document.createElement("tr");
 
-<tr>
+row.innerHTML=`
 <td>${i}</td>
 <td>${data.name}</td>
 
-<td>
+<td class="action">
 
 <button onclick="editFacility('${key}','${data.name}')">
 EDIT
@@ -169,10 +179,9 @@ DELETE
 </button>
 
 </td>
-
-</tr>
-
 `;
+
+list.appendChild(row);
 
 i++;
 
@@ -181,10 +190,22 @@ i++;
 });
 
 
-// EDIT
-window.editFacility=(key,oldName)=>{
+/* DELETE */
 
-let newName=prompt("Edit facility:",oldName);
+window.deleteFacility=function(key){
+
+if(confirm("Delete this facility?")){
+remove(ref(db,"facilities/"+key));
+}
+
+};
+
+
+/* EDIT */
+
+window.editFacility=function(key,name){
+
+let newName=prompt("Edit facility name",name);
 
 if(newName){
 
@@ -194,19 +215,16 @@ name:newName.toUpperCase()
 
 }
 
-}
+};
 
 
-// DELETE
-window.deleteFacility=(key)=>{
+/* BACK BUTTON */
 
-if(confirm("Delete facility?")){
+window.goBack=function(){
 
-remove(ref(db,"facilities/"+key));
+window.location.href="releasing.html";
 
-}
-
-}
+};
 
 </script>
 
