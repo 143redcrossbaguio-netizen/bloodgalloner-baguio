@@ -1,1 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Releasing Statistics</title>
+<meta charset="UTF-8">
 
+<style>
+body{
+margin:0;
+font-family:Arial;
+background:#f4f4f4;
+}
+
+header{
+background:#00897b;
+color:white;
+text-align:center;
+padding:15px;
+}
+
+.container{
+max-width:1200px;
+margin:20px auto;
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+.controls{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+.controls input,
+.controls select,
+.controls button{
+padding:10px;
+border:1px solid #ccc;
+border-radius:5px;
+font-weight:bold;
+}
+
+.controls input,
+.controls select{
+flex:1;
+min-width:200px;
+}
+
+.controls button{
+border:none;
+cursor:pointer;
+color:white;
+}
+
+.backBtn{
+background:#444;
+}
+
+.monthSection{
+margin-top:20px;
+}
+
+.monthHeader{
+background:#e0f2f1;
+padding:12px;
+font-weight:bold;
+border-radius:6px;
+margin-bottom:10px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-bottom:20px;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:8px;
+text-align:center;
+vertical-align:top;
+}
+
+th{
+background:#00897b;
+color:white;
+}
+
+.left{
+text-align:left;
+}
+
+.small{
+font-size:13px;
+line-height:1.5;
+text-align:left;
+white-space:pre-line;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>Blood Releasing Statistics</h2>
+</header>
+
+<div class="container">
+
+<div class="controls">
+<select id="monthFilter">
+<option value="">ALL MONTHS</option>
+</select>
+
+<input type="text" id="hospitalSearch" placeholder="SEARCH HOSPITAL">
+
+<button class="backBtn" onclick="goBack()">BACK TO RELEASING</button>
+</div>
+
+<div id="statisticsContainer"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "YOUR-API-KEY",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const statisticsContainer = document.getElementById("statisticsContainer");
+const monthFilter = document.getElementById("monthFilter");
+const hospitalSearch = document.getElementById("hospitalSearch");
+
+let allEntries = [];
+
+function emptyComponentCounts(){
+  return {
+    "WB": 0,
+    "PRBC": 0,
+    "PC": 0,
+    "FFP": 0,
+    "CRYO": 0
+  };
+}
+
+function addComponentCount(store, component, qty){
+  const key = (component || "").toUpperCase().trim();
+  const num = Number(qty || 0);
+  if(store[key] !== undefined){
+    store[key] += isNaN(num) ? 0 : num;
+  }
+}
+
+function formatComponents(obj){
+  return [
+    `WHOLE BLOOD - ${obj.WB}`,
+    `PRBC - ${obj.PRBC}`,
+    `PC - ${obj.PC}`,
+    `FFP - ${obj.FFP}`,
+    `CRYO - ${obj.CRYO}`
+  ].join("\n");
+}
+
+function populateMonthFilter(entries){
+  const months = [...new Set(
+    entries
+      .map(e => (e.date || "").slice(0,7))
+      .filter(Boolean)
+  )].sort().reverse();
+
+  monthFilter.innerHTML = `<option value="">ALL MONTHS</option>`;
+
+  months.forEach(month => {
+    const option = document.createElement("option");
+    option.value = month;
+    option.textContent = month;
+    monthFilter.appendChild(option);
+  });
+}
+
+function renderStatistics(){
+  const selectedMonth = monthFilter.value;
+  const searchValue = hospitalSearch.value.trim().toUpperCase();
+
+  let filtered = allEntries.filter(entry => {
+    const month = (entry.date || "").slice(0,7);
+    const hospital = (entry.facility || "").toUpperCase();
+
+    const matchMonth = selectedMonth === "" || month === selectedMonth;
+    const matchSearch = searchValue === "" || hospital.includes(searchValue);
+
+    return matchMonth && matchSearch;
+  });
+
+  const groupedByMonth = {};
+
+  filtered.forEach(entry => {
+    const month = (entry.date || "").slice(0,7) || "NO DATE";
+    const hospital = (entry.facility || "").toUpperCase().trim() || "NO FACILITY";
+
+    if(!groupedByMonth[month]){
+      groupedByMonth[month] = {};
+    }
+
+    if(!groupedByMonth[month][hospital]){
+      groupedByMonth[month][hospital] = {
+        entries: 0,
+        male: 0,
+        female: 0,
+        requested: emptyComponentCounts(),
+        issued: emptyComponentCounts()
+      };
+    }
+
+    const stats = groupedByMonth[month][hospital];
+
+    stats.entries += 1;
+
+    const sex = (entry.sex || "").toUpperCase();
+    if(sex === "MALE"){
+      stats.male += 1;
+    }else if(sex === "FEMALE"){
+      stats.female += 1;
+    }
+
+    addComponentCount(stats.requested, entry.request, entry.requestQty);
+    addComponentCount(stats.issued, entry.issued, entry.issuedQty);
+  });
+
+  statisticsContainer.innerHTML = "";
+
+  const months = Object.keys(groupedByMonth).sort().reverse();
+
+  if(months.length === 0){
+    statisticsContainer.innerHTML = "<p>No statistics found.</p>";
+    return;
+  }
+
+  months.forEach(month => {
+    const section = document.createElement("div");
+    section.className = "monthSection";
+
+    const header = document.createElement("div");
+    header.className = "monthHeader";
+    header.textContent = month;
+
+    const table = document.createElement("table");
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>HOSPITAL</th>
+          <th>NO. OF ENTRY / PATIENT</th>
+          <th>MALE</th>
+          <th>FEMALE</th>
+          <th>COMPONENTS REQUESTED</th>
+          <th>COMPONENTS ISSUED</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = table.querySelector("tbody");
+    const hospitals = Object.keys(groupedByMonth[month]).sort();
+
+    hospitals.forEach(hospital => {
+      const stats = groupedByMonth[month][hospital];
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td class="left">${hospital}</td>
+        <td>${stats.entries}</td>
+        <td>${stats.male}</td>
+        <td>${stats.female}</td>
+        <td class="small">${formatComponents(stats.requested)}</td>
+        <td class="small">${formatComponents(stats.issued)}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    section.appendChild(header);
+    section.appendChild(table);
+    statisticsContainer.appendChild(section);
+  });
+}
+
+onValue(ref(db, "releasing"), (snapshot) => {
+  allEntries = [];
+
+  snapshot.forEach(child => {
+    allEntries.push({
+      id: child.key,
+      ...child.val()
+    });
+  });
+
+  populateMonthFilter(allEntries);
+  renderStatistics();
+});
+
+monthFilter.addEventListener("change", renderStatistics);
+hospitalSearch.addEventListener("input", renderStatistics);
+
+window.goBack = function(){
+  window.location.href = "releasing.html";
+};
+</script>
+
+</body>
+</html>
