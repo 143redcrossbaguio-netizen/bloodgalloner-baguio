@@ -3,169 +3,386 @@
 <head>
 <title>Releasing Tracking</title>
 <meta charset="UTF-8">
+
 <style>
-body{margin:0;font-family:Arial;background:#f4f4f4}
-header{background:#ff9800;color:white;text-align:center;padding:15px;position:relative}
-.container{max-width:1000px;margin:20px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
-input,select,button{padding:10px;margin:5px;border-radius:5px;border:1px solid #ccc;}
-button{cursor:pointer;font-weight:bold}
-table{width:100%;border-collapse:collapse;margin-top:15px;}
-th,td{border:1px solid #ccc;padding:8px;text-align:center}
-th{background:#ff9800;color:white}
-.collapseMonth{cursor:pointer;background:#f0f0f0;}
-.hidden{display:none;}
+body{
+margin:0;
+font-family:Arial;
+background:#f4f4f4;
+}
+
+header{
+background:#e65100;
+color:white;
+text-align:center;
+padding:15px;
+}
+
+.container{
+max-width:1300px;
+margin:20px auto;
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+.controls{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+.controls input,
+.controls select,
+.controls button{
+padding:10px;
+border:1px solid #ccc;
+border-radius:5px;
+font-weight:bold;
+}
+
+.controls input,
+.controls select{
+flex:1;
+min-width:180px;
+}
+
+.controls button{
+cursor:pointer;
+border:none;
+color:white;
+}
+
+.exportBtn{background:#2e7d32;}
+.backBtn{background:#444;}
+
+.monthHeader{
+background:#f0f0f0;
+padding:12px;
+font-weight:bold;
+border-radius:5px;
+margin-top:15px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:8px;
+text-align:center;
+font-size:14px;
+}
+
+th{
+background:#e65100;
+color:white;
+}
+
+.actionBtn{
+padding:6px 10px;
+border:none;
+border-radius:4px;
+color:white;
+cursor:pointer;
+font-weight:bold;
+margin:2px;
+}
+
+.editBtn{background:#1565c0;}
+.deleteBtn{background:#c62828;}
+
+.hidden{
+display:none;
+}
 </style>
 </head>
+
 <body>
 
 <header>
-<h2>BLOOD RELEASING TRACKING</h2>
+<h2>Blood Releasing Tracking</h2>
 </header>
 
 <div class="container">
 
-<input type="text" id="searchBox" placeholder="SEARCH BY NAME OR FACILITY">
+<div class="controls">
+<input type="text" id="searchBox" placeholder="SEARCH NAME OR FACILITY">
 <input type="date" id="filterDate">
-<input type="text" id="filterFacility" placeholder="FILTER BY FACILITY">
-<button onclick="exportCSV()">EXPORT TO CSV</button>
-<button onclick="goBack()">BACK TO RELEASING</button>
+<select id="filterFacility">
+<option value="">ALL FACILITIES</option>
+</select>
+<button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
+<button class="backBtn" onclick="goBack()">BACK TO RELEASING</button>
+</div>
 
-<div id="trackingTableContainer"></div>
+<div id="trackingContainer"></div>
 
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-const firebaseConfig={
-    apiKey:"YOUR-API-KEY",
-    databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-    projectId:"YOUR-PROJECT"
+const firebaseConfig = {
+  apiKey: "YOUR-API-KEY",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club"
 };
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
-const trackingContainer=document.getElementById("trackingTableContainer");
 
-let allEntries=[];
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-/* Load Entries */
-onValue(ref(db,"releasing"),snapshot=>{
-    allEntries=[];
-    snapshot.forEach(child=>{
-        allEntries.push({id:child.key,...child.val()});
+const trackingContainer = document.getElementById("trackingContainer");
+const searchBox = document.getElementById("searchBox");
+const filterDate = document.getElementById("filterDate");
+const filterFacility = document.getElementById("filterFacility");
+
+let allEntries = [];
+
+/* LOAD ENTRIES */
+onValue(ref(db, "releasing"), (snapshot) => {
+  allEntries = [];
+
+  snapshot.forEach((child) => {
+    allEntries.push({
+      id: child.key,
+      ...child.val()
     });
-    renderTable();
+  });
+
+  loadFacilityFilter();
+  renderTracking();
 });
 
-/* Render Table Grouped by Month */
-function renderTable(){
-    trackingContainer.innerHTML="";
-    const grouped={};
-    allEntries.forEach(entry=>{
-        if(!entry.date) return;
-        const month=entry.date.slice(0,7); // YYYY-MM
-        if(!grouped[month]) grouped[month]=[];
-        grouped[month].push(entry);
-    });
+/* LOAD FACILITY FILTER OPTIONS */
+function loadFacilityFilter(){
+  const facilities = [...new Set(allEntries.map(entry => (entry.facility || "").toUpperCase()).filter(Boolean))];
+  filterFacility.innerHTML = `<option value="">ALL FACILITIES</option>`;
 
-    Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(month=>{
-        const monthDiv=document.createElement("div");
-        const monthHeader=document.createElement("div");
-        monthHeader.className="collapseMonth";
-        monthHeader.innerText=`${month} ▼`;
-        monthDiv.appendChild(monthHeader);
-        const table=document.createElement("table");
-        const thead=document.createElement("thead");
-        thead.innerHTML=`<tr>
-        <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th><th>AGE</th>
-        <th>SEX</th><th>BLOOD TYPE</th><th>OR</th><th>REQUEST</th><th>REQ QTY</th>
-        <th>ISSUED</th><th>ISS QTY</th><th>AMOUNT PAID</th><th>DISCOUNT</th>
-        <th>EDIT</th><th>DELETE</th>
-        </tr>`;
-        table.appendChild(thead);
-        const tbody=document.createElement("tbody");
-        grouped[month].forEach(entry=>{
-            const tr=document.createElement("tr");
-            tr.innerHTML=`<td>${entry.date}</td>
-            <td>${entry.facility}</td>
-            <td>${entry.surname}</td>
-            <td>${entry.firstname}</td>
-            <td>${entry.age}</td>
-            <td>${entry.sex}</td>
-            <td>${entry.bloodtype}</td>
-            <td>${entry.or}</td>
-            <td>${entry.request}</td>
-            <td>${entry.requestQty}</td>
-            <td>${entry.issued}</td>
-            <td>${entry.issuedQty}</td>
-            <td>${entry.amountPaid}</td>
-            <td>${entry.discount}</td>
-            <td><button onclick="editEntry('${entry.id}')">EDIT</button></td>
-            <td><button onclick="deleteEntry('${entry.id}')">DELETE</button></td>`;
-            tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        monthDiv.appendChild(table);
-        trackingContainer.appendChild(monthDiv);
-
-        /* Collapse logic */
-        tbody.classList.add("hidden");
-        monthHeader.addEventListener("click",()=>tbody.classList.toggle("hidden"));
-    });
+  facilities.sort().forEach(facility => {
+    const option = document.createElement("option");
+    option.value = facility;
+    option.textContent = facility;
+    filterFacility.appendChild(option);
+  });
 }
 
-/* Search & Filter */
-document.getElementById("searchBox").addEventListener("input",filterTable);
-document.getElementById("filterDate").addEventListener("change",filterTable);
-document.getElementById("filterFacility").addEventListener("input",filterTable);
+/* FILTER + RENDER */
+function renderTracking(){
+  const searchValue = searchBox.value.trim().toUpperCase();
+  const dateValue = filterDate.value;
+  const facilityValue = filterFacility.value.toUpperCase();
 
-function filterTable(){
-    const s=document.getElementById("searchBox").value.toUpperCase();
-    const fDate=document.getElementById("filterDate").value;
-    const fFac=document.getElementById("filterFacility").value.toUpperCase();
-    const tables=trackingContainer.querySelectorAll("table tbody");
-    tables.forEach(tbody=>{
-        Array.from(tbody.rows).forEach(row=>{
-            const cells=row.cells;
-            const matchSearch=s? (cells[1].innerText.includes(s) || cells[2].innerText.includes(s) || cells[3].innerText.includes(s)) : true;
-            const matchDate=fDate? cells[0].innerText===fDate:true;
-            const matchFac=fFac? cells[1].innerText.includes(fFac):true;
-            row.style.display=(matchSearch && matchDate && matchFac)?"":"none";
-        });
+  let filtered = allEntries.filter(entry => {
+    const fullName = `${entry.surname || ""} ${entry.firstname || ""}`.toUpperCase();
+    const facility = (entry.facility || "").toUpperCase();
+    const matchesSearch =
+      searchValue === "" ||
+      fullName.includes(searchValue) ||
+      facility.includes(searchValue);
+
+    const matchesDate =
+      dateValue === "" ||
+      (entry.date || "") === dateValue;
+
+    const matchesFacility =
+      facilityValue === "" ||
+      facility === facilityValue;
+
+    return matchesSearch && matchesDate && matchesFacility;
+  });
+
+  // sort newest first
+  filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+
+  const grouped = {};
+
+  filtered.forEach(entry => {
+    const monthKey = entry.date ? entry.date.slice(0,7) : "NO DATE";
+    if(!grouped[monthKey]) grouped[monthKey] = [];
+    grouped[monthKey].push(entry);
+  });
+
+  trackingContainer.innerHTML = "";
+
+  Object.keys(grouped).sort().reverse().forEach(month => {
+    const section = document.createElement("div");
+
+    const header = document.createElement("div");
+    header.className = "monthHeader";
+    header.textContent = month;
+
+    const content = document.createElement("div");
+    content.className = "hidden";
+
+    const table = document.createElement("table");
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>FACILITY</th>
+          <th>SURNAME</th>
+          <th>FIRST NAME</th>
+          <th>AGE</th>
+          <th>SEX</th>
+          <th>BLOOD TYPE</th>
+          <th>OR</th>
+          <th>REQUEST</th>
+          <th>REQ QTY</th>
+          <th>ISSUED</th>
+          <th>ISS QTY</th>
+          <th>AMOUNT PAID</th>
+          <th>DISCOUNT</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = table.querySelector("tbody");
+
+    grouped[month].forEach(entry => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${entry.date || ""}</td>
+        <td>${entry.facility || ""}</td>
+        <td>${entry.surname || ""}</td>
+        <td>${entry.firstname || ""}</td>
+        <td>${entry.age || ""}</td>
+        <td>${entry.sex || ""}</td>
+        <td>${entry.bloodtype || ""}</td>
+        <td>${entry.or || ""}</td>
+        <td>${entry.request || ""}</td>
+        <td>${entry.requestQty || ""}</td>
+        <td>${entry.issued || ""}</td>
+        <td>${entry.issuedQty || ""}</td>
+        <td>${entry.amountPaid || ""}</td>
+        <td>${entry.discount || ""}</td>
+        <td>
+          <button class="actionBtn editBtn" onclick="editEntry('${entry.id}')">EDIT</button>
+          <button class="actionBtn deleteBtn" onclick="deleteEntry('${entry.id}')">DELETE</button>
+        </td>
+      `;
+      tbody.appendChild(row);
     });
+
+    content.appendChild(table);
+
+    header.addEventListener("click", () => {
+      content.classList.toggle("hidden");
+    });
+
+    section.appendChild(header);
+    section.appendChild(content);
+    trackingContainer.appendChild(section);
+  });
+
+  if(filtered.length === 0){
+    trackingContainer.innerHTML = "<p>No records found.</p>";
+  }
 }
 
-/* Edit Entry */
-function editEntry(id){
-    localStorage.setItem("editId",id);
-    window.location.href="releasing-entry.html";
+/* SEARCH + FILTER EVENTS */
+searchBox.addEventListener("input", renderTracking);
+filterDate.addEventListener("change", renderTracking);
+filterFacility.addEventListener("change", renderTracking);
+
+/* EDIT */
+window.editEntry = function(id){
+  const entry = allEntries.find(item => item.id === id);
+  if(!entry) return;
+
+  localStorage.setItem("editId", id);
+  localStorage.setItem("editEntryData", JSON.stringify(entry));
+  window.location.href = "releasing-entry.html";
 }
 
-/* Delete Entry */
-function deleteEntry(id){
-    if(confirm("Are you sure you want to delete this entry?")){
-        remove(ref(db,"releasing/"+id));
+/* DELETE */
+window.deleteEntry = async function(id){
+  if(confirm("Delete this entry?")){
+    try{
+      await remove(ref(db, "releasing/" + id));
+    }catch(error){
+      console.error(error);
+      alert("Failed to delete entry");
     }
+  }
 }
 
-/* Export CSV */
-function exportCSV(){
-    let csv="DATE,FACILITY,SURNAME,FIRST NAME,AGE,SEX,BLOOD TYPE,OR,REQUEST,REQ QTY,ISSUED,ISS QTY,AMOUNT PAID,DISCOUNT\n";
-    allEntries.forEach(e=>{
-        csv+=`"${e.date}","${e.facility}","${e.surname}","${e.firstname}",${e.age},"${e.sex}","${e.bloodtype}","${e.or}","${e.request}",${e.requestQty},"${e.issued}",${e.issuedQty},${e.amountPaid},${e.discount}\n`;
-    });
-    const blob=new Blob([csv],{type:"text/csv"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download="blood_releasing_tracking.csv";
-    a.click();
+/* EXPORT CSV */
+window.exportCSV = function(){
+  let rows = [
+    [
+      "DATE","FACILITY","SURNAME","FIRST NAME","AGE","SEX","BLOOD TYPE","OR",
+      "REQUEST","REQ QTY","ISSUED","ISS QTY","AMOUNT PAID","DISCOUNT"
+    ]
+  ];
+
+  const searchValue = searchBox.value.trim().toUpperCase();
+  const dateValue = filterDate.value;
+  const facilityValue = filterFacility.value.toUpperCase();
+
+  let filtered = allEntries.filter(entry => {
+    const fullName = `${entry.surname || ""} ${entry.firstname || ""}`.toUpperCase();
+    const facility = (entry.facility || "").toUpperCase();
+
+    const matchesSearch =
+      searchValue === "" ||
+      fullName.includes(searchValue) ||
+      facility.includes(searchValue);
+
+    const matchesDate =
+      dateValue === "" ||
+      (entry.date || "") === dateValue;
+
+    const matchesFacility =
+      facilityValue === "" ||
+      facility === facilityValue;
+
+    return matchesSearch && matchesDate && matchesFacility;
+  });
+
+  filtered.forEach(entry => {
+    rows.push([
+      entry.date || "",
+      entry.facility || "",
+      entry.surname || "",
+      entry.firstname || "",
+      entry.age || "",
+      entry.sex || "",
+      entry.bloodtype || "",
+      entry.or || "",
+      entry.request || "",
+      entry.requestQty || "",
+      entry.issued || "",
+      entry.issuedQty || "",
+      entry.amountPaid || "",
+      entry.discount || ""
+    ]);
+  });
+
+  const csvContent = rows.map(row =>
+    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "releasing-tracking.csv";
+  link.click();
 }
 
-/* Back to releasing */
-function goBack(){window.location.href="releasing.html";}
-
+/* BACK */
+window.goBack = function(){
+  window.location.href = "releasing.html";
+}
 </script>
 
 </body>
