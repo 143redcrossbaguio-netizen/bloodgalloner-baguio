@@ -151,7 +151,7 @@ button{
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "YOUR-API-KEY",
@@ -165,7 +165,10 @@ const db = getDatabase(app);
 const facilityList = document.getElementById("facilityList");
 const saveBtn = document.getElementById("saveBtn");
 
-/* LOAD FACILITIES FROM FACILITY MANAGER */
+const urlParams = new URLSearchParams(window.location.search);
+const editId = urlParams.get("id");
+
+/* LOAD FACILITIES */
 onValue(ref(db, "facilities"), (snapshot) => {
   facilityList.innerHTML = "";
 
@@ -178,6 +181,30 @@ onValue(ref(db, "facilities"), (snapshot) => {
     facilityList.appendChild(option);
   });
 });
+
+/* LOAD ENTRY FOR EDIT */
+if(editId){
+  get(ref(db, "releasing/" + editId)).then((snapshot) => {
+    if(snapshot.exists()){
+      const entry = snapshot.val();
+
+      document.getElementById("date").value = entry.date || "";
+      document.getElementById("facility").value = entry.facility || "";
+      document.getElementById("surname").value = entry.surname || "";
+      document.getElementById("firstname").value = entry.firstname || "";
+      document.getElementById("age").value = entry.age || "";
+      document.getElementById("sex").value = entry.sex || "";
+      document.getElementById("bloodtype").value = entry.bloodtype || "";
+      document.getElementById("or").value = entry.or || "";
+      document.getElementById("request").value = entry.request || "WB";
+      document.getElementById("requestQty").value = entry.requestQty || "";
+      document.getElementById("issued").value = entry.issued || "WB";
+      document.getElementById("issuedQty").value = entry.issuedQty || "";
+      document.getElementById("amountPaid").value = entry.amountPaid || "";
+      document.getElementById("discount").value = entry.discount || "";
+    }
+  });
+}
 
 /* SAVE ENTRY */
 saveBtn.addEventListener("click", async () => {
@@ -199,23 +226,15 @@ saveBtn.addEventListener("click", async () => {
   };
 
   try {
-    await push(ref(db, "releasing"), entryData);
-    alert("Saved successfully!");
+    if(editId){
+      await update(ref(db, "releasing/" + editId), entryData);
+      alert("Updated successfully!");
+    }else{
+      await push(ref(db, "releasing"), entryData);
+      alert("Saved successfully!");
+    }
 
-    document.getElementById("date").value = "";
-    document.getElementById("facility").value = "";
-    document.getElementById("surname").value = "";
-    document.getElementById("firstname").value = "";
-    document.getElementById("age").value = "";
-    document.getElementById("sex").value = "";
-    document.getElementById("bloodtype").value = "";
-    document.getElementById("or").value = "";
-    document.getElementById("request").value = "WB";
-    document.getElementById("requestQty").value = "";
-    document.getElementById("issued").value = "WB";
-    document.getElementById("issuedQty").value = "";
-    document.getElementById("amountPaid").value = "";
-    document.getElementById("discount").value = "";
+    window.location.href = "releasing-tracking.html";
   } catch (error) {
     console.error("Save entry error:", error);
     alert("Failed to save entry");
