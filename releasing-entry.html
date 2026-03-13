@@ -60,8 +60,8 @@ button{
 }
 
 .save{background:#ff9800;color:white}
+.facilityBtn{background:#2e7d32;color:white}
 .back{background:#444;color:white}
-
 </style>
 </head>
 
@@ -77,8 +77,10 @@ button{
 <input type="date" id="date">
 
 <label>FACILITY</label>
-<input list="facilityList" id="facility">
+<input type="text" id="facility" list="facilityList" placeholder="Type facility name">
 <datalist id="facilityList"></datalist>
+
+<button class="facilityBtn" onclick="goFacilityManager()">OPEN FACILITY MANAGER</button>
 
 <label>1. SURNAME</label>
 <input type="text" id="surname">
@@ -92,8 +94,8 @@ button{
 <label>4. SEX</label>
 <select id="sex">
 <option value="">Select</option>
-<option>Male</option>
-<option>Female</option>
+<option>MALE</option>
+<option>FEMALE</option>
 </select>
 
 <label>5. BLOOD TYPE</label>
@@ -142,69 +144,92 @@ button{
 <label>10. DISCOUNT</label>
 <input type="number" id="discount">
 
-<button class="save" onclick="saveData()">SAVE</button>
+<button class="save" id="saveBtn">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 </div>
 
 <script type="module">
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// 🔑 Replace with your Firebase config
-const firebaseConfig={
-    apiKey:"YOUR-API-KEY",
-    databaseURL:"https://YOUR-PROJECT-default-rtdb.firebaseio.com",
-    projectId:"YOUR-PROJECT"
+const firebaseConfig = {
+  apiKey: "YOUR-API-KEY",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Autocomplete facility from Firebase
 const facilityList = document.getElementById("facilityList");
-const facilityRef = ref(db,"facilities");
+const saveBtn = document.getElementById("saveBtn");
 
-onValue(facilityRef, snapshot=>{
-    facilityList.innerHTML="";
-    snapshot.forEach(child=>{
-        const option = document.createElement("option");
-        option.value = child.val().name;
-        facilityList.appendChild(option);
-    });
+/* LOAD FACILITIES FROM FACILITY MANAGER */
+onValue(ref(db, "facilities"), (snapshot) => {
+  facilityList.innerHTML = "";
+
+  if (!snapshot.exists()) return;
+
+  snapshot.forEach((child) => {
+    const data = child.val();
+    const option = document.createElement("option");
+    option.value = data.name || "";
+    facilityList.appendChild(option);
+  });
 });
 
-// Save entry
-window.saveData = function(){
-    push(ref(db,"releasing"),{
-        date: date.value,
-        facility: facility.value.toUpperCase(),
-        surname: surname.value.toUpperCase(),
-        firstname: firstname.value.toUpperCase(),
-        age: age.value,
-        sex: sex.value.toUpperCase(),
-        bloodtype: bloodtype.value.toUpperCase(),
-        or: or.value.toUpperCase(),
-        request: request.value.toUpperCase(),
-        requestQty: requestQty.value,
-        issued: issued.value.toUpperCase(),
-        issuedQty: issuedQty.value,
-        amountPaid: amountPaid.value,
-        discount: discount.value
-    });
+/* SAVE ENTRY */
+saveBtn.addEventListener("click", async () => {
+  const entryData = {
+    date: document.getElementById("date").value,
+    facility: document.getElementById("facility").value.toUpperCase(),
+    surname: document.getElementById("surname").value.toUpperCase(),
+    firstname: document.getElementById("firstname").value.toUpperCase(),
+    age: document.getElementById("age").value,
+    sex: document.getElementById("sex").value,
+    bloodtype: document.getElementById("bloodtype").value,
+    or: document.getElementById("or").value.toUpperCase(),
+    request: document.getElementById("request").value,
+    requestQty: document.getElementById("requestQty").value,
+    issued: document.getElementById("issued").value,
+    issuedQty: document.getElementById("issuedQty").value,
+    amountPaid: document.getElementById("amountPaid").value,
+    discount: document.getElementById("discount").value
+  };
+
+  try {
+    await push(ref(db, "releasing"), entryData);
     alert("Saved successfully!");
-    // Clear form
-    date.value=""; facility.value=""; surname.value=""; firstname.value=""; age.value="";
-    sex.value=""; bloodtype.value=""; or.value=""; request.value="WB"; requestQty.value="";
-    issued.value="WB"; issuedQty.value=""; amountPaid.value=""; discount.value="";
+
+    document.getElementById("date").value = "";
+    document.getElementById("facility").value = "";
+    document.getElementById("surname").value = "";
+    document.getElementById("firstname").value = "";
+    document.getElementById("age").value = "";
+    document.getElementById("sex").value = "";
+    document.getElementById("bloodtype").value = "";
+    document.getElementById("or").value = "";
+    document.getElementById("request").value = "WB";
+    document.getElementById("requestQty").value = "";
+    document.getElementById("issued").value = "WB";
+    document.getElementById("issuedQty").value = "";
+    document.getElementById("amountPaid").value = "";
+    document.getElementById("discount").value = "";
+  } catch (error) {
+    console.error("Save entry error:", error);
+    alert("Failed to save entry");
+  }
+});
+
+/* NAVIGATION */
+window.goFacilityManager = function(){
+  window.location.href = "facility-manager.html";
 }
 
-// Back button
 window.goBack = function(){
-    window.location.href="releasing.html";
+  window.location.href = "releasing.html";
 }
-
 </script>
 
 </body>
