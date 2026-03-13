@@ -201,16 +201,22 @@ function emptyComponentCounts(){
   };
 }
 
-function addComponentCount(store, component, qty){
-  const key = (component || "").toUpperCase().trim();
-  const num = Number(qty || 0);
-  if(store[key] !== undefined){
-    store[key] += isNaN(num) ? 0 : num;
-  }
+function addArrayComponentCounts(store, list){
+  if(!Array.isArray(list)) return;
+
+  list.forEach(item => {
+    const key = (item.type || "").toUpperCase().trim();
+    const qty = Number(item.qty || 0);
+
+    if(store[key] !== undefined){
+      store[key] += isNaN(qty) ? 0 : qty;
+    }
+  });
 }
 
 function monthToWords(monthKey){
   if(!monthKey || !monthKey.includes("-")) return monthKey;
+
   const [year, month] = monthKey.split("-");
   const months = {
     "01":"JANUARY",
@@ -226,6 +232,7 @@ function monthToWords(monthKey){
     "11":"NOVEMBER",
     "12":"DECEMBER"
   };
+
   return `${months[month] || month} ${year}`;
 }
 
@@ -281,7 +288,7 @@ function buildStatisticsData(){
   const selectedMonth = monthFilter.value;
   const searchValue = hospitalSearch.value.trim().toUpperCase();
 
-  let filtered = allEntries.filter(entry => {
+  const filtered = allEntries.filter(entry => {
     const month = (entry.date || "").slice(0,7);
     const hospital = (entry.facility || "").toUpperCase();
 
@@ -336,11 +343,11 @@ function buildStatisticsData(){
       hospitalStats.female += 1;
     }
 
-    addComponentCount(monthStats.requested, entry.request, entry.requestQty);
-    addComponentCount(hospitalStats.requested, entry.request, entry.requestQty);
+    addArrayComponentCounts(monthStats.requested, entry.requests);
+    addArrayComponentCounts(hospitalStats.requested, entry.requests);
 
-    addComponentCount(monthStats.issued, entry.issued, entry.issuedQty);
-    addComponentCount(hospitalStats.issued, entry.issued, entry.issuedQty);
+    addArrayComponentCounts(monthStats.issued, entry.issued);
+    addArrayComponentCounts(hospitalStats.issued, entry.issued);
 
     monthStats.income += computeIncome(entry);
   });
@@ -438,7 +445,8 @@ function renderStatistics(){
 
 function exportStatisticsCSV(){
   const groupedByMonth = buildStatisticsData();
-  let rows = [[
+
+  const rows = [[
     "MONTH",
     "HOSPITAL",
     "NO. OF ENTRY / PATIENT",
