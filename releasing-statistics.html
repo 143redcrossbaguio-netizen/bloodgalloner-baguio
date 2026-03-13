@@ -19,7 +19,7 @@ padding:15px;
 }
 
 .container{
-max-width:1200px;
+max-width:1400px;
 margin:20px auto;
 background:white;
 padding:20px;
@@ -55,12 +55,12 @@ cursor:pointer;
 color:white;
 }
 
-.backBtn{
-background:#444;
-}
+.backBtn{background:#444;}
+.printBtn{background:#1565c0;}
+.exportBtn{background:#2e7d32;}
 
 .monthSection{
-margin-top:20px;
+margin-top:25px;
 }
 
 .monthHeader{
@@ -69,35 +69,74 @@ padding:12px;
 font-weight:bold;
 border-radius:6px;
 margin-bottom:10px;
+font-size:18px;
 }
 
-table{
+.summaryBox{
+background:#f7f7f7;
+padding:12px;
+border:1px solid #ccc;
+border-radius:6px;
+margin-bottom:15px;
+}
+
+.summaryTable,
+.mainTable,
+.componentTable{
 width:100%;
 border-collapse:collapse;
-margin-bottom:20px;
 }
 
-th,td{
+.summaryTable th,
+.summaryTable td,
+.mainTable th,
+.mainTable td,
+.componentTable th,
+.componentTable td{
 border:1px solid #ccc;
 padding:8px;
 text-align:center;
 vertical-align:top;
 }
 
-th{
+.summaryTable th,
+.mainTable th,
+.componentTable th{
 background:#00897b;
 color:white;
 }
 
 .left{
-text-align:left;
+text-align:left !important;
 }
 
-.small{
+.componentCell{
+padding:0 !important;
+}
+
+.componentTable th,
+.componentTable td{
 font-size:13px;
-line-height:1.5;
-text-align:left;
-white-space:pre-line;
+padding:6px;
+}
+
+@media print{
+.controls,
+.backBtn,
+.printBtn,
+.exportBtn{
+display:none !important;
+}
+
+body{
+background:white;
+}
+
+.container{
+box-shadow:none;
+margin:0;
+max-width:none;
+}
 }
 </style>
 </head>
@@ -117,6 +156,8 @@ white-space:pre-line;
 
 <input type="text" id="hospitalSearch" placeholder="SEARCH HOSPITAL">
 
+<button class="printBtn" onclick="window.print()">PRINT</button>
+<button class="exportBtn" onclick="exportStatisticsCSV()">EXPORT CSV</button>
 <button class="backBtn" onclick="goBack()">BACK TO RELEASING</button>
 </div>
 
@@ -161,14 +202,49 @@ function addComponentCount(store, component, qty){
   }
 }
 
-function formatComponents(obj){
-  return [
-    `WHOLE BLOOD - ${obj.WB}`,
-    `PRBC - ${obj.PRBC}`,
-    `PC - ${obj.PC}`,
-    `FFP - ${obj.FFP}`,
-    `CRYO - ${obj.CRYO}`
-  ].join("\n");
+function monthToWords(monthKey){
+  if(!monthKey || !monthKey.includes("-")) return monthKey;
+  const [year, month] = monthKey.split("-");
+  const months = {
+    "01":"JANUARY",
+    "02":"FEBRUARY",
+    "03":"MARCH",
+    "04":"APRIL",
+    "05":"MAY",
+    "06":"JUNE",
+    "07":"JULY",
+    "08":"AUGUST",
+    "09":"SEPTEMBER",
+    "10":"OCTOBER",
+    "11":"NOVEMBER",
+    "12":"DECEMBER"
+  };
+  return `${months[month] || month} ${year}`;
+}
+
+function componentTableHTML(obj){
+  return `
+    <table class="componentTable">
+      <thead>
+        <tr>
+          <th>WB</th>
+          <th>PRBC</th>
+          <th>PC</th>
+          <th>FFP</th>
+          <th>CRYO</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${obj.WB}</td>
+          <td>${obj.PRBC}</td>
+          <td>${obj.PC}</td>
+          <td>${obj.FFP}</td>
+          <td>${obj.CRYO}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
 }
 
 function populateMonthFilter(entries){
@@ -183,12 +259,12 @@ function populateMonthFilter(entries){
   months.forEach(month => {
     const option = document.createElement("option");
     option.value = month;
-    option.textContent = month;
+    option.textContent = monthToWords(month);
     monthFilter.appendChild(option);
   });
 }
 
-function renderStatistics(){
+function buildStatisticsData(){
   const selectedMonth = monthFilter.value;
   const searchValue = hospitalSearch.value.trim().toUpperCase();
 
@@ -209,11 +285,20 @@ function renderStatistics(){
     const hospital = (entry.facility || "").toUpperCase().trim() || "NO FACILITY";
 
     if(!groupedByMonth[month]){
-      groupedByMonth[month] = {};
+      groupedByMonth[month] = {
+        hospitals: {},
+        totals: {
+          entries: 0,
+          male: 0,
+          female: 0,
+          requested: emptyComponentCounts(),
+          issued: emptyComponentCounts()
+        }
+      };
     }
 
-    if(!groupedByMonth[month][hospital]){
-      groupedByMonth[month][hospital] = {
+    if(!groupedByMonth[month].hospitals[hospital]){
+      groupedByMonth[month].hospitals[hospital] = {
         entries: 0,
         male: 0,
         female: 0,
@@ -222,21 +307,33 @@ function renderStatistics(){
       };
     }
 
-    const stats = groupedByMonth[month][hospital];
+    const monthStats = groupedByMonth[month].totals;
+    const hospitalStats = groupedByMonth[month].hospitals[hospital];
 
-    stats.entries += 1;
+    monthStats.entries += 1;
+    hospitalStats.entries += 1;
 
     const sex = (entry.sex || "").toUpperCase();
     if(sex === "MALE"){
-      stats.male += 1;
+      monthStats.male += 1;
+      hospitalStats.male += 1;
     }else if(sex === "FEMALE"){
-      stats.female += 1;
+      monthStats.female += 1;
+      hospitalStats.female += 1;
     }
 
-    addComponentCount(stats.requested, entry.request, entry.requestQty);
-    addComponentCount(stats.issued, entry.issued, entry.issuedQty);
+    addComponentCount(monthStats.requested, entry.request, entry.requestQty);
+    addComponentCount(hospitalStats.requested, entry.request, entry.requestQty);
+
+    addComponentCount(monthStats.issued, entry.issued, entry.issuedQty);
+    addComponentCount(hospitalStats.issued, entry.issued, entry.issuedQty);
   });
 
+  return groupedByMonth;
+}
+
+function renderStatistics(){
+  const groupedByMonth = buildStatisticsData();
   statisticsContainer.innerHTML = "";
 
   const months = Object.keys(groupedByMonth).sort().reverse();
@@ -247,14 +344,42 @@ function renderStatistics(){
   }
 
   months.forEach(month => {
+    const data = groupedByMonth[month];
+
     const section = document.createElement("div");
     section.className = "monthSection";
 
     const header = document.createElement("div");
     header.className = "monthHeader";
-    header.textContent = month;
+    header.textContent = monthToWords(month);
+
+    const summaryBox = document.createElement("div");
+    summaryBox.className = "summaryBox";
+    summaryBox.innerHTML = `
+      <table class="summaryTable">
+        <thead>
+          <tr>
+            <th>TOTAL ENTRY / PATIENT</th>
+            <th>TOTAL MALE</th>
+            <th>TOTAL FEMALE</th>
+            <th>TOTAL COMPONENTS REQUESTED</th>
+            <th>TOTAL COMPONENTS ISSUED</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${data.totals.entries}</td>
+            <td>${data.totals.male}</td>
+            <td>${data.totals.female}</td>
+            <td class="componentCell">${componentTableHTML(data.totals.requested)}</td>
+            <td class="componentCell">${componentTableHTML(data.totals.issued)}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
 
     const table = document.createElement("table");
+    table.className = "mainTable";
     table.innerHTML = `
       <thead>
         <tr>
@@ -270,10 +395,10 @@ function renderStatistics(){
     `;
 
     const tbody = table.querySelector("tbody");
-    const hospitals = Object.keys(groupedByMonth[month]).sort();
+    const hospitals = Object.keys(data.hospitals).sort();
 
     hospitals.forEach(hospital => {
-      const stats = groupedByMonth[month][hospital];
+      const stats = data.hospitals[hospital];
 
       const row = document.createElement("tr");
       row.innerHTML = `
@@ -281,16 +406,92 @@ function renderStatistics(){
         <td>${stats.entries}</td>
         <td>${stats.male}</td>
         <td>${stats.female}</td>
-        <td class="small">${formatComponents(stats.requested)}</td>
-        <td class="small">${formatComponents(stats.issued)}</td>
+        <td class="componentCell">${componentTableHTML(stats.requested)}</td>
+        <td class="componentCell">${componentTableHTML(stats.issued)}</td>
       `;
       tbody.appendChild(row);
     });
 
     section.appendChild(header);
+    section.appendChild(summaryBox);
     section.appendChild(table);
     statisticsContainer.appendChild(section);
   });
+}
+
+function exportStatisticsCSV(){
+  const groupedByMonth = buildStatisticsData();
+  let rows = [[
+    "MONTH",
+    "HOSPITAL",
+    "NO. OF ENTRY / PATIENT",
+    "MALE",
+    "FEMALE",
+    "REQUEST_WB",
+    "REQUEST_PRBC",
+    "REQUEST_PC",
+    "REQUEST_FFP",
+    "REQUEST_CRYO",
+    "ISSUED_WB",
+    "ISSUED_PRBC",
+    "ISSUED_PC",
+    "ISSUED_FFP",
+    "ISSUED_CRYO"
+  ]];
+
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const hospitals = groupedByMonth[month].hospitals;
+
+    Object.keys(hospitals).sort().forEach(hospital => {
+      const stats = hospitals[hospital];
+      rows.push([
+        monthToWords(month),
+        hospital,
+        stats.entries,
+        stats.male,
+        stats.female,
+        stats.requested.WB,
+        stats.requested.PRBC,
+        stats.requested.PC,
+        stats.requested.FFP,
+        stats.requested.CRYO,
+        stats.issued.WB,
+        stats.issued.PRBC,
+        stats.issued.PC,
+        stats.issued.FFP,
+        stats.issued.CRYO
+      ]);
+    });
+
+    const total = groupedByMonth[month].totals;
+    rows.push([
+      monthToWords(month) + " TOTAL",
+      "ALL HOSPITALS",
+      total.entries,
+      total.male,
+      total.female,
+      total.requested.WB,
+      total.requested.PRBC,
+      total.requested.PC,
+      total.requested.FFP,
+      total.requested.CRYO,
+      total.issued.WB,
+      total.issued.PRBC,
+      total.issued.PC,
+      total.issued.FFP,
+      total.issued.CRYO
+    ]);
+  });
+
+  const csvContent = rows.map(row =>
+    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "releasing-statistics.csv";
+  link.click();
 }
 
 onValue(ref(db, "releasing"), (snapshot) => {
