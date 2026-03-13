@@ -4,62 +4,17 @@
 <title>Facility Manager</title>
 <meta charset="UTF-8">
 <style>
-body{
-    margin:0;
-    font-family:Arial;
-    background:#f4f4f4;
-}
-header{
-    background:#2e7d32;
-    color:white;
-    padding:15px;
-    text-align:center;
-}
-.container{
-    max-width:600px;
-    margin:40px auto;
-    background:white;
-    padding:30px;
-    border-radius:10px;
-    box-shadow:0 3px 10px rgba(0,0,0,0.1);
-}
-input{
-    width:100%;
-    padding:10px;
-    margin-top:10px;
-    border:1px solid #ccc;
-    border-radius:5px;
-}
-button{
-    width:100%;
-    padding:12px;
-    margin-top:12px;
-    border:none;
-    border-radius:5px;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-}
+body{margin:0;font-family:Arial;background:#f4f4f4;}
+header{background:#2e7d32;color:white;padding:15px;text-align:center;}
+.container{max-width:600px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+input{width:100%;padding:12px;margin-top:10px;border:1px solid #ccc;border-radius:5px;}
+button{width:100%;padding:12px;margin-top:12px;border:none;border-radius:5px;color:white;font-weight:bold;cursor:pointer;}
 .save{background:#2e7d32;}
 .back{background:#444;}
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:20px;
-}
-th,td{
-    border:1px solid #ccc;
-    padding:10px;
-    text-align:left;
-}
-th{
-    background:#f0f0f0;
-}
-.action-btn{
-    width:auto;
-    padding:5px 10px;
-    margin-right:5px;
-}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{border:1px solid #ccc;padding:10px;text-align:left;}
+th{background:#f0f0f0;}
+.action-btn{width:auto;padding:5px 10px;margin-right:5px;}
 </style>
 </head>
 <body>
@@ -70,22 +25,21 @@ th{
 
 <div class="container">
 
-<input type="text" id="facilityName" placeholder="Enter facility name">
+<input id="facilityName" placeholder="Enter facility name">
 
 <button class="save" id="saveBtn">SAVE FACILITY</button>
 
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
 <table>
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Facility</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody id="facilityList">
-    </tbody>
+<thead>
+<tr>
+<th>#</th>
+<th>Facility</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody id="facilityList"></tbody>
 </table>
 
 </div>
@@ -95,9 +49,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-    apiKey: "YOUR-API-KEY",
-    databaseURL: "https://YOUR-PROJECT-ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR-PROJECT-ID"
+  apiKey: "YOUR-API-KEY",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -108,88 +62,82 @@ const facilityInput = document.getElementById("facilityName");
 const saveBtn = document.getElementById("saveBtn");
 const facilityList = document.getElementById("facilityList");
 
-// SAVE FACILITY
 saveBtn.addEventListener("click", async () => {
-    const name = facilityInput.value.trim();
+  const name = facilityInput.value.trim();
 
-    if(name === ""){
-        alert("Enter facility name");
-        return;
-    }
+  if (name === "") {
+    alert("Enter facility name");
+    return;
+  }
 
-    try{
-        await push(facilityRef, {
-            name: name.toUpperCase()
-        });
-        facilityInput.value = "";
-    }catch(error){
-        console.error("Save error:", error);
-        alert("Failed to save facility");
-    }
-});
-
-// DISPLAY FACILITY LIST
-onValue(facilityRef, (snapshot) => {
-    facilityList.innerHTML = "";
-
-    if(!snapshot.exists()){
-        facilityList.innerHTML = "<tr><td colspan='3'>No facilities saved</td></tr>";
-        return;
-    }
-
-    let i = 1;
-
-    snapshot.forEach((child) => {
-        const data = child.val();
-        const key = child.key;
-
-        const row = document.createElement("tr");
-
-        row.innerHTML = `
-            <td>${i}</td>
-            <td>${data.name || ""}</td>
-            <td>
-                <button class="action-btn" onclick="editFacility('${key}', '${(data.name || "").replace(/'/g, "\\'")}')">EDIT</button>
-                <button class="action-btn" onclick="deleteFacility('${key}')">DELETE</button>
-            </td>
-        `;
-
-        facilityList.appendChild(row);
-        i++;
+  try {
+    await push(facilityRef, {
+      name: name.toUpperCase()
     });
+    facilityInput.value = "";
+  } catch (error) {
+    console.error("Save error:", error);
+    alert("Failed to save facility");
+  }
 });
 
-// EDIT
-window.editFacility = async function(key, oldName){
-    const newName = prompt("Edit facility name", oldName);
+onValue(facilityRef, (snapshot) => {
+  facilityList.innerHTML = "";
 
-    if(newName && newName.trim() !== ""){
-        try{
-            await update(ref(db, "facilities/" + key), {
-                name: newName.toUpperCase()
-            });
-        }catch(error){
-            console.error("Edit error:", error);
-            alert("Failed to edit facility");
-        }
+  if (!snapshot.exists()) {
+    facilityList.innerHTML = "<tr><td colspan='3'>No facilities saved</td></tr>";
+    return;
+  }
+
+  let i = 1;
+
+  snapshot.forEach((child) => {
+    const data = child.val();
+    const key = child.key;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i}</td>
+      <td>${data.name || ""}</td>
+      <td>
+        <button class="action-btn" onclick="editFacility('${key}', '${(data.name || "").replace(/'/g, "\\'")}')">EDIT</button>
+        <button class="action-btn" onclick="deleteFacility('${key}')">DELETE</button>
+      </td>
+    `;
+
+    facilityList.appendChild(row);
+    i++;
+  });
+});
+
+window.editFacility = async function (key, oldName) {
+  const newName = prompt("Edit facility name", oldName);
+
+  if (newName && newName.trim() !== "") {
+    try {
+      await update(ref(db, "facilities/" + key), {
+        name: newName.toUpperCase()
+      });
+    } catch (error) {
+      console.error("Edit error:", error);
+      alert("Failed to edit facility");
     }
+  }
 };
 
-// DELETE
-window.deleteFacility = async function(key){
-    if(confirm("Delete facility?")){
-        try{
-            await remove(ref(db, "facilities/" + key));
-        }catch(error){
-            console.error("Delete error:", error);
-            alert("Failed to delete facility");
-        }
+window.deleteFacility = async function (key) {
+  if (confirm("Delete facility?")) {
+    try {
+      await remove(ref(db, "facilities/" + key));
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete facility");
     }
+  }
 };
 
-// BACK
-window.goBack = function(){
-    window.location.href = "releasing.html";
+window.goBack = function () {
+  window.location.href = "releasing.html";
 };
 </script>
 
