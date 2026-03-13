@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 
 <style>
+
 body{
 margin:0;
 font-family:Arial;
@@ -38,15 +39,9 @@ margin-bottom:20px;
 .controls select,
 .controls button{
 padding:10px;
-border:1px solid #ccc;
 border-radius:5px;
+border:1px solid #ccc;
 font-weight:bold;
-}
-
-.controls input,
-.controls select{
-flex:1;
-min-width:200px;
 }
 
 .controls button{
@@ -55,20 +50,16 @@ cursor:pointer;
 color:white;
 }
 
-.backBtn{background:#444;}
 .printBtn{background:#1565c0;}
 .exportBtn{background:#2e7d32;}
-
-.monthSection{
-margin-top:25px;
-}
+.backBtn{background:#444;}
 
 .monthHeader{
 background:#e0f2f1;
 padding:12px;
 font-weight:bold;
 border-radius:6px;
-margin-bottom:10px;
+margin-top:20px;
 font-size:18px;
 }
 
@@ -77,47 +68,34 @@ background:#f7f7f7;
 padding:12px;
 border:1px solid #ccc;
 border-radius:6px;
-margin-bottom:15px;
+margin-bottom:10px;
 }
 
-.summaryTable,
-.mainTable,
-.componentTable{
+table{
 width:100%;
 border-collapse:collapse;
+margin-top:10px;
 }
 
-.summaryTable th,
-.summaryTable td,
-.mainTable th,
-.mainTable td,
-.componentTable th,
-.componentTable td{
+th,td{
 border:1px solid #ccc;
 padding:8px;
 text-align:center;
-vertical-align:top;
 }
 
-.summaryTable th,
-.mainTable th,
-.componentTable th{
+th{
 background:#00897b;
 color:white;
 }
 
 .left{
-text-align:left !important;
+text-align:left;
 }
 
-.componentCell{
-padding:0 !important;
-}
-
-.componentTable th,
-.componentTable td{
+.componentBox{
 font-size:13px;
-padding:6px;
+line-height:1.5;
+text-align:left;
 }
 
 .incomeBox{
@@ -127,21 +105,6 @@ font-size:16px;
 color:#00695c;
 }
 
-@media print{
-.controls{
-display:none !important;
-}
-
-body{
-background:white;
-}
-
-.container{
-box-shadow:none;
-margin:0;
-max-width:none;
-}
-}
 </style>
 </head>
 
@@ -154,6 +117,7 @@ max-width:none;
 <div class="container">
 
 <div class="controls">
+
 <select id="monthFilter">
 <option value="">ALL MONTHS</option>
 </select>
@@ -162,7 +126,8 @@ max-width:none;
 
 <button class="printBtn" id="printBtn">PRINT</button>
 <button class="exportBtn" id="exportBtn">EXPORT CSV</button>
-<button class="backBtn" id="backBtn">BACK TO RELEASING</button>
+<button class="backBtn" id="backBtn">BACK</button>
+
 </div>
 
 <div id="statisticsContainer"></div>
@@ -170,384 +135,331 @@ max-width:none;
 </div>
 
 <script type="module">
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "YOUR-API-KEY",
-  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "galloners-club"
+
+apiKey:"YOUR-API-KEY",
+databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+projectId:"galloners-club"
+
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
 
-const statisticsContainer = document.getElementById("statisticsContainer");
-const monthFilter = document.getElementById("monthFilter");
-const hospitalSearch = document.getElementById("hospitalSearch");
-const printBtn = document.getElementById("printBtn");
-const exportBtn = document.getElementById("exportBtn");
-const backBtn = document.getElementById("backBtn");
+const container=document.getElementById("statisticsContainer");
+const monthFilter=document.getElementById("monthFilter");
+const hospitalSearch=document.getElementById("hospitalSearch");
 
-let allEntries = [];
+let allEntries=[];
 
-function emptyComponentCounts(){
-  return {
-    "WB": 0,
-    "PRBC": 0,
-    "PC": 0,
-    "FFP": 0,
-    "CRYO": 0
-  };
+/* LIVE LOAD FROM FIREBASE */
+
+onValue(ref(db,"releasing"),snapshot=>{
+
+allEntries=[];
+
+snapshot.forEach(child=>{
+allEntries.push({
+id:child.key,
+...child.val()
+});
+});
+
+populateMonthFilter();
+renderStatistics();
+
+});
+
+
+/* MONTH TEXT */
+
+function monthName(monthKey){
+
+const months={
+"01":"JANUARY",
+"02":"FEBRUARY",
+"03":"MARCH",
+"04":"APRIL",
+"05":"MAY",
+"06":"JUNE",
+"07":"JULY",
+"08":"AUGUST",
+"09":"SEPTEMBER",
+"10":"OCTOBER",
+"11":"NOVEMBER",
+"12":"DECEMBER"
+};
+
+const [year,month]=monthKey.split("-");
+return months[month]+" "+year;
+
 }
 
-function addArrayComponentCounts(store, list){
-  if(!Array.isArray(list)) return;
 
-  list.forEach(item => {
-    const key = (item.type || "").toUpperCase().trim();
-    const qty = Number(item.qty || 0);
+/* COMPONENT COUNT */
 
-    if(store[key] !== undefined){
-      store[key] += isNaN(qty) ? 0 : qty;
-    }
-  });
+function emptyComponent(){
+return {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
 }
 
-function monthToWords(monthKey){
-  if(!monthKey || !monthKey.includes("-")) return monthKey;
+function countComponents(store,list){
 
-  const [year, month] = monthKey.split("-");
-  const months = {
-    "01":"JANUARY",
-    "02":"FEBRUARY",
-    "03":"MARCH",
-    "04":"APRIL",
-    "05":"MAY",
-    "06":"JUNE",
-    "07":"JULY",
-    "08":"AUGUST",
-    "09":"SEPTEMBER",
-    "10":"OCTOBER",
-    "11":"NOVEMBER",
-    "12":"DECEMBER"
-  };
+if(!Array.isArray(list)) return;
 
-  return `${months[month] || month} ${year}`;
+list.forEach(item=>{
+const type=(item.type||"").toUpperCase();
+const qty=Number(item.qty||0);
+
+if(store[type]!=undefined){
+store[type]+=qty;
 }
 
-function componentTableHTML(obj){
-  return `
-    <table class="componentTable">
-      <thead>
-        <tr>
-          <th>WB</th>
-          <th>PRBC</th>
-          <th>PC</th>
-          <th>FFP</th>
-          <th>CRYO</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>${obj.WB}</td>
-          <td>${obj.PRBC}</td>
-          <td>${obj.PC}</td>
-          <td>${obj.FFP}</td>
-          <td>${obj.CRYO}</td>
-        </tr>
-      </tbody>
-    </table>
-  `;
+});
+
 }
 
-function computeIncome(entry){
-  const amountPaid = Number(entry.amountPaid || 0);
-  const discount = Number(entry.discount || 0);
-  return (isNaN(amountPaid) ? 0 : amountPaid) - (isNaN(discount) ? 0 : discount);
+
+/* MONTH FILTER */
+
+function populateMonthFilter(){
+
+const months=[...new Set(allEntries.map(e=>e.date.slice(0,7)))].sort().reverse();
+
+monthFilter.innerHTML='<option value="">ALL MONTHS</option>';
+
+months.forEach(m=>{
+const opt=document.createElement("option");
+opt.value=m;
+opt.textContent=monthName(m);
+monthFilter.appendChild(opt);
+});
+
 }
 
-function populateMonthFilter(entries){
-  const months = [...new Set(
-    entries
-      .map(e => (e.date || "").slice(0,7))
-      .filter(Boolean)
-  )].sort().reverse();
 
-  const current = monthFilter.value;
-  monthFilter.innerHTML = `<option value="">ALL MONTHS</option>`;
+/* BUILD STATS */
 
-  months.forEach(month => {
-    const option = document.createElement("option");
-    option.value = month;
-    option.textContent = monthToWords(month);
-    if(month === current) option.selected = true;
-    monthFilter.appendChild(option);
-  });
+function buildStats(){
+
+const monthFilterValue=monthFilter.value;
+const hospitalSearchValue=hospitalSearch.value.toUpperCase();
+
+const grouped={};
+
+allEntries.forEach(entry=>{
+
+const month=entry.date.slice(0,7);
+const hospital=(entry.facility||"").toUpperCase();
+
+if(monthFilterValue && month!==monthFilterValue) return;
+if(hospitalSearchValue && !hospital.includes(hospitalSearchValue)) return;
+
+if(!grouped[month]){
+
+grouped[month]={
+hospitals:{},
+totals:{
+entries:0,
+male:0,
+female:0,
+requested:emptyComponent(),
+issued:emptyComponent(),
+income:0
+}
+};
+
 }
 
-function buildStatisticsData(){
-  const selectedMonth = monthFilter.value;
-  const searchValue = hospitalSearch.value.trim().toUpperCase();
+if(!grouped[month].hospitals[hospital]){
 
-  const filtered = allEntries.filter(entry => {
-    const month = (entry.date || "").slice(0,7);
-    const hospital = (entry.facility || "").toUpperCase();
+grouped[month].hospitals[hospital]={
+entries:0,
+male:0,
+female:0,
+requested:emptyComponent(),
+issued:emptyComponent()
+};
 
-    const matchMonth = selectedMonth === "" || month === selectedMonth;
-    const matchSearch = searchValue === "" || hospital.includes(searchValue);
-
-    return matchMonth && matchSearch;
-  });
-
-  const groupedByMonth = {};
-
-  filtered.forEach(entry => {
-    const month = (entry.date || "").slice(0,7) || "NO DATE";
-    const hospital = (entry.facility || "").toUpperCase().trim() || "NO FACILITY";
-
-    if(!groupedByMonth[month]){
-      groupedByMonth[month] = {
-        hospitals: {},
-        totals: {
-          entries: 0,
-          male: 0,
-          female: 0,
-          requested: emptyComponentCounts(),
-          issued: emptyComponentCounts(),
-          income: 0
-        }
-      };
-    }
-
-    if(!groupedByMonth[month].hospitals[hospital]){
-      groupedByMonth[month].hospitals[hospital] = {
-        entries: 0,
-        male: 0,
-        female: 0,
-        requested: emptyComponentCounts(),
-        issued: emptyComponentCounts()
-      };
-    }
-
-    const monthStats = groupedByMonth[month].totals;
-    const hospitalStats = groupedByMonth[month].hospitals[hospital];
-
-    monthStats.entries += 1;
-    hospitalStats.entries += 1;
-
-    const sex = (entry.sex || "").toUpperCase();
-    if(sex === "MALE"){
-      monthStats.male += 1;
-      hospitalStats.male += 1;
-    }else if(sex === "FEMALE"){
-      monthStats.female += 1;
-      hospitalStats.female += 1;
-    }
-
-    addArrayComponentCounts(monthStats.requested, entry.requests);
-    addArrayComponentCounts(hospitalStats.requested, entry.requests);
-
-    addArrayComponentCounts(monthStats.issued, entry.issued);
-    addArrayComponentCounts(hospitalStats.issued, entry.issued);
-
-    monthStats.income += computeIncome(entry);
-  });
-
-  return groupedByMonth;
 }
+
+const m=grouped[month];
+const h=grouped[month].hospitals[hospital];
+
+m.totals.entries++;
+h.entries++;
+
+if(entry.sex==="MALE"){m.totals.male++;h.male++;}
+if(entry.sex==="FEMALE"){m.totals.female++;h.female++;}
+
+countComponents(m.totals.requested,entry.requests);
+countComponents(h.requested,entry.requests);
+
+countComponents(m.totals.issued,entry.issued);
+countComponents(h.issued,entry.issued);
+
+const income=(Number(entry.amountPaid||0)-Number(entry.discount||0));
+m.totals.income+=income;
+
+});
+
+return grouped;
+
+}
+
+
+/* RENDER */
 
 function renderStatistics(){
-  const groupedByMonth = buildStatisticsData();
-  statisticsContainer.innerHTML = "";
 
-  const months = Object.keys(groupedByMonth).sort().reverse();
+const stats=buildStats();
 
-  if(months.length === 0){
-    statisticsContainer.innerHTML = "<p>No statistics found.</p>";
-    return;
-  }
+container.innerHTML="";
 
-  months.forEach(month => {
-    const data = groupedByMonth[month];
+Object.keys(stats).sort().reverse().forEach(month=>{
 
-    const section = document.createElement("div");
-    section.className = "monthSection";
+const data=stats[month];
 
-    const header = document.createElement("div");
-    header.className = "monthHeader";
-    header.textContent = monthToWords(month);
+const header=document.createElement("div");
+header.className="monthHeader";
+header.textContent=monthName(month);
 
-    const summaryBox = document.createElement("div");
-    summaryBox.className = "summaryBox";
-    summaryBox.innerHTML = `
-      <table class="summaryTable">
-        <thead>
-          <tr>
-            <th>TOTAL ENTRY / PATIENT</th>
-            <th>TOTAL MALE</th>
-            <th>TOTAL FEMALE</th>
-            <th>TOTAL COMPONENTS REQUESTED</th>
-            <th>TOTAL COMPONENTS ISSUED</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${data.totals.entries}</td>
-            <td>${data.totals.male}</td>
-            <td>${data.totals.female}</td>
-            <td class="componentCell">${componentTableHTML(data.totals.requested)}</td>
-            <td class="componentCell">${componentTableHTML(data.totals.issued)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="incomeBox">TOTAL INCOME FOR ${monthToWords(month)}: ${data.totals.income.toFixed(2)}</div>
-    `;
+const summary=document.createElement("div");
+summary.className="summaryBox";
 
-    const table = document.createElement("table");
-    table.className = "mainTable";
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>HOSPITAL</th>
-          <th>NO. OF ENTRY / PATIENT</th>
-          <th>MALE</th>
-          <th>FEMALE</th>
-          <th>COMPONENTS REQUESTED</th>
-          <th>COMPONENTS ISSUED</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
+summary.innerHTML=`
 
-    const tbody = table.querySelector("tbody");
-    const hospitals = Object.keys(data.hospitals).sort();
+<b>TOTAL PATIENTS:</b> ${data.totals.entries}
+<br>
+<b>MALE:</b> ${data.totals.male}
+<br>
+<b>FEMALE:</b> ${data.totals.female}
 
-    hospitals.forEach(hospital => {
-      const stats = data.hospitals[hospital];
+<div class="incomeBox">
+TOTAL INCOME: ${data.totals.income.toFixed(2)}
+</div>
 
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td class="left">${hospital}</td>
-        <td>${stats.entries}</td>
-        <td>${stats.male}</td>
-        <td>${stats.female}</td>
-        <td class="componentCell">${componentTableHTML(stats.requested)}</td>
-        <td class="componentCell">${componentTableHTML(stats.issued)}</td>
-      `;
-      tbody.appendChild(row);
-    });
+`;
 
-    section.appendChild(header);
-    section.appendChild(summaryBox);
-    section.appendChild(table);
-    statisticsContainer.appendChild(section);
-  });
-}
+const table=document.createElement("table");
 
-function exportStatisticsCSV(){
-  const groupedByMonth = buildStatisticsData();
+table.innerHTML=`
+<tr>
+<th>HOSPITAL</th>
+<th>PATIENTS</th>
+<th>MALE</th>
+<th>FEMALE</th>
+<th>REQUESTED</th>
+<th>ISSUED</th>
+</tr>
+`;
 
-  const rows = [[
-    "MONTH",
-    "HOSPITAL",
-    "NO. OF ENTRY / PATIENT",
-    "MALE",
-    "FEMALE",
-    "REQUEST_WB",
-    "REQUEST_PRBC",
-    "REQUEST_PC",
-    "REQUEST_FFP",
-    "REQUEST_CRYO",
-    "ISSUED_WB",
-    "ISSUED_PRBC",
-    "ISSUED_PC",
-    "ISSUED_FFP",
-    "ISSUED_CRYO",
-    "MONTH_INCOME"
-  ]];
+Object.keys(data.hospitals).sort().forEach(hospital=>{
 
-  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
-    const hospitals = groupedByMonth[month].hospitals;
-    const monthIncome = groupedByMonth[month].totals.income;
+const s=data.hospitals[hospital];
 
-    Object.keys(hospitals).sort().forEach(hospital => {
-      const stats = hospitals[hospital];
-      rows.push([
-        monthToWords(month),
-        hospital,
-        stats.entries,
-        stats.male,
-        stats.female,
-        stats.requested.WB,
-        stats.requested.PRBC,
-        stats.requested.PC,
-        stats.requested.FFP,
-        stats.requested.CRYO,
-        stats.issued.WB,
-        stats.issued.PRBC,
-        stats.issued.PC,
-        stats.issued.FFP,
-        stats.issued.CRYO,
-        monthIncome.toFixed(2)
-      ]);
-    });
+const row=document.createElement("tr");
 
-    const total = groupedByMonth[month].totals;
-    rows.push([
-      monthToWords(month) + " TOTAL",
-      "ALL HOSPITALS",
-      total.entries,
-      total.male,
-      total.female,
-      total.requested.WB,
-      total.requested.PRBC,
-      total.requested.PC,
-      total.requested.FFP,
-      total.requested.CRYO,
-      total.issued.WB,
-      total.issued.PRBC,
-      total.issued.PC,
-      total.issued.FFP,
-      total.issued.CRYO,
-      total.income.toFixed(2)
-    ]);
-  });
+row.innerHTML=`
 
-  const csvContent = rows.map(row =>
-    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
-  ).join("\n");
+<td class="left">${hospital}</td>
+<td>${s.entries}</td>
+<td>${s.male}</td>
+<td>${s.female}</td>
 
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "releasing-statistics.csv";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
+<td class="componentBox">
+WB:${s.requested.WB}<br>
+PRBC:${s.requested.PRBC}<br>
+PC:${s.requested.PC}<br>
+FFP:${s.requested.FFP}<br>
+CRYO:${s.requested.CRYO}
+</td>
 
-onValue(ref(db, "releasing"), (snapshot) => {
-  allEntries = [];
+<td class="componentBox">
+WB:${s.issued.WB}<br>
+PRBC:${s.issued.PRBC}<br>
+PC:${s.issued.PC}<br>
+FFP:${s.issued.FFP}<br>
+CRYO:${s.issued.CRYO}
+</td>
 
-  snapshot.forEach(child => {
-    allEntries.push({
-      id: child.key,
-      ...child.val()
-    });
-  });
+`;
 
-  populateMonthFilter(allEntries);
-  renderStatistics();
+table.appendChild(row);
+
 });
 
-monthFilter.addEventListener("change", renderStatistics);
-hospitalSearch.addEventListener("input", renderStatistics);
-printBtn.addEventListener("click", () => window.print());
-exportBtn.addEventListener("click", exportStatisticsCSV);
-backBtn.addEventListener("click", () => {
-  window.location.href = "releasing.html";
+container.appendChild(header);
+container.appendChild(summary);
+container.appendChild(table);
+
 });
+
+}
+
+
+/* EXPORT CSV */
+
+function exportCSV(){
+
+const stats=buildStats();
+
+let rows=[["MONTH","HOSPITAL","PATIENTS","MALE","FEMALE","WB_REQ","PRBC_REQ","PC_REQ","FFP_REQ","CRYO_REQ","WB_ISS","PRBC_ISS","PC_ISS","FFP_ISS","CRYO_ISS"]];
+
+Object.keys(stats).forEach(month=>{
+
+const hospitals=stats[month].hospitals;
+
+Object.keys(hospitals).forEach(hospital=>{
+
+const s=hospitals[hospital];
+
+rows.push([
+monthName(month),
+hospital,
+s.entries,
+s.male,
+s.female,
+s.requested.WB,
+s.requested.PRBC,
+s.requested.PC,
+s.requested.FFP,
+s.requested.CRYO,
+s.issued.WB,
+s.issued.PRBC,
+s.issued.PC,
+s.issued.FFP,
+s.issued.CRYO
+]);
+
+});
+
+});
+
+const csv=rows.map(r=>r.join(",")).join("\n");
+
+const blob=new Blob([csv],{type:"text/csv"});
+const link=document.createElement("a");
+
+link.href=URL.createObjectURL(blob);
+link.download="releasing_statistics.csv";
+link.click();
+
+}
+
+
+/* EVENTS */
+
+monthFilter.addEventListener("change",renderStatistics);
+hospitalSearch.addEventListener("input",renderStatistics);
+
+document.getElementById("printBtn").onclick=()=>window.print();
+document.getElementById("exportBtn").onclick=exportCSV;
+document.getElementById("backBtn").onclick=()=>window.location.href="releasing.html";
+
 </script>
 
 </body>
