@@ -5,11 +5,11 @@
 <meta charset="UTF-8">
 
 <style>
-
 body{
 margin:0;
 font-family:Arial;
 background:#f4f4f4;
+color:#333;
 }
 
 header{
@@ -20,7 +20,7 @@ padding:15px;
 }
 
 .container{
-max-width:1400px;
+max-width:1450px;
 margin:20px auto;
 background:white;
 padding:20px;
@@ -44,6 +44,12 @@ border:1px solid #ccc;
 font-weight:bold;
 }
 
+.controls input,
+.controls select{
+flex:1;
+min-width:200px;
+}
+
 .controls button{
 border:none;
 cursor:pointer;
@@ -53,6 +59,49 @@ color:white;
 .printBtn{background:#1565c0;}
 .exportBtn{background:#2e7d32;}
 .backBtn{background:#444;}
+
+.dashboardGrid{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:15px;
+margin-bottom:20px;
+}
+
+.card{
+background:#f8f9fa;
+border:1px solid #ddd;
+border-radius:10px;
+padding:18px;
+box-shadow:0 2px 6px rgba(0,0,0,0.05);
+}
+
+.cardTitle{
+font-size:13px;
+font-weight:bold;
+color:#666;
+margin-bottom:8px;
+text-transform:uppercase;
+}
+
+.cardValue{
+font-size:28px;
+font-weight:bold;
+color:#00695c;
+}
+
+.doubleGrid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:15px;
+margin-bottom:25px;
+}
+
+.sectionTitle{
+font-size:16px;
+font-weight:bold;
+margin-bottom:10px;
+color:#00695c;
+}
 
 .monthHeader{
 background:#e0f2f1;
@@ -91,20 +140,57 @@ color:white;
 .subHeader{
 background:#b2dfdb;
 font-weight:bold;
+color:#000;
 }
 
 .left{
 text-align:left;
 }
 
-.incomeBox{
-margin-top:10px;
+.totalRow{
 font-weight:bold;
-font-size:16px;
-color:#00695c;
+background:#f0f0f0;
 }
 
+.grandWrap{
+margin-top:20px;
+}
+
+.smallTable th,
+.smallTable td{
+padding:10px;
+}
+
+@media (max-width: 1000px){
+.dashboardGrid{
+grid-template-columns:repeat(2,1fr);
+}
+.doubleGrid{
+grid-template-columns:1fr;
+}
+}
+
+@media (max-width: 640px){
+.dashboardGrid{
+grid-template-columns:1fr;
+}
+}
+
+@media print{
+.controls{
+display:none !important;
+}
+body{
+background:white;
+}
+.container{
+box-shadow:none;
+margin:0;
+max-width:none;
+}
+}
 </style>
+
 </head>
 
 <body>
@@ -116,7 +202,6 @@ color:#00695c;
 <div class="container">
 
 <div class="controls">
-
 <select id="monthFilter">
 <option value="">ALL MONTHS</option>
 </select>
@@ -126,15 +211,14 @@ color:#00695c;
 <button class="printBtn" onclick="window.print()">PRINT</button>
 <button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
 <button class="backBtn" onclick="goBack()">BACK</button>
-
 </div>
 
+<div id="dashboardSection"></div>
 <div id="statisticsContainer"></div>
 
 </div>
 
 <script type="module">
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
@@ -144,306 +228,409 @@ databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabas
 projectId:"galloners-club"
 };
 
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-const container=document.getElementById("statisticsContainer");
-const monthFilter=document.getElementById("monthFilter");
-const hospitalSearch=document.getElementById("hospitalSearch");
+const statisticsContainer = document.getElementById("statisticsContainer");
+const dashboardSection = document.getElementById("dashboardSection");
+const monthFilter = document.getElementById("monthFilter");
+const hospitalSearch = document.getElementById("hospitalSearch");
 
-let allEntries=[];
+let allEntries = [];
 
-onValue(ref(db,"releasing"),snapshot=>{
+onValue(ref(db,"releasing"), snapshot => {
+    allEntries = [];
 
-allEntries=[];
+    snapshot.forEach(child => {
+        allEntries.push({
+            id: child.key,
+            ...child.val()
+        });
+    });
 
-snapshot.forEach(child=>{
-allEntries.push({
-id:child.key,
-...child.val()
-});
-});
-
-populateMonthFilter();
-renderStatistics();
-
+    populateMonthFilter();
+    renderStatistics();
 });
 
 function monthName(monthKey){
+    const months = {
+        "01":"JANUARY",
+        "02":"FEBRUARY",
+        "03":"MARCH",
+        "04":"APRIL",
+        "05":"MAY",
+        "06":"JUNE",
+        "07":"JULY",
+        "08":"AUGUST",
+        "09":"SEPTEMBER",
+        "10":"OCTOBER",
+        "11":"NOVEMBER",
+        "12":"DECEMBER"
+    };
 
-const months={
-"01":"JANUARY",
-"02":"FEBRUARY",
-"03":"MARCH",
-"04":"APRIL",
-"05":"MAY",
-"06":"JUNE",
-"07":"JULY",
-"08":"AUGUST",
-"09":"SEPTEMBER",
-"10":"OCTOBER",
-"11":"NOVEMBER",
-"12":"DECEMBER"
-};
-
-const [year,month]=monthKey.split("-");
-return months[month]+" "+year;
-
+    const [year, month] = monthKey.split("-");
+    return (months[month] || month) + " " + year;
 }
 
 function emptyComponent(){
-return {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+    return {WB:0, PRBC:0, PC:0, FFP:0, CRYO:0};
 }
 
-function countComponents(store,list){
+function countComponents(store, list){
+    if(!Array.isArray(list)) return;
 
-if(!Array.isArray(list)) return;
+    list.forEach(item => {
+        const type = (item.type || "").toUpperCase();
+        const qty = Number(item.qty || 0);
 
-list.forEach(item=>{
-const type=(item.type||"").toUpperCase();
-const qty=Number(item.qty||0);
-
-if(store[type]!=undefined){
-store[type]+=qty;
-}
-
-});
-
+        if(store[type] !== undefined){
+            store[type] += qty;
+        }
+    });
 }
 
 function populateMonthFilter(){
+    const months = [...new Set(
+        allEntries
+        .map(e => (e.date || "").slice(0,7))
+        .filter(Boolean)
+    )].sort().reverse();
 
-const months=[...new Set(allEntries.map(e=>e.date.slice(0,7)))].sort().reverse();
+    monthFilter.innerHTML = '<option value="">ALL MONTHS</option>';
 
-monthFilter.innerHTML='<option value="">ALL MONTHS</option>';
-
-months.forEach(m=>{
-const opt=document.createElement("option");
-opt.value=m;
-opt.textContent=monthName(m);
-monthFilter.appendChild(opt);
-});
-
+    months.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = monthName(m);
+        monthFilter.appendChild(opt);
+    });
 }
 
 function buildStats(){
+    const monthFilterValue = monthFilter.value;
+    const hospitalSearchValue = hospitalSearch.value.toUpperCase();
 
-const monthFilterValue=monthFilter.value;
-const hospitalSearchValue=hospitalSearch.value.toUpperCase();
+    const grouped = {};
 
-const grouped={};
+    const grand = {
+        patients:0,
+        male:0,
+        female:0,
+        requested:emptyComponent(),
+        issued:emptyComponent(),
+        income:0
+    };
 
-allEntries.forEach(entry=>{
+    allEntries.forEach(entry => {
+        const dateValue = entry.date || "";
+        if(dateValue === "") return;
 
-const month=entry.date.slice(0,7);
-const hospital=(entry.facility||"").toUpperCase();
+        const month = dateValue.slice(0,7);
+        const hospital = (entry.facility || "").toUpperCase();
 
-if(monthFilterValue && month!==monthFilterValue) return;
-if(hospitalSearchValue && !hospital.includes(hospitalSearchValue)) return;
+        if(monthFilterValue && month !== monthFilterValue) return;
+        if(hospitalSearchValue && !hospital.includes(hospitalSearchValue)) return;
 
-if(!grouped[month]){
+        if(!grouped[month]){
+            grouped[month] = {
+                hospitals:{},
+                totals:{
+                    entries:0,
+                    male:0,
+                    female:0,
+                    requested:emptyComponent(),
+                    issued:emptyComponent(),
+                    income:0
+                }
+            };
+        }
 
-grouped[month]={
-hospitals:{},
-totals:{
-entries:0,
-male:0,
-female:0,
-requested:emptyComponent(),
-issued:emptyComponent(),
-income:0
+        if(!grouped[month].hospitals[hospital]){
+            grouped[month].hospitals[hospital] = {
+                entries:0,
+                male:0,
+                female:0,
+                requested:emptyComponent(),
+                issued:emptyComponent()
+            };
+        }
+
+        const m = grouped[month];
+        const h = grouped[month].hospitals[hospital];
+
+        m.totals.entries++;
+        h.entries++;
+        grand.patients++;
+
+        if(entry.sex === "MALE"){
+            m.totals.male++;
+            h.male++;
+            grand.male++;
+        }
+
+        if(entry.sex === "FEMALE"){
+            m.totals.female++;
+            h.female++;
+            grand.female++;
+        }
+
+        countComponents(m.totals.requested, entry.requests);
+        countComponents(h.requested, entry.requests);
+        countComponents(grand.requested, entry.requests);
+
+        countComponents(m.totals.issued, entry.issued);
+        countComponents(h.issued, entry.issued);
+        countComponents(grand.issued, entry.issued);
+
+        const income = (Number(entry.amountPaid || 0) - Number(entry.discount || 0));
+        m.totals.income += income;
+        grand.income += income;
+    });
+
+    return {grouped, grand};
 }
-};
 
+function smallComponentTable(title, data){
+    return `
+        <div class="card">
+            <div class="sectionTitle">${title}</div>
+            <table class="smallTable">
+                <thead>
+                    <tr>
+                        <th>WB</th>
+                        <th>PRBC</th>
+                        <th>PC</th>
+                        <th>FFP</th>
+                        <th>CRYO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>${data.WB}</td>
+                        <td>${data.PRBC}</td>
+                        <td>${data.PC}</td>
+                        <td>${data.FFP}</td>
+                        <td>${data.CRYO}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
-if(!grouped[month].hospitals[hospital]){
+function renderDashboard(grand){
+    dashboardSection.innerHTML = `
+        <div class="dashboardGrid">
+            <div class="card">
+                <div class="cardTitle">Total Patients</div>
+                <div class="cardValue">${grand.patients}</div>
+            </div>
+            <div class="card">
+                <div class="cardTitle">Total Male</div>
+                <div class="cardValue">${grand.male}</div>
+            </div>
+            <div class="card">
+                <div class="cardTitle">Total Female</div>
+                <div class="cardValue">${grand.female}</div>
+            </div>
+            <div class="card">
+                <div class="cardTitle">Total Income</div>
+                <div class="cardValue">${grand.income.toFixed(2)}</div>
+            </div>
+        </div>
 
-grouped[month].hospitals[hospital]={
-entries:0,
-male:0,
-female:0,
-requested:emptyComponent(),
-issued:emptyComponent()
-};
-
-}
-
-const m=grouped[month];
-const h=grouped[month].hospitals[hospital];
-
-m.totals.entries++;
-h.entries++;
-
-if(entry.sex==="MALE"){m.totals.male++;h.male++;}
-if(entry.sex==="FEMALE"){m.totals.female++;h.female++;}
-
-countComponents(m.totals.requested,entry.requests);
-countComponents(h.requested,entry.requests);
-
-countComponents(m.totals.issued,entry.issued);
-countComponents(h.issued,entry.issued);
-
-const income=(Number(entry.amountPaid||0)-Number(entry.discount||0));
-m.totals.income+=income;
-
-});
-
-return grouped;
-
+        <div class="doubleGrid">
+            ${smallComponentTable("GRAND TOTAL REQUESTED", grand.requested)}
+            ${smallComponentTable("GRAND TOTAL ISSUED", grand.issued)}
+        </div>
+    `;
 }
 
 function renderStatistics(){
+    const data = buildStats();
+    const stats = data.grouped;
+    const grand = data.grand;
 
-const stats=buildStats();
+    renderDashboard(grand);
+    statisticsContainer.innerHTML = "";
 
-container.innerHTML="";
+    const months = Object.keys(stats).sort().reverse();
 
-Object.keys(stats).sort().reverse().forEach(month=>{
+    if(months.length === 0){
+        statisticsContainer.innerHTML = "<p>No statistics found.</p>";
+        return;
+    }
 
-const data=stats[month];
+    months.forEach(month => {
+        const m = stats[month];
 
-const header=document.createElement("div");
-header.className="monthHeader";
-header.textContent=monthName(month);
+        const header = document.createElement("div");
+        header.className = "monthHeader";
+        header.textContent = monthName(month);
 
-const summary=document.createElement("div");
-summary.className="summaryBox";
+        const summary = document.createElement("div");
+        summary.className = "summaryBox";
+        summary.innerHTML = `
+            <b>PATIENTS:</b> ${m.totals.entries}
+            <br>
+            <b>MALE:</b> ${m.totals.male}
+            <br>
+            <b>FEMALE:</b> ${m.totals.female}
+            <br>
+            <b>MONTHLY INCOME:</b> ${m.totals.income.toFixed(2)}
+        `;
 
-summary.innerHTML=`
-<b>TOTAL PATIENTS:</b> ${data.totals.entries}
-<br>
-<b>MALE:</b> ${data.totals.male}
-<br>
-<b>FEMALE:</b> ${data.totals.female}
-<div class="incomeBox">
-TOTAL INCOME: ${data.totals.income.toFixed(2)}
-</div>
-`;
+        const table = document.createElement("table");
 
-const table=document.createElement("table");
+        table.innerHTML = `
+            <tr>
+                <th rowspan="2">HOSPITAL</th>
+                <th rowspan="2">PATIENTS</th>
+                <th rowspan="2">MALE</th>
+                <th rowspan="2">FEMALE</th>
+                <th colspan="5">REQUESTED</th>
+                <th colspan="5">ISSUED</th>
+            </tr>
 
-table.innerHTML=`
+            <tr class="subHeader">
+                <th>WB</th>
+                <th>PRBC</th>
+                <th>PC</th>
+                <th>FFP</th>
+                <th>CRYO</th>
 
-<tr>
-<th rowspan="2">HOSPITAL</th>
-<th rowspan="2">PATIENTS</th>
-<th rowspan="2">MALE</th>
-<th rowspan="2">FEMALE</th>
+                <th>WB</th>
+                <th>PRBC</th>
+                <th>PC</th>
+                <th>FFP</th>
+                <th>CRYO</th>
+            </tr>
+        `;
 
-<th colspan="5">REQUESTED</th>
-<th colspan="5">ISSUED</th>
-</tr>
+        Object.keys(m.hospitals).sort().forEach(hospital => {
+            const s = m.hospitals[hospital];
 
-<tr class="subHeader">
-<th>WB</th>
-<th>PRBC</th>
-<th>PC</th>
-<th>FFP</th>
-<th>CRYO</th>
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td class="left">${hospital}</td>
+                <td>${s.entries}</td>
+                <td>${s.male}</td>
+                <td>${s.female}</td>
 
-<th>WB</th>
-<th>PRBC</th>
-<th>PC</th>
-<th>FFP</th>
-<th>CRYO</th>
-</tr>
+                <td>${s.requested.WB}</td>
+                <td>${s.requested.PRBC}</td>
+                <td>${s.requested.PC}</td>
+                <td>${s.requested.FFP}</td>
+                <td>${s.requested.CRYO}</td>
 
-`;
+                <td>${s.issued.WB}</td>
+                <td>${s.issued.PRBC}</td>
+                <td>${s.issued.PC}</td>
+                <td>${s.issued.FFP}</td>
+                <td>${s.issued.CRYO}</td>
+            `;
+            table.appendChild(row);
+        });
 
-Object.keys(data.hospitals).sort().forEach(hospital=>{
+        const totalRow = document.createElement("tr");
+        totalRow.className = "totalRow";
+        totalRow.innerHTML = `
+            <td class="left">TOTAL</td>
+            <td>${m.totals.entries}</td>
+            <td>${m.totals.male}</td>
+            <td>${m.totals.female}</td>
 
-const s=data.hospitals[hospital];
+            <td>${m.totals.requested.WB}</td>
+            <td>${m.totals.requested.PRBC}</td>
+            <td>${m.totals.requested.PC}</td>
+            <td>${m.totals.requested.FFP}</td>
+            <td>${m.totals.requested.CRYO}</td>
 
-const row=document.createElement("tr");
+            <td>${m.totals.issued.WB}</td>
+            <td>${m.totals.issued.PRBC}</td>
+            <td>${m.totals.issued.PC}</td>
+            <td>${m.totals.issued.FFP}</td>
+            <td>${m.totals.issued.CRYO}</td>
+        `;
+        table.appendChild(totalRow);
 
-row.innerHTML=`
-
-<td class="left">${hospital}</td>
-<td>${s.entries}</td>
-<td>${s.male}</td>
-<td>${s.female}</td>
-
-<td>${s.requested.WB}</td>
-<td>${s.requested.PRBC}</td>
-<td>${s.requested.PC}</td>
-<td>${s.requested.FFP}</td>
-<td>${s.requested.CRYO}</td>
-
-<td>${s.issued.WB}</td>
-<td>${s.issued.PRBC}</td>
-<td>${s.issued.PC}</td>
-<td>${s.issued.FFP}</td>
-<td>${s.issued.CRYO}</td>
-
-`;
-
-table.appendChild(row);
-
-});
-
-container.appendChild(header);
-container.appendChild(summary);
-container.appendChild(table);
-
-});
-
+        statisticsContainer.appendChild(header);
+        statisticsContainer.appendChild(summary);
+        statisticsContainer.appendChild(table);
+    });
 }
 
 function exportCSV(){
+    const data = buildStats();
+    const stats = data.grouped;
 
-const stats=buildStats();
+    let rows = [[
+        "MONTH","HOSPITAL","PATIENTS","MALE","FEMALE",
+        "WB_REQ","PRBC_REQ","PC_REQ","FFP_REQ","CRYO_REQ",
+        "WB_ISS","PRBC_ISS","PC_ISS","FFP_ISS","CRYO_ISS","MONTHLY_INCOME"
+    ]];
 
-let rows=[["MONTH","HOSPITAL","PATIENTS","MALE","FEMALE","WB_REQ","PRBC_REQ","PC_REQ","FFP_REQ","CRYO_REQ","WB_ISS","PRBC_ISS","PC_ISS","FFP_ISS","CRYO_ISS"]];
+    Object.keys(stats).sort().reverse().forEach(month => {
+        const hospitals = stats[month].hospitals;
 
-Object.keys(stats).forEach(month=>{
+        Object.keys(hospitals).sort().forEach(hospital => {
+            const s = hospitals[hospital];
+            rows.push([
+                monthName(month),
+                hospital,
+                s.entries,
+                s.male,
+                s.female,
+                s.requested.WB,
+                s.requested.PRBC,
+                s.requested.PC,
+                s.requested.FFP,
+                s.requested.CRYO,
+                s.issued.WB,
+                s.issued.PRBC,
+                s.issued.PC,
+                s.issued.FFP,
+                s.issued.CRYO,
+                stats[month].totals.income.toFixed(2)
+            ]);
+        });
 
-const hospitals=stats[month].hospitals;
+        rows.push([
+            monthName(month),
+            "TOTAL",
+            stats[month].totals.entries,
+            stats[month].totals.male,
+            stats[month].totals.female,
+            stats[month].totals.requested.WB,
+            stats[month].totals.requested.PRBC,
+            stats[month].totals.requested.PC,
+            stats[month].totals.requested.FFP,
+            stats[month].totals.requested.CRYO,
+            stats[month].totals.issued.WB,
+            stats[month].totals.issued.PRBC,
+            stats[month].totals.issued.PC,
+            stats[month].totals.issued.FFP,
+            stats[month].totals.issued.CRYO,
+            stats[month].totals.income.toFixed(2)
+        ]);
+    });
 
-Object.keys(hospitals).forEach(hospital=>{
-
-const s=hospitals[hospital];
-
-rows.push([
-monthName(month),
-hospital,
-s.entries,
-s.male,
-s.female,
-s.requested.WB,
-s.requested.PRBC,
-s.requested.PC,
-s.requested.FFP,
-s.requested.CRYO,
-s.issued.WB,
-s.issued.PRBC,
-s.issued.PC,
-s.issued.FFP,
-s.issued.CRYO
-]);
-
-});
-
-});
-
-const csv=rows.map(r=>r.join(",")).join("\n");
-
-const blob=new Blob([csv],{type:"text/csv"});
-const link=document.createElement("a");
-
-link.href=URL.createObjectURL(blob);
-link.download="releasing_statistics.csv";
-link.click();
-
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "releasing_statistics.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
-monthFilter.addEventListener("change",renderStatistics);
-hospitalSearch.addEventListener("input",renderStatistics);
+monthFilter.addEventListener("change", renderStatistics);
+hospitalSearch.addEventListener("input", renderStatistics);
 
-window.goBack=function(){
-window.location.href="releasing.html";
-}
-
+window.goBack = function(){
+    window.location.href = "releasing.html";
+};
 </script>
 
 </body>
