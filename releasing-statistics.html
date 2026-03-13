@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Releasing Statistics</title>
+<title>Blood Releasing Statistics</title>
 <meta charset="UTF-8">
 
 <style>
@@ -88,13 +88,12 @@ background:#00897b;
 color:white;
 }
 
-.left{
-text-align:left;
+.subHeader{
+background:#b2dfdb;
+font-weight:bold;
 }
 
-.componentBox{
-font-size:13px;
-line-height:1.5;
+.left{
 text-align:left;
 }
 
@@ -124,9 +123,9 @@ color:#00695c;
 
 <input type="text" id="hospitalSearch" placeholder="SEARCH HOSPITAL">
 
-<button class="printBtn" id="printBtn">PRINT</button>
-<button class="exportBtn" id="exportBtn">EXPORT CSV</button>
-<button class="backBtn" id="backBtn">BACK</button>
+<button class="printBtn" onclick="window.print()">PRINT</button>
+<button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
+<button class="backBtn" onclick="goBack()">BACK</button>
 
 </div>
 
@@ -140,11 +139,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-
 apiKey:"YOUR-API-KEY",
 databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
 projectId:"galloners-club"
-
 };
 
 const app=initializeApp(firebaseConfig);
@@ -155,8 +152,6 @@ const monthFilter=document.getElementById("monthFilter");
 const hospitalSearch=document.getElementById("hospitalSearch");
 
 let allEntries=[];
-
-/* LIVE LOAD FROM FIREBASE */
 
 onValue(ref(db,"releasing"),snapshot=>{
 
@@ -173,9 +168,6 @@ populateMonthFilter();
 renderStatistics();
 
 });
-
-
-/* MONTH TEXT */
 
 function monthName(monthKey){
 
@@ -199,9 +191,6 @@ return months[month]+" "+year;
 
 }
 
-
-/* COMPONENT COUNT */
-
 function emptyComponent(){
 return {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
 }
@@ -222,9 +211,6 @@ store[type]+=qty;
 
 }
 
-
-/* MONTH FILTER */
-
 function populateMonthFilter(){
 
 const months=[...new Set(allEntries.map(e=>e.date.slice(0,7)))].sort().reverse();
@@ -239,9 +225,6 @@ monthFilter.appendChild(opt);
 });
 
 }
-
-
-/* BUILD STATS */
 
 function buildStats(){
 
@@ -310,9 +293,6 @@ return grouped;
 
 }
 
-
-/* RENDER */
-
 function renderStatistics(){
 
 const stats=buildStats();
@@ -331,30 +311,44 @@ const summary=document.createElement("div");
 summary.className="summaryBox";
 
 summary.innerHTML=`
-
 <b>TOTAL PATIENTS:</b> ${data.totals.entries}
 <br>
 <b>MALE:</b> ${data.totals.male}
 <br>
 <b>FEMALE:</b> ${data.totals.female}
-
 <div class="incomeBox">
 TOTAL INCOME: ${data.totals.income.toFixed(2)}
 </div>
-
 `;
 
 const table=document.createElement("table");
 
 table.innerHTML=`
+
 <tr>
-<th>HOSPITAL</th>
-<th>PATIENTS</th>
-<th>MALE</th>
-<th>FEMALE</th>
-<th>REQUESTED</th>
-<th>ISSUED</th>
+<th rowspan="2">HOSPITAL</th>
+<th rowspan="2">PATIENTS</th>
+<th rowspan="2">MALE</th>
+<th rowspan="2">FEMALE</th>
+
+<th colspan="5">REQUESTED</th>
+<th colspan="5">ISSUED</th>
 </tr>
+
+<tr class="subHeader">
+<th>WB</th>
+<th>PRBC</th>
+<th>PC</th>
+<th>FFP</th>
+<th>CRYO</th>
+
+<th>WB</th>
+<th>PRBC</th>
+<th>PC</th>
+<th>FFP</th>
+<th>CRYO</th>
+</tr>
+
 `;
 
 Object.keys(data.hospitals).sort().forEach(hospital=>{
@@ -370,21 +364,17 @@ row.innerHTML=`
 <td>${s.male}</td>
 <td>${s.female}</td>
 
-<td class="componentBox">
-WB:${s.requested.WB}<br>
-PRBC:${s.requested.PRBC}<br>
-PC:${s.requested.PC}<br>
-FFP:${s.requested.FFP}<br>
-CRYO:${s.requested.CRYO}
-</td>
+<td>${s.requested.WB}</td>
+<td>${s.requested.PRBC}</td>
+<td>${s.requested.PC}</td>
+<td>${s.requested.FFP}</td>
+<td>${s.requested.CRYO}</td>
 
-<td class="componentBox">
-WB:${s.issued.WB}<br>
-PRBC:${s.issued.PRBC}<br>
-PC:${s.issued.PC}<br>
-FFP:${s.issued.FFP}<br>
-CRYO:${s.issued.CRYO}
-</td>
+<td>${s.issued.WB}</td>
+<td>${s.issued.PRBC}</td>
+<td>${s.issued.PC}</td>
+<td>${s.issued.FFP}</td>
+<td>${s.issued.CRYO}</td>
 
 `;
 
@@ -399,9 +389,6 @@ container.appendChild(table);
 });
 
 }
-
-
-/* EXPORT CSV */
 
 function exportCSV(){
 
@@ -450,15 +437,12 @@ link.click();
 
 }
 
-
-/* EVENTS */
-
 monthFilter.addEventListener("change",renderStatistics);
 hospitalSearch.addEventListener("input",renderStatistics);
 
-document.getElementById("printBtn").onclick=()=>window.print();
-document.getElementById("exportBtn").onclick=exportCSV;
-document.getElementById("backBtn").onclick=()=>window.location.href="releasing.html";
+window.goBack=function(){
+window.location.href="releasing.html";
+}
 
 </script>
 
