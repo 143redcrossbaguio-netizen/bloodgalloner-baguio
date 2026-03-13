@@ -5,7 +5,6 @@
 <meta charset="UTF-8">
 
 <style>
-
 body{
 margin:0;
 font-family:Arial;
@@ -56,6 +55,7 @@ color:white;
 table{
 width:100%;
 border-collapse:collapse;
+margin-top:10px;
 }
 
 th,td{
@@ -94,8 +94,15 @@ padding:10px;
 margin-top:20px;
 font-weight:bold;
 font-size:16px;
+border-radius:5px;
 }
 
+.emptyMessage{
+padding:20px;
+text-align:center;
+font-weight:bold;
+color:#666;
+}
 </style>
 </head>
 
@@ -108,19 +115,15 @@ font-size:16px;
 <div class="container">
 
 <div class="controls">
-
 <input type="text" id="searchBox" placeholder="Search Name / Facility">
-
 <input type="date" id="filterDate">
 
 <select id="filterFacility">
 <option value="">ALL FACILITIES</option>
 </select>
 
-<button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
-
-<button class="backBtn" onclick="goBack()">BACK</button>
-
+<button class="exportBtn" id="exportBtn">EXPORT CSV</button>
+<button class="backBtn" id="backBtn">BACK</button>
 </div>
 
 <div id="tableContainer"></div>
@@ -128,251 +131,266 @@ font-size:16px;
 </div>
 
 <script type="module">
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-
-apiKey:"YOUR-API-KEY",
-databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-projectId:"galloners-club"
-
+  apiKey:"YOUR-API-KEY",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club"
 };
 
-const app=initializeApp(firebaseConfig);
-const db=getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-const container=document.getElementById("tableContainer");
-const searchBox=document.getElementById("searchBox");
-const filterDate=document.getElementById("filterDate");
-const filterFacility=document.getElementById("filterFacility");
+const container = document.getElementById("tableContainer");
+const searchBox = document.getElementById("searchBox");
+const filterDate = document.getElementById("filterDate");
+const filterFacility = document.getElementById("filterFacility");
+const exportBtn = document.getElementById("exportBtn");
+const backBtn = document.getElementById("backBtn");
 
-let allEntries=[];
+let allEntries = [];
 
-onValue(ref(db,"releasing"),snapshot=>{
+/* LOAD DATA LIVE FROM FIREBASE */
+onValue(ref(db,"releasing"), snapshot => {
+  allEntries = [];
 
-allEntries=[];
+  snapshot.forEach(child => {
+    allEntries.push({
+      id: child.key,
+      ...child.val()
+    });
+  });
 
-snapshot.forEach(child=>{
-allEntries.push({
-id:child.key,
-...child.val()
+  populateFacilityFilter();
+  renderTable();
 });
-});
 
-populateFacilityFilter();
-renderTable();
-
-});
-
-
+/* FACILITY FILTER */
 function populateFacilityFilter(){
+  const currentValue = filterFacility.value;
+  const facilities = [...new Set(
+    allEntries
+      .map(e => (e.facility || "").trim())
+      .filter(Boolean)
+  )].sort();
 
-const facilities=[...new Set(allEntries.map(e=>e.facility))];
+  filterFacility.innerHTML = '<option value="">ALL FACILITIES</option>';
 
-filterFacility.innerHTML='<option value="">ALL FACILITIES</option>';
+  facilities.forEach(f => {
+    const option = document.createElement("option");
+    option.value = f;
+    option.textContent = f;
+    filterFacility.appendChild(option);
+  });
 
-facilities.forEach(f=>{
-const option=document.createElement("option");
-option.value=f;
-option.textContent=f;
-filterFacility.appendChild(option);
-});
-
+  if(facilities.includes(currentValue)){
+    filterFacility.value = currentValue;
+  }
 }
 
-
+/* FORMAT COMPONENT LIST */
 function formatComponents(list){
+  if(!Array.isArray(list) || list.length === 0) return "";
 
-if(!list || list.length===0) return "";
-
-let text="";
-
-list.forEach(item=>{
-text+=item.type+" - "+item.qty+"<br>";
-});
-
-return text;
-
+  return list
+    .map(item => `${item.type || ""} - ${item.qty || ""}`)
+    .join("<br>");
 }
 
+/* FILTER CURRENT DATA */
+function getFilteredEntries(){
+  const search = searchBox.value.trim().toUpperCase();
+  const dateValue = filterDate.value;
+  const facilityValue = filterFacility.value;
 
+  let filtered = allEntries.filter(entry => {
+    const fullName = `${entry.surname || ""} ${entry.firstname || ""}`.toUpperCase();
+    const facility = (entry.facility || "").toUpperCase();
+    const date = entry.date || "";
+
+    const matchSearch =
+      search === "" ||
+      fullName.includes(search) ||
+      facility.includes(search);
+
+    const matchDate =
+      dateValue === "" ||
+      date === dateValue;
+
+    const matchFacility =
+      facilityValue === "" ||
+      entry.facility === facilityValue;
+
+    return matchSearch && matchDate && matchFacility;
+  });
+
+  filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+  return filtered;
+}
+
+/* RENDER TABLE */
 function renderTable(){
+  const filtered = getFilteredEntries();
 
-const search=searchBox.value.toUpperCase();
-const dateFilter=filterDate.value;
-const facilityFilter=filterFacility.value;
+  if(filtered.length === 0){
+    container.innerHTML = '<div class="emptyMessage">No records found.</div>';
+    return;
+  }
 
-let filtered=allEntries.filter(e=>{
+  const grouped = {};
 
-const name=(e.surname+" "+e.firstname).toUpperCase();
-const facility=(e.facility||"").toUpperCase();
+  filtered.forEach(entry => {
+    const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
+    if(!grouped[month]) grouped[month] = [];
+    grouped[month].push(entry);
+  });
 
-const matchSearch=
-name.includes(search) ||
-facility.includes(search);
+  container.innerHTML = "";
 
-const matchDate=
-dateFilter==="" ||
-e.date===dateFilter;
+  Object.keys(grouped).sort().reverse().forEach(month => {
+    const monthHeader = document.createElement("div");
+    monthHeader.className = "monthHeader";
+    monthHeader.textContent = month;
+    container.appendChild(monthHeader);
 
-const matchFacility=
-facilityFilter==="" ||
-e.facility===facilityFilter;
+    const table = document.createElement("table");
 
-return matchSearch && matchDate && matchFacility;
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>FACILITY</th>
+          <th>SURNAME</th>
+          <th>FIRST NAME</th>
+          <th>AGE</th>
+          <th>SEX</th>
+          <th>BLOOD</th>
+          <th>REQUESTED</th>
+          <th>ISSUED</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
 
+    const tbody = table.querySelector("tbody");
+
+    grouped[month].forEach(entry => {
+      const row = document.createElement("tr");
+
+      row.innerHTML = `
+        <td>${entry.date || ""}</td>
+        <td>${entry.facility || ""}</td>
+        <td>${entry.surname || ""}</td>
+        <td>${entry.firstname || ""}</td>
+        <td>${entry.age || ""}</td>
+        <td>${entry.sex || ""}</td>
+        <td>${entry.bloodtype || ""}</td>
+
+        <td class="componentBox">
+          ${formatComponents(entry.requests)}
+        </td>
+
+        <td class="componentBox">
+          ${formatComponents(entry.issued)}
+        </td>
+
+        <td>
+          <button class="actionBtn editBtn" data-action="edit" data-id="${entry.id}">EDIT</button>
+          <button class="actionBtn deleteBtn" data-action="delete" data-id="${entry.id}">DELETE</button>
+        </td>
+      `;
+
+      tbody.appendChild(row);
+    });
+
+    container.appendChild(table);
+  });
+}
+
+/* TABLE BUTTON EVENTS */
+container.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if(!button) return;
+
+  const action = button.dataset.action;
+  const id = button.dataset.id;
+
+  if(!action || !id) return;
+
+  if(action === "edit"){
+    window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
+    return;
+  }
+
+  if(action === "delete"){
+    const confirmed = confirm("Delete this entry?");
+    if(!confirmed) return;
+
+    try{
+      await remove(ref(db, "releasing/" + id));
+      alert("Deleted successfully!");
+    }catch(error){
+      console.error("Delete error:", error);
+      alert("Failed to delete entry");
+    }
+  }
 });
 
-filtered.sort((a,b)=>b.date.localeCompare(a.date));
+/* EXPORT CSV */
+function exportCSV(){
+  const filtered = getFilteredEntries();
 
-const grouped={};
+  let rows = [
+    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","REQUESTED","ISSUED"]
+  ];
 
-filtered.forEach(entry=>{
-const month=entry.date.slice(0,7);
+  filtered.forEach(e => {
+    const req = (Array.isArray(e.requests) ? e.requests : [])
+      .map(r => `${r.type || ""}-${r.qty || ""}`)
+      .join("|");
 
-if(!grouped[month]) grouped[month]=[];
+    const iss = (Array.isArray(e.issued) ? e.issued : [])
+      .map(r => `${r.type || ""}-${r.qty || ""}`)
+      .join("|");
 
-grouped[month].push(entry);
+    rows.push([
+      e.date || "",
+      e.facility || "",
+      e.surname || "",
+      e.firstname || "",
+      e.age || "",
+      e.sex || "",
+      e.bloodtype || "",
+      req,
+      iss
+    ]);
+  });
 
+  const csv = rows.map(row =>
+    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "releasing_records.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/* CONTROL EVENTS */
+searchBox.addEventListener("input", renderTable);
+filterDate.addEventListener("change", renderTable);
+filterFacility.addEventListener("change", renderTable);
+
+exportBtn.addEventListener("click", exportCSV);
+backBtn.addEventListener("click", () => {
+  window.location.href = "releasing.html";
 });
-
-container.innerHTML="";
-
-Object.keys(grouped).sort().reverse().forEach(month=>{
-
-const monthHeader=document.createElement("div");
-monthHeader.className="monthHeader";
-monthHeader.textContent=month;
-container.appendChild(monthHeader);
-
-const table=document.createElement("table");
-
-table.innerHTML=`
-<tr>
-<th>DATE</th>
-<th>FACILITY</th>
-<th>SURNAME</th>
-<th>FIRST NAME</th>
-<th>AGE</th>
-<th>SEX</th>
-<th>BLOOD</th>
-<th>REQUESTED</th>
-<th>ISSUED</th>
-<th>ACTION</th>
-</tr>
-`;
-
-grouped[month].forEach(entry=>{
-
-const row=document.createElement("tr");
-
-row.innerHTML=`
-
-<td>${entry.date}</td>
-<td>${entry.facility}</td>
-<td>${entry.surname}</td>
-<td>${entry.firstname}</td>
-<td>${entry.age}</td>
-<td>${entry.sex}</td>
-<td>${entry.bloodtype}</td>
-
-<td class="componentBox">
-${formatComponents(entry.requests)}
-</td>
-
-<td class="componentBox">
-${formatComponents(entry.issued)}
-</td>
-
-<td>
-
-<button class="actionBtn editBtn" onclick="editEntry('${entry.id}')">
-EDIT
-</button>
-
-<button class="actionBtn deleteBtn" onclick="deleteEntry('${entry.id}')">
-DELETE
-</button>
-
-</td>
-
-`;
-
-table.appendChild(row);
-
-});
-
-container.appendChild(table);
-
-});
-
-}
-
-
-window.editEntry=function(id){
-window.location.href="releasing-entry.html?id="+id;
-}
-
-
-window.deleteEntry=function(id){
-
-if(confirm("Delete this entry?")){
-
-remove(ref(db,"releasing/"+id));
-
-}
-
-}
-
-
-window.exportCSV=function(){
-
-let rows=[
-["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","REQUESTED","ISSUED"]
-];
-
-allEntries.forEach(e=>{
-
-const req=(e.requests||[]).map(r=>r.type+"-"+r.qty).join("|");
-const iss=(e.issued||[]).map(r=>r.type+"-"+r.qty).join("|");
-
-rows.push([
-e.date,
-e.facility,
-e.surname,
-e.firstname,
-e.age,
-e.sex,
-e.bloodtype,
-req,
-iss
-]);
-
-});
-
-const csv=rows.map(r=>r.join(",")).join("\n");
-
-const blob=new Blob([csv],{type:"text/csv"});
-const link=document.createElement("a");
-
-link.href=URL.createObjectURL(blob);
-link.download="releasing_records.csv";
-link.click();
-
-}
-
-
-searchBox.addEventListener("input",renderTable);
-filterDate.addEventListener("change",renderTable);
-filterFacility.addEventListener("change",renderTable);
-
-
-window.goBack=function(){
-window.location.href="releasing.html";
-}
-
 </script>
 
 </body>
