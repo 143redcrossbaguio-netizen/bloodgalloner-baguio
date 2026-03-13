@@ -39,15 +39,25 @@ input,select{
     margin-top:5px;
     border:1px solid #ccc;
     border-radius:5px;
+    box-sizing:border-box;
 }
 
 .row{
     display:flex;
     gap:10px;
+    align-items:flex-end;
+    margin-top:5px;
 }
 
 .row select{flex:2}
 .row input{flex:1}
+
+.row button{
+    width:auto;
+    min-width:45px;
+    padding:10px;
+    margin-top:0;
+}
 
 button{
     width:100%;
@@ -62,6 +72,8 @@ button{
 .save{background:#ff9800;color:white}
 .facilityBtn{background:#2e7d32;color:white}
 .back{background:#444;color:white}
+.addBtn{background:#2e7d32;color:white}
+.removeBtn{background:#c62828;color:white}
 </style>
 </head>
 
@@ -115,27 +127,33 @@ button{
 <input type="text" id="or">
 
 <label>7. REQUEST</label>
-<div class="row">
-<select id="request">
-<option>WB</option>
-<option>PRBC</option>
-<option>PC</option>
-<option>FFP</option>
-<option>CRYO</option>
-</select>
-<input type="number" id="requestQty" placeholder="Qty">
+<div id="requestContainer">
+    <div class="row requestRow">
+        <select class="requestType">
+            <option>WB</option>
+            <option>PRBC</option>
+            <option>PC</option>
+            <option>FFP</option>
+            <option>CRYO</option>
+        </select>
+        <input type="number" class="requestQty" placeholder="Qty">
+        <button type="button" class="addBtn" onclick="addRequest()">+</button>
+    </div>
 </div>
 
 <label>8. ISSUED</label>
-<div class="row">
-<select id="issued">
-<option>WB</option>
-<option>PRBC</option>
-<option>PC</option>
-<option>FFP</option>
-<option>CRYO</option>
-</select>
-<input type="number" id="issuedQty" placeholder="Qty">
+<div id="issuedContainer">
+    <div class="row issuedRow">
+        <select class="issuedType">
+            <option>WB</option>
+            <option>PRBC</option>
+            <option>PC</option>
+            <option>FFP</option>
+            <option>CRYO</option>
+        </select>
+        <input type="number" class="issuedQty" placeholder="Qty">
+        <button type="button" class="addBtn" onclick="addIssued()">+</button>
+    </div>
 </div>
 
 <label>9. AMOUNT PAID</label>
@@ -182,6 +200,44 @@ onValue(ref(db, "facilities"), (snapshot) => {
   });
 });
 
+/* ADD REQUEST ROW */
+window.addRequest = function(){
+  const container = document.getElementById("requestContainer");
+  const row = document.createElement("div");
+  row.className = "row requestRow";
+  row.innerHTML = `
+    <select class="requestType">
+        <option>WB</option>
+        <option>PRBC</option>
+        <option>PC</option>
+        <option>FFP</option>
+        <option>CRYO</option>
+    </select>
+    <input type="number" class="requestQty" placeholder="Qty">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+};
+
+/* ADD ISSUED ROW */
+window.addIssued = function(){
+  const container = document.getElementById("issuedContainer");
+  const row = document.createElement("div");
+  row.className = "row issuedRow";
+  row.innerHTML = `
+    <select class="issuedType">
+        <option>WB</option>
+        <option>PRBC</option>
+        <option>PC</option>
+        <option>FFP</option>
+        <option>CRYO</option>
+    </select>
+    <input type="number" class="issuedQty" placeholder="Qty">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+};
+
 /* LOAD ENTRY FOR EDIT */
 if(editId){
   get(ref(db, "releasing/" + editId)).then((snapshot) => {
@@ -196,18 +252,110 @@ if(editId){
       document.getElementById("sex").value = entry.sex || "";
       document.getElementById("bloodtype").value = entry.bloodtype || "";
       document.getElementById("or").value = entry.or || "";
-      document.getElementById("request").value = entry.request || "WB";
-      document.getElementById("requestQty").value = entry.requestQty || "";
-      document.getElementById("issued").value = entry.issued || "WB";
-      document.getElementById("issuedQty").value = entry.issuedQty || "";
       document.getElementById("amountPaid").value = entry.amountPaid || "";
       document.getElementById("discount").value = entry.discount || "";
+
+      const requestContainer = document.getElementById("requestContainer");
+      const issuedContainer = document.getElementById("issuedContainer");
+
+      requestContainer.innerHTML = "";
+      issuedContainer.innerHTML = "";
+
+      if(entry.requests && Array.isArray(entry.requests) && entry.requests.length > 0){
+        entry.requests.forEach((item, index) => {
+          const row = document.createElement("div");
+          row.className = "row requestRow";
+          row.innerHTML = `
+            <select class="requestType">
+                <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+                <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+                <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+                <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+                <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+            </select>
+            <input type="number" class="requestQty" placeholder="Qty" value="${item.qty || ""}">
+            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addRequest()" : "this.parentElement.remove()"}">${index===0 ? "+" : "-"}</button>
+          `;
+          requestContainer.appendChild(row);
+        });
+      } else {
+        requestContainer.innerHTML = `
+          <div class="row requestRow">
+              <select class="requestType">
+                  <option>WB</option>
+                  <option>PRBC</option>
+                  <option>PC</option>
+                  <option>FFP</option>
+                  <option>CRYO</option>
+              </select>
+              <input type="number" class="requestQty" placeholder="Qty">
+              <button type="button" class="addBtn" onclick="addRequest()">+</button>
+          </div>
+        `;
+      }
+
+      if(entry.issued && Array.isArray(entry.issued) && entry.issued.length > 0){
+        entry.issued.forEach((item, index) => {
+          const row = document.createElement("div");
+          row.className = "row issuedRow";
+          row.innerHTML = `
+            <select class="issuedType">
+                <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+                <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+                <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+                <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+                <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+            </select>
+            <input type="number" class="issuedQty" placeholder="Qty" value="${item.qty || ""}">
+            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addIssued()" : "this.parentElement.remove()"}">${index===0 ? "+" : "-"}</button>
+          `;
+          issuedContainer.appendChild(row);
+        });
+      } else {
+        issuedContainer.innerHTML = `
+          <div class="row issuedRow">
+              <select class="issuedType">
+                  <option>WB</option>
+                  <option>PRBC</option>
+                  <option>PC</option>
+                  <option>FFP</option>
+                  <option>CRYO</option>
+              </select>
+              <input type="number" class="issuedQty" placeholder="Qty">
+              <button type="button" class="addBtn" onclick="addIssued()">+</button>
+          </div>
+        `;
+      }
     }
   });
 }
 
 /* SAVE ENTRY */
 saveBtn.addEventListener("click", async () => {
+  const requests = [];
+  document.querySelectorAll(".requestRow").forEach(row => {
+    const type = row.querySelector(".requestType").value;
+    const qty = row.querySelector(".requestQty").value;
+    if(qty !== ""){
+      requests.push({
+        type: type,
+        qty: qty
+      });
+    }
+  });
+
+  const issued = [];
+  document.querySelectorAll(".issuedRow").forEach(row => {
+    const type = row.querySelector(".issuedType").value;
+    const qty = row.querySelector(".issuedQty").value;
+    if(qty !== ""){
+      issued.push({
+        type: type,
+        qty: qty
+      });
+    }
+  });
+
   const entryData = {
     date: document.getElementById("date").value,
     facility: document.getElementById("facility").value.toUpperCase(),
@@ -217,10 +365,8 @@ saveBtn.addEventListener("click", async () => {
     sex: document.getElementById("sex").value,
     bloodtype: document.getElementById("bloodtype").value,
     or: document.getElementById("or").value.toUpperCase(),
-    request: document.getElementById("request").value,
-    requestQty: document.getElementById("requestQty").value,
-    issued: document.getElementById("issued").value,
-    issuedQty: document.getElementById("issuedQty").value,
+    requests: requests,
+    issued: issued,
     amountPaid: document.getElementById("amountPaid").value,
     discount: document.getElementById("discount").value
   };
@@ -244,11 +390,11 @@ saveBtn.addEventListener("click", async () => {
 /* NAVIGATION */
 window.goFacilityManager = function(){
   window.location.href = "facility-manager.html";
-}
+};
 
 window.goBack = function(){
   window.location.href = "releasing.html";
-}
+};
 </script>
 
 </body>
