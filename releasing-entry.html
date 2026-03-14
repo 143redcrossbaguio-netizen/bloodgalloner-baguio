@@ -74,6 +74,83 @@ button{
 .back{background:#444;color:white}
 .addBtn{background:#2e7d32;color:white}
 .removeBtn{background:#c62828;color:white}
+
+/* BLOOD AUGMENTATION */
+.augmentationToggle{
+    position:fixed;
+    right:15px;
+    top:120px;
+    width:auto;
+    padding:12px 16px;
+    background:#1565c0;
+    color:white;
+    border:none;
+    border-radius:8px;
+    font-weight:bold;
+    z-index:1000;
+    box-shadow:0 3px 10px rgba(0,0,0,0.2);
+}
+
+.augmentationPanel{
+    position:fixed;
+    top:0;
+    right:-520px;
+    width:500px;
+    height:100%;
+    background:white;
+    box-shadow:-3px 0 12px rgba(0,0,0,0.2);
+    transition:right 0.3s ease;
+    z-index:999;
+    overflow:auto;
+    padding:20px;
+    box-sizing:border-box;
+}
+
+.augmentationPanel.open{
+    right:0;
+}
+
+.augmentationHeader{
+    background:#1565c0;
+    color:white;
+    padding:12px;
+    border-radius:8px;
+    text-align:center;
+    font-weight:bold;
+    margin-bottom:15px;
+}
+
+.augmentationCard{
+    border:1px solid #ccc;
+    border-radius:8px;
+    padding:15px;
+    margin-top:15px;
+    background:#fafafa;
+}
+
+.innerBox{
+    border:1px solid #ddd;
+    border-radius:6px;
+    padding:10px;
+    margin-top:10px;
+    background:white;
+}
+
+.smallBtn{
+    width:auto;
+    padding:8px 12px;
+    margin-top:10px;
+    border:none;
+    border-radius:5px;
+    font-weight:bold;
+    cursor:pointer;
+    color:white;
+}
+
+.blueBtn{background:#1565c0;}
+.greenBtn{background:#2e7d32;}
+.redBtn{background:#c62828;}
+.grayBtn{background:#444;}
 </style>
 </head>
 
@@ -82,6 +159,8 @@ button{
 <header>
 <h2>Blood Releasing Entry</h2>
 </header>
+
+<button class="augmentationToggle" onclick="toggleAugmentation()">BLOOD AUGMENTATION</button>
 
 <div class="container">
 
@@ -167,6 +246,23 @@ button{
 
 </div>
 
+<!-- BLOOD AUGMENTATION PANEL -->
+<div id="augmentationPanel" class="augmentationPanel">
+    <div class="augmentationHeader">BLOOD AUGMENTATION</div>
+
+    <label>DATE</label>
+    <input type="date" id="augDate">
+
+    <label>FACILITY</label>
+    <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name">
+
+    <div id="augmentationBloodTypeContainer"></div>
+
+    <button class="greenBtn smallBtn" onclick="addAugmentationBloodType()">+ ADD BLOOD TYPE</button>
+    <button class="blueBtn smallBtn" onclick="saveAugmentation()">SAVE BLOOD AUGMENTATION</button>
+    <button class="grayBtn smallBtn" onclick="toggleAugmentation()">CLOSE</button>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -200,7 +296,7 @@ onValue(ref(db, "facilities"), (snapshot) => {
   });
 });
 
-/* ADD REQUEST ROW */
+/* MAIN ENTRY REQUEST */
 window.addRequest = function(){
   const container = document.getElementById("requestContainer");
   const row = document.createElement("div");
@@ -219,7 +315,6 @@ window.addRequest = function(){
   container.appendChild(row);
 };
 
-/* ADD ISSUED ROW */
 window.addIssued = function(){
   const container = document.getElementById("issuedContainer");
   const row = document.createElement("div");
@@ -238,7 +333,6 @@ window.addIssued = function(){
   container.appendChild(row);
 };
 
-/* RESET FORM */
 function resetForm(){
   document.getElementById("date").value = "";
   document.getElementById("facility").value = "";
@@ -372,17 +466,14 @@ if(editId){
   });
 }
 
-/* SAVE ENTRY */
+/* SAVE MAIN ENTRY */
 saveBtn.addEventListener("click", async () => {
   const requests = [];
   document.querySelectorAll(".requestRow").forEach(row => {
     const type = row.querySelector(".requestType").value;
     const qty = row.querySelector(".requestQty").value;
     if(qty !== ""){
-      requests.push({
-        type: type,
-        qty: qty
-      });
+      requests.push({ type, qty });
     }
   });
 
@@ -391,10 +482,7 @@ saveBtn.addEventListener("click", async () => {
     const type = row.querySelector(".issuedType").value;
     const qty = row.querySelector(".issuedQty").value;
     if(qty !== ""){
-      issued.push({
-        type: type,
-        qty: qty
-      });
+      issued.push({ type, qty });
     }
   });
 
@@ -428,6 +516,165 @@ saveBtn.addEventListener("click", async () => {
     alert("Failed to save entry");
   }
 });
+
+/* BLOOD AUGMENTATION PANEL */
+window.toggleAugmentation = function(){
+  document.getElementById("augmentationPanel").classList.toggle("open");
+};
+
+/* ADD BLOOD TYPE CARD */
+window.addAugmentationBloodType = function(){
+  const container = document.getElementById("augmentationBloodTypeContainer");
+  const index = Date.now();
+
+  const card = document.createElement("div");
+  card.className = "augmentationCard";
+  card.innerHTML = `
+    <div class="row">
+      <div style="flex:1">
+        <label>BLOOD TYPE</label>
+        <select class="augBloodType">
+          <option value="">Select</option>
+          <option>A+</option>
+          <option>A-</option>
+          <option>B+</option>
+          <option>B-</option>
+          <option>AB+</option>
+          <option>AB-</option>
+          <option>O+</option>
+          <option>O-</option>
+        </select>
+      </div>
+      <div>
+        <button type="button" class="removeBtn" onclick="this.closest('.augmentationCard').remove()">-</button>
+      </div>
+    </div>
+
+    <div class="innerBox">
+      <label>REQUESTED</label>
+      <div class="augRequestContainer">
+        <div class="row augRequestRow">
+          <select class="augRequestType">
+            <option>WB</option>
+            <option>PRBC</option>
+            <option>PC</option>
+            <option>FFP</option>
+            <option>CRYO</option>
+          </select>
+          <input type="number" class="augRequestQty" placeholder="Qty">
+          <button type="button" class="addBtn" onclick="addAugRequest(this)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="innerBox">
+      <label>ISSUED</label>
+      <div class="augIssuedContainer">
+        <div class="row augIssuedRow">
+          <select class="augIssuedType">
+            <option>WB</option>
+            <option>PRBC</option>
+            <option>PC</option>
+            <option>FFP</option>
+            <option>CRYO</option>
+          </select>
+          <input type="number" class="augIssuedQty" placeholder="Qty">
+          <button type="button" class="addBtn" onclick="addAugIssued(this)">+</button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.appendChild(card);
+};
+
+window.addAugRequest = function(button){
+  const container = button.closest(".innerBox").querySelector(".augRequestContainer");
+  const row = document.createElement("div");
+  row.className = "row augRequestRow";
+  row.innerHTML = `
+    <select class="augRequestType">
+      <option>WB</option>
+      <option>PRBC</option>
+      <option>PC</option>
+      <option>FFP</option>
+      <option>CRYO</option>
+    </select>
+    <input type="number" class="augRequestQty" placeholder="Qty">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+};
+
+window.addAugIssued = function(button){
+  const container = button.closest(".innerBox").querySelector(".augIssuedContainer");
+  const row = document.createElement("div");
+  row.className = "row augIssuedRow";
+  row.innerHTML = `
+    <select class="augIssuedType">
+      <option>WB</option>
+      <option>PRBC</option>
+      <option>PC</option>
+      <option>FFP</option>
+      <option>CRYO</option>
+    </select>
+    <input type="number" class="augIssuedQty" placeholder="Qty">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+};
+
+window.saveAugmentation = async function(){
+  const cards = document.querySelectorAll(".augmentationCard");
+  const bloodTypes = [];
+
+  cards.forEach(card => {
+    const bloodType = card.querySelector(".augBloodType").value;
+
+    const requests = [];
+    card.querySelectorAll(".augRequestRow").forEach(row => {
+      const type = row.querySelector(".augRequestType").value;
+      const qty = row.querySelector(".augRequestQty").value;
+      if(qty !== ""){
+        requests.push({ type, qty });
+      }
+    });
+
+    const issued = [];
+    card.querySelectorAll(".augIssuedRow").forEach(row => {
+      const type = row.querySelector(".augIssuedType").value;
+      const qty = row.querySelector(".augIssuedQty").value;
+      if(qty !== ""){
+        issued.push({ type, qty });
+      }
+    });
+
+    if(bloodType !== ""){
+      bloodTypes.push({
+        bloodType,
+        requests,
+        issued
+      });
+    }
+  });
+
+  const augmentationData = {
+    date: document.getElementById("augDate").value,
+    facility: document.getElementById("augFacility").value.toUpperCase(),
+    bloodTypes: bloodTypes
+  };
+
+  try{
+    await push(ref(db, "bloodAugmentation"), augmentationData);
+    alert("Blood augmentation saved successfully!");
+    document.getElementById("augDate").value = "";
+    document.getElementById("augFacility").value = "";
+    document.getElementById("augmentationBloodTypeContainer").innerHTML = "";
+    toggleAugmentation();
+  }catch(error){
+    console.error("Augmentation save error:", error);
+    alert("Failed to save blood augmentation");
+  }
+};
 
 /* NAVIGATION */
 window.goFacilityManager = function(){
