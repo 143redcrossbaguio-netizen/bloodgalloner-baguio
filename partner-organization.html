@@ -3,24 +3,132 @@
 <head>
     <title>Galloners Club - Partner Organization</title>
     <meta charset="UTF-8">
+
     <style>
-        body { margin:0; font-family:Arial; background:#f4f4f4; }
-        header { background:#b30000; color:white; padding:15px; text-align:center; }
-        .container { max-width:95%; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
-        input { padding:5px; margin:5px; }
-        button { padding:5px 10px; margin:5px; border:none; border-radius:4px; cursor:pointer; color:white; }
-        .add-btn { background:#b30000; }
-        .edit-btn { background:#1565c0; }
-        .delete-btn { background:#c62828; }
-        .print-btn { background:#444; }
-        .export-btn { background:#222; }
-        .view-btn { background:#6a1b9a; }
-        #dashboardBtn { background:#1e88e5; }
-        table { width:100%; border-collapse:collapse; margin-top:10px; }
-        th, td { padding:8px; border:1px solid #ddd; text-align:center; }
-        th { background:#b30000; color:white; }
-        .edit-row { background:#f9f9f9; }
-        .view-row { background:#f3f3f3; }
+        body{
+            margin:0;
+            font-family:Arial;
+            background:#f4f4f4;
+        }
+
+        header{
+            background:#b30000;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
+        .container{
+            max-width:95%;
+            margin:20px auto;
+            background:white;
+            padding:20px;
+            border-radius:10px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .top-controls{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center;
+            margin-bottom:15px;
+        }
+
+        .top-controls input{
+            padding:8px;
+            border:1px solid #ccc;
+            border-radius:5px;
+        }
+
+        .entry-box{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center;
+            margin-bottom:15px;
+        }
+
+        .entry-box input{
+            padding:8px;
+            border:1px solid #ccc;
+            border-radius:5px;
+        }
+
+        button{
+            padding:6px 10px;
+            margin:2px;
+            border:none;
+            border-radius:4px;
+            cursor:pointer;
+            color:white;
+            font-weight:bold;
+        }
+
+        .add-btn{ background:#b30000; }
+        .edit-btn{ background:#1565c0; }
+        .delete-btn{ background:#c62828; }
+        .print-btn{ background:#444; }
+        .export-btn{ background:#222; }
+        .view-btn{ background:#6a1b9a; }
+        #dashboardBtn{ background:#1e88e5; }
+        .save-inline-btn{ background:#2e7d32; }
+        .cancel-inline-btn{ background:#757575; }
+
+        table{
+            width:100%;
+            border-collapse:collapse;
+            margin-top:10px;
+        }
+
+        th, td{
+            padding:8px;
+            border:1px solid #ddd;
+            text-align:center;
+        }
+
+        th{
+            background:#b30000;
+            color:white;
+        }
+
+        .name-cell{
+            text-align:left;
+            font-weight:bold;
+            padding-left:10px;
+        }
+
+        .total-ml{
+            font-weight:bold;
+            color:#b30000;
+        }
+
+        .edit-row{
+            background:#f9f9f9;
+        }
+
+        .view-row{
+            background:#f3f3f3;
+        }
+
+        .history-box{
+            background:#f9f9f9;
+            border:1px solid #ccc;
+            padding:10px;
+            border-radius:6px;
+            text-align:left;
+        }
+
+        .history-item{
+            margin-bottom:6px;
+        }
+
+        .empty-message{
+            text-align:center;
+            color:#666;
+            font-weight:bold;
+            padding:15px;
+        }
     </style>
 </head>
 <body>
@@ -31,18 +139,19 @@
 
 <div class="container">
 
-    <input type="text" id="searchInput" placeholder="Search organization..." onkeyup="searchOrg()">
+    <div class="top-controls">
+        <input type="text" id="searchInput" placeholder="Search organization...">
+        <button class="export-btn" id="exportBtn">Export CSV</button>
+        <button class="print-btn" id="printBtn">Print</button>
+        <button id="dashboardBtn">Return to Dashboard</button>
+    </div>
 
-    <div style="margin-top:10px;">
+    <div class="entry-box">
         <input type="text" id="orgName" placeholder="Organization Name">
         <input type="number" id="numDonors" placeholder="Number of Donors">
         <input type="date" id="orgDate">
         <button class="add-btn" id="addBtn">Add Organization</button>
     </div>
-
-    <button class="export-btn" id="exportBtn">Export CSV</button>
-    <button class="print-btn" id="printBtn">Print</button>
-    <button id="dashboardBtn">Return to Dashboard</button>
 
     <table>
         <thead>
@@ -57,6 +166,7 @@
         </thead>
         <tbody id="orgTable"></tbody>
     </table>
+
 </div>
 
 <script type="module">
@@ -75,87 +185,106 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+const searchInput = document.getElementById("searchInput");
+const orgNameInput = document.getElementById("orgName");
+const numDonorsInput = document.getElementById("numDonors");
+const orgDateInput = document.getElementById("orgDate");
+const addBtn = document.getElementById("addBtn");
+const exportBtn = document.getElementById("exportBtn");
+const printBtn = document.getElementById("printBtn");
+const dashboardBtn = document.getElementById("dashboardBtn");
+const orgTable = document.getElementById("orgTable");
+
 let organizations = [];
 
 /* LOAD */
 async function loadOrganizations(){
     organizations = [];
-    const snapshot = await getDocs(collection(db,"partnerOrganizations"));
-    snapshot.forEach(docSnap=>{
+
+    const snapshot = await getDocs(collection(db, "partnerOrganizations"));
+
+    snapshot.forEach(docSnap => {
         const data = docSnap.data();
         data.id = docSnap.id;
-        if(!data.history) data.history = [];
+        if(!Array.isArray(data.history)) data.history = [];
         organizations.push(data);
     });
+
+    organizations.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
     renderTable();
 }
 
 /* CALCULATE */
 function calculateTotalML(numDonors){
-    return numDonors * 450;
+    return (Number(numDonors) || 0) * 450;
 }
 
 /* RENDER */
 function renderTable(){
-    const table = document.getElementById("orgTable");
-    table.innerHTML = "";
+    orgTable.innerHTML = "";
 
-    organizations.forEach((org,index)=>{
-        table.innerHTML += `
+    if(organizations.length === 0){
+        orgTable.innerHTML = `<tr><td colspan="6" class="empty-message">No partner organizations found.</td></tr>`;
+        return;
+    }
+
+    organizations.forEach((org,index) => {
+        orgTable.innerHTML += `
         <tr>
-            <td>${index+1}</td>
-            <td>${org.name}</td>
-            <td>${org.date}</td>
-            <td>${org.numDonors}</td>
-            <td>${calculateTotalML(org.numDonors)}</td>
+            <td>${index + 1}</td>
+            <td class="name-cell">${org.name || ""}</td>
+            <td>${org.date || ""}</td>
+            <td>${org.numDonors || 0}</td>
+            <td class="total-ml">${calculateTotalML(org.numDonors)}</td>
             <td>
                 <button class="edit-btn" onclick="editOrganization('${org.id}')">Edit</button>
                 <button class="view-btn" onclick="viewOrganization('${org.id}')">View</button>
                 <button class="delete-btn" onclick="deleteOrganization('${org.id}')">Delete</button>
             </td>
-        </tr>`;
+        </tr>
+        `;
     });
 }
 
 /* ADD */
 async function addOrganization(){
-    const name = orgName.value.trim();
-    const numDonors = parseInt(numDonors.value);
-    const date = orgDate.value;
+    const name = orgNameInput.value.trim();
+    const numDonors = parseInt(numDonorsInput.value, 10);
+    const date = orgDateInput.value;
 
     if(!name || !numDonors || !date){
         alert("Please fill all required fields.");
         return;
     }
 
-    const docRef = await addDoc(collection(db,"partnerOrganizations"),{
+    const newData = {
         name,
         numDonors,
         date,
-        history: [{
-            donors: numDonors,
-            date: date
-        }]
-    });
+        history: [
+            {
+                donors: numDonors,
+                date: date
+            }
+        ]
+    };
 
-    organizations.push({
-        id:docRef.id,
-        name,
-        numDonors,
-        date,
-        history:[{ donors:numDonors, date:date }]
+    const docRef = await addDoc(collection(db, "partnerOrganizations"), newData);
+
+    organizations.unshift({
+        id: docRef.id,
+        ...newData
     });
 
     renderTable();
 
-    orgName.value="";
-    numDonors.value="";
-    orgDate.value="";
+    orgNameInput.value = "";
+    numDonorsInput.value = "";
+    orgDateInput.value = "";
 }
 
 /* VIEW FULL ENTRY HISTORY */
 window.viewOrganization = function(id){
-
     const row = document.querySelector(`button[onclick="viewOrganization('${id}')"]`).closest("tr");
 
     if(row.nextElementSibling && row.nextElementSibling.classList.contains("view-row")){
@@ -164,14 +293,15 @@ window.viewOrganization = function(id){
     }
 
     const org = organizations.find(o => o.id === id);
+    if(!org) return;
 
     let historyHTML = "";
 
     if(org.history && org.history.length > 0){
-        org.history.forEach((entry,index)=>{
+        org.history.forEach((entry,index) => {
             historyHTML += `
-                <div>
-                    Entry ${index+1} → Donors: ${entry.donors} | Date: ${entry.date}
+                <div class="history-item">
+                    Entry ${index + 1} → Donors: ${entry.donors} | Date: ${entry.date}
                 </div>
             `;
         });
@@ -183,12 +313,14 @@ window.viewOrganization = function(id){
     viewRow.classList.add("view-row");
 
     viewRow.innerHTML = `
-        <td colspan="6" style="text-align:left; padding:10px;">
-            <strong>${org.name}</strong><br><br>
-            ${historyHTML}
-            <br><br>
-            <strong>Total Donors:</strong> ${org.numDonors}<br>
-            <strong>Total ML:</strong> ${calculateTotalML(org.numDonors)}
+        <td colspan="6">
+            <div class="history-box">
+                <strong>${org.name}</strong><br><br>
+                ${historyHTML}
+                <br>
+                <strong>Total Donors:</strong> ${org.numDonors}<br>
+                <strong>Total ML:</strong> ${calculateTotalML(org.numDonors)}
+            </div>
         </td>
     `;
 
@@ -197,7 +329,6 @@ window.viewOrganization = function(id){
 
 /* INLINE EDIT */
 window.editOrganization = function(id){
-
     const row = document.querySelector(`button[onclick="editOrganization('${id}')"]`).closest("tr");
 
     if(row.nextElementSibling && row.nextElementSibling.classList.contains("edit-row")){
@@ -211,8 +342,8 @@ window.editOrganization = function(id){
         <td colspan="6">
             <input type="number" id="editDonors-${id}" placeholder="Add Donors">
             <input type="date" id="editDate-${id}">
-            <button style="background:#2e7d32;" onclick="saveEdit('${id}')">Save</button>
-            <button style="background:#757575;" onclick="this.closest('tr').remove()">Cancel</button>
+            <button class="save-inline-btn" onclick="saveEdit('${id}')">Save</button>
+            <button class="cancel-inline-btn" onclick="this.closest('tr').remove()">Cancel</button>
         </td>
     `;
 
@@ -220,8 +351,7 @@ window.editOrganization = function(id){
 };
 
 window.saveEdit = async function(id){
-
-    const addDonors = parseInt(document.getElementById(`editDonors-${id}`).value);
+    const addDonors = parseInt(document.getElementById(`editDonors-${id}`).value, 10);
     const newDate = document.getElementById(`editDate-${id}`).value;
 
     if(!addDonors || !newDate){
@@ -230,11 +360,12 @@ window.saveEdit = async function(id){
     }
 
     const orgIndex = organizations.findIndex(o => o.id === id);
+    if(orgIndex === -1) return;
+
     const org = organizations[orgIndex];
+    const updatedDonors = Number(org.numDonors || 0) + addDonors;
 
-    const updatedDonors = org.numDonors + addDonors;
-
-    if(!org.history){
+    if(!Array.isArray(org.history)){
         org.history = [];
     }
 
@@ -243,7 +374,7 @@ window.saveEdit = async function(id){
         date: newDate
     });
 
-    await updateDoc(doc(db,"partnerOrganizations",id),{
+    await updateDoc(doc(db, "partnerOrganizations", id), {
         numDonors: updatedDonors,
         date: newDate,
         history: org.history
@@ -260,7 +391,7 @@ window.saveEdit = async function(id){
 window.deleteOrganization = async function(id){
     if(!confirm("Are you sure you want to delete this organization?")) return;
 
-    await deleteDoc(doc(db,"partnerOrganizations",id));
+    await deleteDoc(doc(db, "partnerOrganizations", id));
     organizations = organizations.filter(o => o.id !== id);
     renderTable();
 };
@@ -268,7 +399,8 @@ window.deleteOrganization = async function(id){
 /* SEARCH */
 function searchOrg(){
     const input = searchInput.value.toLowerCase();
-    document.querySelectorAll("#orgTable tr").forEach(row=>{
+
+    document.querySelectorAll("#orgTable tr").forEach(row => {
         row.style.display = row.innerText.toLowerCase().includes(input) ? "" : "none";
     });
 }
@@ -276,8 +408,9 @@ function searchOrg(){
 /* EXPORT */
 function exportCSV(){
     let csv = "Organization,Date,Number of Donors,Total (ml)\n";
-    organizations.forEach(org=>{
-        csv += `${org.name},${org.date},${org.numDonors},${calculateTotalML(org.numDonors)}\n`;
+
+    organizations.forEach(org => {
+        csv += `"${org.name || ""}","${org.date || ""}","${org.numDonors || 0}","${calculateTotalML(org.numDonors)}"\n`;
     });
 
     const blob = new Blob([csv], {type:"text/csv"});
@@ -289,16 +422,22 @@ function exportCSV(){
     URL.revokeObjectURL(url);
 }
 
-function printTable(){ window.print(); }
-function goDashboard(){ window.location.href="dashboard.html"; }
+function printTable(){
+    window.print();
+}
 
-addBtn.onclick = addOrganization;
-dashboardBtn.onclick = goDashboard;
-exportBtn.onclick = exportCSV;
-printBtn.onclick = printTable;
+function goDashboard(){
+    window.location.href = "dashboard.html";
+}
+
+/* EVENTS */
+addBtn.addEventListener("click", addOrganization);
+searchInput.addEventListener("keyup", searchOrg);
+dashboardBtn.addEventListener("click", goDashboard);
+exportBtn.addEventListener("click", exportCSV);
+printBtn.addEventListener("click", printTable);
 
 window.onload = loadOrganizations;
-
 </script>
 
 </body>
