@@ -64,12 +64,6 @@ color:white;
 .badge-silver{background:#9e9e9e;}
 .badge-gold{background:#d4af37;color:black;}
 
-.blood-icon{
-width:20px;
-height:20px;
-vertical-align:middle;
-}
-
 button{
 padding:5px 8px;
 margin:2px;
@@ -85,6 +79,13 @@ color:white;
 
 .top-btn{background:#b30000;}
 
+.blood-icon{
+width:20px;
+height:20px;
+vertical-align:middle;
+margin-right:4px;
+}
+
 .serial-box{
 background:#f9f9f9;
 border:1px solid #ccc;
@@ -92,33 +93,6 @@ padding:10px;
 border-radius:6px;
 text-align:left;
 }
-
-.modal{
-display:none;
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:100%;
-background:rgba(0,0,0,0.4);
-}
-
-.modal-content{
-background:white;
-width:350px;
-margin:100px auto;
-padding:20px;
-border-radius:10px;
-}
-
-.modal-content input{
-width:100%;
-padding:6px;
-margin-bottom:10px;
-}
-
-.save-settings{background:#2e7d32;}
-.close-settings{background:#444;}
 
 </style>
 </head>
@@ -138,7 +112,6 @@ margin-bottom:10px;
 
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
-<button class="top-btn" onclick="openSettings()">Category Settings</button>
 
 <br><br>
 
@@ -172,33 +145,6 @@ margin-bottom:10px;
 
 </div>
 
-<!-- SETTINGS PANEL -->
-
-<div class="modal" id="settingsModal">
-
-<div class="modal-content">
-
-<h3>Donation Category Limits</h3>
-
-<label>Galloner</label>
-<input id="gallonerLimit">
-
-<label>Bronze</label>
-<input id="bronzeLimit">
-
-<label>Silver</label>
-<input id="silverLimit">
-
-<label>Gold</label>
-<input id="goldLimit">
-
-<button class="save-settings" onclick="saveLimits()">Save</button>
-<button class="close-settings" onclick="closeSettings()">Close</button>
-
-</div>
-
-</div>
-
 <script>
 
 var firebaseConfig={
@@ -220,24 +166,38 @@ window.location.href="dashboard.html";
 
 /* BLOOD DROP ICON */
 
-function bloodDrop(color){
+function bloodDrop(color, outline=false){
+
+let stroke = outline ? "#000" : "none";
 
 return `
 <svg class="blood-icon" viewBox="0 0 24 24">
-<path fill="${color}" d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/>
+<path fill="${color}" stroke="${stroke}" stroke-width="1.5"
+d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/>
 </svg>
 `;
 
 }
 
+/* BLOOD TYPE ICON LOGIC */
+
 function getBloodIcon(type,rh){
 
-if(rh=="-") return bloodDrop("#a5d6a7");
+/* negative blood types */
 
-if(type=="A") return bloodDrop("#1e88e5");
-if(type=="B") return bloodDrop("#ffd600");
-if(type=="AB") return bloodDrop("#ff80ab");
-if(type=="O") return bloodDrop("#ffffff");
+if(rh === "-"){
+return bloodDrop("#a5d6a7");
+}
+
+/* positive types */
+
+if(type === "A") return bloodDrop("#1e88e5");
+if(type === "B") return bloodDrop("#ffd600");
+if(type === "AB") return bloodDrop("#ff80ab");
+
+/* O with black outline */
+
+if(type === "O") return bloodDrop("#ffffff",true);
 
 return bloodDrop("#ccc");
 
@@ -263,55 +223,7 @@ return "";
 
 }
 
-/* LOAD LIMITS */
-
-function fetchLimits(){
-
-db.collection("settings").doc("categories").get().then(doc=>{
-
-if(doc.exists) categoryLimits=doc.data();
-
-});
-
-}
-
-/* SETTINGS */
-
-function openSettings(){
-
-settingsModal.style.display="block";
-
-gallonerLimit.value=categoryLimits.galloner;
-bronzeLimit.value=categoryLimits.bronze;
-silverLimit.value=categoryLimits.silver;
-goldLimit.value=categoryLimits.gold;
-
-}
-
-function closeSettings(){
-settingsModal.style.display="none";
-}
-
-function saveLimits(){
-
-categoryLimits={
-galloner:Number(gallonerLimit.value),
-bronze:Number(bronzeLimit.value),
-silver:Number(silverLimit.value),
-gold:Number(goldLimit.value)
-};
-
-db.collection("settings").doc("categories").set(categoryLimits).then(()=>{
-
-alert("Limits Saved");
-closeSettings();
-renderTable();
-
-});
-
-}
-
-/* LOAD DONORS */
+/* FETCH DONORS */
 
 function fetchDonors(){
 
@@ -331,18 +243,22 @@ renderTable();
 
 }
 
-/* TABLE */
+/* RENDER TABLE */
 
 function renderTable(){
 
 let table=document.getElementById("donorTable");
+let bloodFilter=document.getElementById("bloodFilter").value;
+
 table.innerHTML="";
 
 donorsData.forEach((d,index)=>{
 
-let serial=d.serials?d.serials.length:0;
+let serialCount=d.serials?d.serials.length:0;
 
-let badge=getBadge(serial);
+if(bloodFilter && d.bloodType!==bloodFilter) return;
+
+let badge=getBadge(serialCount);
 let bloodIcon=getBloodIcon(d.bloodType,d.rhFactor);
 
 table.innerHTML+=`
@@ -364,7 +280,7 @@ ${bloodIcon} ${d.bloodType||""}${d.rhFactor||""}
 <td>${d.contact||""}</td>
 
 <td>
-${serial}
+${serialCount}
 <button class="view-btn" onclick="toggleSerial(${index})">View</button>
 </td>
 
@@ -420,11 +336,9 @@ row.style.display="none";
 
 function searchDonor(){
 
-let input=searchInput.value.toLowerCase();
+let input=document.getElementById("searchInput").value.toLowerCase();
 
-let rows=document.querySelectorAll("#donorTable tr");
-
-rows.forEach(row=>{
+document.querySelectorAll("#donorTable tr").forEach(row=>{
 row.style.display=row.innerText.toLowerCase().includes(input)?"":"none";
 });
 
@@ -437,9 +351,7 @@ function deleteDonor(id){
 if(confirm("Delete donor?")){
 
 db.collection("donors").doc(id).delete().then(()=>{
-
 fetchDonors();
-
 });
 
 }
@@ -449,9 +361,7 @@ fetchDonors();
 /* EDIT */
 
 function editDonor(id){
-
 window.location.href="donor-entry.html?editId="+id;
-
 }
 
 /* CSV */
@@ -465,11 +375,9 @@ csv+=`${d.bloodType||""},${d.rhFactor||""},${d.firstName||""},${d.middleName||""
 });
 
 let blob=new Blob([csv],{type:"text/csv"});
-
 let url=window.URL.createObjectURL(blob);
 
 let a=document.createElement("a");
-
 a.href=url;
 a.download="donors.csv";
 a.click();
@@ -479,10 +387,7 @@ window.URL.revokeObjectURL(url);
 }
 
 window.onload=function(){
-
-fetchLimits();
 fetchDonors();
-
 };
 
 </script>
