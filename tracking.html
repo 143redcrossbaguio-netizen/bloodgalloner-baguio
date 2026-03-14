@@ -33,10 +33,7 @@ border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-}
+table{width:100%;border-collapse:collapse;}
 
 th,td{
 padding:8px;
@@ -47,6 +44,30 @@ text-align:center;
 th{
 background:#b30000;
 color:white;
+}
+
+.name-cell{
+text-align:left;
+font-weight:bold;
+padding-left:10px;
+}
+
+.badge{
+padding:3px 6px;
+border-radius:4px;
+font-size:11px;
+color:white;
+}
+
+.badge-galloner{background:#1e88e5;}
+.badge-bronze{background:#cd7f32;}
+.badge-silver{background:#9e9e9e;}
+.badge-gold{background:#d4af37;color:black;}
+
+.blood-icon{
+width:20px;
+height:20px;
+vertical-align:middle;
 }
 
 button{
@@ -60,38 +81,17 @@ color:white;
 
 .edit-btn{background:#1565c0;}
 .delete-btn{background:#c62828;}
-.notes-btn{background:#2e7d32;}
 .view-btn{background:#6a1b9a;}
 
 .top-btn{background:#b30000;}
-
-.galloner-btn{background:#1e88e5;}
-.bronze-btn{background:#cd7f32;}
-.silver-btn{background:#9e9e9e;}
-.gold-btn{background:#d4af37;color:black;}
-.filter-btn{background:#222;}
-
-.badge{
-padding:2px 6px;
-border-radius:4px;
-font-size:11px;
-margin-left:5px;
-color:white;
-}
-
-.badge-galloner{background:#1e88e5;}
-.badge-bronze{background:#cd7f32;}
-.badge-silver{background:#9e9e9e;}
-.badge-gold{background:#d4af37;color:black;}
 
 .serial-box{
 background:#f9f9f9;
 border:1px solid #ccc;
 padding:10px;
 border-radius:6px;
+text-align:left;
 }
-
-/* SETTINGS */
 
 .modal{
 display:none;
@@ -152,23 +152,16 @@ margin-bottom:10px;
 
 <br><br>
 
-<button class="galloner-btn" onclick="filterByCategory('galloner')">Galloners</button>
-<button class="bronze-btn" onclick="filterByCategory('bronze')">Bronze</button>
-<button class="silver-btn" onclick="filterByCategory('silver')">Silver</button>
-<button class="gold-btn" onclick="filterByCategory('gold')">Gold</button>
-<button class="filter-btn" onclick="renderTable()">Show All</button>
-
-<br><br>
-
 <table>
 
 <thead>
 <tr>
 <th>#</th>
 <th>Name</th>
-<th>Blood Type</th>
+<th>Badge</th>
+<th>Blood</th>
 <th>Contact</th>
-<th>Serial Count</th>
+<th>Serial</th>
 <th>Actions</th>
 </tr>
 </thead>
@@ -206,7 +199,6 @@ margin-bottom:10px;
 
 </div>
 
-
 <script>
 
 var firebaseConfig={
@@ -220,17 +212,55 @@ firebase.initializeApp(firebaseConfig);
 var db=firebase.firestore();
 
 let donorsData=[];
-let currentCategory=null;
-
-let categoryLimits={
-galloner:8,
-bronze:28,
-silver:46,
-gold:70
-};
+let categoryLimits={galloner:8,bronze:28,silver:46,gold:70};
 
 function goDashboard(){
 window.location.href="dashboard.html";
+}
+
+/* BLOOD DROP ICON */
+
+function bloodDrop(color){
+
+return `
+<svg class="blood-icon" viewBox="0 0 24 24">
+<path fill="${color}" d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/>
+</svg>
+`;
+
+}
+
+function getBloodIcon(type,rh){
+
+if(rh=="-") return bloodDrop("#a5d6a7");
+
+if(type=="A") return bloodDrop("#1e88e5");
+if(type=="B") return bloodDrop("#ffd600");
+if(type=="AB") return bloodDrop("#ff80ab");
+if(type=="O") return bloodDrop("#ffffff");
+
+return bloodDrop("#ccc");
+
+}
+
+/* BADGE */
+
+function getBadge(serial){
+
+if(serial>=categoryLimits.gold)
+return `<span class="badge badge-gold">GOLD</span>`;
+
+if(serial>=categoryLimits.silver)
+return `<span class="badge badge-silver">SILVER</span>`;
+
+if(serial>=categoryLimits.bronze)
+return `<span class="badge badge-bronze">BRONZE</span>`;
+
+if(serial>=categoryLimits.galloner)
+return `<span class="badge badge-galloner">GALLONER</span>`;
+
+return "";
+
 }
 
 /* LOAD LIMITS */
@@ -239,21 +269,17 @@ function fetchLimits(){
 
 db.collection("settings").doc("categories").get().then(doc=>{
 
-if(doc.exists){
-categoryLimits=doc.data();
-}else{
-db.collection("settings").doc("categories").set(categoryLimits);
-}
+if(doc.exists) categoryLimits=doc.data();
 
 });
 
 }
 
-/* SETTINGS PANEL */
+/* SETTINGS */
 
 function openSettings(){
 
-document.getElementById("settingsModal").style.display="block";
+settingsModal.style.display="block";
 
 gallonerLimit.value=categoryLimits.galloner;
 bronzeLimit.value=categoryLimits.bronze;
@@ -263,9 +289,7 @@ goldLimit.value=categoryLimits.gold;
 }
 
 function closeSettings(){
-
 settingsModal.style.display="none";
-
 }
 
 function saveLimits(){
@@ -279,7 +303,7 @@ gold:Number(goldLimit.value)
 
 db.collection("settings").doc("categories").set(categoryLimits).then(()=>{
 
-alert("Limits saved!");
+alert("Limits Saved");
 closeSettings();
 renderTable();
 
@@ -307,66 +331,42 @@ renderTable();
 
 }
 
-/* BADGE */
-
-function getBadge(serialCount){
-
-if(serialCount>=categoryLimits.gold)
-return `<span class="badge badge-gold">GOLD</span>`;
-
-if(serialCount>=categoryLimits.silver)
-return `<span class="badge badge-silver">SILVER</span>`;
-
-if(serialCount>=categoryLimits.bronze)
-return `<span class="badge badge-bronze">BRONZE</span>`;
-
-if(serialCount>=categoryLimits.galloner)
-return `<span class="badge badge-galloner">GALLONER</span>`;
-
-return "";
-
-}
-
 /* TABLE */
 
-function renderTable(category=null){
-
-currentCategory=category;
+function renderTable(){
 
 let table=document.getElementById("donorTable");
-let bloodFilter=document.getElementById("bloodFilter").value;
-
 table.innerHTML="";
 
 donorsData.forEach((d,index)=>{
 
-let serialCount=d.serials?d.serials.length:0;
+let serial=d.serials?d.serials.length:0;
 
-if(bloodFilter!=="" && d.bloodType!==bloodFilter) return;
-
-if(category){
-
-if(category==="galloner" && serialCount<categoryLimits.galloner) return;
-if(category==="bronze" && serialCount<categoryLimits.bronze) return;
-if(category==="silver" && serialCount<categoryLimits.silver) return;
-if(category==="gold" && serialCount<categoryLimits.gold) return;
-
-}
-
-let badge=getBadge(serialCount);
+let badge=getBadge(serial);
+let bloodIcon=getBloodIcon(d.bloodType,d.rhFactor);
 
 table.innerHTML+=`
+
 <tr>
 
 <td>${index+1}</td>
 
-<td>${d.firstName||""} ${d.middleName||""} ${d.surname||""} ${badge}</td>
+<td class="name-cell">
+${d.firstName||""} ${d.middleName||""} ${d.surname||""}
+</td>
 
-<td>${d.bloodType||""} ${d.rhFactor||""}</td>
+<td>${badge}</td>
+
+<td>
+${bloodIcon} ${d.bloodType||""}${d.rhFactor||""}
+</td>
 
 <td>${d.contact||""}</td>
 
-<td>${serialCount}</td>
+<td>
+${serial}
+<button class="view-btn" onclick="toggleSerial(${index})">View</button>
+</td>
 
 <td>
 
@@ -376,9 +376,43 @@ table.innerHTML+=`
 </td>
 
 </tr>
+
+<tr id="serialRow${index}" style="display:none;">
+<td colspan="7">
+<div class="serial-box" id="serialList${index}"></div>
+</td>
+</tr>
+
 `;
 
 });
+
+}
+
+/* SERIAL VIEW */
+
+function toggleSerial(index){
+
+let row=document.getElementById("serialRow"+index);
+let container=document.getElementById("serialList"+index);
+
+if(row.style.display==="none"){
+
+container.innerHTML="";
+
+let serials=donorsData[index].serials||[];
+
+serials.forEach(s=>{
+container.innerHTML+=`${s.serial} - ${s.date}<br>`;
+});
+
+row.style.display="table-row";
+
+}else{
+
+row.style.display="none";
+
+}
 
 }
 
@@ -403,7 +437,9 @@ function deleteDonor(id){
 if(confirm("Delete donor?")){
 
 db.collection("donors").doc(id).delete().then(()=>{
+
 fetchDonors();
+
 });
 
 }
@@ -418,22 +454,14 @@ window.location.href="donor-entry.html?editId="+id;
 
 }
 
-/* FILTER */
-
-function filterByCategory(cat){
-
-renderTable(cat);
-
-}
-
-/* EXPORT */
+/* CSV */
 
 function exportToCSV(){
 
-let csv="Blood Type,Rh Factor,First Name,Middle Name,Surname,Birthday,Contact\n";
+let csv="Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact\n";
 
 donorsData.forEach(d=>{
-csv+=`${d.bloodType||""},${d.rhFactor||""},${d.firstName||""},${d.middleName||""},${d.surname||""},${d.birthday||""},${d.contact||""}\n`;
+csv+=`${d.bloodType||""},${d.rhFactor||""},${d.firstName||""},${d.middleName||""},${d.surname||""},${d.contact||""}\n`;
 });
 
 let blob=new Blob([csv],{type:"text/csv"});
