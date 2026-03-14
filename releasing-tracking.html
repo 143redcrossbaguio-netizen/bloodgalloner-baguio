@@ -27,6 +27,26 @@ border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
 
+.topSwitch{
+display:flex;
+gap:10px;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+.switchBtn{
+padding:12px 16px;
+border:none;
+border-radius:5px;
+font-weight:bold;
+cursor:pointer;
+color:white;
+}
+
+.releaseBtn{background:#e65100;}
+.augmentationBtn{background:#1565c0;}
+.activeBtn{outline:3px solid #222;}
+
 .controls{
 display:flex;
 gap:10px;
@@ -62,6 +82,7 @@ th,td{
 border:1px solid #ccc;
 padding:8px;
 text-align:center;
+vertical-align:top;
 }
 
 th{
@@ -103,6 +124,16 @@ text-align:center;
 font-weight:bold;
 color:#666;
 }
+
+.augBloodBox{
+text-align:left;
+font-size:13px;
+line-height:1.6;
+}
+
+.hidden{
+display:none;
+}
 </style>
 </head>
 
@@ -113,6 +144,11 @@ color:#666;
 </header>
 
 <div class="container">
+
+<div class="topSwitch">
+<button id="showReleaseBtn" class="switchBtn releaseBtn activeBtn">RELEASING RECORDS</button>
+<button id="showAugmentationBtn" class="switchBtn augmentationBtn">BLOOD AUGMENTATION</button>
+</div>
 
 <div class="controls">
 <input type="text" id="searchBox" placeholder="Search Name / Facility">
@@ -149,33 +185,80 @@ const filterDate = document.getElementById("filterDate");
 const filterFacility = document.getElementById("filterFacility");
 const exportBtn = document.getElementById("exportBtn");
 const backBtn = document.getElementById("backBtn");
+const showReleaseBtn = document.getElementById("showReleaseBtn");
+const showAugmentationBtn = document.getElementById("showAugmentationBtn");
 
-let allEntries = [];
+let currentView = "releasing";
+let allReleasingEntries = [];
+let allAugmentationEntries = [];
 
-/* LOAD DATA LIVE FROM FIREBASE */
+/* LOAD RELEASING */
 onValue(ref(db,"releasing"), snapshot => {
-  allEntries = [];
-
+  allReleasingEntries = [];
   snapshot.forEach(child => {
-    allEntries.push({
+    allReleasingEntries.push({
       id: child.key,
       ...child.val()
     });
   });
 
-  populateFacilityFilter();
-  renderTable();
+  if(currentView === "releasing"){
+    populateFacilityFilter();
+    renderCurrentView();
+  }
 });
 
-/* FACILITY FILTER */
-function populateFacilityFilter(){
-  const currentValue = filterFacility.value;
-  const facilities = [...new Set(
-    allEntries
-      .map(e => (e.facility || "").trim())
-      .filter(Boolean)
-  )].sort();
+/* LOAD AUGMENTATION */
+onValue(ref(db,"bloodAugmentation"), snapshot => {
+  allAugmentationEntries = [];
+  snapshot.forEach(child => {
+    allAugmentationEntries.push({
+      id: child.key,
+      ...child.val()
+    });
+  });
 
+  if(currentView === "augmentation"){
+    populateFacilityFilter();
+    renderCurrentView();
+  }
+});
+
+function setView(view){
+  currentView = view;
+
+  if(view === "releasing"){
+    showReleaseBtn.classList.add("activeBtn");
+    showAugmentationBtn.classList.remove("activeBtn");
+    searchBox.placeholder = "Search Name / Facility";
+  }else{
+    showAugmentationBtn.classList.add("activeBtn");
+    showReleaseBtn.classList.remove("activeBtn");
+    searchBox.placeholder = "Search Facility / Blood Type";
+  }
+
+  populateFacilityFilter();
+  renderCurrentView();
+}
+
+function populateFacilityFilter(){
+  let facilities = [];
+
+  if(currentView === "releasing"){
+    facilities = [...new Set(
+      allReleasingEntries
+        .map(e => (e.facility || "").trim())
+        .filter(Boolean)
+    )].sort();
+  }else{
+    facilities = [...new Set(
+      allAugmentationEntries
+        .map(e => (e.facility || "").trim())
+        .filter(Boolean)
+    )].sort();
+  }
+
+  const currentValue = filterFacility.value;
   filterFacility.innerHTML = '<option value="">ALL FACILITIES</option>';
 
   facilities.forEach(f => {
@@ -187,25 +270,36 @@ function populateFacilityFilter(){
 
   if(facilities.includes(currentValue)){
     filterFacility.value = currentValue;
+  }else{
+    filterFacility.value = "";
   }
 }
 
-/* FORMAT COMPONENT LIST */
 function formatComponents(list){
   if(!Array.isArray(list) || list.length === 0) return "";
-
-  return list
-    .map(item => `${item.type || ""} - ${item.qty || ""}`)
-    .join("<br>");
+  return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
 }
 
-/* FILTER CURRENT DATA */
-function getFilteredEntries(){
+function formatAugmentationBloodTypes(bloodTypes){
+  if(!Array.isArray(bloodTypes) || bloodTypes.length === 0) return "";
+
+  let html = "";
+
+  bloodTypes.forEach(item => {
+    html += `<b>${item.bloodType || ""}</b><br>`;
+    html += `REQUESTED:<br>${formatComponents(item.requests)}<br>`;
+    html += `ISSUED:<br>${formatComponents(item.issued)}<br><br>`;
+  });
+
+  return html;
+}
+
+function getFilteredReleasingEntries(){
   const search = searchBox.value.trim().toUpperCase();
   const dateValue = filterDate.value;
   const facilityValue = filterFacility.value;
 
-  let filtered = allEntries.filter(entry => {
+  let filtered = allReleasingEntries.filter(entry => {
     const fullName = `${entry.surname || ""} ${entry.firstname || ""}`.toUpperCase();
     const facility = (entry.facility || "").toUpperCase();
     const date = entry.date || "";
@@ -230,12 +324,53 @@ function getFilteredEntries(){
   return filtered;
 }
 
-/* RENDER TABLE */
-function renderTable(){
-  const filtered = getFilteredEntries();
+function getFilteredAugmentationEntries(){
+  const search = searchBox.value.trim().toUpperCase();
+  const dateValue = filterDate.value;
+  const facilityValue = filterFacility.value;
+
+  let filtered = allAugmentationEntries.filter(entry => {
+    const facility = (entry.facility || "").toUpperCase();
+    const date = entry.date || "";
+
+    let bloodTypeText = "";
+    if(Array.isArray(entry.bloodTypes)){
+      bloodTypeText = entry.bloodTypes.map(b => b.bloodType || "").join(" ").toUpperCase();
+    }
+
+    const matchSearch =
+      search === "" ||
+      facility.includes(search) ||
+      bloodTypeText.includes(search);
+
+    const matchDate =
+      dateValue === "" ||
+      date === dateValue;
+
+    const matchFacility =
+      facilityValue === "" ||
+      entry.facility === facilityValue;
+
+    return matchSearch && matchDate && matchFacility;
+  });
+
+  filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+  return filtered;
+}
+
+function renderCurrentView(){
+  if(currentView === "releasing"){
+    renderReleasingTable();
+  }else{
+    renderAugmentationTable();
+  }
+}
+
+function renderReleasingTable(){
+  const filtered = getFilteredReleasingEntries();
 
   if(filtered.length === 0){
-    container.innerHTML = '<div class="emptyMessage">No records found.</div>';
+    container.innerHTML = '<div class="emptyMessage">No releasing records found.</div>';
     return;
   }
 
@@ -279,7 +414,6 @@ function renderTable(){
 
     grouped[month].forEach(entry => {
       const row = document.createElement("tr");
-
       row.innerHTML = `
         <td>${entry.date || ""}</td>
         <td>${entry.facility || ""}</td>
@@ -288,21 +422,13 @@ function renderTable(){
         <td>${entry.age || ""}</td>
         <td>${entry.sex || ""}</td>
         <td>${entry.bloodtype || ""}</td>
-
-        <td class="componentBox">
-          ${formatComponents(entry.requests)}
-        </td>
-
-        <td class="componentBox">
-          ${formatComponents(entry.issued)}
-        </td>
-
+        <td class="componentBox">${formatComponents(entry.requests)}</td>
+        <td class="componentBox">${formatComponents(entry.issued)}</td>
         <td>
-          <button class="actionBtn editBtn" data-action="edit" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete" data-id="${entry.id}">DELETE</button>
+          <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+          <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
         </td>
       `;
-
       tbody.appendChild(row);
     });
 
@@ -310,7 +436,65 @@ function renderTable(){
   });
 }
 
-/* TABLE BUTTON EVENTS */
+function renderAugmentationTable(){
+  const filtered = getFilteredAugmentationEntries();
+
+  if(filtered.length === 0){
+    container.innerHTML = '<div class="emptyMessage">No blood augmentation records found.</div>';
+    return;
+  }
+
+  const grouped = {};
+
+  filtered.forEach(entry => {
+    const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
+    if(!grouped[month]) grouped[month] = [];
+    grouped[month].push(entry);
+  });
+
+  container.innerHTML = "";
+
+  Object.keys(grouped).sort().reverse().forEach(month => {
+    const monthHeader = document.createElement("div");
+    monthHeader.className = "monthHeader";
+    monthHeader.textContent = month;
+    container.appendChild(monthHeader);
+
+    const table = document.createElement("table");
+
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>FACILITY</th>
+          <th>BLOOD AUGMENTATION DETAILS</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = table.querySelector("tbody");
+
+    grouped[month].forEach(entry => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${entry.date || ""}</td>
+        <td>${entry.facility || ""}</td>
+        <td class="augBloodBox">${formatAugmentationBloodTypes(entry.bloodTypes)}</td>
+        <td>
+          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    container.appendChild(table);
+  });
+}
+
+/* BUTTON ACTIONS */
 container.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if(!button) return;
@@ -320,30 +504,49 @@ container.addEventListener("click", async (event) => {
 
   if(!action || !id) return;
 
-  if(action === "edit"){
+  if(action === "edit-release"){
     window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
     return;
   }
 
-  if(action === "delete"){
-    const confirmed = confirm("Delete this entry?");
+  if(action === "delete-release"){
+    const confirmed = confirm("Delete this releasing record?");
     if(!confirmed) return;
 
     try{
       await remove(ref(db, "releasing/" + id));
       alert("Deleted successfully!");
     }catch(error){
-      console.error("Delete error:", error);
-      alert("Failed to delete entry");
+      console.error(error);
+      alert("Failed to delete record");
+    }
+    return;
+  }
+
+  if(action === "edit-augmentation"){
+    window.location.href = "blood-augmentation-entry.html?id=" + encodeURIComponent(id);
+    return;
+  }
+
+  if(action === "delete-augmentation"){
+    const confirmed = confirm("Delete this blood augmentation record?");
+    if(!confirmed) return;
+
+    try{
+      await remove(ref(db, "bloodAugmentation/" + id));
+      alert("Deleted successfully!");
+    }catch(error){
+      console.error(error);
+      alert("Failed to delete blood augmentation record");
     }
   }
 });
 
-/* EXPORT CSV */
-function exportCSV(){
-  const filtered = getFilteredEntries();
+/* EXPORT */
+function exportReleasingCSV(){
+  const filtered = getFilteredReleasingEntries();
 
-  let rows = [
+  const rows = [
     ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","REQUESTED","ISSUED"]
   ];
 
@@ -382,15 +585,71 @@ function exportCSV(){
   document.body.removeChild(link);
 }
 
-/* CONTROL EVENTS */
-searchBox.addEventListener("input", renderTable);
-filterDate.addEventListener("change", renderTable);
-filterFacility.addEventListener("change", renderTable);
+function exportAugmentationCSV(){
+  const filtered = getFilteredAugmentationEntries();
 
-exportBtn.addEventListener("click", exportCSV);
+  const rows = [
+    ["DATE","FACILITY","BLOOD_TYPE","REQUESTED","ISSUED"]
+  ];
+
+  filtered.forEach(e => {
+    const bloodTypes = Array.isArray(e.bloodTypes) ? e.bloodTypes : [];
+
+    bloodTypes.forEach(item => {
+      const req = (Array.isArray(item.requests) ? item.requests : [])
+        .map(r => `${r.type || ""}-${r.qty || ""}`)
+        .join("|");
+
+      const iss = (Array.isArray(item.issued) ? item.issued : [])
+        .map(r => `${r.type || ""}-${r.qty || ""}`)
+        .join("|");
+
+      rows.push([
+        e.date || "",
+        e.facility || "",
+        item.bloodType || "",
+        req,
+        iss
+      ]);
+    });
+  });
+
+  const csv = rows.map(row =>
+    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "blood_augmentation_records.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function exportCurrentCSV(){
+  if(currentView === "releasing"){
+    exportReleasingCSV();
+  }else{
+    exportAugmentationCSV();
+  }
+}
+
+/* EVENTS */
+searchBox.addEventListener("input", renderCurrentView);
+filterDate.addEventListener("change", renderCurrentView);
+filterFacility.addEventListener("change", renderCurrentView);
+
+showReleaseBtn.addEventListener("click", () => setView("releasing"));
+showAugmentationBtn.addEventListener("click", () => setView("augmentation"));
+
+exportBtn.addEventListener("click", exportCurrentCSV);
 backBtn.addEventListener("click", () => {
   window.location.href = "releasing.html";
 });
+
+/* DEFAULT */
+setView("releasing");
 </script>
 
 </body>
