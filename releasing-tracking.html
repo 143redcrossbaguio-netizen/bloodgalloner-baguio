@@ -19,7 +19,7 @@ padding:15px;
 }
 
 .container{
-max-width:1400px;
+max-width:1450px;
 margin:20px auto;
 background:white;
 padding:20px;
@@ -83,11 +83,16 @@ border:1px solid #ccc;
 padding:8px;
 text-align:center;
 vertical-align:top;
+font-size:14px;
 }
 
 th{
 background:#e65100;
 color:white;
+}
+
+.augTable th{
+background:#1565c0;
 }
 
 .componentBox{
@@ -125,14 +130,109 @@ font-weight:bold;
 color:#666;
 }
 
-.augBloodBox{
-text-align:left;
-font-size:13px;
-line-height:1.6;
+/* MODAL */
+.modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.45);
+z-index:2000;
+overflow:auto;
 }
 
-.hidden{
-display:none;
+.modalContent{
+background:white;
+max-width:800px;
+margin:30px auto;
+padding:20px;
+border-radius:10px;
+box-shadow:0 4px 14px rgba(0,0,0,0.2);
+}
+
+.formLabel{
+font-weight:bold;
+display:block;
+margin-top:10px;
+}
+
+.formInput, .formSelect{
+width:100%;
+padding:10px;
+margin-top:5px;
+border:1px solid #ccc;
+border-radius:5px;
+box-sizing:border-box;
+}
+
+.row{
+display:flex;
+gap:10px;
+align-items:flex-end;
+margin-top:8px;
+}
+
+.row select,
+.row input{
+flex:1;
+padding:10px;
+border:1px solid #ccc;
+border-radius:5px;
+box-sizing:border-box;
+}
+
+.row button{
+width:auto;
+min-width:45px;
+padding:10px;
+border:none;
+border-radius:5px;
+color:white;
+font-weight:bold;
+cursor:pointer;
+}
+
+.addBtn{background:#2e7d32;}
+.removeBtn{background:#c62828;}
+.saveBtn{background:#1565c0;color:white;}
+.closeBtn{background:#444;color:white;}
+.card{
+border:1px solid #ddd;
+border-radius:8px;
+padding:12px;
+margin-top:12px;
+background:#fafafa;
+}
+
+.innerBox{
+border:1px solid #ddd;
+border-radius:6px;
+padding:10px;
+margin-top:10px;
+background:white;
+}
+
+.modalActions{
+display:flex;
+gap:10px;
+margin-top:20px;
+}
+
+.modalActions button{
+flex:1;
+padding:12px;
+border:none;
+border-radius:5px;
+font-weight:bold;
+cursor:pointer;
+}
+
+@media (max-width: 900px){
+.controls{
+flex-direction:column;
+}
 }
 </style>
 </head>
@@ -166,9 +266,37 @@ display:none;
 
 </div>
 
+<!-- AUGMENTATION EDIT MODAL -->
+<div id="augmentationModal" class="modal">
+  <div class="modalContent">
+    <h3 style="margin-top:0;">EDIT BLOOD AUGMENTATION</h3>
+
+    <label class="formLabel">DATE</label>
+    <input type="date" id="editAugDate" class="formInput">
+
+    <label class="formLabel">FACILITY</label>
+    <input type="text" id="editAugFacility" class="formInput">
+
+    <div id="editAugBloodTypeContainer"></div>
+
+    <button type="button" class="addBtn" style="margin-top:15px;" onclick="addEditAugmentationBloodType()">+ ADD BLOOD TYPE</button>
+
+    <label class="formLabel">AMOUNT PAID</label>
+    <input type="number" id="editAugAmountPaid" class="formInput">
+
+    <label class="formLabel">DISCOUNT</label>
+    <input type="number" id="editAugDiscount" class="formInput">
+
+    <div class="modalActions">
+      <button type="button" class="saveBtn" onclick="saveAugmentationEdit()">SAVE CHANGES</button>
+      <button type="button" class="closeBtn" onclick="closeAugmentationModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, remove, get, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey:"YOUR-API-KEY",
@@ -191,6 +319,7 @@ const showAugmentationBtn = document.getElementById("showAugmentationBtn");
 let currentView = "releasing";
 let allReleasingEntries = [];
 let allAugmentationEntries = [];
+let currentAugmentationEditId = null;
 
 /* LOAD RELEASING */
 onValue(ref(db,"releasing"), snapshot => {
@@ -246,15 +375,11 @@ function populateFacilityFilter(){
 
   if(currentView === "releasing"){
     facilities = [...new Set(
-      allReleasingEntries
-        .map(e => (e.facility || "").trim())
-        .filter(Boolean)
+      allReleasingEntries.map(e => (e.facility || "").trim()).filter(Boolean)
     )].sort();
   }else{
     facilities = [...new Set(
-      allAugmentationEntries
-        .map(e => (e.facility || "").trim())
-        .filter(Boolean)
+      allAugmentationEntries.map(e => (e.facility || "").trim()).filter(Boolean)
     )].sort();
   }
 
@@ -278,20 +403,6 @@ function populateFacilityFilter(){
 function formatComponents(list){
   if(!Array.isArray(list) || list.length === 0) return "";
   return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
-}
-
-function formatAugmentationBloodTypes(bloodTypes){
-  if(!Array.isArray(bloodTypes) || bloodTypes.length === 0) return "";
-
-  let html = "";
-
-  bloodTypes.forEach(item => {
-    html += `<b>${item.bloodType || ""}</b><br>`;
-    html += `REQUESTED:<br>${formatComponents(item.requests)}<br>`;
-    html += `ISSUED:<br>${formatComponents(item.issued)}<br><br>`;
-  });
-
-  return html;
 }
 
 function getFilteredReleasingEntries(){
@@ -329,19 +440,47 @@ function getFilteredAugmentationEntries(){
   const dateValue = filterDate.value;
   const facilityValue = filterFacility.value;
 
-  let filtered = allAugmentationEntries.filter(entry => {
-    const facility = (entry.facility || "").toUpperCase();
-    const date = entry.date || "";
+  let flattened = [];
 
-    let bloodTypeText = "";
-    if(Array.isArray(entry.bloodTypes)){
-      bloodTypeText = entry.bloodTypes.map(b => b.bloodType || "").join(" ").toUpperCase();
+  allAugmentationEntries.forEach(entry => {
+    const bloodTypes = Array.isArray(entry.bloodTypes) ? entry.bloodTypes : [];
+
+    if(bloodTypes.length === 0){
+      flattened.push({
+        parentId: entry.id,
+        date: entry.date || "",
+        facility: entry.facility || "",
+        bloodType: "",
+        requests: [],
+        issued: [],
+        amountPaid: entry.amountPaid || "",
+        discount: entry.discount || ""
+      });
+    }else{
+      bloodTypes.forEach(item => {
+        flattened.push({
+          parentId: entry.id,
+          date: entry.date || "",
+          facility: entry.facility || "",
+          bloodType: item.bloodType || "",
+          requests: Array.isArray(item.requests) ? item.requests : [],
+          issued: Array.isArray(item.issued) ? item.issued : [],
+          amountPaid: entry.amountPaid || "",
+          discount: entry.discount || ""
+        });
+      });
     }
+  });
+
+  let filtered = flattened.filter(entry => {
+    const facility = (entry.facility || "").toUpperCase();
+    const bloodType = (entry.bloodType || "").toUpperCase();
+    const date = entry.date || "";
 
     const matchSearch =
       search === "" ||
       facility.includes(search) ||
-      bloodTypeText.includes(search);
+      bloodType.includes(search);
 
     const matchDate =
       dateValue === "" ||
@@ -461,14 +600,32 @@ function renderAugmentationTable(){
     container.appendChild(monthHeader);
 
     const table = document.createElement("table");
+    table.className = "augTable";
 
     table.innerHTML = `
       <thead>
         <tr>
-          <th>DATE</th>
-          <th>FACILITY</th>
-          <th>BLOOD AUGMENTATION DETAILS</th>
-          <th>ACTION</th>
+          <th rowspan="2">DATE</th>
+          <th rowspan="2">FACILITY</th>
+          <th rowspan="2">BLOOD TYPE</th>
+          <th colspan="5">REQUESTED</th>
+          <th colspan="5">ISSUED</th>
+          <th rowspan="2">AMOUNT PAID</th>
+          <th rowspan="2">DISCOUNT</th>
+          <th rowspan="2">ACTION</th>
+        </tr>
+        <tr>
+          <th>WB</th>
+          <th>PRBC</th>
+          <th>PC</th>
+          <th>FFP</th>
+          <th>CRYO</th>
+
+          <th>WB</th>
+          <th>PRBC</th>
+          <th>PC</th>
+          <th>FFP</th>
+          <th>CRYO</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -477,14 +634,45 @@ function renderAugmentationTable(){
     const tbody = table.querySelector("tbody");
 
     grouped[month].forEach(entry => {
+      const req = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+      const iss = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+
+      (entry.requests || []).forEach(item => {
+        const t = (item.type || "").toUpperCase();
+        const q = Number(item.qty || 0);
+        if(req[t] !== undefined) req[t] += q;
+      });
+
+      (entry.issued || []).forEach(item => {
+        const t = (item.type || "").toUpperCase();
+        const q = Number(item.qty || 0);
+        if(iss[t] !== undefined) iss[t] += q;
+      });
+
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${entry.date || ""}</td>
         <td>${entry.facility || ""}</td>
-        <td class="augBloodBox">${formatAugmentationBloodTypes(entry.bloodTypes)}</td>
+        <td>${entry.bloodType || ""}</td>
+
+        <td>${req.WB}</td>
+        <td>${req.PRBC}</td>
+        <td>${req.PC}</td>
+        <td>${req.FFP}</td>
+        <td>${req.CRYO}</td>
+
+        <td>${iss.WB}</td>
+        <td>${iss.PRBC}</td>
+        <td>${iss.PC}</td>
+        <td>${iss.FFP}</td>
+        <td>${iss.CRYO}</td>
+
+        <td>${entry.amountPaid || ""}</td>
+        <td>${entry.discount || ""}</td>
+
         <td>
-          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.parentId}">EDIT</button>
+          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.parentId}">DELETE</button>
         </td>
       `;
       tbody.appendChild(row);
@@ -494,7 +682,206 @@ function renderAugmentationTable(){
   });
 }
 
-/* BUTTON ACTIONS */
+/* MODAL HELPERS */
+function openAugmentationModal(){
+  document.getElementById("augmentationModal").style.display = "block";
+}
+
+window.closeAugmentationModal = function(){
+  document.getElementById("augmentationModal").style.display = "none";
+  currentAugmentationEditId = null;
+  document.getElementById("editAugDate").value = "";
+  document.getElementById("editAugFacility").value = "";
+  document.getElementById("editAugAmountPaid").value = "";
+  document.getElementById("editAugDiscount").value = "";
+  document.getElementById("editAugBloodTypeContainer").innerHTML = "";
+};
+
+window.addEditAugmentationBloodType = function(data = null){
+  const container = document.getElementById("editAugBloodTypeContainer");
+  const card = document.createElement("div");
+  card.className = "card";
+
+  const bloodTypeValue = data?.bloodType || "";
+
+  card.innerHTML = `
+    <div class="row">
+      <div style="flex:1">
+        <label class="formLabel">BLOOD TYPE</label>
+        <select class="editAugBloodType formSelect">
+          <option value="">Select</option>
+          <option ${bloodTypeValue==="A+" ? "selected" : ""}>A+</option>
+          <option ${bloodTypeValue==="A-" ? "selected" : ""}>A-</option>
+          <option ${bloodTypeValue==="B+" ? "selected" : ""}>B+</option>
+          <option ${bloodTypeValue==="B-" ? "selected" : ""}>B-</option>
+          <option ${bloodTypeValue==="AB+" ? "selected" : ""}>AB+</option>
+          <option ${bloodTypeValue==="AB-" ? "selected" : ""}>AB-</option>
+          <option ${bloodTypeValue==="O+" ? "selected" : ""}>O+</option>
+          <option ${bloodTypeValue==="O-" ? "selected" : ""}>O-</option>
+        </select>
+      </div>
+      <div>
+        <button type="button" class="removeBtn" onclick="this.closest('.card').remove()">-</button>
+      </div>
+    </div>
+
+    <div class="innerBox">
+      <label class="formLabel">REQUESTED</label>
+      <div class="editAugRequestContainer"></div>
+      <button type="button" class="addBtn" onclick="addEditAugRequest(this)">+</button>
+    </div>
+
+    <div class="innerBox">
+      <label class="formLabel">ISSUED</label>
+      <div class="editAugIssuedContainer"></div>
+      <button type="button" class="addBtn" onclick="addEditAugIssued(this)">+</button>
+    </div>
+  `;
+
+  container.appendChild(card);
+
+  const reqContainer = card.querySelector(".editAugRequestContainer");
+  const issContainer = card.querySelector(".editAugIssuedContainer");
+
+  const requests = Array.isArray(data?.requests) && data.requests.length ? data.requests : [{type:"WB", qty:""}];
+  const issued = Array.isArray(data?.issued) && data.issued.length ? data.issued : [{type:"WB", qty:""}];
+
+  requests.forEach(item => addEditAugRequestRow(reqContainer, item));
+  issued.forEach(item => addEditAugIssuedRow(issContainer, item));
+};
+
+function addEditAugRequestRow(container, item = {type:"WB", qty:""}){
+  const row = document.createElement("div");
+  row.className = "row editAugRequestRow";
+  row.innerHTML = `
+    <select class="editAugRequestType">
+      <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+      <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+      <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+      <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+      <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+    </select>
+    <input type="number" class="editAugRequestQty" placeholder="Qty" value="${item.qty ?? ""}">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+}
+
+function addEditAugIssuedRow(container, item = {type:"WB", qty:""}){
+  const row = document.createElement("div");
+  row.className = "row editAugIssuedRow";
+  row.innerHTML = `
+    <select class="editAugIssuedType">
+      <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+      <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+      <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+      <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+      <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+    </select>
+    <input type="number" class="editAugIssuedQty" placeholder="Qty" value="${item.qty ?? ""}">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+}
+
+window.addEditAugRequest = function(button){
+  const card = button.closest(".innerBox");
+  const container = card.querySelector(".editAugRequestContainer");
+  addEditAugRequestRow(container);
+};
+
+window.addEditAugIssued = function(button){
+  const card = button.closest(".innerBox");
+  const container = card.querySelector(".editAugIssuedContainer");
+  addEditAugIssuedRow(container);
+};
+
+async function openEditAugmentation(id){
+  try{
+    const snapshot = await get(ref(db, "bloodAugmentation/" + id));
+    if(!snapshot.exists()){
+      alert("Record not found.");
+      return;
+    }
+
+    const data = snapshot.val();
+    currentAugmentationEditId = id;
+
+    document.getElementById("editAugDate").value = data.date || "";
+    document.getElementById("editAugFacility").value = data.facility || "";
+    document.getElementById("editAugAmountPaid").value = data.amountPaid || "";
+    document.getElementById("editAugDiscount").value = data.discount || "";
+    document.getElementById("editAugBloodTypeContainer").innerHTML = "";
+
+    const bloodTypes = Array.isArray(data.bloodTypes) ? data.bloodTypes : [];
+    if(bloodTypes.length){
+      bloodTypes.forEach(item => window.addEditAugmentationBloodType(item));
+    }else{
+      window.addEditAugmentationBloodType();
+    }
+
+    openAugmentationModal();
+  }catch(error){
+    console.error(error);
+    alert("Failed to load augmentation record.");
+  }
+}
+
+window.saveAugmentationEdit = async function(){
+  if(!currentAugmentationEditId) return;
+
+  const cards = document.querySelectorAll("#editAugBloodTypeContainer .card");
+  const bloodTypes = [];
+
+  cards.forEach(card => {
+    const bloodType = card.querySelector(".editAugBloodType").value;
+
+    const requests = [];
+    card.querySelectorAll(".editAugRequestRow").forEach(row => {
+      const type = row.querySelector(".editAugRequestType").value;
+      const qty = row.querySelector(".editAugRequestQty").value;
+      if(qty !== ""){
+        requests.push({type, qty});
+      }
+    });
+
+    const issued = [];
+    card.querySelectorAll(".editAugIssuedRow").forEach(row => {
+      const type = row.querySelector(".editAugIssuedType").value;
+      const qty = row.querySelector(".editAugIssuedQty").value;
+      if(qty !== ""){
+        issued.push({type, qty});
+      }
+    });
+
+    if(bloodType !== ""){
+      bloodTypes.push({
+        bloodType,
+        requests,
+        issued
+      });
+    }
+  });
+
+  const payload = {
+    date: document.getElementById("editAugDate").value,
+    facility: document.getElementById("editAugFacility").value.toUpperCase(),
+    bloodTypes,
+    amountPaid: document.getElementById("editAugAmountPaid").value,
+    discount: document.getElementById("editAugDiscount").value
+  };
+
+  try{
+    await update(ref(db, "bloodAugmentation/" + currentAugmentationEditId), payload);
+    alert("Blood augmentation updated successfully!");
+    window.closeAugmentationModal();
+  }catch(error){
+    console.error(error);
+    alert("Failed to save changes.");
+  }
+};
+
+/* ACTIONS */
 container.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if(!button) return;
@@ -524,7 +911,7 @@ container.addEventListener("click", async (event) => {
   }
 
   if(action === "edit-augmentation"){
-    window.location.href = "blood-augmentation-entry.html?id=" + encodeURIComponent(id);
+    await openEditAugmentation(id);
     return;
   }
 
@@ -589,29 +976,42 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BLOOD_TYPE","REQUESTED","ISSUED"]
+    ["DATE","FACILITY","BLOOD_TYPE","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
-    const bloodTypes = Array.isArray(e.bloodTypes) ? e.bloodTypes : [];
+    const req = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+    const iss = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
 
-    bloodTypes.forEach(item => {
-      const req = (Array.isArray(item.requests) ? item.requests : [])
-        .map(r => `${r.type || ""}-${r.qty || ""}`)
-        .join("|");
-
-      const iss = (Array.isArray(item.issued) ? item.issued : [])
-        .map(r => `${r.type || ""}-${r.qty || ""}`)
-        .join("|");
-
-      rows.push([
-        e.date || "",
-        e.facility || "",
-        item.bloodType || "",
-        req,
-        iss
-      ]);
+    (e.requests || []).forEach(item => {
+      const t = (item.type || "").toUpperCase();
+      const q = Number(item.qty || 0);
+      if(req[t] !== undefined) req[t] += q;
     });
+
+    (e.issued || []).forEach(item => {
+      const t = (item.type || "").toUpperCase();
+      const q = Number(item.qty || 0);
+      if(iss[t] !== undefined) iss[t] += q;
+    });
+
+    rows.push([
+      e.date || "",
+      e.facility || "",
+      e.bloodType || "",
+      req.WB,
+      req.PRBC,
+      req.PC,
+      req.FFP,
+      req.CRYO,
+      iss.WB,
+      iss.PRBC,
+      iss.PC,
+      iss.FFP,
+      iss.CRYO,
+      e.amountPaid || "",
+      e.discount || ""
+    ]);
   });
 
   const csv = rows.map(row =>
@@ -647,6 +1047,13 @@ exportBtn.addEventListener("click", exportCurrentCSV);
 backBtn.addEventListener("click", () => {
   window.location.href = "releasing.html";
 });
+
+window.onclick = function(event){
+  const modal = document.getElementById("augmentationModal");
+  if(event.target === modal){
+    window.closeAugmentationModal();
+  }
+};
 
 /* DEFAULT */
 setView("releasing");
