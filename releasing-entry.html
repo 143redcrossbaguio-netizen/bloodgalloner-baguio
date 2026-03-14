@@ -74,6 +74,12 @@ button{
 .back{background:#444;color:white}
 .addBtn{background:#2e7d32;color:white}
 .removeBtn{background:#c62828;color:white}
+.discountBtn{background:#1565c0;color:white}
+.smallBtn{
+    width:auto !important;
+    min-width:120px !important;
+    padding:10px 14px !important;
+}
 
 /* BLOOD AUGMENTATION */
 .augmentationToggle{
@@ -135,22 +141,6 @@ button{
     margin-top:10px;
     background:white;
 }
-
-.smallBtn{
-    width:auto;
-    padding:8px 12px;
-    margin-top:10px;
-    border:none;
-    border-radius:5px;
-    font-weight:bold;
-    cursor:pointer;
-    color:white;
-}
-
-.blueBtn{background:#1565c0;}
-.greenBtn{background:#2e7d32;}
-.redBtn{background:#c62828;}
-.grayBtn{background:#444;}
 </style>
 </head>
 
@@ -236,10 +226,21 @@ button{
 </div>
 
 <label>9. AMOUNT PAID</label>
-<input type="number" id="amountPaid">
+<div class="row">
+    <input type="number" id="amountPaid" readonly>
+    <button type="button" class="discountBtn smallBtn" onclick="toggleDiscount()">DISCOUNT</button>
+</div>
 
-<label>10. DISCOUNT</label>
-<input type="number" id="discount">
+<div id="discountSection" style="display:none;">
+    <label>DISCOUNTED PRICE</label>
+    <input type="number" id="discountPrice">
+
+    <label>DISCOUNT %</label>
+    <input type="number" id="discountPercent">
+
+    <label>10. DISCOUNT</label>
+    <input type="number" id="discount" readonly>
+</div>
 
 <button class="save" id="saveBtn">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
@@ -258,9 +259,27 @@ button{
 
     <div id="augmentationBloodTypeContainer"></div>
 
-    <button class="greenBtn smallBtn" onclick="addAugmentationBloodType()">+ ADD BLOOD TYPE</button>
-    <button class="blueBtn smallBtn" onclick="saveAugmentation()">SAVE BLOOD AUGMENTATION</button>
-    <button class="grayBtn smallBtn" onclick="toggleAugmentation()">CLOSE</button>
+    <button class="addBtn" type="button" onclick="addAugmentationBloodType()">+ ADD BLOOD TYPE</button>
+
+    <label style="margin-top:15px;">AMOUNT PAID</label>
+    <div class="row">
+        <input type="number" id="augAmountPaid" readonly>
+        <button type="button" class="discountBtn smallBtn" onclick="toggleAugDiscount()">DISCOUNT</button>
+    </div>
+
+    <div id="augDiscountSection" style="display:none;">
+        <label>DISCOUNTED PRICE</label>
+        <input type="number" id="augDiscountPrice">
+
+        <label>DISCOUNT %</label>
+        <input type="number" id="augDiscountPercent">
+
+        <label>DISCOUNT</label>
+        <input type="number" id="augDiscount" readonly>
+    </div>
+
+    <button class="facilityBtn" type="button" onclick="saveAugmentation()">SAVE BLOOD AUGMENTATION</button>
+    <button class="back" type="button" onclick="toggleAugmentation()">CLOSE</button>
 </div>
 
 <script type="module">
@@ -273,6 +292,14 @@ const firebaseConfig = {
   projectId: "galloners-club"
 };
 
+const componentPrices = {
+  WB:1800,
+  PRBC:1500,
+  PC:1000,
+  FFP:1000,
+  CRYO:1000
+};
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -281,6 +308,17 @@ const saveBtn = document.getElementById("saveBtn");
 
 const urlParams = new URLSearchParams(window.location.search);
 const editId = urlParams.get("id");
+
+/* TODAY DATE */
+function setTodayDate(){
+  const today = new Date().toISOString().split("T")[0];
+
+  const mainDate = document.getElementById("date");
+  if(mainDate && !mainDate.value) mainDate.value = today;
+
+  const augDate = document.getElementById("augDate");
+  if(augDate && !augDate.value) augDate.value = today;
+}
 
 /* LOAD FACILITIES */
 onValue(ref(db, "facilities"), (snapshot) => {
@@ -333,8 +371,72 @@ window.addIssued = function(){
   container.appendChild(row);
 };
 
+/* DISCOUNT MAIN */
+window.toggleDiscount = function(){
+  const section = document.getElementById("discountSection");
+  section.style.display = section.style.display === "none" ? "block" : "none";
+};
+
+function computeIssuedTotal(){
+  let total = 0;
+
+  document.querySelectorAll(".issuedRow").forEach(row => {
+    const type = row.querySelector(".issuedType").value;
+    const qty = Number(row.querySelector(".issuedQty").value) || 0;
+
+    if(componentPrices[type]){
+      total += componentPrices[type] * qty;
+    }
+  });
+
+  document.getElementById("amountPaid").value = total.toFixed(2);
+  computeMainDiscountFromPercentOrPrice();
+}
+
+function computeMainDiscountFromPrice(){
+  const original = Number(document.getElementById("amountPaid").value) || 0;
+  const discounted = Number(document.getElementById("discountPrice").value) || 0;
+
+  if(original <= 0){
+    document.getElementById("discountPercent").value = "";
+    document.getElementById("discount").value = "";
+    return;
+  }
+
+  const discountAmount = original - discounted;
+  const percent = (discountAmount / original) * 100;
+
+  document.getElementById("discountPercent").value = percent.toFixed(2);
+  document.getElementById("discount").value = discountAmount.toFixed(2);
+}
+
+function computeMainDiscountFromPercent(){
+  const original = Number(document.getElementById("amountPaid").value) || 0;
+  const percent = Number(document.getElementById("discountPercent").value) || 0;
+
+  const discountAmount = original * (percent / 100);
+  const discounted = original - discountAmount;
+
+  document.getElementById("discountPrice").value = discounted.toFixed(2);
+  document.getElementById("discount").value = discountAmount.toFixed(2);
+}
+
+function computeMainDiscountFromPercentOrPrice(){
+  const discountPrice = document.getElementById("discountPrice").value;
+  const discountPercent = document.getElementById("discountPercent").value;
+
+  if(discountPrice !== ""){
+    computeMainDiscountFromPrice();
+  }else if(discountPercent !== ""){
+    computeMainDiscountFromPercent();
+  }else{
+    document.getElementById("discount").value = "";
+  }
+}
+
+/* RESET MAIN FORM */
 function resetForm(){
-  document.getElementById("date").value = "";
+  document.getElementById("date").value = new Date().toISOString().split("T")[0];
   document.getElementById("facility").value = "";
   document.getElementById("surname").value = "";
   document.getElementById("firstname").value = "";
@@ -343,7 +445,10 @@ function resetForm(){
   document.getElementById("bloodtype").value = "";
   document.getElementById("or").value = "";
   document.getElementById("amountPaid").value = "";
+  document.getElementById("discountPrice").value = "";
+  document.getElementById("discountPercent").value = "";
   document.getElementById("discount").value = "";
+  document.getElementById("discountSection").style.display = "none";
 
   document.getElementById("requestContainer").innerHTML = `
     <div class="row requestRow">
@@ -390,6 +495,14 @@ if(editId){
       document.getElementById("or").value = entry.or || "";
       document.getElementById("amountPaid").value = entry.amountPaid || "";
       document.getElementById("discount").value = entry.discount || "";
+
+      const original = Number(entry.amountPaid || 0);
+      const discountAmount = Number(entry.discount || 0);
+      if(discountAmount > 0){
+        document.getElementById("discountSection").style.display = "block";
+        document.getElementById("discountPrice").value = (original - discountAmount).toFixed(2);
+        document.getElementById("discountPercent").value = original > 0 ? ((discountAmount / original) * 100).toFixed(2) : "";
+      }
 
       const requestContainer = document.getElementById("requestContainer");
       const issuedContainer = document.getElementById("issuedContainer");
@@ -498,7 +611,7 @@ saveBtn.addEventListener("click", async () => {
     requests: requests,
     issued: issued,
     amountPaid: document.getElementById("amountPaid").value,
-    discount: document.getElementById("discount").value
+    discount: document.getElementById("discount").value || 0
   };
 
   try {
@@ -522,10 +635,72 @@ window.toggleAugmentation = function(){
   document.getElementById("augmentationPanel").classList.toggle("open");
 };
 
+/* AUGMENTATION DISCOUNT */
+window.toggleAugDiscount = function(){
+  const section = document.getElementById("augDiscountSection");
+  section.style.display = section.style.display === "none" ? "block" : "none";
+};
+
+function computeAugmentationTotal(){
+  let total = 0;
+
+  document.querySelectorAll(".augIssuedRow").forEach(row => {
+    const type = row.querySelector(".augIssuedType").value;
+    const qty = Number(row.querySelector(".augIssuedQty").value) || 0;
+
+    if(componentPrices[type]){
+      total += componentPrices[type] * qty;
+    }
+  });
+
+  document.getElementById("augAmountPaid").value = total.toFixed(2);
+  computeAugDiscountFromPercentOrPrice();
+}
+
+function computeAugDiscountFromPrice(){
+  const original = Number(document.getElementById("augAmountPaid").value) || 0;
+  const discounted = Number(document.getElementById("augDiscountPrice").value) || 0;
+
+  if(original <= 0){
+    document.getElementById("augDiscountPercent").value = "";
+    document.getElementById("augDiscount").value = "";
+    return;
+  }
+
+  const discountAmount = original - discounted;
+  const percent = (discountAmount / original) * 100;
+
+  document.getElementById("augDiscountPercent").value = percent.toFixed(2);
+  document.getElementById("augDiscount").value = discountAmount.toFixed(2);
+}
+
+function computeAugDiscountFromPercent(){
+  const original = Number(document.getElementById("augAmountPaid").value) || 0;
+  const percent = Number(document.getElementById("augDiscountPercent").value) || 0;
+
+  const discountAmount = original * (percent / 100);
+  const discounted = original - discountAmount;
+
+  document.getElementById("augDiscountPrice").value = discounted.toFixed(2);
+  document.getElementById("augDiscount").value = discountAmount.toFixed(2);
+}
+
+function computeAugDiscountFromPercentOrPrice(){
+  const discountPrice = document.getElementById("augDiscountPrice").value;
+  const discountPercent = document.getElementById("augDiscountPercent").value;
+
+  if(discountPrice !== ""){
+    computeAugDiscountFromPrice();
+  }else if(discountPercent !== ""){
+    computeAugDiscountFromPercent();
+  }else{
+    document.getElementById("augDiscount").value = "";
+  }
+}
+
 /* ADD BLOOD TYPE CARD */
 window.addAugmentationBloodType = function(){
   const container = document.getElementById("augmentationBloodTypeContainer");
-  const index = Date.now();
 
   const card = document.createElement("div");
   card.className = "augmentationCard";
@@ -546,7 +721,7 @@ window.addAugmentationBloodType = function(){
         </select>
       </div>
       <div>
-        <button type="button" class="removeBtn" onclick="this.closest('.augmentationCard').remove()">-</button>
+        <button type="button" class="removeBtn" onclick="this.closest('.augmentationCard').remove(); computeAugmentationTotal();">-</button>
       </div>
     </div>
 
@@ -618,11 +793,12 @@ window.addAugIssued = function(button){
       <option>CRYO</option>
     </select>
     <input type="number" class="augIssuedQty" placeholder="Qty">
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeAugmentationTotal();">-</button>
   `;
   container.appendChild(row);
 };
 
+/* SAVE AUGMENTATION */
 window.saveAugmentation = async function(){
   const cards = document.querySelectorAll(".augmentationCard");
   const bloodTypes = [];
@@ -660,21 +836,69 @@ window.saveAugmentation = async function(){
   const augmentationData = {
     date: document.getElementById("augDate").value,
     facility: document.getElementById("augFacility").value.toUpperCase(),
-    bloodTypes: bloodTypes
+    bloodTypes: bloodTypes,
+    amountPaid: document.getElementById("augAmountPaid").value,
+    discount: document.getElementById("augDiscount").value || 0
   };
 
   try{
     await push(ref(db, "bloodAugmentation"), augmentationData);
     alert("Blood augmentation saved successfully!");
-    document.getElementById("augDate").value = "";
+    document.getElementById("augDate").value = new Date().toISOString().split("T")[0];
     document.getElementById("augFacility").value = "";
     document.getElementById("augmentationBloodTypeContainer").innerHTML = "";
+    document.getElementById("augAmountPaid").value = "";
+    document.getElementById("augDiscountPrice").value = "";
+    document.getElementById("augDiscountPercent").value = "";
+    document.getElementById("augDiscount").value = "";
+    document.getElementById("augDiscountSection").style.display = "none";
     toggleAugmentation();
   }catch(error){
     console.error("Augmentation save error:", error);
     alert("Failed to save blood augmentation");
   }
 };
+
+/* GLOBAL INPUT LISTENERS */
+document.addEventListener("input", function(e){
+  if(
+    e.target.classList.contains("issuedQty") ||
+    e.target.classList.contains("issuedType")
+  ){
+    computeIssuedTotal();
+  }
+
+  if(
+    e.target.id === "discountPrice"
+  ){
+    computeMainDiscountFromPrice();
+  }
+
+  if(
+    e.target.id === "discountPercent"
+  ){
+    computeMainDiscountFromPercent();
+  }
+
+  if(
+    e.target.classList.contains("augIssuedQty") ||
+    e.target.classList.contains("augIssuedType")
+  ){
+    computeAugmentationTotal();
+  }
+
+  if(
+    e.target.id === "augDiscountPrice"
+  ){
+    computeAugDiscountFromPrice();
+  }
+
+  if(
+    e.target.id === "augDiscountPercent"
+  ){
+    computeAugDiscountFromPercent();
+  }
+});
 
 /* NAVIGATION */
 window.goFacilityManager = function(){
@@ -684,6 +908,9 @@ window.goFacilityManager = function(){
 window.goBack = function(){
   window.location.href = "releasing.html";
 };
+
+/* INIT */
+setTodayDate();
 </script>
 
 </body>
