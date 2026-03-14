@@ -152,12 +152,24 @@ font-weight:bold;
 background:#f0f0f0;
 }
 
-.grandTotal{
-background:#e8f5e9;
-padding:15px;
+.augSection{
+margin-top:35px;
+padding-top:10px;
+border-top:3px solid #ddd;
+}
+
+.augHeader{
+background:#dbeafe;
+padding:12px;
+font-weight:bold;
+border-radius:6px;
 margin-top:20px;
-border-radius:8px;
-border:1px solid #ccc;
+font-size:18px;
+color:#0f3d91;
+}
+
+.augTable th{
+background:#1565c0;
 }
 
 .smallTable th,
@@ -220,6 +232,11 @@ max-width:none;
 <div id="dashboardSection"></div>
 <div id="statisticsContainer"></div>
 
+<div class="augSection">
+  <div class="sectionTitle">BLOOD AUGMENTATION STATISTICS</div>
+  <div id="augmentationStatisticsContainer"></div>
+</div>
+
 </div>
 
 <script type="module">
@@ -236,11 +253,19 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 const statisticsContainer = document.getElementById("statisticsContainer");
+const augmentationStatisticsContainer = document.getElementById("augmentationStatisticsContainer");
 const dashboardSection = document.getElementById("dashboardSection");
 const monthFilter = document.getElementById("monthFilter");
 const hospitalSearch = document.getElementById("hospitalSearch");
 
 let allEntries = [];
+let allAugmentationEntries = [];
+
+function refreshAll(){
+    populateMonthFilter();
+    renderStatistics();
+    renderAugmentationStatistics();
+}
 
 onValue(ref(db,"releasing"), snapshot => {
     allEntries = [];
@@ -252,8 +277,20 @@ onValue(ref(db,"releasing"), snapshot => {
         });
     });
 
-    populateMonthFilter();
-    renderStatistics();
+    refreshAll();
+});
+
+onValue(ref(db,"bloodAugmentation"), snapshot => {
+    allAugmentationEntries = [];
+
+    snapshot.forEach(child => {
+        allAugmentationEntries.push({
+            id: child.key,
+            ...child.val()
+        });
+    });
+
+    refreshAll();
 });
 
 function monthName(monthKey){
@@ -293,14 +330,30 @@ function countComponents(store, list){
     });
 }
 
-function populateMonthFilter(){
-    const months = [...new Set(
-        allEntries
-        .map(e => (e.date || "").slice(0,7))
-        .filter(Boolean)
-    )].sort().reverse();
+function countAugmentationBloodTypes(store, bloodTypes){
+    if(!Array.isArray(bloodTypes)) return;
 
+    bloodTypes.forEach(item => {
+        countComponents(store.requested, item.requests);
+        countComponents(store.issued, item.issued);
+        store.bloodTypeCount += 1;
+    });
+}
+
+function populateMonthFilter(){
+    const monthSet = new Set();
+
+    allEntries.forEach(e => {
+        if((e.date || "").slice(0,7)) monthSet.add((e.date || "").slice(0,7));
+    });
+
+    allAugmentationEntries.forEach(e => {
+        if((e.date || "").slice(0,7)) monthSet.add((e.date || "").slice(0,7));
+    });
+
+    const months = [...monthSet].sort().reverse();
     const current = monthFilter.value;
+
     monthFilter.innerHTML = '<option value="">ALL MONTHS</option>';
 
     months.forEach(m => {
@@ -312,12 +365,11 @@ function populateMonthFilter(){
     });
 }
 
-function buildStats(){
+function buildReleasingStats(){
     const monthFilterValue = monthFilter.value;
     const hospitalSearchValue = hospitalSearch.value.toUpperCase();
 
     const grouped = {};
-
     const grand = {
         patients:0,
         male:0,
@@ -396,6 +448,65 @@ function buildStats(){
     return {grouped, grand};
 }
 
+function buildAugmentationStats(){
+    const monthFilterValue = monthFilter.value;
+    const hospitalSearchValue = hospitalSearch.value.toUpperCase();
+
+    const grouped = {};
+    const grand = {
+        records:0,
+        bloodTypeCount:0,
+        requested:emptyComponent(),
+        issued:emptyComponent(),
+        income:0
+    };
+
+    allAugmentationEntries.forEach(entry => {
+        const dateValue = entry.date || "";
+        if(dateValue === "") return;
+
+        const month = dateValue.slice(0,7);
+        const facility = (entry.facility || "").toUpperCase();
+
+        if(monthFilterValue && month !== monthFilterValue) return;
+        if(hospitalSearchValue && !facility.includes(hospitalSearchValue)) return;
+
+        if(!grouped[month]){
+            grouped[month] = {
+                totals:{
+                    records:0,
+                    bloodTypeCount:0,
+                    requested:emptyComponent(),
+                    issued:emptyComponent(),
+                    income:0
+                }
+            };
+        }
+
+        grouped[month].totals.records += 1;
+        grand.records += 1;
+
+        if(Array.isArray(entry.bloodTypes)){
+            entry.bloodTypes.forEach(item => {
+                grouped[month].totals.bloodTypeCount += 1;
+                grand.bloodTypeCount += 1;
+
+                countComponents(grouped[month].totals.requested, item.requests);
+                countComponents(grouped[month].totals.issued, item.issued);
+
+                countComponents(grand.requested, item.requests);
+                countComponents(grand.issued, item.issued);
+            });
+        }
+
+        const income = (Number(entry.amountPaid || 0) - Number(entry.discount || 0));
+        grouped[month].totals.income += income;
+        grand.income += income;
+    });
+
+    return {grouped, grand};
+}
+
 function smallComponentTable(title, data){
     return `
         <div class="card">
@@ -453,7 +564,7 @@ function renderDashboard(grand){
 }
 
 function renderStatistics(){
-    const data = buildStats();
+    const data = buildReleasingStats();
     const stats = data.grouped;
     const grand = data.grand;
 
@@ -463,7 +574,7 @@ function renderStatistics(){
     const months = Object.keys(stats).sort().reverse();
 
     if(months.length === 0){
-        statisticsContainer.innerHTML = "<p>No statistics found.</p>";
+        statisticsContainer.innerHTML = "<p>No releasing statistics found.</p>";
         return;
     }
 
@@ -566,22 +677,118 @@ function renderStatistics(){
     });
 }
 
-window.exportCSV = function(){
-    const data = buildStats();
+function renderAugmentationStatistics(){
+    const data = buildAugmentationStats();
     const stats = data.grouped;
+    const grand = data.grand;
+
+    augmentationStatisticsContainer.innerHTML = "";
+
+    const intro = document.createElement("div");
+    intro.className = "summaryBox";
+    intro.innerHTML = `
+        <b>TOTAL BLOOD AUGMENTATION RECORDS:</b> ${grand.records}
+        <br>
+        <b>TOTAL BLOOD TYPE ENTRIES:</b> ${grand.bloodTypeCount}
+        <br>
+        <b>TOTAL BLOOD AUGMENTATION INCOME:</b> ${grand.income.toFixed(2)}
+    `;
+    augmentationStatisticsContainer.appendChild(intro);
+
+    const grandTables = document.createElement("div");
+    grandTables.className = "doubleGrid";
+    grandTables.innerHTML = `
+        ${smallComponentTable("AUGMENTATION GRAND REQUESTED", grand.requested)}
+        ${smallComponentTable("AUGMENTATION GRAND ISSUED", grand.issued)}
+    `;
+    augmentationStatisticsContainer.appendChild(grandTables);
+
+    const months = Object.keys(stats).sort().reverse();
+
+    if(months.length === 0){
+        const empty = document.createElement("p");
+        empty.textContent = "No blood augmentation statistics found.";
+        augmentationStatisticsContainer.appendChild(empty);
+        return;
+    }
+
+    months.forEach(month => {
+        const m = stats[month];
+
+        const header = document.createElement("div");
+        header.className = "augHeader";
+        header.textContent = monthName(month);
+
+        const table = document.createElement("table");
+        table.className = "augTable";
+        table.innerHTML = `
+            <tr>
+                <th rowspan="2">TYPE</th>
+                <th rowspan="2">RECORDS</th>
+                <th rowspan="2">BLOOD TYPE ENTRIES</th>
+                <th colspan="5">REQUESTED</th>
+                <th colspan="5">ISSUED</th>
+                <th rowspan="2">INCOME</th>
+            </tr>
+            <tr class="subHeader">
+                <th>WB</th>
+                <th>PRBC</th>
+                <th>PC</th>
+                <th>FFP</th>
+                <th>CRYO</th>
+
+                <th>WB</th>
+                <th>PRBC</th>
+                <th>PC</th>
+                <th>FFP</th>
+                <th>CRYO</th>
+            </tr>
+        `;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td class="left">BLOOD AUGMENTATION TOTAL</td>
+            <td>${m.totals.records}</td>
+            <td>${m.totals.bloodTypeCount}</td>
+
+            <td>${m.totals.requested.WB}</td>
+            <td>${m.totals.requested.PRBC}</td>
+            <td>${m.totals.requested.PC}</td>
+            <td>${m.totals.requested.FFP}</td>
+            <td>${m.totals.requested.CRYO}</td>
+
+            <td>${m.totals.issued.WB}</td>
+            <td>${m.totals.issued.PRBC}</td>
+            <td>${m.totals.issued.PC}</td>
+            <td>${m.totals.issued.FFP}</td>
+            <td>${m.totals.issued.CRYO}</td>
+
+            <td>${m.totals.income.toFixed(2)}</td>
+        `;
+        table.appendChild(row);
+
+        augmentationStatisticsContainer.appendChild(header);
+        augmentationStatisticsContainer.appendChild(table);
+    });
+}
+
+window.exportCSV = function(){
+    const rel = buildReleasingStats();
+    const aug = buildAugmentationStats();
 
     let rows = [[
-        "MONTH","HOSPITAL","PATIENTS","MALE","FEMALE",
+        "SECTION","MONTH","NAME","PATIENTS_OR_RECORDS","MALE","FEMALE",
         "WB_REQ","PRBC_REQ","PC_REQ","FFP_REQ","CRYO_REQ",
-        "WB_ISS","PRBC_ISS","PC_ISS","FFP_ISS","CRYO_ISS","MONTHLY_INCOME"
+        "WB_ISS","PRBC_ISS","PC_ISS","FFP_ISS","CRYO_ISS","INCOME"
     ]];
 
-    Object.keys(stats).sort().reverse().forEach(month => {
-        const hospitals = stats[month].hospitals;
+    Object.keys(rel.grouped).sort().reverse().forEach(month => {
+        const hospitals = rel.grouped[month].hospitals;
 
         Object.keys(hospitals).sort().forEach(hospital => {
             const s = hospitals[hospital];
             rows.push([
+                "RELEASING",
                 monthName(month),
                 hospital,
                 s.entries,
@@ -597,27 +804,51 @@ window.exportCSV = function(){
                 s.issued.PC,
                 s.issued.FFP,
                 s.issued.CRYO,
-                stats[month].totals.income.toFixed(2)
+                ""
             ]);
         });
 
         rows.push([
+            "RELEASING TOTAL",
             monthName(month),
             "TOTAL",
-            stats[month].totals.entries,
-            stats[month].totals.male,
-            stats[month].totals.female,
-            stats[month].totals.requested.WB,
-            stats[month].totals.requested.PRBC,
-            stats[month].totals.requested.PC,
-            stats[month].totals.requested.FFP,
-            stats[month].totals.requested.CRYO,
-            stats[month].totals.issued.WB,
-            stats[month].totals.issued.PRBC,
-            stats[month].totals.issued.PC,
-            stats[month].totals.issued.FFP,
-            stats[month].totals.issued.CRYO,
-            stats[month].totals.income.toFixed(2)
+            rel.grouped[month].totals.entries,
+            rel.grouped[month].totals.male,
+            rel.grouped[month].totals.female,
+            rel.grouped[month].totals.requested.WB,
+            rel.grouped[month].totals.requested.PRBC,
+            rel.grouped[month].totals.requested.PC,
+            rel.grouped[month].totals.requested.FFP,
+            rel.grouped[month].totals.requested.CRYO,
+            rel.grouped[month].totals.issued.WB,
+            rel.grouped[month].totals.issued.PRBC,
+            rel.grouped[month].totals.issued.PC,
+            rel.grouped[month].totals.issued.FFP,
+            rel.grouped[month].totals.issued.CRYO,
+            rel.grouped[month].totals.income.toFixed(2)
+        ]);
+    });
+
+    Object.keys(aug.grouped).sort().reverse().forEach(month => {
+        const t = aug.grouped[month].totals;
+        rows.push([
+            "BLOOD AUGMENTATION",
+            monthName(month),
+            "BLOOD AUGMENTATION TOTAL",
+            t.records,
+            "",
+            "",
+            t.requested.WB,
+            t.requested.PRBC,
+            t.requested.PC,
+            t.requested.FFP,
+            t.requested.CRYO,
+            t.issued.WB,
+            t.issued.PRBC,
+            t.issued.PC,
+            t.issued.FFP,
+            t.issued.CRYO,
+            t.income.toFixed(2)
         ]);
     });
 
@@ -635,8 +866,8 @@ window.goBack = function(){
     window.location.href = "releasing.html";
 };
 
-monthFilter.addEventListener("change", renderStatistics);
-hospitalSearch.addEventListener("input", renderStatistics);
+monthFilter.addEventListener("change", refreshAll);
+hospitalSearch.addEventListener("input", refreshAll);
 </script>
 
 </body>
