@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Admin Manager</title>
+<meta charset="UTF-8">
+
+<style>
+
+body{
+margin:0;
+font-family:Arial;
+background:#f4f4f4;
+}
+
+header{
+background:#6a1b9a;
+color:white;
+padding:15px;
+text-align:center;
+}
+
+.container{
+max-width:600px;
+margin:40px auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+input{
+width:100%;
+padding:10px;
+margin-top:10px;
+border:1px solid #ccc;
+border-radius:5px;
+}
+
+button{
+width:100%;
+padding:12px;
+margin-top:10px;
+border:none;
+border-radius:5px;
+font-weight:bold;
+cursor:pointer;
+color:white;
+}
+
+.add{background:#2e7d32;}
+.password{background:#1565c0;}
+.delete{background:#c62828;}
+.back{background:#444;}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:8px;
+text-align:center;
+}
+
+th{
+background:#eee;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+<h2>Admin Account Manager</h2>
+</header>
+
+<div class="container">
+
+<h3>Create New Admin</h3>
+
+<input id="newUsername" placeholder="Username">
+<input id="newPassword" type="password" placeholder="Password">
+
+<button class="add" onclick="createAdmin()">CREATE ADMIN</button>
+
+<h3>Admin Accounts</h3>
+
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Username</th>
+<th>Action</th>
+</tr>
+</thead>
+
+<tbody id="adminList"></tbody>
+
+</table>
+
+<button class="back" onclick="goBack()">BACK</button>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth,
+createUserWithEmailAndPassword,
+updatePassword,
+deleteUser
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+
+apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+authDomain:"galloners-club.firebaseapp.com",
+databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+projectId:"galloners-club",
+storageBucket:"galloners-club.firebasestorage.app",
+messagingSenderId:"213049860421",
+appId:"1:213049860421:web:4156aaa52b945f48711e2c"
+
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const adminRef = ref(db,"admins");
+
+const adminList = document.getElementById("adminList");
+
+window.createAdmin = async function(){
+
+const username = document.getElementById("newUsername").value.trim();
+const password = document.getElementById("newPassword").value.trim();
+
+if(username=="" || password==""){
+alert("Enter username and password");
+return;
+}
+
+const email = username + "@galloners.club";
+
+try{
+
+await createUserWithEmailAndPassword(auth,email,password);
+
+await push(adminRef,{
+username:username
+});
+
+alert("Admin created");
+
+document.getElementById("newUsername").value="";
+document.getElementById("newPassword").value="";
+
+}catch(error){
+
+alert(error.message);
+
+}
+
+}
+
+onValue(adminRef,(snapshot)=>{
+
+adminList.innerHTML="";
+
+let i=1;
+
+snapshot.forEach(child=>{
+
+const data = child.val();
+const key = child.key;
+
+const row = document.createElement("tr");
+
+row.innerHTML = `
+<td>${i}</td>
+<td>${data.username}</td>
+<td>
+<button onclick="changePassword('${data.username}')">Change Password</button>
+<button onclick="deleteAdmin('${key}')">Delete</button>
+</td>
+`;
+
+adminList.appendChild(row);
+
+i++;
+
+});
+
+});
+
+window.changePassword = function(username){
+
+const newPass = prompt("Enter new password");
+
+if(!newPass) return;
+
+alert("Password change must be done while logged in as that user.");
+
+}
+
+window.deleteAdmin = async function(key){
+
+if(!confirm("Delete this admin?")) return;
+
+await remove(ref(db,"admins/"+key));
+
+alert("Admin removed");
+
+}
+
+window.goBack = function(){
+
+window.location.href="dashboard.html";
+
+}
+
+</script>
+
+</body>
+</html>
