@@ -241,15 +241,22 @@ max-width:none;
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-apiKey:"YOUR-API-KEY",
-databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-projectId:"galloners-club"
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getDatabase(app);
 
 const statisticsContainer = document.getElementById("statisticsContainer");
@@ -267,30 +274,37 @@ function refreshAll(){
     renderAugmentationStatistics();
 }
 
-onValue(ref(db,"releasing"), snapshot => {
-    allEntries = [];
+onAuthStateChanged(auth, (user) => {
+    if(!user){
+        window.location.href = "index.html";
+        return;
+    }
 
-    snapshot.forEach(child => {
-        allEntries.push({
-            id: child.key,
-            ...child.val()
+    onValue(ref(db,"releasing"), snapshot => {
+        allEntries = [];
+
+        snapshot.forEach(child => {
+            allEntries.push({
+                id: child.key,
+                ...child.val()
+            });
         });
+
+        refreshAll();
     });
 
-    refreshAll();
-});
+    onValue(ref(db,"bloodAugmentation"), snapshot => {
+        allAugmentationEntries = [];
 
-onValue(ref(db,"bloodAugmentation"), snapshot => {
-    allAugmentationEntries = [];
-
-    snapshot.forEach(child => {
-        allAugmentationEntries.push({
-            id: child.key,
-            ...child.val()
+        snapshot.forEach(child => {
+            allAugmentationEntries.push({
+                id: child.key,
+                ...child.val()
+            });
         });
-    });
 
-    refreshAll();
+        refreshAll();
+    });
 });
 
 function monthName(monthKey){
@@ -327,16 +341,6 @@ function countComponents(store, list){
         if(store[type] !== undefined){
             store[type] += qty;
         }
-    });
-}
-
-function countAugmentationBloodTypes(store, bloodTypes){
-    if(!Array.isArray(bloodTypes)) return;
-
-    bloodTypes.forEach(item => {
-        countComponents(store.requested, item.requests);
-        countComponents(store.issued, item.issued);
-        store.bloodTypeCount += 1;
     });
 }
 
