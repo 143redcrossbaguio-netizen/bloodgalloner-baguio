@@ -7,7 +7,7 @@
 body{margin:0;font-family:Arial;background:#f4f4f4;}
 header{background:#2e7d32;color:white;padding:15px;text-align:center;}
 .container{max-width:600px;margin:40px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
-input{width:100%;padding:12px;margin-top:10px;border:1px solid #ccc;border-radius:5px;}
+input{width:100%;padding:12px;margin-top:10px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;}
 button{width:100%;padding:12px;margin-top:12px;border:none;border-radius:5px;color:white;font-weight:bold;cursor:pointer;}
 .save{background:#2e7d32;}
 .back{background:#444;}
@@ -46,15 +46,22 @@ th{background:#f0f0f0;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "YOUR-API-KEY",
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
   databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "galloners-club"
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getDatabase(app);
 
 const facilityRef = ref(db, "facilities");
@@ -62,7 +69,49 @@ const facilityInput = document.getElementById("facilityName");
 const saveBtn = document.getElementById("saveBtn");
 const facilityList = document.getElementById("facilityList");
 
+function loadFacilities() {
+  onValue(facilityRef, (snapshot) => {
+    facilityList.innerHTML = "";
+
+    if (!snapshot.exists()) {
+      facilityList.innerHTML = "<tr><td colspan='3'>No facilities saved</td></tr>";
+      return;
+    }
+
+    let i = 1;
+
+    snapshot.forEach((child) => {
+      const data = child.val();
+      const key = child.key;
+
+      const safeName = (data.name || "").replace(/'/g, "\\'");
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${i}</td>
+        <td>${data.name || ""}</td>
+        <td>
+          <button class="action-btn" onclick="editFacility('${key}', '${safeName}')">EDIT</button>
+          <button class="action-btn" onclick="deleteFacility('${key}')">DELETE</button>
+        </td>
+      `;
+
+      facilityList.appendChild(row);
+      i++;
+    });
+  }, (error) => {
+    console.error("Load facilities error:", error);
+    alert("Failed to load facilities");
+  });
+}
+
 saveBtn.addEventListener("click", async () => {
+  if (!auth.currentUser) {
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   const name = facilityInput.value.trim();
 
   if (name === "") {
@@ -81,36 +130,13 @@ saveBtn.addEventListener("click", async () => {
   }
 });
 
-onValue(facilityRef, (snapshot) => {
-  facilityList.innerHTML = "";
-
-  if (!snapshot.exists()) {
-    facilityList.innerHTML = "<tr><td colspan='3'>No facilities saved</td></tr>";
+window.editFacility = async function (key, oldName) {
+  if (!auth.currentUser) {
+    alert("You are not logged in.");
+    window.location.href = "index.html";
     return;
   }
 
-  let i = 1;
-
-  snapshot.forEach((child) => {
-    const data = child.val();
-    const key = child.key;
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${i}</td>
-      <td>${data.name || ""}</td>
-      <td>
-        <button class="action-btn" onclick="editFacility('${key}', '${(data.name || "").replace(/'/g, "\\'")}')">EDIT</button>
-        <button class="action-btn" onclick="deleteFacility('${key}')">DELETE</button>
-      </td>
-    `;
-
-    facilityList.appendChild(row);
-    i++;
-  });
-});
-
-window.editFacility = async function (key, oldName) {
   const newName = prompt("Edit facility name", oldName);
 
   if (newName && newName.trim() !== "") {
@@ -126,6 +152,12 @@ window.editFacility = async function (key, oldName) {
 };
 
 window.deleteFacility = async function (key) {
+  if (!auth.currentUser) {
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   if (confirm("Delete facility?")) {
     try {
       await remove(ref(db, "facilities/" + key));
@@ -139,6 +171,15 @@ window.deleteFacility = async function (key) {
 window.goBack = function () {
   window.location.href = "releasing.html";
 };
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  loadFacilities();
+});
 </script>
 
 </body>
