@@ -9,6 +9,7 @@ body{
 margin:0;
 font-family:Arial, sans-serif;
 background:#f4f4f4;
+color:#333;
 }
 
 header{
@@ -19,7 +20,7 @@ text-align:center;
 }
 
 .container{
-max-width:1200px;
+max-width:1300px;
 margin:30px auto;
 background:white;
 padding:25px;
@@ -27,36 +28,112 @@ border-radius:10px;
 box-shadow:0 3px 10px rgba(0,0,0,0.1);
 }
 
-.controls{
+.topbar{
 display:flex;
 gap:10px;
 flex-wrap:wrap;
 margin-bottom:20px;
 }
 
-select, button{
-padding:10px;
-border-radius:5px;
-border:1px solid #ccc;
-font-weight:bold;
-}
-
 button{
+padding:10px 14px;
 border:none;
+border-radius:6px;
+font-weight:bold;
 cursor:pointer;
 color:white;
 }
 
 .back-btn{background:#444;}
-.reload-btn{background:#1565c0;}
+.refresh-btn{background:#1565c0;}
+
+.meta{
+background:#f7f7f7;
+border:1px solid #ccc;
+padding:12px;
+border-radius:8px;
+margin:15px 0 20px;
+line-height:1.6;
+}
+
+.year-group{
+margin-top:18px;
+border:1px solid #d8d8d8;
+border-radius:10px;
+overflow:hidden;
+background:#fafafa;
+}
+
+.year-header{
+background:#00695c;
+color:white;
+padding:14px 16px;
+font-size:18px;
+font-weight:bold;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.month-group{
+border-top:1px solid #ddd;
+background:white;
+}
+
+.month-header{
+background:#e8f5f2;
+padding:12px 16px;
+font-weight:bold;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
+color:#00695c;
+}
+
+.backup-list{
+padding:10px 16px 16px;
+display:none;
+}
+
+.backup-item{
+background:#f8f9fa;
+border:1px solid #ddd;
+border-radius:8px;
+padding:10px 12px;
+margin-top:10px;
+cursor:pointer;
+font-weight:bold;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.backup-item:hover{
+background:#eef7f5;
+}
+
+.backup-item.active{
+background:#dff3ee;
+border-color:#9fd3c7;
+}
 
 .section{
-margin-top:25px;
+margin-top:30px;
 }
 
 .section h3{
 margin-bottom:10px;
 color:#00695c;
+}
+
+.count-box{
+margin-top:8px;
+font-size:14px;
+color:#444;
+font-weight:bold;
+margin-bottom:10px;
 }
 
 table{
@@ -88,32 +165,46 @@ border:1px solid #ddd;
 border-radius:8px;
 }
 
-pre{
-white-space:pre-wrap;
-word-break:break-word;
-margin:0;
-font-family:Arial, sans-serif;
+.hidden{
+display:none;
 }
 
-.meta{
-background:#f7f7f7;
-border:1px solid #ccc;
-padding:12px;
-border-radius:8px;
-margin-bottom:20px;
-line-height:1.6;
-}
-
-.count-box{
-margin-top:8px;
+.chevron{
 font-size:14px;
-color:#444;
-font-weight:bold;
+opacity:0.9;
+}
+
+.viewer-card{
+margin-top:20px;
+padding:20px;
+background:#fff;
+border:1px solid #ddd;
+border-radius:10px;
+}
+
+.component-cell{
+line-height:1.5;
+}
+
+.small-note{
+font-size:12px;
+color:#666;
+margin-top:6px;
 }
 
 @media (max-width: 800px){
-.controls{
+.topbar{
 flex-direction:column;
+}
+.backup-item{
+flex-direction:column;
+align-items:flex-start;
+gap:6px;
+}
+table{
+display:block;
+overflow-x:auto;
+white-space:nowrap;
 }
 }
 </style>
@@ -127,12 +218,12 @@ flex-direction:column;
 
 <div class="container">
 
-<div class="controls">
-<select id="backupSelect"></select>
-<button class="reload-btn" onclick="loadSelectedBackup()">Load Backup</button>
+<div class="topbar">
+<button class="refresh-btn" onclick="reloadPage()">Refresh</button>
 <button class="back-btn" onclick="goBack()">Back to Dashboard</button>
 </div>
 
+<div id="backupTree"></div>
 <div id="backupMeta"></div>
 <div id="backupContent"></div>
 
@@ -158,53 +249,173 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-const backupSelect = document.getElementById("backupSelect");
+const backupTree = document.getElementById("backupTree");
 const backupMeta = document.getElementById("backupMeta");
 const backupContent = document.getElementById("backupContent");
+
+let backupKeys = [];
+let activeBackupId = "";
 
 onAuthStateChanged(auth, (user) => {
   if(!user){
     window.location.href = "index.html";
     return;
   }
-
-  loadBackupList();
+  loadBackupTree();
 });
 
-function loadBackupList(){
+function monthName(monthNumber){
+  const months = {
+    "01":"January",
+    "02":"February",
+    "03":"March",
+    "04":"April",
+    "05":"May",
+    "06":"June",
+    "07":"July",
+    "08":"August",
+    "09":"September",
+    "10":"October",
+    "11":"November",
+    "12":"December"
+  };
+  return months[monthNumber] || monthNumber;
+}
+
+function formatDateTime(value){
+  if(!value) return "";
+  const d = new Date(value);
+  if(isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
+function groupBackups(keys){
+  const grouped = {};
+
+  keys.forEach(key => {
+    const parts = key.split("-");
+    if(parts.length < 3) return;
+
+    const year = parts[0];
+    const month = parts[1];
+
+    if(!grouped[year]) grouped[year] = {};
+    if(!grouped[year][month]) grouped[year][month] = [];
+
+    grouped[year][month].push(key);
+  });
+
+  return grouped;
+}
+
+function loadBackupTree(){
   onValue(ref(db, "backups"), (snapshot) => {
-    backupSelect.innerHTML = "";
+    backupTree.innerHTML = "";
+    backupMeta.innerHTML = "";
+    backupContent.innerHTML = "";
 
     if(!snapshot.exists()){
-      backupSelect.innerHTML = '<option value="">No backups found</option>';
-      backupMeta.innerHTML = "";
-      backupContent.innerHTML = '<div class="empty">No backups available.</div>';
+      backupTree.innerHTML = '<div class="empty">No backups available.</div>';
       return;
     }
 
-    const keys = [];
-    snapshot.forEach(child => keys.push(child.key));
-    keys.sort().reverse();
+    backupKeys = [];
+    snapshot.forEach(child => backupKeys.push(child.key));
+    backupKeys.sort().reverse();
 
-    keys.forEach(key => {
-      const option = document.createElement("option");
-      option.value = key;
-      option.textContent = key;
-      backupSelect.appendChild(option);
-    });
+    const grouped = groupBackups(backupKeys);
+    renderBackupTree(grouped);
 
-    loadSelectedBackup();
+    if(backupKeys.length > 0){
+      activeBackupId = backupKeys[0];
+      loadBackup(activeBackupId);
+      highlightActiveBackup();
+    }
   });
 }
 
-window.loadSelectedBackup = async function(){
-  const backupId = backupSelect.value;
+function renderBackupTree(grouped){
+  const years = Object.keys(grouped).sort().reverse();
 
-  if(!backupId){
-    backupMeta.innerHTML = "";
-    backupContent.innerHTML = '<div class="empty">No backup selected.</div>';
-    return;
-  }
+  years.forEach(year => {
+    const yearGroup = document.createElement("div");
+    yearGroup.className = "year-group";
+
+    const yearHeader = document.createElement("div");
+    yearHeader.className = "year-header";
+    yearHeader.innerHTML = `
+      <span>${year}</span>
+      <span class="chevron">▼</span>
+    `;
+
+    const yearContent = document.createElement("div");
+
+    yearHeader.addEventListener("click", () => {
+      yearContent.classList.toggle("hidden");
+      yearHeader.querySelector(".chevron").textContent =
+        yearContent.classList.contains("hidden") ? "►" : "▼";
+    });
+
+    const months = Object.keys(grouped[year]).sort().reverse();
+
+    months.forEach(month => {
+      const monthGroup = document.createElement("div");
+      monthGroup.className = "month-group";
+
+      const monthHeader = document.createElement("div");
+      monthHeader.className = "month-header";
+      monthHeader.innerHTML = `
+        <span>${monthName(month)} ${year}</span>
+        <span class="chevron">▼</span>
+      `;
+
+      const backupList = document.createElement("div");
+      backupList.className = "backup-list";
+      backupList.style.display = "block";
+
+      monthHeader.addEventListener("click", () => {
+        const isOpen = backupList.style.display === "block";
+        backupList.style.display = isOpen ? "none" : "block";
+        monthHeader.querySelector(".chevron").textContent = isOpen ? "►" : "▼";
+      });
+
+      grouped[year][month].forEach(backupId => {
+        const item = document.createElement("div");
+        item.className = "backup-item";
+        item.dataset.backupId = backupId;
+        item.innerHTML = `
+          <span>${backupId}</span>
+          <span style="font-size:13px;color:#555;">Open Backup</span>
+        `;
+
+        item.addEventListener("click", () => {
+          activeBackupId = backupId;
+          loadBackup(backupId);
+          highlightActiveBackup();
+        });
+
+        backupList.appendChild(item);
+      });
+
+      monthGroup.appendChild(monthHeader);
+      monthGroup.appendChild(backupList);
+      yearContent.appendChild(monthGroup);
+    });
+
+    yearGroup.appendChild(yearHeader);
+    yearGroup.appendChild(yearContent);
+    backupTree.appendChild(yearGroup);
+  });
+}
+
+function highlightActiveBackup(){
+  document.querySelectorAll(".backup-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.backupId === activeBackupId);
+  });
+}
+
+async function loadBackup(backupId){
+  if(!backupId) return;
 
   try{
     const snapshot = await get(ref(db, "backups/" + backupId));
@@ -222,13 +433,6 @@ window.loadSelectedBackup = async function(){
     backupMeta.innerHTML = "";
     backupContent.innerHTML = '<div class="empty">Failed to load backup.</div>';
   }
-};
-
-function formatDateTime(value){
-  if(!value) return "";
-  const d = new Date(value);
-  if(isNaN(d.getTime())) return value;
-  return d.toLocaleString();
 }
 
 function renderBackup(data){
@@ -245,25 +449,18 @@ function renderBackup(data){
     </div>
   `;
 
-  backupContent.innerHTML = "";
+  backupContent.innerHTML = '<div class="viewer-card" id="viewerCard"></div>';
+  const viewerCard = document.getElementById("viewerCard");
 
-  renderObjectSection("Admins", rt.admins || {});
-  renderObjectSection("Facilities", rt.facilities || {});
-  renderObjectSection("Releasing", rt.releasing || {});
-  renderObjectSection("Blood Augmentation", rt.bloodAugmentation || {});
-  renderObjectSection("Donors (Firestore)", fs.donors || {});
+  renderAdminsSection(rt.admins || {}, viewerCard);
+  renderFacilitiesSection(rt.facilities || {}, viewerCard);
+  renderDonorsSection(fs.donors || {}, viewerCard);
+  renderReleasingSection(rt.releasing || {}, viewerCard);
+  renderAugmentationSection(rt.bloodAugmentation || {}, viewerCard);
 }
 
-function renderObjectSection(title, obj){
-  const section = document.createElement("div");
-  section.className = "section";
-
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  section.appendChild(heading);
-
+function appendEmptyOrCount(section, obj){
   const keys = Object.keys(obj || {});
-
   const countBox = document.createElement("div");
   countBox.className = "count-box";
   countBox.textContent = `Total records: ${keys.length}`;
@@ -274,7 +471,18 @@ function renderObjectSection(title, obj){
     empty.className = "empty";
     empty.textContent = "No data found.";
     section.appendChild(empty);
-    backupContent.appendChild(section);
+    return false;
+  }
+  return true;
+}
+
+function renderAdminsSection(obj, parent){
+  const section = document.createElement("div");
+  section.className = "section";
+  section.innerHTML = "<h3>Admins</h3>";
+
+  if(!appendEmptyOrCount(section, obj)){
+    parent.appendChild(section);
     return;
   }
 
@@ -282,8 +490,10 @@ function renderObjectSection(title, obj){
   table.innerHTML = `
     <thead>
       <tr>
-        <th style="width:180px;">Record ID</th>
-        <th>Data</th>
+        <th>Record ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Created At</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -291,25 +501,266 @@ function renderObjectSection(title, obj){
 
   const tbody = table.querySelector("tbody");
 
-  keys.forEach(key => {
+  Object.keys(obj).forEach(key => {
+    const item = obj[key] || {};
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${key}</td>
-      <td><pre>${escapeHtml(JSON.stringify(obj[key], null, 2))}</pre></td>
+      <td>${item.username || ""}</td>
+      <td>${item.email || ""}</td>
+      <td>${formatDateTime(item.createdAt || "")}</td>
     `;
     tbody.appendChild(row);
   });
 
   section.appendChild(table);
-  backupContent.appendChild(section);
+  parent.appendChild(section);
 }
 
-function escapeHtml(str){
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function renderFacilitiesSection(obj, parent){
+  const section = document.createElement("div");
+  section.className = "section";
+  section.innerHTML = "<h3>Facilities</h3>";
+
+  if(!appendEmptyOrCount(section, obj)){
+    parent.appendChild(section);
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Record ID</th>
+        <th>Facility Name</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  Object.keys(obj).forEach(key => {
+    const item = obj[key] || {};
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${key}</td>
+      <td>${item.name || ""}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  section.appendChild(table);
+  parent.appendChild(section);
 }
+
+function renderDonorsSection(obj, parent){
+  const section = document.createElement("div");
+  section.className = "section";
+  section.innerHTML = "<h3>Donors (Firestore)</h3>";
+
+  if(!appendEmptyOrCount(section, obj)){
+    parent.appendChild(section);
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Doc ID</th>
+        <th>First Name</th>
+        <th>Middle Name</th>
+        <th>Surname</th>
+        <th>Blood Type</th>
+        <th>Rh</th>
+        <th>Birthday</th>
+        <th>Contact</th>
+        <th>Serial Count</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  Object.keys(obj).forEach(key => {
+    const item = obj[key] || {};
+    const serials = Array.isArray(item.serials) ? item.serials.length : 0;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${key}</td>
+      <td>${item.firstName || ""}</td>
+      <td>${item.middleName || ""}</td>
+      <td>${item.surname || ""}</td>
+      <td>${item.bloodType || ""}</td>
+      <td>${item.rhFactor || ""}</td>
+      <td>${item.birthday || ""}</td>
+      <td>${item.contact || ""}</td>
+      <td>${serials}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  section.appendChild(table);
+  parent.appendChild(section);
+}
+
+function formatComponents(list){
+  if(!Array.isArray(list) || list.length === 0) return "";
+  return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
+}
+
+function renderReleasingSection(obj, parent){
+  const section = document.createElement("div");
+  section.className = "section";
+  section.innerHTML = "<h3>Releasing</h3>";
+
+  if(!appendEmptyOrCount(section, obj)){
+    parent.appendChild(section);
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Record ID</th>
+        <th>Date</th>
+        <th>Facility</th>
+        <th>Surname</th>
+        <th>First Name</th>
+        <th>Age</th>
+        <th>Sex</th>
+        <th>Blood Type</th>
+        <th>OR</th>
+        <th>Requested</th>
+        <th>Issued</th>
+        <th>Amount Paid</th>
+        <th>Discount</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  Object.keys(obj).forEach(key => {
+    const item = obj[key] || {};
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${key}</td>
+      <td>${item.date || ""}</td>
+      <td>${item.facility || ""}</td>
+      <td>${item.surname || ""}</td>
+      <td>${item.firstname || ""}</td>
+      <td>${item.age || ""}</td>
+      <td>${item.sex || ""}</td>
+      <td>${item.bloodtype || ""}</td>
+      <td>${item.or || ""}</td>
+      <td class="component-cell">${formatComponents(item.requests)}</td>
+      <td class="component-cell">${formatComponents(item.issued)}</td>
+      <td>${item.amountPaid || ""}</td>
+      <td>${item.discount || ""}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  section.appendChild(table);
+  parent.appendChild(section);
+}
+
+function renderAugmentationSection(obj, parent){
+  const section = document.createElement("div");
+  section.className = "section";
+  section.innerHTML = "<h3>Blood Augmentation</h3>";
+
+  if(!appendEmptyOrCount(section, obj)){
+    parent.appendChild(section);
+    return;
+  }
+
+  const flattened = [];
+
+  Object.keys(obj).forEach(key => {
+    const item = obj[key] || {};
+    const bloodTypes = Array.isArray(item.bloodTypes) ? item.bloodTypes : [];
+
+    if(bloodTypes.length === 0){
+      flattened.push({
+        recordId: key,
+        date: item.date || "",
+        facility: item.facility || "",
+        bloodType: "",
+        requests: [],
+        issued: [],
+        amountPaid: item.amountPaid || "",
+        discount: item.discount || ""
+      });
+    } else {
+      bloodTypes.forEach(bt => {
+        flattened.push({
+          recordId: key,
+          date: item.date || "",
+          facility: item.facility || "",
+          bloodType: bt.bloodType || "",
+          requests: Array.isArray(bt.requests) ? bt.requests : [],
+          issued: Array.isArray(bt.issued) ? bt.issued : [],
+          amountPaid: item.amountPaid || "",
+          discount: item.discount || ""
+        });
+      });
+    }
+  });
+
+  const countNote = document.createElement("div");
+  countNote.className = "small-note";
+  countNote.textContent = `Expanded rows by blood type: ${flattened.length}`;
+  section.appendChild(countNote);
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Record ID</th>
+        <th>Date</th>
+        <th>Facility</th>
+        <th>Blood Type</th>
+        <th>Requested</th>
+        <th>Issued</th>
+        <th>Amount Paid</th>
+        <th>Discount</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector("tbody");
+
+  flattened.forEach(item => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${item.recordId}</td>
+      <td>${item.date || ""}</td>
+      <td>${item.facility || ""}</td>
+      <td>${item.bloodType || ""}</td>
+      <td class="component-cell">${formatComponents(item.requests)}</td>
+      <td class="component-cell">${formatComponents(item.issued)}</td>
+      <td>${item.amountPaid || ""}</td>
+      <td>${item.discount || ""}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  section.appendChild(table);
+  parent.appendChild(section);
+}
+
+window.reloadPage = function(){
+  window.location.reload();
+};
 
 window.goBack = function(){
   window.location.href = "dashboard.html";
