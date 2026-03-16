@@ -67,7 +67,7 @@
     <img src="images/logo.png" alt="Galloners Club Logo" class="logo">
     <h2>Galloners Club</h2>
 
-    <input type="email" id="email" placeholder="Admin Email">
+    <input type="text" id="username" placeholder="Username or Email">
     <input type="password" id="password" placeholder="Password">
 
     <button onclick="login()">Login</button>
@@ -91,14 +91,30 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
 
+    function normalizeLoginInput(value) {
+        const input = value.trim().toLowerCase();
+
+        if (!input) return "";
+
+        // If user already typed a full email, use it as-is
+        if (input.includes("@")) {
+            return input;
+        }
+
+        // Otherwise convert username to Firebase email format
+        return input + "@galloners.club";
+    }
+
     window.login = async function() {
-        const email = document.getElementById("email").value.trim();
+        const usernameOrEmail = document.getElementById("username").value.trim();
         const password = document.getElementById("password").value;
 
-        if (!email || !password) {
-            alert("Enter both email and password.");
+        if (!usernameOrEmail || !password) {
+            alert("Enter both username/email and password.");
             return;
         }
+
+        const email = normalizeLoginInput(usernameOrEmail);
 
         try {
             await signInWithEmailAndPassword(auth, email, password);
@@ -106,7 +122,7 @@
             window.location.href = "dashboard.html";
         } catch (error) {
             console.error("Login error:", error);
-            alert("Invalid email or password.");
+            alert("Invalid username/email or password.");
         }
     };
 
