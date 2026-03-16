@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
 <style>
@@ -155,10 +156,12 @@ projectId:"galloners-club"
 
 firebase.initializeApp(firebaseConfig);
 
-var db=firebase.firestore();
+var auth = firebase.auth();
+var db = firebase.firestore();
 
-let donorsData=[];
-let categoryLimits={galloner:8,bronze:28,silver:46,gold:70};
+let donorsData = [];
+let categoryLimits = {galloner:8, bronze:28, silver:46, gold:70};
+let authReady = false;
 
 function goDashboard(){
 window.location.href="dashboard.html";
@@ -183,20 +186,13 @@ d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/>
 
 function getBloodIcon(type,rh){
 
-/* negative blood types */
-
 if(rh === "-"){
 return bloodDrop("#a5d6a7");
 }
 
-/* positive types */
-
 if(type === "A") return bloodDrop("#1e88e5");
 if(type === "B") return bloodDrop("#ffd600");
 if(type === "AB") return bloodDrop("#ff80ab");
-
-/* O with black outline */
-
 if(type === "O") return bloodDrop("#ffffff",true);
 
 return bloodDrop("#ccc");
@@ -207,16 +203,16 @@ return bloodDrop("#ccc");
 
 function getBadge(serial){
 
-if(serial>=categoryLimits.gold)
+if(serial >= categoryLimits.gold)
 return `<span class="badge badge-gold">GOLD</span>`;
 
-if(serial>=categoryLimits.silver)
+if(serial >= categoryLimits.silver)
 return `<span class="badge badge-silver">SILVER</span>`;
 
-if(serial>=categoryLimits.bronze)
+if(serial >= categoryLimits.bronze)
 return `<span class="badge badge-bronze">BRONZE</span>`;
 
-if(serial>=categoryLimits.galloner)
+if(serial >= categoryLimits.galloner)
 return `<span class="badge badge-galloner">GALLONER</span>`;
 
 return "";
@@ -226,6 +222,12 @@ return "";
 /* FETCH DONORS */
 
 function fetchDonors(){
+
+if (!auth.currentUser) {
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
 
 db.collection("donors").get().then(snapshot=>{
 
@@ -239,6 +241,9 @@ donorsData.push(data);
 
 renderTable();
 
+}).catch(error => {
+console.error("Fetch donors error:", error);
+alert("Error loading donor records.");
 });
 
 }
@@ -254,9 +259,9 @@ table.innerHTML="";
 
 donorsData.forEach((d,index)=>{
 
-let serialCount=d.serials?d.serials.length:0;
+let serialCount=d.serials ? d.serials.length : 0;
 
-if(bloodFilter && d.bloodType!==bloodFilter) return;
+if(bloodFilter && d.bloodType !== bloodFilter) return;
 
 let badge=getBadge(serialCount);
 let bloodIcon=getBloodIcon(d.bloodType,d.rhFactor);
@@ -348,10 +353,19 @@ row.style.display=row.innerText.toLowerCase().includes(input)?"":"none";
 
 function deleteDonor(id){
 
+if (!auth.currentUser) {
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
 if(confirm("Delete donor?")){
 
 db.collection("donors").doc(id).delete().then(()=>{
 fetchDonors();
+}).catch(error => {
+console.error("Delete error:", error);
+alert("Error deleting donor.");
 });
 
 }
@@ -386,9 +400,18 @@ window.URL.revokeObjectURL(url);
 
 }
 
-window.onload=function(){
+/* AUTH CHECK */
+
+auth.onAuthStateChanged(function(user){
+authReady = true;
+
+if(!user){
+window.location.href="index.html";
+return;
+}
+
 fetchDonors();
-};
+});
 
 </script>
 
