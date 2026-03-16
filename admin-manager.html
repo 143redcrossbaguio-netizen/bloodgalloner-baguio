@@ -5,7 +5,6 @@
 <meta charset="UTF-8">
 
 <style>
-
 body{
 margin:0;
 font-family:Arial;
@@ -13,14 +12,14 @@ background:#f4f4f4;
 }
 
 header{
-background:#6a1b9a;
+background:#4a148c;
 color:white;
 padding:15px;
 text-align:center;
 }
 
 .container{
-max-width:600px;
+max-width:700px;
 margin:40px auto;
 background:white;
 padding:30px;
@@ -34,6 +33,7 @@ padding:10px;
 margin-top:10px;
 border:1px solid #ccc;
 border-radius:5px;
+box-sizing:border-box;
 }
 
 button{
@@ -52,6 +52,16 @@ color:white;
 .delete{background:#c62828;}
 .back{background:#444;}
 
+.note{
+background:#f5f5f5;
+border:1px solid #ddd;
+padding:12px;
+border-radius:8px;
+margin-bottom:15px;
+font-size:14px;
+line-height:1.5;
+}
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -68,8 +78,12 @@ th{
 background:#eee;
 }
 
+.action-btn{
+width:auto;
+padding:8px 12px;
+margin:2px;
+}
 </style>
-
 </head>
 
 <body>
@@ -79,6 +93,11 @@ background:#eee;
 </header>
 
 <div class="container">
+
+<div class="note">
+Usernames can use only letters, numbers, dot, underscore, and dash.<br>
+Examples: <b>admin</b>, <b>gideon</b>, <b>lab-tech</b>, <b>admin_1</b>
+</div>
 
 <h3>Create New Admin</h3>
 
@@ -94,12 +113,11 @@ background:#eee;
 <tr>
 <th>#</th>
 <th>Username</th>
+<th>Login Email</th>
 <th>Action</th>
 </tr>
 </thead>
-
 <tbody id="adminList"></tbody>
-
 </table>
 
 <button class="back" onclick="goBack()">BACK</button>
@@ -107,125 +125,155 @@ background:#eee;
 </div>
 
 <script type="module">
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth,
-createUserWithEmailAndPassword,
-updatePassword,
-deleteUser
+import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  getDatabase,
+  ref,
+  push,
+  onValue,
+  remove
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-
-apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-authDomain:"galloners-club.firebaseapp.com",
-databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-projectId:"galloners-club",
-storageBucket:"galloners-club.firebasestorage.app",
-messagingSenderId:"213049860421",
-appId:"1:213049860421:web:4156aaa52b945f48711e2c"
-
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-const adminRef = ref(db,"admins");
-
 const adminList = document.getElementById("adminList");
+const adminRef = ref(db, "admins");
+
+function usernameToEmail(username){
+  return `${username}@galloners.club`;
+}
+
+function isValidUsername(username){
+  return /^[a-zA-Z0-9._-]+$/.test(username);
+}
+
+onAuthStateChanged(auth, (user) => {
+  if(!user){
+    window.location.href = "index.html";
+  }
+});
 
 window.createAdmin = async function(){
+  const usernameRaw = document.getElementById("newUsername").value.trim();
+  const password = document.getElementById("newPassword").value.trim();
 
-const username = document.getElementById("newUsername").value.trim();
-const password = document.getElementById("newPassword").value.trim();
+  if(usernameRaw === "" || password === ""){
+    alert("Enter username and password.");
+    return;
+  }
 
-if(username=="" || password==""){
-alert("Enter username and password");
-return;
-}
+  if(!isValidUsername(usernameRaw)){
+    alert("Invalid username. Use only letters, numbers, dot, underscore, or dash.");
+    return;
+  }
 
-const email = username + "@galloners.club";
+  if(password.length < 6){
+    alert("Password must be at least 6 characters.");
+    return;
+  }
 
-try{
+  const username = usernameRaw.toLowerCase();
+  const email = usernameToEmail(username);
 
-await createUserWithEmailAndPassword(auth,email,password);
+  try{
+    // Use a SECONDARY app so the current admin stays logged in
+    const secondaryName = "secondary-admin-" + Date.now();
+    const secondaryApp = initializeApp(firebaseConfig, secondaryName);
+    const secondaryAuth = getAuth(secondaryApp);
 
-await push(adminRef,{
-username:username
+    await createUserWithEmailAndPassword(secondaryAuth, email, password);
+
+    await push(adminRef, {
+      username: username,
+      email: email,
+      createdAt: new Date().toISOString()
+    });
+
+    await secondaryAuth.signOut();
+    await deleteApp(secondaryApp);
+
+    document.getElementById("newUsername").value = "";
+    document.getElementById("newPassword").value = "";
+
+    alert("Admin created successfully.");
+  } catch(error){
+    console.error(error);
+
+    if(error.code === "auth/email-already-in-use"){
+      alert("That username already exists.");
+    } else if(error.code === "auth/invalid-email"){
+      alert("Invalid username format. Use only letters, numbers, dot, underscore, or dash.");
+    } else if(error.code === "auth/weak-password"){
+      alert("Password is too weak. Use at least 6 characters.");
+    } else {
+      alert("Firebase: " + error.message);
+    }
+  }
+};
+
+onValue(adminRef, (snapshot) => {
+  adminList.innerHTML = "";
+
+  if(!snapshot.exists()){
+    adminList.innerHTML = "<tr><td colspan='4'>No admins found.</td></tr>";
+    return;
+  }
+
+  let i = 1;
+
+  snapshot.forEach((child) => {
+    const data = child.val();
+    const key = child.key;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i}</td>
+      <td>${data.username || ""}</td>
+      <td>${data.email || ""}</td>
+      <td>
+        <button class="action-btn delete" onclick="deleteAdmin('${key}')">REMOVE FROM LIST</button>
+      </td>
+    `;
+    adminList.appendChild(row);
+    i++;
+  });
 });
-
-alert("Admin created");
-
-document.getElementById("newUsername").value="";
-document.getElementById("newPassword").value="";
-
-}catch(error){
-
-alert(error.message);
-
-}
-
-}
-
-onValue(adminRef,(snapshot)=>{
-
-adminList.innerHTML="";
-
-let i=1;
-
-snapshot.forEach(child=>{
-
-const data = child.val();
-const key = child.key;
-
-const row = document.createElement("tr");
-
-row.innerHTML = `
-<td>${i}</td>
-<td>${data.username}</td>
-<td>
-<button onclick="changePassword('${data.username}')">Change Password</button>
-<button onclick="deleteAdmin('${key}')">Delete</button>
-</td>
-`;
-
-adminList.appendChild(row);
-
-i++;
-
-});
-
-});
-
-window.changePassword = function(username){
-
-const newPass = prompt("Enter new password");
-
-if(!newPass) return;
-
-alert("Password change must be done while logged in as that user.");
-
-}
 
 window.deleteAdmin = async function(key){
+  if(!confirm("Remove this admin from the list?")){
+    return;
+  }
 
-if(!confirm("Delete this admin?")) return;
-
-await remove(ref(db,"admins/"+key));
-
-alert("Admin removed");
-
-}
+  try{
+    await remove(ref(db, "admins/" + key));
+    alert("Admin removed from list.");
+  } catch(error){
+    console.error(error);
+    alert("Failed to remove admin.");
+  }
+};
 
 window.goBack = function(){
-
-window.location.href="dashboard.html";
-
-}
-
+  window.location.href = "dashboard.html";
+};
 </script>
 
 </body>
