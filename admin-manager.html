@@ -48,7 +48,6 @@ color:white;
 }
 
 .add{background:#2e7d32;}
-.password{background:#1565c0;}
 .delete{background:#c62828;}
 .back{background:#444;}
 
@@ -125,7 +124,7 @@ Examples: <b>admin</b>, <b>gideon</b>, <b>lab-tech</b>, <b>admin_1</b>
 </div>
 
 <script type="module">
-import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged,
@@ -161,6 +160,10 @@ function usernameToEmail(username){
   return `${username}@galloners.club`;
 }
 
+function normalizeUsername(username){
+  return username.trim().toLowerCase();
+}
+
 function isValidUsername(username){
   return /^[a-zA-Z0-9._-]+$/.test(username);
 }
@@ -172,15 +175,17 @@ onAuthStateChanged(auth, (user) => {
 });
 
 window.createAdmin = async function(){
-  const usernameRaw = document.getElementById("newUsername").value.trim();
+  const usernameRaw = document.getElementById("newUsername").value;
   const password = document.getElementById("newPassword").value.trim();
 
-  if(usernameRaw === "" || password === ""){
+  if(usernameRaw.trim() === "" || password === ""){
     alert("Enter username and password.");
     return;
   }
 
-  if(!isValidUsername(usernameRaw)){
+  const username = normalizeUsername(usernameRaw);
+
+  if(!isValidUsername(username)){
     alert("Invalid username. Use only letters, numbers, dot, underscore, or dash.");
     return;
   }
@@ -190,11 +195,9 @@ window.createAdmin = async function(){
     return;
   }
 
-  const username = usernameRaw.toLowerCase();
   const email = usernameToEmail(username);
 
   try{
-    // Use a SECONDARY app so the current admin stays logged in
     const secondaryName = "secondary-admin-" + Date.now();
     const secondaryApp = initializeApp(firebaseConfig, secondaryName);
     const secondaryAuth = getAuth(secondaryApp);
@@ -220,7 +223,7 @@ window.createAdmin = async function(){
     if(error.code === "auth/email-already-in-use"){
       alert("That username already exists.");
     } else if(error.code === "auth/invalid-email"){
-      alert("Invalid username format. Use only letters, numbers, dot, underscore, or dash.");
+      alert("Invalid username format.");
     } else if(error.code === "auth/weak-password"){
       alert("Password is too weak. Use at least 6 characters.");
     } else {
