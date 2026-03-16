@@ -57,7 +57,9 @@
         .partner-btn { background-color: #2e7d32; }
         .releasing-btn { background-color: #ff9800; }
         .admin-btn { background-color: #4a148c; }
-        .backup-btn { background-color: #00897b; }
+        .backup-file-btn { background-color: #00897b; }
+        .backup-system-btn { background-color: #00796b; }
+        .backup-viewer-btn { background-color: #00695c; }
         .logout-btn { background-color: #444; }
 
         .backup-status {
@@ -105,7 +107,10 @@
     <button class="partner-btn" onclick="goPartner()">Partner Organization</button>
     <button class="releasing-btn" onclick="goReleasing()">Releasing</button>
     <button class="admin-btn" onclick="goAdminManager()">Admin Manager</button>
-    <button class="backup-btn" onclick="downloadBackup()">Monthly Backup</button>
+
+    <button class="backup-file-btn" onclick="downloadBackupFile()">Monthly Backup File</button>
+    <button class="backup-system-btn" onclick="saveBackupToSystem()">Save Backup to System</button>
+    <button class="backup-viewer-btn" onclick="goBackupViewer()">Backup Viewer</button>
 
     <div id="backupStatus" class="backup-status backup-warning">
         <div class="backup-title">Backup Status</div>
@@ -119,7 +124,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
     import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -206,7 +211,32 @@
         return data;
     }
 
-    window.downloadBackup = async function() {
+    async function buildBackupData() {
+        const realtimeData = await getRealtimeDatabaseBackup();
+        const donorsData = await getFirestoreCollectionBackup("donors");
+
+        return {
+            metadata: {
+                project: "galloners-club",
+                exportedAt: new Date().toISOString(),
+                exportedBy: auth.currentUser?.email || "",
+                type: "monthly-backup"
+            },
+            realtimeDatabase: realtimeData,
+            firestore: {
+                donors: donorsData
+            }
+        };
+    }
+
+    function markBackupDone(dateObj) {
+        const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+        localStorage.setItem("lastBackupMonth", `${dateObj.getFullYear()}-${month}`);
+        localStorage.setItem("lastBackupTime", dateObj.toISOString());
+        updateBackupStatus();
+    }
+
+    window.downloadBackupFile = async function() {
         try {
             if (!auth.currentUser) {
                 alert("You are not logged in.");
@@ -214,25 +244,11 @@
                 return;
             }
 
-            const realtimeData = await getRealtimeDatabaseBackup();
-            const donorsData = await getFirestoreCollectionBackup("donors");
-
             const now = new Date();
             const month = String(now.getMonth() + 1).padStart(2, "0");
             const day = String(now.getDate()).padStart(2, "0");
 
-            const backupData = {
-                metadata: {
-                    project: "galloners-club",
-                    exportedAt: now.toISOString(),
-                    exportedBy: auth.currentUser.email || "",
-                    type: "monthly-backup"
-                },
-                realtimeDatabase: realtimeData,
-                firestore: {
-                    donors: donorsData
-                }
-            };
+            const backupData = await buildBackupData();
 
             const fileName = `bloodbank-backup-${now.getFullYear()}-${month}-${day}.json`;
             const json = JSON.stringify(backupData, null, 2);
@@ -245,14 +261,36 @@
             link.click();
             document.body.removeChild(link);
 
-            localStorage.setItem("lastBackupMonth", `${now.getFullYear()}-${month}`);
-            localStorage.setItem("lastBackupTime", now.toISOString());
-            updateBackupStatus();
-
-            alert("Backup downloaded successfully.");
+            markBackupDone(now);
+            alert("Backup file downloaded successfully. You can now upload it to Google Drive.");
         } catch (error) {
-            console.error("Backup error:", error);
-            alert("Backup failed. Check browser console.");
+            console.error("Download backup error:", error);
+            alert("Backup file download failed. Check browser console.");
+        }
+    };
+
+    window.saveBackupToSystem = async function() {
+        try {
+            if (!auth.currentUser) {
+                alert("You are not logged in.");
+                window.location.href = "index.html";
+                return;
+            }
+
+            const now = new Date();
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            const day = String(now.getDate()).padStart(2, "0");
+            const backupKey = `${now.getFullYear()}-${month}-${day}`;
+
+            const backupData = await buildBackupData();
+
+            await set(ref(db, "backups/" + backupKey), backupData);
+
+            markBackupDone(now);
+            alert("Backup saved to system successfully.");
+        } catch (error) {
+            console.error("Save system backup error:", error);
+            alert("Saving backup to system failed. Check browser console.");
         }
     };
 
@@ -263,6 +301,7 @@
     window.goPartner = function() { window.location.href = "partner-organization.html"; };
     window.goReleasing = function() { window.location.href = "releasing.html"; };
     window.goAdminManager = function() { window.location.href = "admin-manager.html"; };
+    window.goBackupViewer = function() { window.location.href = "backup-viewer.html"; };
 
     window.logout = async function() {
         try {
