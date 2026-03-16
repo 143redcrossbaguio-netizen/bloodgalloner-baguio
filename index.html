@@ -22,6 +22,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            box-sizing: border-box;
         }
 
         .logo {
@@ -40,6 +41,7 @@
             margin: 8px 0;
             border: 1px solid #ccc;
             border-radius: 5px;
+            box-sizing: border-box;
         }
 
         button {
@@ -65,21 +67,20 @@
     <img src="images/logo.png" alt="Galloners Club Logo" class="logo">
     <h2>Galloners Club</h2>
 
-    <input type="text" id="username" placeholder="Username">
+    <input type="email" id="email" placeholder="Admin Email">
     <input type="password" id="password" placeholder="Password">
 
     <button onclick="login()">Login</button>
 </div>
 
-<!-- Firebase CDN -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
         authDomain: "galloners-club.firebaseapp.com",
+        databaseURL: "https://galloners-club-default-rtdb.firebaseio.com",
         projectId: "galloners-club",
         storageBucket: "galloners-club.firebasestorage.app",
         messagingSenderId: "213049860421",
@@ -88,43 +89,32 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getFirestore(app);
-    window.db = db;
+    const auth = getAuth(app);
 
-    // LOGIN FUNCTION USING FIRESTORE
     window.login = async function() {
-        const userInput = document.getElementById("username").value.trim();
-        const passInput = document.getElementById("password").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
 
-        if(!userInput || !passInput){
-            alert("Enter both username and password.");
+        if (!email || !password) {
+            alert("Enter both email and password.");
             return;
         }
 
         try {
-            const credRef = collection(db, "credentials");
-            const q = query(credRef, where("username", "==", userInput), where("password", "==", passInput));
-            const querySnapshot = await getDocs(q);
-
-            if(!querySnapshot.empty){
-                localStorage.setItem("isLoggedIn", "true");
-                window.location.href = "dashboard.html";
-            } else {
-                alert("Invalid Username or Password");
-            }
-        } catch(e){
-            console.error(e);
-            alert("Login error. Check console.");
+            await signInWithEmailAndPassword(auth, email, password);
+            alert("Login successful.");
+            window.location.href = "dashboard.html";
+        } catch (error) {
+            console.error("Login error:", error);
+            alert("Invalid email or password.");
         }
-    }
+    };
 
-    // Auto redirect if already logged in
-    window.onload = function() {
-        if(localStorage.getItem("isLoggedIn") === "true") {
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
             window.location.href = "dashboard.html";
         }
-    }
+    });
 </script>
 
 </body>
