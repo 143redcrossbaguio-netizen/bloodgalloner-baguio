@@ -284,12 +284,18 @@ button{
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getDatabase, ref, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "YOUR-API-KEY",
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
   databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "galloners-club"
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
 };
 
 const componentPrices = {
@@ -301,6 +307,7 @@ const componentPrices = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getDatabase(app);
 
 const facilityList = document.getElementById("facilityList");
@@ -308,6 +315,8 @@ const saveBtn = document.getElementById("saveBtn");
 
 const urlParams = new URLSearchParams(window.location.search);
 const editId = urlParams.get("id");
+
+let authReady = false;
 
 /* TODAY DATE */
 function setTodayDate(){
@@ -321,18 +330,22 @@ function setTodayDate(){
 }
 
 /* LOAD FACILITIES */
-onValue(ref(db, "facilities"), (snapshot) => {
-  facilityList.innerHTML = "";
+function loadFacilities(){
+  onValue(ref(db, "facilities"), (snapshot) => {
+    facilityList.innerHTML = "";
 
-  if (!snapshot.exists()) return;
+    if (!snapshot.exists()) return;
 
-  snapshot.forEach((child) => {
-    const data = child.val();
-    const option = document.createElement("option");
-    option.value = data.name || "";
-    facilityList.appendChild(option);
+    snapshot.forEach((child) => {
+      const data = child.val();
+      const option = document.createElement("option");
+      option.value = data.name || "";
+      facilityList.appendChild(option);
+    });
+  }, (error) => {
+    console.error("Facility load error:", error);
   });
-});
+}
 
 /* MAIN ENTRY REQUEST */
 window.addRequest = function(){
@@ -480,8 +493,12 @@ function resetForm(){
 }
 
 /* LOAD ENTRY FOR EDIT */
-if(editId){
-  get(ref(db, "releasing/" + editId)).then((snapshot) => {
+async function loadEditEntry(){
+  if(!editId) return;
+
+  try{
+    const snapshot = await get(ref(db, "releasing/" + editId));
+
     if(snapshot.exists()){
       const entry = snapshot.val();
 
@@ -576,11 +593,20 @@ if(editId){
         `;
       }
     }
-  });
+  }catch(error){
+    console.error("Load edit error:", error);
+    alert("Failed to load entry");
+  }
 }
 
 /* SAVE MAIN ENTRY */
 saveBtn.addEventListener("click", async () => {
+  if (!auth.currentUser) {
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   const requests = [];
   document.querySelectorAll(".requestRow").forEach(row => {
     const type = row.querySelector(".requestType").value;
@@ -800,6 +826,12 @@ window.addAugIssued = function(button){
 
 /* SAVE AUGMENTATION */
 window.saveAugmentation = async function(){
+  if (!auth.currentUser) {
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   const cards = document.querySelectorAll(".augmentationCard");
   const bloodTypes = [];
 
@@ -868,15 +900,11 @@ document.addEventListener("input", function(e){
     computeIssuedTotal();
   }
 
-  if(
-    e.target.id === "discountPrice"
-  ){
+  if(e.target.id === "discountPrice"){
     computeMainDiscountFromPrice();
   }
 
-  if(
-    e.target.id === "discountPercent"
-  ){
+  if(e.target.id === "discountPercent"){
     computeMainDiscountFromPercent();
   }
 
@@ -887,15 +915,11 @@ document.addEventListener("input", function(e){
     computeAugmentationTotal();
   }
 
-  if(
-    e.target.id === "augDiscountPrice"
-  ){
+  if(e.target.id === "augDiscountPrice"){
     computeAugDiscountFromPrice();
   }
 
-  if(
-    e.target.id === "augDiscountPercent"
-  ){
+  if(e.target.id === "augDiscountPercent"){
     computeAugDiscountFromPercent();
   }
 });
@@ -909,8 +933,19 @@ window.goBack = function(){
   window.location.href = "releasing.html";
 };
 
-/* INIT */
-setTodayDate();
+/* AUTH CHECK + INIT */
+onAuthStateChanged(auth, async (user) => {
+  authReady = true;
+
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  setTodayDate();
+  loadFacilities();
+  await loadEditEntry();
+});
 </script>
 
 </body>
