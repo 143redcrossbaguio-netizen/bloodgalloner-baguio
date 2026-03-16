@@ -6,13 +6,14 @@
 
     <!-- Firebase CDN scripts -->
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
         header { background:#b30000; color:white; padding:15px; text-align:center; }
         .container { max-width:500px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
-        input, select { width:100%; padding:8px; margin-bottom:10px; }
+        input, select { width:100%; padding:8px; margin-bottom:10px; box-sizing:border-box; }
         button { padding:8px; margin-top:5px; background:#b30000; color:white; border:none; border-radius:5px; cursor:pointer; }
         .serial-box { margin-top:10px; }
     </style>
@@ -76,22 +77,57 @@
         appId: "1:213049860421:web:4156aaa52b945f48711e2c",
         measurementId: "G-XYXJH9JNXJ"
     };
+
     firebase.initializeApp(firebaseConfig);
+
+    var auth = firebase.auth();
     var db = firebase.firestore();
 
     let serials = [];
     let editDocId = null;
+    let authReady = false;
 
-    function addSerial(){
+    auth.onAuthStateChanged(function(user) {
+        if (!user) {
+            window.location.href = "index.html";
+            return;
+        }
+
+        authReady = true;
+
+        let params = new URLSearchParams(window.location.search);
+        if (params.has("editId")) {
+            editDocId = params.get("editId");
+            db.collection("donors").doc(editDocId).get().then(docSnap => {
+                if (docSnap.exists) {
+                    let d = docSnap.data();
+                    document.getElementById("firstName").value = d.firstName || "";
+                    document.getElementById("middleName").value = d.middleName || "";
+                    document.getElementById("surname").value = d.surname || "";
+                    document.getElementById("bloodType").value = d.bloodType || "";
+                    document.getElementById("rhFactor").value = d.rhFactor || "";
+                    document.getElementById("birthday").value = d.birthday || "";
+                    document.getElementById("contact").value = d.contact || "";
+                    serials = d.serials || [];
+                    renderSerials();
+                }
+            }).catch(error => {
+                console.error("Error loading donor:", error);
+                alert("Error loading donor record.");
+            });
+        }
+    });
+
+    function addSerial() {
         let serial = document.getElementById("serialInput").value.trim();
         let date = document.getElementById("dateInput").value;
 
-        if(serial === "" || date === ""){
+        if (serial === "" || date === "") {
             alert("Enter serial number and date.");
             return;
         }
 
-        if(serials.some(s => s.serial === serial)){
+        if (serials.some(s => s.serial === serial)) {
             alert("Duplicate serial detected!");
             return;
         }
@@ -102,10 +138,10 @@
         renderSerials();
     }
 
-    function renderSerials(){
+    function renderSerials() {
         let container = document.getElementById("serialList");
         container.innerHTML = "";
-        serials.forEach((s,i)=>{
+        serials.forEach((s, i) => {
             container.innerHTML += `
                 <div>
                     ${s.serial} - ${s.date}
@@ -115,12 +151,18 @@
         });
     }
 
-    function removeSerial(index){
-        serials.splice(index,1);
+    function removeSerial(index) {
+        serials.splice(index, 1);
         renderSerials();
     }
 
-    function saveDonor(){
+    function saveDonor() {
+        if (!authReady || !auth.currentUser) {
+            alert("You are not logged in.");
+            window.location.href = "index.html";
+            return;
+        }
+
         let firstName = document.getElementById("firstName").value.trim();
         let middleName = document.getElementById("middleName").value.trim();
         let surname = document.getElementById("surname").value.trim();
@@ -129,44 +171,37 @@
         let birthday = document.getElementById("birthday").value;
         let contact = document.getElementById("contact").value.trim();
 
-        if(!firstName || !surname || !bloodType || !rhFactor){
+        if (!firstName || !surname || !bloodType || !rhFactor) {
             alert("Fill required fields.");
             return;
         }
 
-        var donorData = { firstName, middleName, surname, bloodType, rhFactor, birthday, contact, serials };
+        var donorData = {
+            firstName,
+            middleName,
+            surname,
+            bloodType,
+            rhFactor,
+            birthday,
+            contact,
+            serials
+        };
 
-        if(editDocId){
-            db.collection("donors").doc(editDocId).update(donorData).then(()=>{
+        if (editDocId) {
+            db.collection("donors").doc(editDocId).update(donorData).then(() => {
                 alert("Donor updated successfully!");
                 window.location.href = "tracking.html";
+            }).catch(error => {
+                console.error("Update error:", error);
+                alert("Error updating donor.");
             });
         } else {
-            db.collection("donors").add(donorData).then(()=>{
+            db.collection("donors").add(donorData).then(() => {
                 alert("Donor saved successfully!");
                 window.location.href = "tracking.html";
-            });
-        }
-    }
-
-    // Load edit data if URL has ?editId=
-    window.onload = function(){
-        let params = new URLSearchParams(window.location.search);
-        if(params.has("editId")){
-            editDocId = params.get("editId");
-            db.collection("donors").doc(editDocId).get().then(docSnap=>{
-                if(docSnap.exists){
-                    let d = docSnap.data();
-                    document.getElementById("firstName").value = d.firstName;
-                    document.getElementById("middleName").value = d.middleName;
-                    document.getElementById("surname").value = d.surname;
-                    document.getElementById("bloodType").value = d.bloodType;
-                    document.getElementById("rhFactor").value = d.rhFactor;
-                    document.getElementById("birthday").value = d.birthday;
-                    document.getElementById("contact").value = d.contact;
-                    serials = d.serials || [];
-                    renderSerials();
-                }
+            }).catch(error => {
+                console.error("Save error:", error);
+                alert("Error saving donor.");
             });
         }
     }
