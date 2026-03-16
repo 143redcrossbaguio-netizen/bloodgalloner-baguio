@@ -56,11 +56,35 @@
         .settings-btn { background-color: #1565c0; }
         .partner-btn { background-color: #2e7d32; }
         .releasing-btn { background-color: #ff9800; }
-
-        /* NEW ADMIN BUTTON */
         .admin-btn { background-color: #4a148c; }
-
+        .backup-btn { background-color: #00897b; }
         .logout-btn { background-color: #444; }
+
+        .backup-status {
+            margin-top: 18px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: left;
+        }
+
+        .backup-warning {
+            background: #fff3cd;
+            border: 1px solid #ffe69c;
+            color: #664d03;
+        }
+
+        .backup-ok {
+            background: #d1e7dd;
+            border: 1px solid #a3cfbb;
+            color: #0f5132;
+        }
+
+        .backup-title {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
     </style>
 </head>
 
@@ -80,9 +104,13 @@
     <button class="settings-btn" onclick="goSettings()">Settings</button>
     <button class="partner-btn" onclick="goPartner()">Partner Organization</button>
     <button class="releasing-btn" onclick="goReleasing()">Releasing</button>
-
-    <!-- NEW ADMIN MANAGER BUTTON -->
     <button class="admin-btn" onclick="goAdminManager()">Admin Manager</button>
+    <button class="backup-btn" onclick="downloadBackup()">Monthly Backup</button>
+
+    <div id="backupStatus" class="backup-status backup-warning">
+        <div class="backup-title">Backup Status</div>
+        <div>Checking backup status...</div>
+    </div>
 
     <button class="logout-btn" onclick="logout()">Logout</button>
 
@@ -91,6 +119,8 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -105,12 +135,127 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getDatabase(app);
+    const firestore = getFirestore(app);
+
+    const backupStatusEl = document.getElementById("backupStatus");
 
     onAuthStateChanged(auth, (user) => {
         if (!user) {
             window.location.href = "index.html";
+            return;
         }
+
+        updateBackupStatus();
     });
+
+    function getCurrentMonthKey() {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        return `${now.getFullYear()}-${month}`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return "Never";
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return value;
+        return d.toLocaleString();
+    }
+
+    function updateBackupStatus() {
+        const currentMonth = getCurrentMonthKey();
+        const lastBackupMonth = localStorage.getItem("lastBackupMonth");
+        const lastBackupTime = localStorage.getItem("lastBackupTime");
+
+        if (lastBackupMonth === currentMonth) {
+            backupStatusEl.className = "backup-status backup-ok";
+            backupStatusEl.innerHTML = `
+                <div class="backup-title">Backup Status</div>
+                <div>Monthly backup completed.</div>
+                <div>Last backup: ${formatDateTime(lastBackupTime)}</div>
+            `;
+        } else {
+            backupStatusEl.className = "backup-status backup-warning";
+            backupStatusEl.innerHTML = `
+                <div class="backup-title">Backup Status</div>
+                <div>Monthly backup is due.</div>
+                <div>Last backup: ${formatDateTime(lastBackupTime)}</div>
+            `;
+        }
+    }
+
+    async function getRealtimeDatabaseBackup() {
+        const paths = ["admins", "facilities", "releasing", "bloodAugmentation"];
+        const backup = {};
+
+        for (const path of paths) {
+            const snapshot = await get(ref(db, path));
+            backup[path] = snapshot.exists() ? snapshot.val() : {};
+        }
+
+        return backup;
+    }
+
+    async function getFirestoreCollectionBackup(collectionName) {
+        const snapshot = await getDocs(collection(firestore, collectionName));
+        const data = {};
+
+        snapshot.forEach((doc) => {
+            data[doc.id] = doc.data();
+        });
+
+        return data;
+    }
+
+    window.downloadBackup = async function() {
+        try {
+            if (!auth.currentUser) {
+                alert("You are not logged in.");
+                window.location.href = "index.html";
+                return;
+            }
+
+            const realtimeData = await getRealtimeDatabaseBackup();
+            const donorsData = await getFirestoreCollectionBackup("donors");
+
+            const now = new Date();
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            const day = String(now.getDate()).padStart(2, "0");
+
+            const backupData = {
+                metadata: {
+                    project: "galloners-club",
+                    exportedAt: now.toISOString(),
+                    exportedBy: auth.currentUser.email || "",
+                    type: "monthly-backup"
+                },
+                realtimeDatabase: realtimeData,
+                firestore: {
+                    donors: donorsData
+                }
+            };
+
+            const fileName = `bloodbank-backup-${now.getFullYear()}-${month}-${day}.json`;
+            const json = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([json], { type: "application/json" });
+
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            localStorage.setItem("lastBackupMonth", `${now.getFullYear()}-${month}`);
+            localStorage.setItem("lastBackupTime", now.toISOString());
+            updateBackupStatus();
+
+            alert("Backup downloaded successfully.");
+        } catch (error) {
+            console.error("Backup error:", error);
+            alert("Backup failed.");
+        }
+    };
 
     window.goEntry = function() { window.location.href = "donor-entry.html"; };
     window.goTracking = function() { window.location.href = "tracking.html"; };
@@ -118,11 +263,7 @@
     window.goSettings = function() { window.location.href = "settings.html"; };
     window.goPartner = function() { window.location.href = "partner-organization.html"; };
     window.goReleasing = function() { window.location.href = "releasing.html"; };
-
-    /* NEW ADMIN MANAGER PAGE */
-    window.goAdminManager = function() {
-        window.location.href = "admin-manager.html";
-    };
+    window.goAdminManager = function() { window.location.href = "admin-manager.html"; };
 
     window.logout = async function() {
         try {
