@@ -44,7 +44,7 @@ color:white;
 }
 
 .releaseBtn{background:#e65100;}
-.augmentationBtn{background:#1565c0;}
+augmentationBtn{background:#1565c0;}
 .activeBtn{outline:3px solid #222;}
 
 .controls{
@@ -296,15 +296,22 @@ flex-direction:column;
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getDatabase, ref, onValue, remove, get, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey:"YOUR-API-KEY",
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
   databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:"galloners-club"
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getDatabase(app);
 
 const container = document.getElementById("tableContainer");
@@ -320,38 +327,51 @@ let currentView = "releasing";
 let allReleasingEntries = [];
 let allAugmentationEntries = [];
 let currentAugmentationEditId = null;
+let authReady = false;
 
 /* LOAD RELEASING */
-onValue(ref(db,"releasing"), snapshot => {
-  allReleasingEntries = [];
-  snapshot.forEach(child => {
-    allReleasingEntries.push({
-      id: child.key,
-      ...child.val()
-    });
-  });
+function loadReleasingData(){
+  onValue(ref(db,"releasing"), snapshot => {
+    allReleasingEntries = [];
 
-  if(currentView === "releasing"){
-    populateFacilityFilter();
-    renderCurrentView();
-  }
-});
+    snapshot.forEach(child => {
+      allReleasingEntries.push({
+        id: child.key,
+        ...child.val()
+      });
+    });
+
+    if(currentView === "releasing"){
+      populateFacilityFilter();
+      renderCurrentView();
+    }
+  }, error => {
+    console.error("Load releasing error:", error);
+    alert("Failed to load releasing records.");
+  });
+}
 
 /* LOAD AUGMENTATION */
-onValue(ref(db,"bloodAugmentation"), snapshot => {
-  allAugmentationEntries = [];
-  snapshot.forEach(child => {
-    allAugmentationEntries.push({
-      id: child.key,
-      ...child.val()
-    });
-  });
+function loadAugmentationData(){
+  onValue(ref(db,"bloodAugmentation"), snapshot => {
+    allAugmentationEntries = [];
 
-  if(currentView === "augmentation"){
-    populateFacilityFilter();
-    renderCurrentView();
-  }
-});
+    snapshot.forEach(child => {
+      allAugmentationEntries.push({
+        id: child.key,
+        ...child.val()
+      });
+    });
+
+    if(currentView === "augmentation"){
+      populateFacilityFilter();
+      renderCurrentView();
+    }
+  }, error => {
+    console.error("Load augmentation error:", error);
+    alert("Failed to load blood augmentation records.");
+  });
+}
 
 function setView(view){
   currentView = view;
@@ -797,6 +817,12 @@ window.addEditAugIssued = function(button){
 };
 
 async function openEditAugmentation(id){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   try{
     const snapshot = await get(ref(db, "bloodAugmentation/" + id));
     if(!snapshot.exists()){
@@ -828,6 +854,12 @@ async function openEditAugmentation(id){
 }
 
 window.saveAugmentationEdit = async function(){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   if(!currentAugmentationEditId) return;
 
   const cards = document.querySelectorAll("#editAugBloodTypeContainer .card");
@@ -890,6 +922,12 @@ container.addEventListener("click", async (event) => {
   const id = button.dataset.id;
 
   if(!action || !id) return;
+
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
 
   if(action === "edit-release"){
     window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
@@ -1028,6 +1066,12 @@ function exportAugmentationCSV(){
 }
 
 function exportCurrentCSV(){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
   if(currentView === "releasing"){
     exportReleasingCSV();
   }else{
@@ -1055,8 +1099,19 @@ window.onclick = function(event){
   }
 };
 
-/* DEFAULT */
-setView("releasing");
+/* AUTH CHECK + INIT */
+onAuthStateChanged(auth, (user) => {
+  authReady = true;
+
+  if(!user){
+    window.location.href = "index.html";
+    return;
+  }
+
+  loadReleasingData();
+  loadAugmentationData();
+  setView("releasing");
+});
 </script>
 
 </body>
