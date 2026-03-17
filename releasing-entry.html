@@ -324,6 +324,30 @@ const urlParams = new URLSearchParams(window.location.search);
 const editId = urlParams.get("id");
 
 let authReady = false;
+let currentReleasingPriceSnapshot = null;
+let currentAugmentationPriceSnapshot = null;
+
+function buildPriceSnapshot(){
+  return {
+    WB: Number(componentPrices.WB) || 0,
+    PRBC: Number(componentPrices.PRBC) || 0,
+    PC: Number(componentPrices.PC) || 0,
+    FFP: Number(componentPrices.FFP) || 0,
+    CRYO: Number(componentPrices.CRYO) || 0,
+    BOX: Number(componentPrices.BOXCONTAINER) || 0
+  };
+}
+
+function normalizePriceSnapshot(snapshot){
+  return {
+    WB: Number(snapshot?.WB ?? snapshot?.wb) || 0,
+    PRBC: Number(snapshot?.PRBC ?? snapshot?.prbc) || 0,
+    PC: Number(snapshot?.PC ?? snapshot?.pc) || 0,
+    FFP: Number(snapshot?.FFP ?? snapshot?.ffp) || 0,
+    CRYO: Number(snapshot?.CRYO ?? snapshot?.cryo) || 0,
+    BOX: Number(snapshot?.BOX ?? snapshot?.box ?? snapshot?.boxContainer) || 0
+  };
+}
 
 function setTodayDate(){
   const today = new Date().toISOString().split("T")[0];
@@ -495,6 +519,8 @@ function computeMainDiscountFromPercentOrPrice(){
 }
 
 function resetForm(){
+  currentReleasingPriceSnapshot = null;
+
   document.getElementById("date").value = new Date().toISOString().split("T")[0];
   document.getElementById("facility").value = "";
   document.getElementById("surname").value = "";
@@ -549,6 +575,8 @@ async function loadEditEntry(){
 
     if(snapshot.exists()){
       const entry = snapshot.val();
+
+      currentReleasingPriceSnapshot = entry.priceSnapshot ? normalizePriceSnapshot(entry.priceSnapshot) : null;
 
       document.getElementById("date").value = entry.date || "";
       document.getElementById("facility").value = entry.facility || "";
@@ -675,6 +703,8 @@ saveBtn.addEventListener("click", async () => {
     }
   });
 
+  const priceSnapshotToSave = currentReleasingPriceSnapshot || buildPriceSnapshot();
+
   const entryData = {
     date: document.getElementById("date").value,
     facility: document.getElementById("facility").value.toUpperCase(),
@@ -688,7 +718,8 @@ saveBtn.addEventListener("click", async () => {
     requests: requests,
     issued: issued,
     amountPaid: document.getElementById("amountPaid").value,
-    discount: document.getElementById("discount").value || 0
+    discount: document.getElementById("discount").value || 0,
+    priceSnapshot: priceSnapshotToSave
   };
 
   try {
@@ -915,18 +946,22 @@ window.saveAugmentation = async function(){
     }
   });
 
+  const priceSnapshotToSave = currentAugmentationPriceSnapshot || buildPriceSnapshot();
+
   const augmentationData = {
     date: document.getElementById("augDate").value,
     facility: document.getElementById("augFacility").value.toUpperCase(),
     boxContainerQty: document.getElementById("augBoxContainerQty").value || 0,
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
-    discount: document.getElementById("augDiscount").value || 0
+    discount: document.getElementById("augDiscount").value || 0,
+    priceSnapshot: priceSnapshotToSave
   };
 
   try{
     await push(ref(db, "bloodAugmentation"), augmentationData);
     alert("Blood augmentation saved successfully!");
+    currentAugmentationPriceSnapshot = null;
     document.getElementById("augDate").value = new Date().toISOString().split("T")[0];
     document.getElementById("augFacility").value = "";
     document.getElementById("augBoxContainerQty").value = "";
