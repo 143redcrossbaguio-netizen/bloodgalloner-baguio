@@ -6,6 +6,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
 
 <style>
 body{
@@ -69,7 +70,6 @@ font-size:15px;
 }
 
 .save{background:#2e7d32;}
-.reset{background:#ef6c00;}
 .back{background:#444;}
 
 .note{
@@ -80,6 +80,7 @@ border-radius:6px;
 font-size:14px;
 color:#444;
 text-align:center;
+word-wrap:break-word;
 }
 </style>
 </head>
@@ -124,12 +125,9 @@ text-align:center;
 </div>
 
 <button class="save" onclick="savePrices()">SAVE PRICES</button>
-<button class="reset" onclick="resetPrices()">RESET PRICES</button>
 <button class="back" onclick="goBack()">BACK</button>
 
-<div class="note" id="statusMessage">
-Saved prices will stay on this browser using localStorage.
-</div>
+<div class="note" id="statusMessage">Loading saved prices...</div>
 </div>
 
 <script>
@@ -140,7 +138,8 @@ var firebaseConfig = {
     storageBucket: "galloners-club.appspot.com",
     messagingSenderId: "213049860421",
     appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
+    measurementId: "G-XYXJH9JNXJ",
+    databaseURL: "https://galloners-club-default-rtdb.firebaseio.com"
 };
 
 if (!firebase.apps.length) {
@@ -148,56 +147,60 @@ if (!firebase.apps.length) {
 }
 
 var auth = firebase.auth();
+var db = firebase.database();
 
 auth.onAuthStateChanged(function(user){
     if(!user){
         window.location.href = "index.html";
+    } else {
+        loadPrices();
     }
 });
 
 function loadPrices(){
-    document.getElementById("wb").value = localStorage.getItem("price_wb") || "";
-    document.getElementById("prbc").value = localStorage.getItem("price_prbc") || "";
-    document.getElementById("pc").value = localStorage.getItem("price_pc") || "";
-    document.getElementById("ffp").value = localStorage.getItem("price_ffp") || "";
-    document.getElementById("cryo").value = localStorage.getItem("price_cryo") || "";
-    document.getElementById("boxContainer").value = localStorage.getItem("price_boxContainer") || "";
+    db.ref("settings/releasingPrices").once("value")
+    .then(function(snapshot){
+        var data = snapshot.val();
+
+        if(data){
+            document.getElementById("wb").value = data.wb || "";
+            document.getElementById("prbc").value = data.prbc || "";
+            document.getElementById("pc").value = data.pc || "";
+            document.getElementById("ffp").value = data.ffp || "";
+            document.getElementById("cryo").value = data.cryo || "";
+            document.getElementById("boxContainer").value = data.boxContainer || "";
+            document.getElementById("statusMessage").innerHTML = "Prices loaded from Firebase.";
+        } else {
+            document.getElementById("statusMessage").innerHTML = "No saved prices found yet.";
+        }
+    })
+    .catch(function(error){
+        document.getElementById("statusMessage").innerHTML = "Error loading prices: " + error.message;
+    });
 }
 
 function savePrices(){
-    localStorage.setItem("price_wb", document.getElementById("wb").value);
-    localStorage.setItem("price_prbc", document.getElementById("prbc").value);
-    localStorage.setItem("price_pc", document.getElementById("pc").value);
-    localStorage.setItem("price_ffp", document.getElementById("ffp").value);
-    localStorage.setItem("price_cryo", document.getElementById("cryo").value);
-    localStorage.setItem("price_boxContainer", document.getElementById("boxContainer").value);
+    var prices = {
+        wb: parseFloat(document.getElementById("wb").value) || 0,
+        prbc: parseFloat(document.getElementById("prbc").value) || 0,
+        pc: parseFloat(document.getElementById("pc").value) || 0,
+        ffp: parseFloat(document.getElementById("ffp").value) || 0,
+        cryo: parseFloat(document.getElementById("cryo").value) || 0,
+        boxContainer: parseFloat(document.getElementById("boxContainer").value) || 0
+    };
 
-    document.getElementById("statusMessage").innerHTML = "Prices saved successfully.";
-}
-
-function resetPrices(){
-    document.getElementById("wb").value = "";
-    document.getElementById("prbc").value = "";
-    document.getElementById("pc").value = "";
-    document.getElementById("ffp").value = "";
-    document.getElementById("cryo").value = "";
-    document.getElementById("boxContainer").value = "";
-
-    localStorage.removeItem("price_wb");
-    localStorage.removeItem("price_prbc");
-    localStorage.removeItem("price_pc");
-    localStorage.removeItem("price_ffp");
-    localStorage.removeItem("price_cryo");
-    localStorage.removeItem("price_boxContainer");
-
-    document.getElementById("statusMessage").innerHTML = "Prices reset successfully.";
+    db.ref("settings/releasingPrices").set(prices)
+    .then(function(){
+        document.getElementById("statusMessage").innerHTML = "Prices saved successfully to Firebase.";
+    })
+    .catch(function(error){
+        document.getElementById("statusMessage").innerHTML = "Error saving prices: " + error.message;
+    });
 }
 
 function goBack(){
     window.location.href = "blood-releasing.html";
 }
-
-loadPrices();
 </script>
 
 </body>
