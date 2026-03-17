@@ -44,7 +44,7 @@ color:white;
 }
 
 .releaseBtn{background:#e65100;}
-augmentationBtn{background:#1565c0;}
+.augmentationBtn{background:#1565c0;}
 .activeBtn{outline:3px solid #222;}
 
 .controls{
@@ -93,6 +93,10 @@ color:white;
 
 .augTable th{
 background:#1565c0;
+}
+
+.augTable td{
+background:#eaf4ff;
 }
 
 .componentBox{
@@ -198,20 +202,21 @@ cursor:pointer;
 .removeBtn{background:#c62828;}
 .saveBtn{background:#1565c0;color:white;}
 .closeBtn{background:#444;color:white;}
+
 .card{
-border:1px solid #ddd;
+border:1px solid #90caf9;
 border-radius:8px;
 padding:12px;
 margin-top:12px;
-background:#fafafa;
+background:#e3f2fd;
 }
 
 .innerBox{
-border:1px solid #ddd;
+border:1px solid #bbdefb;
 border-radius:6px;
 padding:10px;
 margin-top:10px;
-background:white;
+background:#f4faff;
 }
 
 .modalActions{
@@ -276,6 +281,9 @@ flex-direction:column;
 
     <label class="formLabel">FACILITY</label>
     <input type="text" id="editAugFacility" class="formInput">
+
+    <label class="formLabel">BOX CONTAINER</label>
+    <input type="number" id="editAugBoxContainerQty" class="formInput">
 
     <div id="editAugBloodTypeContainer"></div>
 
@@ -474,7 +482,8 @@ function getFilteredAugmentationEntries(){
         requests: [],
         issued: [],
         amountPaid: entry.amountPaid || "",
-        discount: entry.discount || ""
+        discount: entry.discount || "",
+        boxContainerQty: entry.boxContainerQty || ""
       });
     }else{
       bloodTypes.forEach(item => {
@@ -486,7 +495,8 @@ function getFilteredAugmentationEntries(){
           requests: Array.isArray(item.requests) ? item.requests : [],
           issued: Array.isArray(item.issued) ? item.issued : [],
           amountPaid: entry.amountPaid || "",
-          discount: entry.discount || ""
+          discount: entry.discount || "",
+          boxContainerQty: entry.boxContainerQty || ""
         });
       });
     }
@@ -561,8 +571,12 @@ function renderReleasingTable(){
           <th>AGE</th>
           <th>SEX</th>
           <th>BLOOD</th>
+          <th>OR</th>
+          <th>BOX CONTAINER</th>
           <th>REQUESTED</th>
           <th>ISSUED</th>
+          <th>AMOUNT PAID</th>
+          <th>DISCOUNT</th>
           <th>ACTION</th>
         </tr>
       </thead>
@@ -581,8 +595,12 @@ function renderReleasingTable(){
         <td>${entry.age || ""}</td>
         <td>${entry.sex || ""}</td>
         <td>${entry.bloodtype || ""}</td>
+        <td>${entry.or || ""}</td>
+        <td>${entry.boxContainerQty || 0}</td>
         <td class="componentBox">${formatComponents(entry.requests)}</td>
         <td class="componentBox">${formatComponents(entry.issued)}</td>
+        <td>${entry.amountPaid || ""}</td>
+        <td>${entry.discount || ""}</td>
         <td>
           <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
           <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
@@ -628,6 +646,7 @@ function renderAugmentationTable(){
           <th rowspan="2">DATE</th>
           <th rowspan="2">FACILITY</th>
           <th rowspan="2">BLOOD TYPE</th>
+          <th rowspan="2">BOX CONTAINER</th>
           <th colspan="5">REQUESTED</th>
           <th colspan="5">ISSUED</th>
           <th rowspan="2">AMOUNT PAID</th>
@@ -674,6 +693,7 @@ function renderAugmentationTable(){
         <td>${entry.date || ""}</td>
         <td>${entry.facility || ""}</td>
         <td>${entry.bloodType || ""}</td>
+        <td>${entry.boxContainerQty || 0}</td>
 
         <td>${req.WB}</td>
         <td>${req.PRBC}</td>
@@ -712,6 +732,7 @@ window.closeAugmentationModal = function(){
   currentAugmentationEditId = null;
   document.getElementById("editAugDate").value = "";
   document.getElementById("editAugFacility").value = "";
+  document.getElementById("editAugBoxContainerQty").value = "";
   document.getElementById("editAugAmountPaid").value = "";
   document.getElementById("editAugDiscount").value = "";
   document.getElementById("editAugBloodTypeContainer").innerHTML = "";
@@ -835,6 +856,7 @@ async function openEditAugmentation(id){
 
     document.getElementById("editAugDate").value = data.date || "";
     document.getElementById("editAugFacility").value = data.facility || "";
+    document.getElementById("editAugBoxContainerQty").value = data.boxContainerQty || "";
     document.getElementById("editAugAmountPaid").value = data.amountPaid || "";
     document.getElementById("editAugDiscount").value = data.discount || "";
     document.getElementById("editAugBloodTypeContainer").innerHTML = "";
@@ -898,6 +920,7 @@ window.saveAugmentationEdit = async function(){
   const payload = {
     date: document.getElementById("editAugDate").value,
     facility: document.getElementById("editAugFacility").value.toUpperCase(),
+    boxContainerQty: document.getElementById("editAugBoxContainerQty").value || 0,
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
     discount: document.getElementById("editAugDiscount").value
@@ -972,7 +995,7 @@ function exportReleasingCSV(){
   const filtered = getFilteredReleasingEntries();
 
   const rows = [
-    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","REQUESTED","ISSUED"]
+    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","OR","BOX_CONTAINER","REQUESTED","ISSUED","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
@@ -992,8 +1015,12 @@ function exportReleasingCSV(){
       e.age || "",
       e.sex || "",
       e.bloodtype || "",
+      e.or || "",
+      e.boxContainerQty || 0,
       req,
-      iss
+      iss,
+      e.amountPaid || "",
+      e.discount || ""
     ]);
   });
 
@@ -1014,7 +1041,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BLOOD_TYPE","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","BLOOD_TYPE","BOX_CONTAINER","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
@@ -1037,6 +1064,7 @@ function exportAugmentationCSV(){
       e.date || "",
       e.facility || "",
       e.bloodType || "",
+      e.boxContainerQty || 0,
       req.WB,
       req.PRBC,
       req.PC,
