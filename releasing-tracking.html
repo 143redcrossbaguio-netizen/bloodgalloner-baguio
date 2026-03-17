@@ -234,30 +234,6 @@ font-weight:bold;
 cursor:pointer;
 }
 
-.augSummaryBox{
-text-align:left;
-line-height:1.5;
-font-size:13px;
-}
-
-.augMiniTable{
-width:100%;
-border-collapse:collapse;
-}
-
-.augMiniTable th,
-.augMiniTable td{
-border:1px solid #9ec5fe;
-padding:6px;
-font-size:12px;
-text-align:center;
-}
-
-.augMiniTable th{
-background:#bfdbfe;
-color:#0f172a;
-}
-
 @media (max-width: 900px){
 .controls{
 flex-direction:column;
@@ -362,7 +338,7 @@ let currentAugmentationEditId = null;
 let currentAugmentationPriceSnapshot = null;
 let authReady = false;
 
-let priceList = {
+let currentPrices = {
   WB: 0,
   PRBC: 0,
   PC: 0,
@@ -376,7 +352,7 @@ async function loadPrices(){
     const snapshot = await get(ref(db, "settings/releasingPrices"));
     const data = snapshot.val() || {};
 
-    priceList = {
+    currentPrices = {
       WB: Number(data.wb) || 0,
       PRBC: Number(data.prbc) || 0,
       PC: Number(data.pc) || 0,
@@ -386,7 +362,7 @@ async function loadPrices(){
     };
   }catch(error){
     console.error("Failed to load prices:", error);
-    priceList = {
+    currentPrices = {
       WB: 0,
       PRBC: 0,
       PC: 0,
@@ -412,7 +388,7 @@ function getEntryPrices(entry){
   if(entry && entry.priceSnapshot){
     return normalizePriceSnapshot(entry.priceSnapshot);
   }
-  return priceList;
+  return currentPrices;
 }
 
 function computeIssuedTotalFromList(issuedList, boxContainerQty, prices){
@@ -428,6 +404,7 @@ function computeIssuedTotalFromList(issuedList, boxContainerQty, prices){
   });
 
   total += (Number(boxContainerQty) || 0) * (prices.BOX || 0);
+
   return total;
 }
 
@@ -436,83 +413,14 @@ function computeReleasingTotal(entry){
   return computeIssuedTotalFromList(entry.issued, entry.boxContainerQty, prices).toFixed(2);
 }
 
+function computeAugmentationTotal(entry){
+  const prices = getEntryPrices(entry);
+  return computeIssuedTotalFromList(entry.issued, entry.boxContainerQty, prices).toFixed(2);
+}
+
 function formatComponents(list){
   if(!Array.isArray(list) || list.length === 0) return "";
   return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
-}
-
-function formatAugmentationSummary(bloodTypes){
-  if(!Array.isArray(bloodTypes) || bloodTypes.length === 0) return "";
-  return bloodTypes.map(item => {
-    const req = (Array.isArray(item.requests) ? item.requests : [])
-      .filter(x => Number(x.qty || 0) > 0)
-      .map(x => `${x.type}-${x.qty}`)
-      .join(", ");
-
-    const iss = (Array.isArray(item.issued) ? item.issued : [])
-      .filter(x => Number(x.qty || 0) > 0)
-      .map(x => `${x.type}-${x.qty}`)
-      .join(", ");
-
-    return `<b>${item.bloodType || ""}</b><br>REQ: ${req || "-"}<br>ISS: ${iss || "-"}`;
-  }).join("<hr style="border:none;border-top:1px solid #bcd; margin:8px 0;">");
-}
-
-function buildAugmentationTotals(entry){
-  const req = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
-  const iss = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
-
-  (Array.isArray(entry.bloodTypes) ? entry.bloodTypes : []).forEach(bt => {
-    (Array.isArray(bt.requests) ? bt.requests : []).forEach(item => {
-      const t = (item.type || "").toUpperCase();
-      const q = Number(item.qty || 0);
-      if(req[t] !== undefined) req[t] += q;
-    });
-
-    (Array.isArray(bt.issued) ? bt.issued : []).forEach(item => {
-      const t = (item.type || "").toUpperCase();
-      const q = Number(item.qty || 0);
-      if(iss[t] !== undefined) iss[t] += q;
-    });
-  });
-
-  return {req, iss};
-}
-
-function buildAugmentationMiniTable(entry){
-  const totals = buildAugmentationTotals(entry);
-  return `
-    <table class="augMiniTable">
-      <thead>
-        <tr>
-          <th></th>
-          <th>WB</th>
-          <th>PRBC</th>
-          <th>PC</th>
-          <th>FFP</th>
-          <th>CRYO</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <th>REQ</th>
-          <td>${totals.req.WB}</td>
-          <td>${totals.req.PRBC}</td>
-          <td>${totals.req.PC}</td>
-          <td>${totals.req.FFP}</td>
-          <td>${totals.req.CRYO}</td>
-        </tr>
-        <tr>
-          <th>ISS</th>
-          <td>${totals.iss.WB}</td>
-          <td>${totals.iss.PRBC}</td>
-          <td>${totals.iss.PC}</td>
-          <td>${totals.iss.FFP}</td>
-          <td>${totals.iss.CRYO}</td>
-        </tr>
-      </tbody>
-    </table>
-  `;
 }
 
 /* LOAD RELEASING */
@@ -641,17 +549,51 @@ function getFilteredAugmentationEntries(){
   const dateValue = filterDate.value;
   const facilityValue = filterFacility.value;
 
-  let filtered = allAugmentationEntries.filter(entry => {
+  let flattened = [];
+
+  allAugmentationEntries.forEach(entry => {
+    const bloodTypes = Array.isArray(entry.bloodTypes) ? entry.bloodTypes : [];
+
+    if(bloodTypes.length === 0){
+      flattened.push({
+        parentId: entry.id,
+        date: entry.date || "",
+        facility: entry.facility || "",
+        bloodType: "",
+        requests: [],
+        issued: [],
+        amountPaid: entry.amountPaid || "",
+        discount: entry.discount || "",
+        boxContainerQty: entry.boxContainerQty || "",
+        priceSnapshot: entry.priceSnapshot || null
+      });
+    }else{
+      bloodTypes.forEach(item => {
+        flattened.push({
+          parentId: entry.id,
+          date: entry.date || "",
+          facility: entry.facility || "",
+          bloodType: item.bloodType || "",
+          requests: Array.isArray(item.requests) ? item.requests : [],
+          issued: Array.isArray(item.issued) ? item.issued : [],
+          amountPaid: entry.amountPaid || "",
+          discount: entry.discount || "",
+          boxContainerQty: entry.boxContainerQty || "",
+          priceSnapshot: entry.priceSnapshot || null
+        });
+      });
+    }
+  });
+
+  let filtered = flattened.filter(entry => {
     const facility = (entry.facility || "").toUpperCase();
+    const bloodType = (entry.bloodType || "").toUpperCase();
     const date = entry.date || "";
-    const bloodTypeText = (Array.isArray(entry.bloodTypes) ? entry.bloodTypes : [])
-      .map(x => (x.bloodType || "").toUpperCase())
-      .join(" ");
 
     const matchSearch =
       search === "" ||
       facility.includes(search) ||
-      bloodTypeText.includes(search);
+      bloodType.includes(search);
 
     const matchDate =
       dateValue === "" ||
@@ -788,15 +730,29 @@ function renderAugmentationTable(){
     table.innerHTML = `
       <thead>
         <tr>
-          <th>DATE</th>
-          <th>FACILITY</th>
-          <th>BOX CONTAINER</th>
-          <th>AUGMENTED BLOOD TYPES</th>
-          <th>TABULATED DATA</th>
-          <th>COMPUTED TOTAL</th>
-          <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th>
-          <th>ACTION</th>
+          <th rowspan="2">DATE</th>
+          <th rowspan="2">FACILITY</th>
+          <th rowspan="2">BLOOD TYPE</th>
+          <th rowspan="2">BOX CONTAINER</th>
+          <th colspan="5">REQUESTED</th>
+          <th colspan="5">ISSUED</th>
+          <th rowspan="2">COMPUTED TOTAL</th>
+          <th rowspan="2">AMOUNT PAID</th>
+          <th rowspan="2">DISCOUNT</th>
+          <th rowspan="2">ACTION</th>
+        </tr>
+        <tr>
+          <th>WB</th>
+          <th>PRBC</th>
+          <th>PC</th>
+          <th>FFP</th>
+          <th>CRYO</th>
+
+          <th>WB</th>
+          <th>PRBC</th>
+          <th>PC</th>
+          <th>FFP</th>
+          <th>CRYO</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -805,28 +761,49 @@ function renderAugmentationTable(){
     const tbody = table.querySelector("tbody");
 
     grouped[month].forEach(entry => {
-      const prices = getEntryPrices(entry);
-      let totalIssued = 0;
+      const req = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+      const iss = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
 
-      (Array.isArray(entry.bloodTypes) ? entry.bloodTypes : []).forEach(bt => {
-        totalIssued += computeIssuedTotalFromList(bt.issued, 0, prices);
+      (entry.requests || []).forEach(item => {
+        const t = (item.type || "").toUpperCase();
+        const q = Number(item.qty || 0);
+        if(req[t] !== undefined) req[t] += q;
       });
 
-      totalIssued += (Number(entry.boxContainerQty) || 0) * (prices.BOX || 0);
+      (entry.issued || []).forEach(item => {
+        const t = (item.type || "").toUpperCase();
+        const q = Number(item.qty || 0);
+        if(iss[t] !== undefined) iss[t] += q;
+      });
+
+      const computedTotal = computeAugmentationTotal(entry);
 
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${entry.date || ""}</td>
         <td>${entry.facility || ""}</td>
+        <td>${entry.bloodType || ""}</td>
         <td>${entry.boxContainerQty || 0}</td>
-        <td class="augSummaryBox">${formatAugmentationSummary(entry.bloodTypes)}</td>
-        <td>${buildAugmentationMiniTable(entry)}</td>
-        <td>${totalIssued.toFixed(2)}</td>
+
+        <td>${req.WB}</td>
+        <td>${req.PRBC}</td>
+        <td>${req.PC}</td>
+        <td>${req.FFP}</td>
+        <td>${req.CRYO}</td>
+
+        <td>${iss.WB}</td>
+        <td>${iss.PRBC}</td>
+        <td>${iss.PC}</td>
+        <td>${iss.FFP}</td>
+        <td>${iss.CRYO}</td>
+
+        <td>${computedTotal}</td>
         <td>${entry.amountPaid || ""}</td>
         <td>${entry.discount || ""}</td>
+
         <td>
-          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.parentId}">EDIT</button>
+          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.parentId}">DELETE</button>
         </td>
       `;
       tbody.appendChild(row);
@@ -854,7 +831,7 @@ window.closeAugmentationModal = function(){
 };
 
 function recomputeEditAugmentationAmountPaid(){
-  const prices = currentAugmentationPriceSnapshot || priceList;
+  const prices = currentAugmentationPriceSnapshot || currentPrices;
   let total = 0;
 
   document.querySelectorAll("#editAugBloodTypeContainer .editAugIssuedRow").forEach(row => {
@@ -990,7 +967,7 @@ async function openEditAugmentation(id){
 
     const data = snapshot.val();
     currentAugmentationEditId = id;
-    currentAugmentationPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : priceList;
+    currentAugmentationPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : currentPrices;
 
     document.getElementById("editAugDate").value = data.date || "";
     document.getElementById("editAugFacility").value = data.facility || "";
@@ -1181,40 +1158,41 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTED_BLOOD_TYPES","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","BLOOD_TYPE","BOX_CONTAINER","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
-    const totals = buildAugmentationTotals(e);
-    const prices = getEntryPrices(e);
-    let computedTotal = 0;
+    const req = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
+    const iss = {WB:0,PRBC:0,PC:0,FFP:0,CRYO:0};
 
-    (Array.isArray(e.bloodTypes) ? e.bloodTypes : []).forEach(bt => {
-      computedTotal += computeIssuedTotalFromList(bt.issued, 0, prices);
+    (e.requests || []).forEach(item => {
+      const t = (item.type || "").toUpperCase();
+      const q = Number(item.qty || 0);
+      if(req[t] !== undefined) req[t] += q;
     });
 
-    computedTotal += (Number(e.boxContainerQty) || 0) * (prices.BOX || 0);
-
-    const bloodTypeList = (Array.isArray(e.bloodTypes) ? e.bloodTypes : [])
-      .map(x => x.bloodType || "")
-      .join(" | ");
+    (e.issued || []).forEach(item => {
+      const t = (item.type || "").toUpperCase();
+      const q = Number(item.qty || 0);
+      if(iss[t] !== undefined) iss[t] += q;
+    });
 
     rows.push([
       e.date || "",
       e.facility || "",
+      e.bloodType || "",
       e.boxContainerQty || 0,
-      bloodTypeList,
-      totals.req.WB,
-      totals.req.PRBC,
-      totals.req.PC,
-      totals.req.FFP,
-      totals.req.CRYO,
-      totals.iss.WB,
-      totals.iss.PRBC,
-      totals.iss.PC,
-      totals.iss.FFP,
-      totals.iss.CRYO,
-      computedTotal.toFixed(2),
+      req.WB,
+      req.PRBC,
+      req.PC,
+      req.FFP,
+      req.CRYO,
+      iss.WB,
+      iss.PRBC,
+      iss.PC,
+      iss.FFP,
+      iss.CRYO,
+      computeAugmentationTotal(e),
       e.amountPaid || "",
       e.discount || ""
     ]);
