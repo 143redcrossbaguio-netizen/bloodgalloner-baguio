@@ -62,7 +62,7 @@ color:white;
 
 .dashboardGrid{
 display:grid;
-grid-template-columns:repeat(4,1fr);
+grid-template-columns:repeat(3,1fr);
 gap:15px;
 margin-bottom:20px;
 }
@@ -247,7 +247,7 @@ max-width:none;
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -272,6 +272,40 @@ const hospitalSearch = document.getElementById("hospitalSearch");
 
 let allEntries = [];
 let allAugmentationEntries = [];
+let currentPrices = {
+    WB: 0,
+    PRBC: 0,
+    PC: 0,
+    FFP: 0,
+    CRYO: 0,
+    BOX: 0
+};
+
+async function loadPrices(){
+    try{
+        const snapshot = await get(ref(db, "settings/releasingPrices"));
+        const data = snapshot.val() || {};
+
+        currentPrices = {
+            WB: Number(data.wb) || 0,
+            PRBC: Number(data.prbc) || 0,
+            PC: Number(data.pc) || 0,
+            FFP: Number(data.ffp) || 0,
+            CRYO: Number(data.cryo) || 0,
+            BOX: Number(data.boxContainer) || 0
+        };
+    }catch(error){
+        console.error("Failed to load prices:", error);
+        currentPrices = {
+            WB: 0,
+            PRBC: 0,
+            PC: 0,
+            FFP: 0,
+            CRYO: 0,
+            BOX: 0
+        };
+    }
+}
 
 function refreshAll(){
     populateMonthFilter();
@@ -279,34 +313,39 @@ function refreshAll(){
     renderAugmentationStatistics();
 }
 
-onAuthStateChanged(auth, (user) => {
-    if(!user){
-        window.location.href = "index.html";
-        return;
+function normalizePriceSnapshot(snapshot){
+    return {
+        WB: Number(snapshot?.WB ?? snapshot?.wb) || 0,
+        PRBC: Number(snapshot?.PRBC ?? snapshot?.prbc) || 0,
+        PC: Number(snapshot?.PC ?? snapshot?.pc) || 0,
+        FFP: Number(snapshot?.FFP ?? snapshot?.ffp) || 0,
+        CRYO: Number(snapshot?.CRYO ?? snapshot?.cryo) || 0,
+        BOX: Number(snapshot?.BOX ?? snapshot?.box ?? snapshot?.boxContainer) || 0
+    };
+}
+
+function getEntryPrices(entry){
+    if(entry && entry.priceSnapshot){
+        return normalizePriceSnapshot(entry.priceSnapshot);
     }
+    return currentPrices;
+}
 
-    onValue(ref(db,"releasing"), snapshot => {
-        allEntries = [];
-        snapshot.forEach(child => {
-            allEntries.push({
-                id: child.key,
-                ...child.val()
-            });
-        });
-        refreshAll();
+function computeIssuedTotalFromList(issuedList, boxContainerQty, prices){
+    let total = 0;
+
+    (Array.isArray(issuedList) ? issuedList : []).forEach(item => {
+        const type = (item.type || "").toUpperCase();
+        const qty = Number(item.qty || 0);
+
+        if(prices[type] !== undefined){
+            total += qty * prices[type];
+        }
     });
 
-    onValue(ref(db,"bloodAugmentation"), snapshot => {
-        allAugmentationEntries = [];
-        snapshot.forEach(child => {
-            allAugmentationEntries.push({
-                id: child.key,
-                ...child.val()
-            });
-        });
-        refreshAll();
-    });
-});
+    total += (Number(boxContainerQty) || 0) * (prices.BOX || 0);
+    return total;
+}
 
 function monthName(monthKey){
     const months = {
@@ -391,7 +430,9 @@ function buildReleasingStats(){
         female:0,
         requested:emptyComponent(),
         issued:emptyComponent(),
-        income:0
+        actualIncome:0,
+        computedTotal:0,
+        boxContainers:0
     };
 
     allEntries.forEach(entry => {
@@ -413,7 +454,9 @@ function buildReleasingStats(){
                     female:0,
                     requested:emptyComponent(),
                     issued:emptyComponent(),
-                    income:0
+                    actualIncome:0,
+                    computedTotal:0,
+                    boxContainers:0
                 }
             };
         }
@@ -424,7 +467,9 @@ function buildReleasingStats(){
                 male:0,
                 female:0,
                 requested:emptyComponent(),
-                issued:emptyComponent()
+                issued:emptyComponent(),
+                boxContainers:0,
+                computedTotal:0
             };
         }
 
@@ -455,9 +500,20 @@ function buildReleasingStats(){
         countComponents(h.issued, entry.issued);
         countComponents(grand.issued, entry.issued);
 
-        const income = Number(entry.amountPaid || 0) - Number(entry.discount || 0);
-        m.totals.income += income;
-        grand.income += income;
+        const actualIncome = Number(entry.amountPaid || 0) - Number(entry.discount || 0);
+        const computedTotal = computeIssuedTotalFromList(entry.issued, entry.boxContainerQty, getEntryPrices(entry));
+        const boxCount = Number(entry.boxContainerQty || 0);
+
+        m.totals.actualIncome += actualIncome;
+        grand.actualIncome += actualIncome;
+
+        m.totals.computedTotal += computedTotal;
+        h.computedTotal += computedTotal;
+        grand.computedTotal += computedTotal;
+
+        m.totals.boxContainers += boxCount;
+        h.boxContainers += boxCount;
+        grand.boxContainers += boxCount;
     });
 
     return {grouped, grand};
@@ -473,7 +529,9 @@ function buildAugmentationSummaryStats(){
         bloodTypeEntries:0,
         requested:emptyComponent(),
         issued:emptyComponent(),
-        income:0
+        actualIncome:0,
+        computedTotal:0,
+        boxContainers:0
     };
 
     allAugmentationEntries.forEach(entry => {
@@ -493,7 +551,9 @@ function buildAugmentationSummaryStats(){
                     bloodTypeEntries:0,
                     requested:emptyComponent(),
                     issued:emptyComponent(),
-                    income:0
+                    actualIncome:0,
+                    computedTotal:0,
+                    boxContainers:0
                 }
             };
         }
@@ -514,9 +574,22 @@ function buildAugmentationSummaryStats(){
             });
         }
 
-        const income = Number(entry.amountPaid || 0) - Number(entry.discount || 0);
-        grouped[month].totals.income += income;
-        grand.income += income;
+        const actualIncome = Number(entry.amountPaid || 0) - Number(entry.discount || 0);
+        const computedTotal = computeIssuedTotalFromList([], entry.boxContainerQty, getEntryPrices(entry)) +
+            (Array.isArray(entry.bloodTypes)
+                ? entry.bloodTypes.reduce((sum, bt) => sum + computeIssuedTotalFromList(bt.issued, 0, getEntryPrices(entry)), 0)
+                : 0);
+
+        const boxCount = Number(entry.boxContainerQty || 0);
+
+        grouped[month].totals.actualIncome += actualIncome;
+        grand.actualIncome += actualIncome;
+
+        grouped[month].totals.computedTotal += computedTotal;
+        grand.computedTotal += computedTotal;
+
+        grouped[month].totals.boxContainers += boxCount;
+        grand.boxContainers += boxCount;
     });
 
     return {grouped, grand};
@@ -545,6 +618,8 @@ function buildAugmentationDetailStats(){
         const amountPaid = Number(entry.amountPaid || 0);
         const discount = Number(entry.discount || 0);
         const netAmount = amountPaid - discount;
+        const prices = getEntryPrices(entry);
+        const boxContainerQty = Number(entry.boxContainerQty || 0);
 
         const bloodTypes = Array.isArray(entry.bloodTypes) ? entry.bloodTypes : [];
 
@@ -555,6 +630,8 @@ function buildAugmentationDetailStats(){
                 bloodType: "",
                 requests: [],
                 issued: [],
+                boxContainerQty,
+                computedTotal: computeIssuedTotalFromList([], boxContainerQty, prices),
                 amountPaid,
                 discount,
                 netAmount
@@ -567,6 +644,8 @@ function buildAugmentationDetailStats(){
                     bloodType: item.bloodType || "",
                     requests: Array.isArray(item.requests) ? item.requests : [],
                     issued: Array.isArray(item.issued) ? item.issued : [],
+                    boxContainerQty,
+                    computedTotal: computeIssuedTotalFromList(item.issued, boxContainerQty, prices),
                     amountPaid,
                     discount,
                     netAmount
@@ -622,8 +701,16 @@ function renderDashboard(grand){
                 <div class="cardValue">${grand.female}</div>
             </div>
             <div class="card">
-                <div class="cardTitle">Total Income</div>
-                <div class="cardValue">${grand.income.toFixed(2)}</div>
+                <div class="cardTitle">Actual Income</div>
+                <div class="cardValue">${grand.actualIncome.toFixed(2)}</div>
+            </div>
+            <div class="card">
+                <div class="cardTitle">Computed Total</div>
+                <div class="cardValue">${grand.computedTotal.toFixed(2)}</div>
+            </div>
+            <div class="card">
+                <div class="cardTitle">Box Containers</div>
+                <div class="cardValue">${grand.boxContainers}</div>
             </div>
         </div>
 
@@ -665,7 +752,11 @@ function renderStatistics(){
             <br>
             <b>FEMALE:</b> ${m.totals.female}
             <br>
-            <b>MONTHLY INCOME:</b> ${m.totals.income.toFixed(2)}
+            <b>BOX CONTAINERS:</b> ${m.totals.boxContainers}
+            <br>
+            <b>ACTUAL INCOME:</b> ${m.totals.actualIncome.toFixed(2)}
+            <br>
+            <b>COMPUTED TOTAL:</b> ${m.totals.computedTotal.toFixed(2)}
         `;
 
         const table = document.createElement("table");
@@ -676,6 +767,8 @@ function renderStatistics(){
                 <th rowspan="2">PATIENTS</th>
                 <th rowspan="2">MALE</th>
                 <th rowspan="2">FEMALE</th>
+                <th rowspan="2">BOX</th>
+                <th rowspan="2">COMPUTED TOTAL</th>
                 <th colspan="5">REQUESTED</th>
                 <th colspan="5">ISSUED</th>
             </tr>
@@ -704,6 +797,8 @@ function renderStatistics(){
                 <td>${s.entries}</td>
                 <td>${s.male}</td>
                 <td>${s.female}</td>
+                <td>${s.boxContainers}</td>
+                <td>${s.computedTotal.toFixed(2)}</td>
 
                 <td>${s.requested.WB}</td>
                 <td>${s.requested.PRBC}</td>
@@ -727,6 +822,8 @@ function renderStatistics(){
             <td>${m.totals.entries}</td>
             <td>${m.totals.male}</td>
             <td>${m.totals.female}</td>
+            <td>${m.totals.boxContainers}</td>
+            <td>${m.totals.computedTotal.toFixed(2)}</td>
 
             <td>${m.totals.requested.WB}</td>
             <td>${m.totals.requested.PRBC}</td>
@@ -764,7 +861,11 @@ function renderAugmentationStatistics(){
         <br>
         <b>TOTAL BLOOD TYPE ENTRIES:</b> ${grand.bloodTypeEntries}
         <br>
-        <b>TOTAL BLOOD AUGMENTATION INCOME:</b> ${grand.income.toFixed(2)}
+        <b>TOTAL BOX CONTAINERS:</b> ${grand.boxContainers}
+        <br>
+        <b>TOTAL ACTUAL INCOME:</b> ${grand.actualIncome.toFixed(2)}
+        <br>
+        <b>TOTAL COMPUTED TOTAL:</b> ${grand.computedTotal.toFixed(2)}
     `;
     augmentationStatisticsContainer.appendChild(intro);
 
@@ -793,7 +894,9 @@ function renderAugmentationStatistics(){
         const monthlySummary = summaryStats[month] ? summaryStats[month].totals : {
             records:0,
             bloodTypeEntries:0,
-            income:0
+            boxContainers:0,
+            actualIncome:0,
+            computedTotal:0
         };
 
         const summary = document.createElement("div");
@@ -803,7 +906,11 @@ function renderAugmentationStatistics(){
             <br>
             <b>MONTHLY BLOOD TYPE ENTRIES:</b> ${monthlySummary.bloodTypeEntries}
             <br>
-            <b>MONTHLY INCOME:</b> ${Number(monthlySummary.income || 0).toFixed(2)}
+            <b>MONTHLY BOX CONTAINERS:</b> ${monthlySummary.boxContainers}
+            <br>
+            <b>MONTHLY ACTUAL INCOME:</b> ${Number(monthlySummary.actualIncome || 0).toFixed(2)}
+            <br>
+            <b>MONTHLY COMPUTED TOTAL:</b> ${Number(monthlySummary.computedTotal || 0).toFixed(2)}
         `;
 
         const table = document.createElement("table");
@@ -814,8 +921,10 @@ function renderAugmentationStatistics(){
                 <th>DATE</th>
                 <th>FACILITY</th>
                 <th>BLOOD TYPE</th>
+                <th>BOX CONTAINER</th>
                 <th>REQUESTED</th>
                 <th>ISSUED</th>
+                <th>COMPUTED TOTAL</th>
                 <th>AMOUNT PAID</th>
                 <th>DISCOUNT</th>
                 <th>NET AMOUNT</th>
@@ -828,8 +937,10 @@ function renderAugmentationStatistics(){
                 <td>${item.date || ""}</td>
                 <td class="left">${item.facility || ""}</td>
                 <td>${item.bloodType || ""}</td>
+                <td>${Number(item.boxContainerQty || 0)}</td>
                 <td class="componentCell">${formatComponentsText(item.requests)}</td>
                 <td class="componentCell">${formatComponentsText(item.issued)}</td>
+                <td>${Number(item.computedTotal || 0).toFixed(2)}</td>
                 <td>${Number(item.amountPaid || 0).toFixed(2)}</td>
                 <td>${Number(item.discount || 0).toFixed(2)}</td>
                 <td>${Number(item.netAmount || 0).toFixed(2)}</td>
@@ -849,7 +960,7 @@ window.exportCSV = function(){
 
     let rows = [[
         "SECTION","MONTH","NAME","PATIENTS_OR_RECORDS","MALE","FEMALE","BLOOD_TYPE",
-        "REQUESTED","ISSUED","AMOUNT_PAID","DISCOUNT","NET_AMOUNT"
+        "BOX_CONTAINER","REQUESTED","ISSUED","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","NET_AMOUNT"
     ]];
 
     Object.keys(rel.grouped).sort().reverse().forEach(month => {
@@ -865,8 +976,10 @@ window.exportCSV = function(){
                 s.male,
                 s.female,
                 "",
+                s.boxContainers,
                 `WB:${s.requested.WB} PRBC:${s.requested.PRBC} PC:${s.requested.PC} FFP:${s.requested.FFP} CRYO:${s.requested.CRYO}`,
                 `WB:${s.issued.WB} PRBC:${s.issued.PRBC} PC:${s.issued.PC} FFP:${s.issued.FFP} CRYO:${s.issued.CRYO}`,
+                s.computedTotal.toFixed(2),
                 "",
                 "",
                 ""
@@ -884,8 +997,10 @@ window.exportCSV = function(){
                 "",
                 "",
                 item.bloodType || "",
+                Number(item.boxContainerQty || 0),
                 formatComponentsText(item.requests).replace(/<br>/g, " | "),
                 formatComponentsText(item.issued).replace(/<br>/g, " | "),
+                Number(item.computedTotal || 0).toFixed(2),
                 Number(item.amountPaid || 0).toFixed(2),
                 Number(item.discount || 0).toFixed(2),
                 Number(item.netAmount || 0).toFixed(2)
@@ -909,6 +1024,37 @@ window.goBack = function(){
 
 monthFilter.addEventListener("change", refreshAll);
 hospitalSearch.addEventListener("input", refreshAll);
+
+onAuthStateChanged(auth, async (user) => {
+    if(!user){
+        window.location.href = "index.html";
+        return;
+    }
+
+    await loadPrices();
+
+    onValue(ref(db,"releasing"), snapshot => {
+        allEntries = [];
+        snapshot.forEach(child => {
+            allEntries.push({
+                id: child.key,
+                ...child.val()
+            });
+        });
+        refreshAll();
+    });
+
+    onValue(ref(db,"bloodAugmentation"), snapshot => {
+        allAugmentationEntries = [];
+        snapshot.forEach(child => {
+            allAugmentationEntries.push({
+                id: child.key,
+                ...child.val()
+            });
+        });
+        refreshAll();
+    });
+});
 </script>
 
 </body>
