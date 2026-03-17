@@ -195,6 +195,9 @@ button{
 <label>6. OR (Optional)</label>
 <input type="text" id="or">
 
+<label>6A. BOX CONTAINER</label>
+<input type="number" id="boxContainerQty" placeholder="Qty">
+
 <label>7. REQUEST</label>
 <div id="requestContainer">
     <div class="row requestRow">
@@ -257,6 +260,9 @@ button{
     <label>FACILITY</label>
     <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name">
 
+    <label>BOX CONTAINER</label>
+    <input type="number" id="augBoxContainerQty" placeholder="Qty">
+
     <div id="augmentationBloodTypeContainer"></div>
 
     <button class="addBtn" type="button" onclick="addAugmentationBloodType()">+ ADD BLOOD TYPE</button>
@@ -298,12 +304,13 @@ const firebaseConfig = {
   measurementId: "G-XYXJH9JNXJ"
 };
 
-const componentPrices = {
-  WB:1800,
-  PRBC:1500,
-  PC:1000,
-  FFP:1000,
-  CRYO:1000
+let componentPrices = {
+  WB: 0,
+  PRBC: 0,
+  PC: 0,
+  FFP: 0,
+  CRYO: 0,
+  BOXCONTAINER: 0
 };
 
 const app = initializeApp(firebaseConfig);
@@ -318,7 +325,6 @@ const editId = urlParams.get("id");
 
 let authReady = false;
 
-/* TODAY DATE */
 function setTodayDate(){
   const today = new Date().toISOString().split("T")[0];
 
@@ -329,7 +335,6 @@ function setTodayDate(){
   if(augDate && !augDate.value) augDate.value = today;
 }
 
-/* LOAD FACILITIES */
 function loadFacilities(){
   onValue(ref(db, "facilities"), (snapshot) => {
     facilityList.innerHTML = "";
@@ -347,7 +352,47 @@ function loadFacilities(){
   });
 }
 
-/* MAIN ENTRY REQUEST */
+async function loadComponentPrices(){
+  try{
+    const snapshot = await get(ref(db, "settings/releasingPrices"));
+
+    if(snapshot.exists()){
+      const data = snapshot.val() || {};
+
+      componentPrices = {
+        WB: Number(data.wb) || 0,
+        PRBC: Number(data.prbc) || 0,
+        PC: Number(data.pc) || 0,
+        FFP: Number(data.ffp) || 0,
+        CRYO: Number(data.cryo) || 0,
+        BOXCONTAINER: Number(data.boxContainer) || 0
+      };
+    }else{
+      componentPrices = {
+        WB: 0,
+        PRBC: 0,
+        PC: 0,
+        FFP: 0,
+        CRYO: 0,
+        BOXCONTAINER: 0
+      };
+    }
+
+    computeIssuedTotal();
+    computeAugmentationTotal();
+  }catch(error){
+    console.error("Price load error:", error);
+    componentPrices = {
+      WB: 0,
+      PRBC: 0,
+      PC: 0,
+      FFP: 0,
+      CRYO: 0,
+      BOXCONTAINER: 0
+    };
+  }
+}
+
 window.addRequest = function(){
   const container = document.getElementById("requestContainer");
   const row = document.createElement("div");
@@ -379,12 +424,11 @@ window.addIssued = function(){
         <option>CRYO</option>
     </select>
     <input type="number" class="issuedQty" placeholder="Qty">
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeIssuedTotal();">-</button>
   `;
   container.appendChild(row);
 };
 
-/* DISCOUNT MAIN */
 window.toggleDiscount = function(){
   const section = document.getElementById("discountSection");
   section.style.display = section.style.display === "none" ? "block" : "none";
@@ -401,6 +445,9 @@ function computeIssuedTotal(){
       total += componentPrices[type] * qty;
     }
   });
+
+  const boxContainerQty = Number(document.getElementById("boxContainerQty").value) || 0;
+  total += componentPrices.BOXCONTAINER * boxContainerQty;
 
   document.getElementById("amountPaid").value = total.toFixed(2);
   computeMainDiscountFromPercentOrPrice();
@@ -447,7 +494,6 @@ function computeMainDiscountFromPercentOrPrice(){
   }
 }
 
-/* RESET MAIN FORM */
 function resetForm(){
   document.getElementById("date").value = new Date().toISOString().split("T")[0];
   document.getElementById("facility").value = "";
@@ -457,6 +503,7 @@ function resetForm(){
   document.getElementById("sex").value = "";
   document.getElementById("bloodtype").value = "";
   document.getElementById("or").value = "";
+  document.getElementById("boxContainerQty").value = "";
   document.getElementById("amountPaid").value = "";
   document.getElementById("discountPrice").value = "";
   document.getElementById("discountPercent").value = "";
@@ -490,9 +537,10 @@ function resetForm(){
         <button type="button" class="addBtn" onclick="addIssued()">+</button>
     </div>
   `;
+
+  computeIssuedTotal();
 }
 
-/* LOAD ENTRY FOR EDIT */
 async function loadEditEntry(){
   if(!editId) return;
 
@@ -510,6 +558,7 @@ async function loadEditEntry(){
       document.getElementById("sex").value = entry.sex || "";
       document.getElementById("bloodtype").value = entry.bloodtype || "";
       document.getElementById("or").value = entry.or || "";
+      document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
       document.getElementById("amountPaid").value = entry.amountPaid || "";
       document.getElementById("discount").value = entry.discount || "";
 
@@ -573,7 +622,7 @@ async function loadEditEntry(){
                 <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
             </select>
             <input type="number" class="issuedQty" placeholder="Qty" value="${item.qty || ""}">
-            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addIssued()" : "this.parentElement.remove()"}">${index===0 ? "+" : "-"}</button>
+            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addIssued()" : "this.parentElement.remove(); computeIssuedTotal()"}">${index===0 ? "+" : "-"}</button>
           `;
           issuedContainer.appendChild(row);
         });
@@ -592,6 +641,8 @@ async function loadEditEntry(){
           </div>
         `;
       }
+
+      computeIssuedTotal();
     }
   }catch(error){
     console.error("Load edit error:", error);
@@ -599,7 +650,6 @@ async function loadEditEntry(){
   }
 }
 
-/* SAVE MAIN ENTRY */
 saveBtn.addEventListener("click", async () => {
   if (!auth.currentUser) {
     alert("You are not logged in.");
@@ -634,6 +684,7 @@ saveBtn.addEventListener("click", async () => {
     sex: document.getElementById("sex").value,
     bloodtype: document.getElementById("bloodtype").value,
     or: document.getElementById("or").value.toUpperCase(),
+    boxContainerQty: document.getElementById("boxContainerQty").value || 0,
     requests: requests,
     issued: issued,
     amountPaid: document.getElementById("amountPaid").value,
@@ -656,12 +707,10 @@ saveBtn.addEventListener("click", async () => {
   }
 });
 
-/* BLOOD AUGMENTATION PANEL */
 window.toggleAugmentation = function(){
   document.getElementById("augmentationPanel").classList.toggle("open");
 };
 
-/* AUGMENTATION DISCOUNT */
 window.toggleAugDiscount = function(){
   const section = document.getElementById("augDiscountSection");
   section.style.display = section.style.display === "none" ? "block" : "none";
@@ -678,6 +727,9 @@ function computeAugmentationTotal(){
       total += componentPrices[type] * qty;
     }
   });
+
+  const augBoxContainerQty = Number(document.getElementById("augBoxContainerQty").value) || 0;
+  total += componentPrices.BOXCONTAINER * augBoxContainerQty;
 
   document.getElementById("augAmountPaid").value = total.toFixed(2);
   computeAugDiscountFromPercentOrPrice();
@@ -724,7 +776,6 @@ function computeAugDiscountFromPercentOrPrice(){
   }
 }
 
-/* ADD BLOOD TYPE CARD */
 window.addAugmentationBloodType = function(){
   const container = document.getElementById("augmentationBloodTypeContainer");
 
@@ -824,7 +875,6 @@ window.addAugIssued = function(button){
   container.appendChild(row);
 };
 
-/* SAVE AUGMENTATION */
 window.saveAugmentation = async function(){
   if (!auth.currentUser) {
     alert("You are not logged in.");
@@ -868,6 +918,7 @@ window.saveAugmentation = async function(){
   const augmentationData = {
     date: document.getElementById("augDate").value,
     facility: document.getElementById("augFacility").value.toUpperCase(),
+    boxContainerQty: document.getElementById("augBoxContainerQty").value || 0,
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
     discount: document.getElementById("augDiscount").value || 0
@@ -878,6 +929,7 @@ window.saveAugmentation = async function(){
     alert("Blood augmentation saved successfully!");
     document.getElementById("augDate").value = new Date().toISOString().split("T")[0];
     document.getElementById("augFacility").value = "";
+    document.getElementById("augBoxContainerQty").value = "";
     document.getElementById("augmentationBloodTypeContainer").innerHTML = "";
     document.getElementById("augAmountPaid").value = "";
     document.getElementById("augDiscountPrice").value = "";
@@ -891,11 +943,11 @@ window.saveAugmentation = async function(){
   }
 };
 
-/* GLOBAL INPUT LISTENERS */
 document.addEventListener("input", function(e){
   if(
     e.target.classList.contains("issuedQty") ||
-    e.target.classList.contains("issuedType")
+    e.target.classList.contains("issuedType") ||
+    e.target.id === "boxContainerQty"
   ){
     computeIssuedTotal();
   }
@@ -910,7 +962,8 @@ document.addEventListener("input", function(e){
 
   if(
     e.target.classList.contains("augIssuedQty") ||
-    e.target.classList.contains("augIssuedType")
+    e.target.classList.contains("augIssuedType") ||
+    e.target.id === "augBoxContainerQty"
   ){
     computeAugmentationTotal();
   }
@@ -924,7 +977,6 @@ document.addEventListener("input", function(e){
   }
 });
 
-/* NAVIGATION */
 window.goFacilityManager = function(){
   window.location.href = "facility-manager.html";
 };
@@ -933,7 +985,6 @@ window.goBack = function(){
   window.location.href = "releasing.html";
 };
 
-/* AUTH CHECK + INIT */
 onAuthStateChanged(auth, async (user) => {
   authReady = true;
 
@@ -944,7 +995,10 @@ onAuthStateChanged(auth, async (user) => {
 
   setTodayDate();
   loadFacilities();
+  await loadComponentPrices();
   await loadEditEntry();
+  computeIssuedTotal();
+  computeAugmentationTotal();
 });
 </script>
 
