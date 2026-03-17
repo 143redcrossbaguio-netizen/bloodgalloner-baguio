@@ -290,7 +290,7 @@ flex-direction:column;
     <button type="button" class="addBtn" style="margin-top:15px;" onclick="addEditAugmentationBloodType()">+ ADD BLOOD TYPE</button>
 
     <label class="formLabel">AMOUNT PAID</label>
-    <input type="number" id="editAugAmountPaid" class="formInput">
+    <input type="number" id="editAugAmountPaid" class="formInput" readonly>
 
     <label class="formLabel">DISCOUNT</label>
     <input type="number" id="editAugDiscount" class="formInput">
@@ -335,7 +335,93 @@ let currentView = "releasing";
 let allReleasingEntries = [];
 let allAugmentationEntries = [];
 let currentAugmentationEditId = null;
+let currentAugmentationPriceSnapshot = null;
 let authReady = false;
+
+let currentPrices = {
+  WB: 0,
+  PRBC: 0,
+  PC: 0,
+  FFP: 0,
+  CRYO: 0,
+  BOX: 0
+};
+
+async function loadPrices(){
+  try{
+    const snapshot = await get(ref(db, "settings/releasingPrices"));
+    const data = snapshot.val() || {};
+
+    currentPrices = {
+      WB: Number(data.wb) || 0,
+      PRBC: Number(data.prbc) || 0,
+      PC: Number(data.pc) || 0,
+      FFP: Number(data.ffp) || 0,
+      CRYO: Number(data.cryo) || 0,
+      BOX: Number(data.boxContainer) || 0
+    };
+  }catch(error){
+    console.error("Failed to load prices:", error);
+    currentPrices = {
+      WB: 0,
+      PRBC: 0,
+      PC: 0,
+      FFP: 0,
+      CRYO: 0,
+      BOX: 0
+    };
+  }
+}
+
+function normalizePriceSnapshot(snapshot){
+  return {
+    WB: Number(snapshot?.WB ?? snapshot?.wb) || 0,
+    PRBC: Number(snapshot?.PRBC ?? snapshot?.prbc) || 0,
+    PC: Number(snapshot?.PC ?? snapshot?.pc) || 0,
+    FFP: Number(snapshot?.FFP ?? snapshot?.ffp) || 0,
+    CRYO: Number(snapshot?.CRYO ?? snapshot?.cryo) || 0,
+    BOX: Number(snapshot?.BOX ?? snapshot?.boxContainer ?? snapshot?.box) || 0
+  };
+}
+
+function getEntryPrices(entry){
+  if(entry && entry.priceSnapshot){
+    return normalizePriceSnapshot(entry.priceSnapshot);
+  }
+  return currentPrices;
+}
+
+function computeIssuedTotalFromList(issuedList, boxContainerQty, prices){
+  let total = 0;
+
+  (Array.isArray(issuedList) ? issuedList : []).forEach(item => {
+    const type = (item.type || "").toUpperCase();
+    const qty = Number(item.qty || 0);
+
+    if(prices[type] !== undefined){
+      total += qty * prices[type];
+    }
+  });
+
+  total += (Number(boxContainerQty) || 0) * (prices.BOX || 0);
+
+  return total;
+}
+
+function computeReleasingTotal(entry){
+  const prices = getEntryPrices(entry);
+  return computeIssuedTotalFromList(entry.issued, entry.boxContainerQty, prices).toFixed(2);
+}
+
+function computeAugmentationTotal(entry){
+  const prices = getEntryPrices(entry);
+  return computeIssuedTotalFromList(entry.issued, entry.boxContainerQty, prices).toFixed(2);
+}
+
+function formatComponents(list){
+  if(!Array.isArray(list) || list.length === 0) return "";
+  return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
+}
 
 /* LOAD RELEASING */
 function loadReleasingData(){
@@ -428,11 +514,6 @@ function populateFacilityFilter(){
   }
 }
 
-function formatComponents(list){
-  if(!Array.isArray(list) || list.length === 0) return "";
-  return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
-}
-
 function getFilteredReleasingEntries(){
   const search = searchBox.value.trim().toUpperCase();
   const dateValue = filterDate.value;
@@ -483,7 +564,8 @@ function getFilteredAugmentationEntries(){
         issued: [],
         amountPaid: entry.amountPaid || "",
         discount: entry.discount || "",
-        boxContainerQty: entry.boxContainerQty || ""
+        boxContainerQty: entry.boxContainerQty || "",
+        priceSnapshot: entry.priceSnapshot || null
       });
     }else{
       bloodTypes.forEach(item => {
@@ -496,7 +578,8 @@ function getFilteredAugmentationEntries(){
           issued: Array.isArray(item.issued) ? item.issued : [],
           amountPaid: entry.amountPaid || "",
           discount: entry.discount || "",
-          boxContainerQty: entry.boxContainerQty || ""
+          boxContainerQty: entry.boxContainerQty || "",
+          priceSnapshot: entry.priceSnapshot || null
         });
       });
     }
@@ -575,6 +658,7 @@ function renderReleasingTable(){
           <th>BOX CONTAINER</th>
           <th>REQUESTED</th>
           <th>ISSUED</th>
+          <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
           <th>DISCOUNT</th>
           <th>ACTION</th>
@@ -586,6 +670,8 @@ function renderReleasingTable(){
     const tbody = table.querySelector("tbody");
 
     grouped[month].forEach(entry => {
+      const computedTotal = computeReleasingTotal(entry);
+
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${entry.date || ""}</td>
@@ -599,6 +685,7 @@ function renderReleasingTable(){
         <td>${entry.boxContainerQty || 0}</td>
         <td class="componentBox">${formatComponents(entry.requests)}</td>
         <td class="componentBox">${formatComponents(entry.issued)}</td>
+        <td>${computedTotal}</td>
         <td>${entry.amountPaid || ""}</td>
         <td>${entry.discount || ""}</td>
         <td>
@@ -649,6 +736,7 @@ function renderAugmentationTable(){
           <th rowspan="2">BOX CONTAINER</th>
           <th colspan="5">REQUESTED</th>
           <th colspan="5">ISSUED</th>
+          <th rowspan="2">COMPUTED TOTAL</th>
           <th rowspan="2">AMOUNT PAID</th>
           <th rowspan="2">DISCOUNT</th>
           <th rowspan="2">ACTION</th>
@@ -688,6 +776,8 @@ function renderAugmentationTable(){
         if(iss[t] !== undefined) iss[t] += q;
       });
 
+      const computedTotal = computeAugmentationTotal(entry);
+
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>${entry.date || ""}</td>
@@ -707,6 +797,7 @@ function renderAugmentationTable(){
         <td>${iss.FFP}</td>
         <td>${iss.CRYO}</td>
 
+        <td>${computedTotal}</td>
         <td>${entry.amountPaid || ""}</td>
         <td>${entry.discount || ""}</td>
 
@@ -730,6 +821,7 @@ function openAugmentationModal(){
 window.closeAugmentationModal = function(){
   document.getElementById("augmentationModal").style.display = "none";
   currentAugmentationEditId = null;
+  currentAugmentationPriceSnapshot = null;
   document.getElementById("editAugDate").value = "";
   document.getElementById("editAugFacility").value = "";
   document.getElementById("editAugBoxContainerQty").value = "";
@@ -737,6 +829,25 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugDiscount").value = "";
   document.getElementById("editAugBloodTypeContainer").innerHTML = "";
 };
+
+function recomputeEditAugmentationAmountPaid(){
+  const prices = currentAugmentationPriceSnapshot || currentPrices;
+  let total = 0;
+
+  document.querySelectorAll("#editAugBloodTypeContainer .editAugIssuedRow").forEach(row => {
+    const type = row.querySelector(".editAugIssuedType").value;
+    const qty = Number(row.querySelector(".editAugIssuedQty").value) || 0;
+
+    if(prices[type] !== undefined){
+      total += prices[type] * qty;
+    }
+  });
+
+  const boxQty = Number(document.getElementById("editAugBoxContainerQty").value) || 0;
+  total += boxQty * (prices.BOX || 0);
+
+  document.getElementById("editAugAmountPaid").value = total.toFixed(2);
+}
 
 window.addEditAugmentationBloodType = function(data = null){
   const container = document.getElementById("editAugBloodTypeContainer");
@@ -762,7 +873,7 @@ window.addEditAugmentationBloodType = function(data = null){
         </select>
       </div>
       <div>
-        <button type="button" class="removeBtn" onclick="this.closest('.card').remove()">-</button>
+        <button type="button" class="removeBtn" onclick="this.closest('.card').remove(); recomputeEditAugmentationAmountPaid();">-</button>
       </div>
     </div>
 
@@ -789,6 +900,8 @@ window.addEditAugmentationBloodType = function(data = null){
 
   requests.forEach(item => addEditAugRequestRow(reqContainer, item));
   issued.forEach(item => addEditAugIssuedRow(issContainer, item));
+
+  recomputeEditAugmentationAmountPaid();
 };
 
 function addEditAugRequestRow(container, item = {type:"WB", qty:""}){
@@ -820,7 +933,7 @@ function addEditAugIssuedRow(container, item = {type:"WB", qty:""}){
       <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
     </select>
     <input type="number" class="editAugIssuedQty" placeholder="Qty" value="${item.qty ?? ""}">
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); recomputeEditAugmentationAmountPaid();">-</button>
   `;
   container.appendChild(row);
 }
@@ -835,6 +948,7 @@ window.addEditAugIssued = function(button){
   const card = button.closest(".innerBox");
   const container = card.querySelector(".editAugIssuedContainer");
   addEditAugIssuedRow(container);
+  recomputeEditAugmentationAmountPaid();
 };
 
 async function openEditAugmentation(id){
@@ -853,11 +967,11 @@ async function openEditAugmentation(id){
 
     const data = snapshot.val();
     currentAugmentationEditId = id;
+    currentAugmentationPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : currentPrices;
 
     document.getElementById("editAugDate").value = data.date || "";
     document.getElementById("editAugFacility").value = data.facility || "";
     document.getElementById("editAugBoxContainerQty").value = data.boxContainerQty || "";
-    document.getElementById("editAugAmountPaid").value = data.amountPaid || "";
     document.getElementById("editAugDiscount").value = data.discount || "";
     document.getElementById("editAugBloodTypeContainer").innerHTML = "";
 
@@ -868,6 +982,7 @@ async function openEditAugmentation(id){
       window.addEditAugmentationBloodType();
     }
 
+    recomputeEditAugmentationAmountPaid();
     openAugmentationModal();
   }catch(error){
     console.error(error);
@@ -923,7 +1038,8 @@ window.saveAugmentationEdit = async function(){
     boxContainerQty: document.getElementById("editAugBoxContainerQty").value || 0,
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
-    discount: document.getElementById("editAugDiscount").value
+    discount: document.getElementById("editAugDiscount").value,
+    priceSnapshot: currentAugmentationPriceSnapshot
   };
 
   try{
@@ -995,7 +1111,7 @@ function exportReleasingCSV(){
   const filtered = getFilteredReleasingEntries();
 
   const rows = [
-    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","OR","BOX_CONTAINER","REQUESTED","ISSUED","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","OR","BOX_CONTAINER","REQUESTED","ISSUED","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
@@ -1019,6 +1135,7 @@ function exportReleasingCSV(){
       e.boxContainerQty || 0,
       req,
       iss,
+      computeReleasingTotal(e),
       e.amountPaid || "",
       e.discount || ""
     ]);
@@ -1041,7 +1158,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BLOOD_TYPE","BOX_CONTAINER","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","BLOOD_TYPE","BOX_CONTAINER","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
@@ -1075,6 +1192,7 @@ function exportAugmentationCSV(){
       iss.PC,
       iss.FFP,
       iss.CRYO,
+      computeAugmentationTotal(e),
       e.amountPaid || "",
       e.discount || ""
     ]);
@@ -1120,6 +1238,16 @@ backBtn.addEventListener("click", () => {
   window.location.href = "releasing.html";
 });
 
+document.addEventListener("input", function(e){
+  if(
+    e.target.id === "editAugBoxContainerQty" ||
+    e.target.classList.contains("editAugIssuedQty") ||
+    e.target.classList.contains("editAugIssuedType")
+  ){
+    recomputeEditAugmentationAmountPaid();
+  }
+});
+
 window.onclick = function(event){
   const modal = document.getElementById("augmentationModal");
   if(event.target === modal){
@@ -1128,7 +1256,7 @@ window.onclick = function(event){
 };
 
 /* AUTH CHECK + INIT */
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   authReady = true;
 
   if(!user){
@@ -1136,6 +1264,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
+  await loadPrices();
   loadReleasingData();
   loadAugmentationData();
   setView("releasing");
