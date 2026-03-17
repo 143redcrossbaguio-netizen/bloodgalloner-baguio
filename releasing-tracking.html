@@ -234,10 +234,23 @@ font-weight:bold;
 cursor:pointer;
 }
 
-.augSummary{
+.augBloodTypeWrap{
 text-align:left;
-line-height:1.5;
-font-size:13px;
+line-height:1.4;
+}
+
+.augBloodTypeCard{
+background:#ffffff;
+border:1px solid #bcd4f6;
+border-radius:6px;
+padding:8px;
+margin-bottom:8px;
+}
+
+.augBloodTypeTitle{
+font-weight:bold;
+color:#0f3d91;
+margin-bottom:4px;
 }
 
 .augMiniTable{
@@ -255,6 +268,25 @@ text-align:center;
 }
 
 .augMiniTable th{
+background:#cfe2ff;
+color:#0b3d91;
+}
+
+.augEntryTable{
+width:100%;
+border-collapse:collapse;
+margin:0;
+}
+
+.augEntryTable th,
+.augEntryTable td{
+border:1px solid #9bbce0;
+padding:6px;
+font-size:12px;
+text-align:center;
+}
+
+.augEntryTable th{
 background:#cfe2ff;
 color:#0b3d91;
 }
@@ -443,12 +475,29 @@ function formatComponents(list){
   return list.map(item => `${item.type || ""} - ${item.qty || ""}`).join("<br>");
 }
 
-function formatAugBloodTypes(bloodTypes){
-  if(!Array.isArray(bloodTypes) || bloodTypes.length === 0) return "";
-  return bloodTypes
-    .map(item => item.bloodType || "")
-    .filter(Boolean)
-    .join("<br>");
+function buildAugBloodTypeCards(entry){
+  const bloodTypes = Array.isArray(entry.bloodTypes) ? entry.bloodTypes : [];
+  if(bloodTypes.length === 0) return "";
+
+  return bloodTypes.map(bt => {
+    const reqText = (Array.isArray(bt.requests) ? bt.requests : [])
+      .filter(item => Number(item.qty || 0) > 0)
+      .map(item => `${item.type}-${item.qty}`)
+      .join(", ");
+
+    const issText = (Array.isArray(bt.issued) ? bt.issued : [])
+      .filter(item => Number(item.qty || 0) > 0)
+      .map(item => `${item.type}-${item.qty}`)
+      .join(", ");
+
+    return `
+      <div class="augBloodTypeCard">
+        <div class="augBloodTypeTitle">${bt.bloodType || ""}</div>
+        <div>REQ: ${reqText || "-"}</div>
+        <div>ISS: ${issText || "-"}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 function buildAugTotals(entry){
@@ -474,11 +523,11 @@ function buildAugTotals(entry){
   return { req, iss };
 }
 
-function buildAugMiniTable(entry){
+function buildAugEntryTable(entry){
   const totals = buildAugTotals(entry);
 
   return `
-    <table class="augMiniTable">
+    <table class="augEntryTable">
       <tr>
         <th></th>
         <th>WB</th>
@@ -817,8 +866,8 @@ function renderAugmentationTable(){
         <td>${entry.date || ""}</td>
         <td>${entry.facility || ""}</td>
         <td>${entry.boxContainerQty || 0}</td>
-        <td class="augSummary">${formatAugBloodTypes(entry.bloodTypes)}</td>
-        <td>${buildAugMiniTable(entry)}</td>
+        <td class="augBloodTypeWrap">${buildAugBloodTypeCards(entry)}</td>
+        <td>${buildAugEntryTable(entry)}</td>
         <td>${computedTotal}</td>
         <td>${entry.amountPaid || ""}</td>
         <td>${entry.discount || ""}</td>
@@ -1179,21 +1228,37 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTED_BLOOD_TYPES","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTED_BLOOD_TYPES","BLOOD_TYPE_DETAILS","REQ_WB","REQ_PRBC","REQ_PC","REQ_FFP","REQ_CRYO","ISS_WB","ISS_PRBC","ISS_PC","ISS_FFP","ISS_CRYO","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
   ];
 
   filtered.forEach(e => {
     const totals = buildAugTotals(e);
-    const bloodTypesText = (Array.isArray(e.bloodTypes) ? e.bloodTypes : [])
+
+    const bloodTypeList = (Array.isArray(e.bloodTypes) ? e.bloodTypes : [])
       .map(item => item.bloodType || "")
       .filter(Boolean)
       .join(" | ");
+
+    const bloodTypeDetails = (Array.isArray(e.bloodTypes) ? e.bloodTypes : []).map(bt => {
+      const reqText = (Array.isArray(bt.requests) ? bt.requests : [])
+        .filter(item => Number(item.qty || 0) > 0)
+        .map(item => `${item.type}-${item.qty}`)
+        .join(", ");
+
+      const issText = (Array.isArray(bt.issued) ? bt.issued : [])
+        .filter(item => Number(item.qty || 0) > 0)
+        .map(item => `${item.type}-${item.qty}`)
+        .join(", ");
+
+      return `${bt.bloodType || ""} [REQ: ${reqText || "-"} | ISS: ${issText || "-"}]`;
+    }).join(" || ");
 
     rows.push([
       e.date || "",
       e.facility || "",
       e.boxContainerQty || 0,
-      bloodTypesText,
+      bloodTypeList,
+      bloodTypeDetails,
       totals.req.WB,
       totals.req.PRBC,
       totals.req.PC,
