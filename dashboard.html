@@ -361,7 +361,7 @@
             </div>
 
             <div class="iframe-wrap">
-                <iframe id="moduleFrame" class="module-frame" src="donor-database-entry.html"></iframe>
+                <iframe id="moduleFrame" class="module-frame" src=""></iframe>
             </div>
         </main>
 
@@ -395,11 +395,38 @@
     const workspaceTitle = document.getElementById("workspaceTitle");
     const workspaceSubtitle = document.getElementById("workspaceSubtitle");
 
+    let currentModuleUrl = "donor-database-entry.html";
+    let currentModuleTitle = "Donor Database - Data Input";
+    let currentModuleSubtitle = "Donor database data input panel";
+
+    function addCacheBuster(url){
+        const separator = url.includes("?") ? "&" : "?";
+        return `${url}${separator}t=${Date.now()}`;
+    }
+
+    function setFrameSource(url){
+        currentModuleUrl = url;
+        frame.src = addCacheBuster(url);
+    }
+
+    function setWorkspace(title, subtitle){
+        currentModuleTitle = title;
+        currentModuleSubtitle = subtitle;
+        workspaceTitle.textContent = title;
+        workspaceSubtitle.textContent = subtitle;
+    }
+
     onAuthStateChanged(auth, (user) => {
         if (!user) {
             window.location.href = "index.html";
             return;
         }
+
+        setWorkspace(currentModuleTitle, currentModuleSubtitle);
+        setFrameSource(currentModuleUrl);
+
+        const defaultBtn = document.getElementById("btn-donor-db-entry");
+        if (defaultBtn) defaultBtn.classList.add("active-sub");
     });
 
     function clearActiveSubs(){
@@ -436,20 +463,21 @@
             }
         });
 
-        if(clickedNav && document.getElementById("section-" + name).classList.contains("open")){
+        const activeSection = document.getElementById("section-" + name);
+        if(clickedNav && activeSection && activeSection.classList.contains("open")){
             clickedNav.classList.add("active");
         }
     };
 
     window.openModule = function(url, title, subtitle){
-        frame.src = url;
-        workspaceTitle.textContent = title;
-        workspaceSubtitle.textContent = subtitle;
+        setWorkspace(title, subtitle);
+        setFrameSource(url);
         clearActiveSubs();
 
         const matchingButton = Array.from(document.querySelectorAll(".sub-btn")).find(btn =>
             btn.getAttribute("onclick") && btn.getAttribute("onclick").includes("'" + url + "'")
         );
+
         if(matchingButton){
             matchingButton.classList.add("active-sub");
         }
@@ -459,13 +487,13 @@
         clearActiveNavs();
         navButton.classList.add("active");
         clearActiveSubs();
-        frame.src = url;
-        workspaceTitle.textContent = title;
-        workspaceSubtitle.textContent = subtitle;
+        setWorkspace(title, subtitle);
+        setFrameSource(url);
     };
 
     window.reloadFrame = function(){
-        frame.src = frame.src;
+        setWorkspace(currentModuleTitle, currentModuleSubtitle);
+        setFrameSource(currentModuleUrl);
     };
 
     async function getRealtimeDatabaseBackup() {
