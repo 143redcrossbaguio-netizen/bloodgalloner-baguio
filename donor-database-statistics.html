@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Donor Database Statistics</title>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -10,322 +11,551 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
 <style>
+*{box-sizing:border-box;}
+
 body{
-margin:0;
-font-family:Arial;
-background:#f3f6fa;
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f3f6fa;
+    color:#1f2937;
 }
 
 header{
-background:#b30000;
-color:white;
-padding:15px;
-text-align:center;
-font-size:22px;
-font-weight:bold;
+    background:linear-gradient(90deg,#8b0000,#b30000);
+    color:#fff;
+    padding:16px 20px;
+    text-align:center;
+    font-size:24px;
+    font-weight:700;
+    box-shadow:0 2px 10px rgba(0,0,0,0.18);
 }
 
-.container{
-max-width:1400px;
-margin:20px auto;
-padding:10px;
+.page{
+    max-width:1600px;
+    margin:18px auto;
+    padding:0 14px 24px;
 }
 
-.card{
-background:white;
-border-radius:12px;
-padding:12px;
-margin-bottom:12px;
-box-shadow:0 2px 8px rgba(0,0,0,0.1);
+.panel,.year-card,.month-card{
+    background:#fff;
+    border:1px solid #dbe3ec;
+    border-radius:16px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.07);
+    margin-bottom:16px;
+    overflow:hidden;
 }
 
-.year-header{
-background:#8b0000;
-color:white;
-padding:12px;
-cursor:pointer;
-border-radius:10px;
+.panel-head,.year-head,.month-head,.collapse-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-weight:700;
 }
 
-.month-header{
-background:#eef2f6;
-padding:10px;
-cursor:pointer;
-margin-top:6px;
-border-radius:8px;
+.panel-head{
+    background:#eef4fa;
+    color:#22313f;
+    padding:14px 16px;
+    border-bottom:1px solid #dbe3ec;
 }
 
-.hidden{
-display:none;
+.year-head{
+    background:#8b0000;
+    color:#fff;
+    padding:14px 16px;
+    cursor:pointer;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
+.month-head{
+    background:#f6f9fc;
+    color:#22313f;
+    padding:13px 16px;
+    border-top:1px solid #e5e7eb;
+    cursor:pointer;
 }
 
-th,td{
-border:1px solid #222;
-padding:6px;
-font-size:12px;
-text-align:center;
+.collapse-head{
+    background:#f8fafc;
+    color:#22313f;
+    padding:13px 16px;
+    border-bottom:1px solid #e5e7eb;
+    cursor:pointer;
 }
 
-.title{
-background:#eee;
-font-weight:bold;
-text-align:left;
+.panel-body{
+    padding:16px;
+}
+
+.body-hidden{
+    display:none;
+}
+
+.icon{
+    font-size:18px;
+    font-weight:700;
+}
+
+.controls-grid{
+    display:grid;
+    grid-template-columns:190px 240px 1fr auto auto auto;
+    gap:12px;
+    align-items:end;
+}
+
+.mapping-grid{
+    display:grid;
+    grid-template-columns:1.3fr 240px auto;
+    gap:12px;
+    align-items:end;
+}
+
+.field-group{
+    display:flex;
+    flex-direction:column;
+}
+
+.field-group label{
+    font-size:13px;
+    font-weight:700;
+    margin-bottom:6px;
+    color:#334155;
+}
+
+.field-group input,
+.field-group select{
+    width:100%;
+    padding:11px 12px;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    font-size:14px;
+    background:#fff;
+}
+
+button{
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:700;
 }
 
 .btn{
-padding:6px 10px;
-border:none;
-border-radius:6px;
-cursor:pointer;
-color:white;
-font-weight:bold;
+    padding:11px 16px;
+    font-size:13px;
+    white-space:nowrap;
 }
 
-.blue{background:#1565c0;}
-.green{background:#2e7d32;}
-.gray{background:#555;}
-</style>
+.small-btn{
+    padding:8px 10px;
+    font-size:12px;
+}
 
+.blue-btn{background:#1565c0;color:#fff;}
+.green-btn{background:#2e7d32;color:#fff;}
+.gray-btn{background:#64748b;color:#fff;}
+.red-btn{background:#8a1111;color:#fff;}
+
+.status{
+    margin-top:12px;
+    padding:12px;
+    border-radius:10px;
+    font-weight:700;
+    display:none;
+}
+
+.status.ok{
+    display:block;
+    background:#e8f7e8;
+    color:#1b5e20;
+    border:1px solid #b7dfb9;
+}
+
+.status.err{
+    display:block;
+    background:#fdeaea;
+    color:#b71c1c;
+    border:1px solid #efb7b7;
+}
+
+.hint{
+    margin-top:8px;
+    font-size:12px;
+    color:#64748b;
+}
+
+.month-tools{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:12px 14px;
+    background:#fafcff;
+    border-bottom:1px solid #e5e7eb;
+}
+
+.stats-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:14px;
+    padding:14px;
+}
+
+.stat-box{
+    background:#fff;
+    border:1px solid #e5eaf0;
+    border-radius:14px;
+    padding:12px;
+}
+
+.table-wrap{
+    overflow:auto;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+th,td{
+    border:1px solid #222;
+    padding:6px 8px;
+    font-size:12px;
+    white-space:nowrap;
+    text-align:center;
+}
+
+th{
+    font-weight:700;
+}
+
+.title-row{
+    background:#f2f2f2;
+    text-align:left;
+    font-size:15px;
+    font-weight:700;
+}
+
+.pink{background:#e5c1c3;}
+.beige{background:#ead9c4;}
+.green{background:#dfead5;}
+.blue{background:#d9e5f7;}
+.left{text-align:left;}
+.bold{font-weight:700;}
+
+@media print{
+    header,
+    .controls-panel,
+    .mapping-panel,
+    .month-tools,
+    .status{
+        display:none !important;
+    }
+
+    .page{
+        margin:0;
+        padding:0;
+        max-width:none;
+    }
+
+    .panel,
+    .year-card,
+    .month-card,
+    .stat-box{
+        box-shadow:none;
+        border:none;
+        border-radius:0;
+    }
+
+    .body-hidden{
+        display:block !important;
+    }
+}
+
+@media (max-width:1200px){
+    .controls-grid,
+    .mapping-grid{
+        grid-template-columns:1fr;
+    }
+}
+</style>
 </head>
 <body>
 
 <header>Donor Database Statistics</header>
 
-<div class="container">
+<div class="page">
 
-<input type="month" id="monthFilter">
-<button class="btn blue" onclick="loadData()">Refresh</button>
+    <div class="panel controls-panel">
+        <div class="panel-head">
+            <span>Statistics Controls</span>
+        </div>
+        <div class="panel-body">
+            <div class="controls-grid">
+                <div class="field-group">
+                    <label for="quickMonthFilter">Quick Month</label>
+                    <input type="month" id="quickMonthFilter">
+                </div>
 
-<div id="output"></div>
+                <div class="field-group">
+                    <label for="partnerSearch">Find Partner Mapping</label>
+                    <input type="text" id="partnerSearch" placeholder="Search mapped partner">
+                </div>
 
+                <div></div>
+
+                <button class="btn blue-btn" id="refreshBtn">Refresh</button>
+                <button class="btn gray-btn" id="collapseAllBtn">Collapse All</button>
+                <button class="btn green-btn" id="expandAllBtn">Expand All</button>
+            </div>
+
+            <div id="statusBox" class="status"></div>
+        </div>
+    </div>
+
+    <div class="panel mapping-panel">
+        <div class="collapse-head" onclick="toggleMappingPanel()">
+            <span>Group Category Entry</span>
+            <span id="mappingIcon" class="icon">−</span>
+        </div>
+        <div id="mappingBody">
+            <div class="panel-body">
+                <div class="mapping-grid">
+                    <div class="field-group">
+                        <label for="partnerNameInput">MBD Partner / Organization Name</label>
+                        <input type="text" id="partnerNameInput" placeholder="Example: DA(DEPARTMENT OF AGRICULTURE), UP-APO, Peoples Park">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="partnerCategoryInput">Category</label>
+                        <select id="partnerCategoryInput">
+                            <option value="Group">Group</option>
+                            <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
+                            <option value="Pledge 25">Pledge 25</option>
+                        </select>
+                    </div>
+
+                    <button class="btn green-btn" id="savePartnerBtn">Save Mapping</button>
+                </div>
+
+                <div class="hint">
+                    Alias matching is enabled. Example: <b>DA</b> can match <b>DA(DEPARTMENT OF AGRICULTURE)</b>.
+                </div>
+
+                <div class="table-wrap" style="margin-top:14px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="pink">Partner Name</th>
+                                <th class="beige">Category</th>
+                                <th class="blue">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="statisticsContainer"></div>
 </div>
 
 <script>
-
 const firebaseConfig = {
-apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-authDomain: "galloners-club.firebaseapp.com",
-databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-projectId: "galloners-club"
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
 };
 
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
-const db = firebase.firestore();
+const firestore = firebase.firestore();
 const rtdb = firebase.database();
+const auth = firebase.auth();
 
-let donors = [];
-let releasing = [];
+const quickMonthFilter = document.getElementById("quickMonthFilter");
+const partnerSearch = document.getElementById("partnerSearch");
+const refreshBtn = document.getElementById("refreshBtn");
+const collapseAllBtn = document.getElementById("collapseAllBtn");
+const expandAllBtn = document.getElementById("expandAllBtn");
+const statusBox = document.getElementById("statusBox");
 
-function getMonthName(m){
-return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m-1];
+const partnerNameInput = document.getElementById("partnerNameInput");
+const partnerCategoryInput = document.getElementById("partnerCategoryInput");
+const savePartnerBtn = document.getElementById("savePartnerBtn");
+const mappingTableBody = document.getElementById("mappingTableBody");
+
+const statisticsContainer = document.getElementById("statisticsContainer");
+
+let donorRecords = [];
+let releasingEntries = [];
+let partnerMappings = [];
+let collapsedGroups = {};
+let mappingCollapsed = false;
+
+function showStatus(message, good = true) {
+    statusBox.textContent = message;
+    statusBox.className = good ? "status ok" : "status err";
 }
 
-function getYearMonth(date){
-const p = date.split("-");
-return {
-year:p[0],
-month:parseInt(p[1]),
-key:p[0]+"-"+p[1]
-};
+function normalizeText(value) {
+    return String(value || "").trim().toLowerCase();
 }
 
-/* 🔥 FIXED FUNCTION */
-function buildDonorGroups(records){
-const grouped = {};
-records.forEach(r=>{
-if(!r.entryDate)return;
-const d = getYearMonth(r.entryDate);
-
-if(!grouped[d.year]) grouped[d.year]={};
-if(!grouped[d.year][d.month]){
-grouped[d.year][d.month]={records:[]};
+function normalizeCompact(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-grouped[d.year][d.month].records.push(r);
-});
-return grouped;
+function escapeHtml(text) {
+    if (text === null || text === undefined) return "";
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
-function count(records, field, value){
-return records.filter(r=> (r[field]||"").toLowerCase()==value.toLowerCase()).length;
+function csvEscape(value) {
+    if (value === null || value === undefined) return "";
+    return `"${String(value).replace(/"/g, '""')}"`;
 }
 
-function loadData(){
-Promise.all([
-db.collection("donorDatabase").get(),
-rtdb.ref("releasing").once("value")
-]).then(([snap, rel])=>{
-
-donors = snap.docs.map(d=>d.data());
-releasing = Object.values(rel.val()||{});
-
-render();
-
-});
+function setDefaultMonth() {
+    const d = new Date();
+    quickMonthFilter.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function render(){
-
-const grouped = buildDonorGroups(donors);
-let html="";
-
-Object.keys(grouped).sort((a,b)=>b-a).forEach(year=>{
-
-html+=`
-<div class="card">
-<div class="year-header" onclick="toggle('y${year}')">${year}</div>
-<div id="y${year}">
-`;
-
-Object.keys(grouped[year]).sort((a,b)=>b-a).forEach(month=>{
-
-const data = grouped[year][month].records;
-const key = year+"-"+String(month).padStart(2,"0");
-
-html+=`
-<div class="month-header" onclick="toggle('m${year}${month}')">
-${getMonthName(month)} (${data.length})
-<button class="btn gray" onclick="printMonth('${key}')">Print</button>
-</div>
-
-<div id="m${year}${month}">
-${sectionOffice(data)}
-${sectionSex(data)}
-${sectionBlood(data)}
-${sectionRequests(key)}
-</div>
-`;
-
-});
-
-html+=`</div></div>`;
-});
-
-document.getElementById("output").innerHTML = html;
+function getMonthName(n) {
+    return ["January","February","March","April","May","June","July","August","September","October","November","December"][n - 1] || "Unknown";
 }
 
-function toggle(id){
-document.getElementById(id).classList.toggle("hidden");
+function getYearMonth(dateStr) {
+    const parts = String(dateStr || "").split("-");
+    if (parts.length !== 3) {
+        return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
+    }
+
+    const year = parts[0];
+    const month = parseInt(parts[1], 10);
+
+    return {
+        year,
+        month,
+        monthName: getMonthName(month),
+        monthKey: `${year}-${String(month).padStart(2, "0")}`
+    };
 }
 
-/* ---------------- SECTIONS ---------------- */
+/* FIXED MISSING FUNCTION */
+function buildDonorGroups(records) {
+    const grouped = {};
 
-function sectionOffice(data){
-let walk = count(data,"donorType","walk-in");
-let pd = count(data,"donorType","patient directed");
+    records.forEach(record => {
+        if (!record.entryDate) return;
 
-return `
-<div class="card">
-<table>
-<tr><th colspan="2" class="title">Office Bleeding</th></tr>
-<tr><td>Walk-in</td><td>${walk}</td></tr>
-<tr><td>Patient Directed</td><td>${pd}</td></tr>
-</table>
-</div>
-`;
+        const info = getYearMonth(record.entryDate);
+        const year = info.year;
+        const month = info.month;
+        const monthName = info.monthName;
+
+        if (!grouped[year]) grouped[year] = {};
+        if (!grouped[year][month]) {
+            grouped[year][month] = {
+                monthName: monthName,
+                records: []
+            };
+        }
+
+        grouped[year][month].records.push(record);
+    });
+
+    return grouped;
 }
 
-function sectionSex(data){
-let m = count(data,"sex","male");
-let f = count(data,"sex","female");
-
-return `
-<div class="card">
-<table>
-<tr><th colspan="2" class="title">Sex Distribution</th></tr>
-<tr><td>Male</td><td>${m}</td></tr>
-<tr><td>Female</td><td>${f}</td></tr>
-</table>
-</div>
-`;
+function getGroupKey(type, a, b="") {
+    return `${type}-${a}-${b}`;
 }
 
-function sectionBlood(data){
-let bt = {};
-data.forEach(d=>{
-let b=d.bloodType||"";
-if(!bt[b])bt[b]=0;
-bt[b]++;
-});
-
-let rows="";
-Object.keys(bt).forEach(k=>{
-rows+=`<tr><td>${k}</td><td>${bt[k]}</td></tr>`;
-});
-
-return `
-<div class="card">
-<table>
-<tr><th colspan="2" class="title">Blood Type Distribution</th></tr>
-${rows}
-</table>
-</div>
-`;
+function countBySex(records, sex) {
+    return records.filter(r => normalizeText(r.sex) === normalizeText(sex)).length;
 }
 
-function sectionRequests(monthKey){
-
-let map={};
-
-releasing.forEach(r=>{
-if(!r.date || !r.date.startsWith(monthKey)) return;
-
-(r.requests||[]).forEach(req=>{
-let key = req.bloodType+"-"+req.type;
-
-if(!map[key]) map[key]=0;
-
-if(req.type=="WB"){
-map[key]+=Number(req.qty||0);
-}else{
-map[key]+=Number(req.qty||0);
-}
-});
-});
-
-let rows="";
-Object.keys(map).forEach(k=>{
-rows+=`<tr><td>${k}</td><td>${map[k]}</td></tr>`;
-});
-
-return `
-<div class="card">
-<table>
-<tr><th colspan="2" class="title">Blood Requests</th></tr>
-${rows || "<tr><td colspan=2>No Data</td></tr>"}
-</table>
-</div>
-`;
+function countBySexAndPredicate(records, sex, predicate) {
+    return records.filter(r => normalizeText(r.sex) === normalizeText(sex) && predicate(r)).length;
 }
 
-/* PRINT */
-function printMonth(key){
-let data = donors.filter(d=>d.entryDate.startsWith(key));
-let w = window.open("");
-w.document.write("<h2>"+key+"</h2>");
-w.document.write(sectionOffice(data));
-w.document.write(sectionSex(data));
-w.document.write(sectionBlood(data));
-w.print();
+function getAgeGroup(age) {
+    const a = Number(age || 0);
+    if (a >= 16 && a <= 17) return "16-17";
+    if (a >= 18 && a <= 20) return "18-20";
+    if (a >= 21 && a <= 30) return "21-30";
+    if (a >= 31 && a <= 40) return "31-40";
+    if (a >= 41 && a <= 50) return "41-50";
+    if (a >= 51 && a <= 60) return "51-60";
+    if (a >= 60 && a <= 65) return "60-65";
+    if (a >= 66) return "66 & above";
+    return "";
 }
 
-/* INIT */
-firebase.auth().onAuthStateChanged(user=>{
-if(user){
-let d=new Date();
-document.getElementById("monthFilter").value =
-d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
-loadData();
+function countAgeGroup(records, label, sex) {
+    return records.filter(r => getAgeGroup(r.age) === label && normalizeText(r.sex) === normalizeText(sex)).length;
 }
-});
 
-</script>
+function isCountableBagRecord(record) {
+    return normalizeText(record.amount) === "450 ml";
+}
 
-</body>
-</html>
+function blankBagCounter() {
+    return { S: 0, D: 0, T: 0, Q: 0 };
+}
+
+function addBagCount(counter, bagType) {
+    const value = normalizeText(bagType);
+    if (value === "single") counter.S += 1;
+    else if (value === "double") counter.D += 1;
+    else if (value === "triple") counter.T += 1;
+    else if (value === "quadruple") counter.Q += 1;
+}
+
+function sumBagCounters(counters) {
+    const out = blankBagCounter();
+    counters.forEach(c => {
+        out.S += c.S;
+        out.D += c.D;
+        out.T += c.T;
+        out.Q += c.Q;
+    });
+    return out;
+}
+
+function getOfficeBleedingRow(record) {
+    if (normalizeText(record.donorType) === "walk-in") return "Walk-in";
+    if (normalizeText(record.donorType) === "patient directed") {
+        if (normalizeText(record.patientDirectedDetails).includes("replacement")) return "Replacement";
+        return "Patient-directed";
+    }
+    return "";
+}
+
+function createComponentCounter() {
+    return { whole450: 0, PRBC: 0, FFP: 0, PC: 0 };
+}
+
+function addComponentPreparation(counterMap, bloodType, bagType) {
+    const bt = String(bloodType || "").toUpperCase().trim();
+    if (!bt) return;
+    if (!counterMap[bt]) counterMap[bt] = createComponentCounter();
+
+    const value = normalizeText(bagType);
+    if (value === "single") counterMap[bt].whole450 += 1;
+    else if (value === "double") counterMap[bt].whole450 += 1;
+    else if (value === "triple") {
+        counterMap[bt].PRBC += 1;
+        counterMap[bt].FFP += 1;
+        counterMap[bt].PC += 1;
+    } else if (value === "quadruple") {
+        counter
