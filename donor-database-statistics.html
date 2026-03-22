@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Donor Database Statistics</title>
 
-    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
@@ -576,7 +575,6 @@
     <script>
         // =========================================================
         // FIREBASE CONFIG
-        // Keep your existing config here.
         // =========================================================
         const firebaseConfig = {
             apiKey: "YOUR_API_KEY",
@@ -605,6 +603,7 @@
         let groupedStatsCache = {};
         let activeFilteredData = [];
         let activeFilterLabel = "All Data";
+        let filterEventsAttached = false;
 
         const MONTH_NAMES = [
             "January","February","March","April","May","June",
@@ -622,23 +621,49 @@
             await initializePage();
         });
 
+        // =========================================================
+        // INIT
+        // =========================================================
         async function initializePage(){
             try{
                 showLoading(true);
-                await Promise.all([
+
+                const results = await Promise.allSettled([
                     loadCategoryMappings(),
                     loadDonorDatabase(),
-                    loadReleasingData()
+                    loadReleasingDataSafe()
                 ]);
+
+                const categoryResult = results[0];
+                const donorResult = results[1];
+                const releasingResult = results[2];
+
+                if (categoryResult.status === "rejected") {
+                    console.error("Category mappings failed:", categoryResult.reason);
+                    categoryMappings = [];
+                }
+
+                if (donorResult.status === "rejected") {
+                    console.error("Donor database failed:", donorResult.reason);
+                    donorRecords = [];
+                    throw new Error("Failed to load donorDatabase from Firestore.");
+                }
+
+                if (releasingResult.status === "rejected") {
+                    console.error("Releasing data failed:", releasingResult.reason);
+                    releasingRecords = [];
+                }
+
                 populateYearFilter();
                 populateMonthFilter();
                 renderMappings();
-                buildAndRenderStatistics();
                 attachFilterEvents();
+                buildAndRenderStatistics();
+
             }catch(error){
                 console.error(error);
                 document.getElementById("reportContainer").innerHTML = `
-                    <div class="empty">Failed to load statistics: ${escapeHtml(error.message || error)}</div>
+                    <div class="empty">Failed to load statistics: ${escapeHtml(error.message || String(error))}</div>
                 `;
             }finally{
                 showLoading(false);
@@ -646,10 +671,13 @@
         }
 
         function attachFilterEvents(){
-            document.getElementById("filterYear").onchange = buildAndRenderStatistics;
-            document.getElementById("filterMonth").onchange = buildAndRenderStatistics;
-            document.getElementById("searchPartner").oninput = buildAndRenderStatistics;
-            document.getElementById("viewMode").onchange = buildAndRenderStatistics;
+            if (filterEventsAttached) return;
+            filterEventsAttached = true;
+
+            document.getElementById("filterYear").addEventListener("change", buildAndRenderStatistics);
+            document.getElementById("filterMonth").addEventListener("change", buildAndRenderStatistics);
+            document.getElementById("searchPartner").addEventListener("input", buildAndRenderStatistics);
+            document.getElementById("viewMode").addEventListener("change", buildAndRenderStatistics);
         }
 
         function showLoading(show){
@@ -657,7 +685,7 @@
         }
 
         // =========================================================
-        // DATA LOADERS
+        // LOADERS
         // =========================================================
         async function loadDonorDatabase(){
             donorRecords = [];
@@ -681,10 +709,28 @@
             });
         }
 
-        async function loadReleasingData(){
-            const snap = await rtdb.ref("releasing").once("value");
-            const raw = snap.val();
-            releasingRecords = flattenRealtimeData(raw);
+        async function loadReleasingDataSafe(){
+            try{
+                if (!firebaseConfig.databaseURL || firebaseConfig.databaseURL === "YOUR_DATABASE_URL") {
+                    console.warn("databaseURL is missing or placeholder. Releasing stats will be empty.");
+                    releasingRecords = [];
+                    return;
+                }
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Realtime Database request timeout.")), 10000)
+                );
+
+                const dbPromise = rtdb.ref("releasing").once("value");
+                const snap = await Promise.race([dbPromise, timeoutPromise]);
+                const raw = snap.val();
+                releasingRecords = flattenRealtimeData(raw);
+
+            }catch(error){
+                console.error("loadReleasingDataSafe error:", error);
+                releasingRecords = [];
+                throw error;
+            }
         }
 
         function flattenRealtimeData(node, path = []){
@@ -726,18 +772,30 @@
             )].sort((a,b) => b-a);
 
             const select = document.getElementById("filterYear");
+            const current = select.value || "ALL";
             select.innerHTML = `<option value="ALL">All Years</option>`;
+
             years.forEach(year => {
                 select.innerHTML += `<option value="${year}">${year}</option>`;
             });
+
+            if ([...select.options].some(o => o.value === current)) {
+                select.value = current;
+            }
         }
 
         function populateMonthFilter(){
             const select = document.getElementById("filterMonth");
+            const current = select.value || "ALL";
             select.innerHTML = `<option value="ALL">All Months</option>`;
+
             MONTH_NAMES.forEach((m, idx) => {
                 select.innerHTML += `<option value="${idx+1}">${m}</option>`;
             });
+
+            if ([...select.options].some(o => o.value === current)) {
+                select.value = current;
+            }
         }
 
         function getFilteredDonorRecords(){
@@ -790,17 +848,24 @@
         // MAIN BUILD
         // =========================================================
         function buildAndRenderStatistics(){
-            activeFilteredData = getFilteredDonorRecords();
-            const releasingFiltered = getFilteredReleasingRecords();
+            try{
+                activeFilteredData = getFilteredDonorRecords();
+                const releasingFiltered = getFilteredReleasingRecords();
 
-            activeFilterLabel = buildFilterLabel();
-            document.getElementById("summaryFilterLabel").textContent = activeFilterLabel;
+                activeFilterLabel = buildFilterLabel();
+                document.getElementById("summaryFilterLabel").textContent = activeFilterLabel;
 
-            const grouped = buildDonorGroups(activeFilteredData, releasingFiltered);
-            groupedStatsCache = grouped;
+                const grouped = buildDonorGroups(activeFilteredData, releasingFiltered);
+                groupedStatsCache = grouped;
 
-            renderSummary(grouped.summary);
-            renderReport(grouped.byYearMonth);
+                renderSummary(grouped.summary);
+                renderReport(grouped.byYearMonth);
+            }catch(error){
+                console.error("buildAndRenderStatistics error:", error);
+                document.getElementById("reportContainer").innerHTML = `
+                    <div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>
+                `;
+            }
         }
 
         function buildFilterLabel(){
@@ -809,7 +874,6 @@
             const viewMode = document.getElementById("viewMode").value;
 
             if (viewMode === "all") return "All Data";
-
             if (yearVal === "ALL" && monthVal === "ALL") return "All Years / All Months";
             if (yearVal !== "ALL" && monthVal === "ALL") return `${yearVal}`;
             if (yearVal === "ALL" && monthVal !== "ALL") return `${MONTH_NAMES[Number(monthVal)-1]} (All Years)`;
@@ -817,7 +881,7 @@
         }
 
         // =========================================================
-        // IMPORTANT: buildDonorGroups defined here to fix error
+        // CORE GROUP BUILDER
         // =========================================================
         function buildDonorGroups(records, releasingFiltered){
             const yearMonthMap = {};
@@ -931,7 +995,6 @@
         function applyDonorRecordToStats(stats, record){
             stats.totalDonors += 1;
 
-            // a. Office Bleeding / b. Field Donation
             const donorType = normalizeDonorType(extractDonorType(record));
             const partnerName = getPartnerName(record);
 
@@ -949,19 +1012,15 @@
                 stats.officeBleeding["Other Office"] += 1;
             }
 
-            // c. Blood Type Distribution
             const bloodType = normalizeBloodType(extractBloodType(record));
             stats.bloodTypeDistribution[bloodType] = (stats.bloodTypeDistribution[bloodType] || 0) + 1;
 
-            // d. Component Preparation
             const bagType = normalizeBagType(extractBagType(record));
             applyBagTypeToComponents(stats.componentPreparation, bagType);
 
-            // f. Sex Distribution
             const sex = normalizeSex(extractSex(record));
             stats.sexDistribution[sex] = (stats.sexDistribution[sex] || 0) + 1;
 
-            // g. Distribution of Donors according to Frequency
             const donorCategory = normalizeDonorCategory(extractDonorCategory(record));
             if (donorCategory === "New"){
                 stats.donationFrequency["First-time donors"] += 1;
@@ -971,7 +1030,6 @@
                 stats.donationFrequency["Repeat regular"] += 1;
             }
 
-            // h. Age Group
             const age = extractAge(record);
             const ageGroup = getAgeGroup(age);
             stats.ageGroupDistribution[ageGroup] = (stats.ageGroupDistribution[ageGroup] || 0) + 1;
@@ -1432,15 +1490,34 @@
         async function reloadStatistics(){
             try{
                 showLoading(true);
-                await Promise.all([
+
+                const results = await Promise.allSettled([
                     loadCategoryMappings(),
                     loadDonorDatabase(),
-                    loadReleasingData()
+                    loadReleasingDataSafe()
                 ]);
+
+                if (results[0].status === "rejected") {
+                    console.error("Category reload failed:", results[0].reason);
+                    categoryMappings = [];
+                }
+
+                if (results[1].status === "rejected") {
+                    console.error("Donor reload failed:", results[1].reason);
+                    donorRecords = [];
+                    throw new Error("Failed to reload donorDatabase.");
+                }
+
+                if (results[2].status === "rejected") {
+                    console.error("Releasing reload failed:", results[2].reason);
+                    releasingRecords = [];
+                }
+
                 populateYearFilter();
                 populateMonthFilter();
                 renderMappings();
                 buildAndRenderStatistics();
+
             }catch(error){
                 console.error(error);
                 alert("Failed to reload statistics: " + (error.message || error));
@@ -1523,7 +1600,7 @@
 
         function extractAge(record){
             const direct = firstNonEmpty([record.age], null);
-            if (direct !== null && direct !== undefined && direct !== "") return Number(direct);
+            if (direct !== null && direct !== undefined && String(direct).trim() !== "") return Number(direct);
 
             const birthDate = firstNonEmpty([
                 record.birthDate,
@@ -1808,6 +1885,17 @@
                 .replace(/\\/g, "\\\\")
                 .replace(/'/g, "\\'");
         }
+
+        // =========================================================
+        // DEBUG HELPERS
+        // =========================================================
+        window.addEventListener("error", function(e){
+            console.error("Window error:", e.message, e.error);
+        });
+
+        window.addEventListener("unhandledrejection", function(e){
+            console.error("Unhandled promise rejection:", e.reason);
+        });
     </script>
 </body>
 </html>
