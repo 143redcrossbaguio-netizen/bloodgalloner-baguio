@@ -1,149 +1,1164 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Donor Import Tool</title>
-    <meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Galloners Club - Donor Bulk Importer</title>
 
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
 
-    <!-- XLSX Reader -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-    <style>
-        body { font-family: Arial; padding:20px; background:#f4f4f4; }
-        button { padding:10px; margin-top:10px; }
-        #log { margin-top:20px; background:#fff; padding:15px; height:300px; overflow:auto; }
-    </style>
+<style>
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f4f6f8;
+        color: #222;
+    }
+
+    header {
+        background: linear-gradient(135deg, #9d0000, #c62828);
+        color: white;
+        padding: 18px 20px;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    }
+
+    .page {
+        width: min(1400px, 96%);
+        margin: 20px auto 40px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+    }
+
+    .card {
+        background: white;
+        border-radius: 14px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        padding: 18px;
+    }
+
+    .card h3 {
+        margin: 0 0 12px 0;
+        color: #9d0000;
+    }
+
+    .top-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 18px;
+    }
+
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .row label {
+        font-weight: bold;
+        min-width: 140px;
+    }
+
+    input[type="text"],
+    input[type="date"],
+    input[type="file"],
+    select {
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        min-width: 180px;
+        font-size: 14px;
+    }
+
+    button {
+        border: none;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.2s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+
+    .btn-primary { background: #b30000; color: white; }
+    .btn-secondary { background: #555; color: white; }
+    .btn-green { background: #1b8f3a; color: white; }
+    .btn-orange { background: #ef6c00; color: white; }
+    .btn-blue { background: #1565c0; color: white; }
+    .btn-red { background: #c62828; color: white; }
+
+    .small-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        gap: 12px;
+    }
+
+    .stat-box {
+        background: #fafafa;
+        border: 1px solid #ececec;
+        border-radius: 12px;
+        padding: 14px;
+        text-align: center;
+    }
+
+    .stat-box .num {
+        font-size: 24px;
+        font-weight: bold;
+        color: #b30000;
+    }
+
+    .stat-box .label {
+        margin-top: 6px;
+        font-size: 13px;
+        color: #555;
+    }
+
+    .table-wrap {
+        overflow: auto;
+        border: 1px solid #e5e5e5;
+        border-radius: 12px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1200px;
+        background: white;
+    }
+
+    th, td {
+        border-bottom: 1px solid #eee;
+        padding: 10px 8px;
+        font-size: 13px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    th {
+        background: #fafafa;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        color: #333;
+    }
+
+    tr:hover td {
+        background: #fcfcfc;
+    }
+
+    .status-pill {
+        display: inline-block;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .status-new { background: #e8f5e9; color: #1b5e20; }
+    .status-dup-db { background: #ffebee; color: #b71c1c; }
+    .status-dup-batch { background: #fff3e0; color: #e65100; }
+    .status-warn { background: #fff8e1; color: #8d6e00; }
+
+    .muted {
+        color: #666;
+        font-size: 13px;
+    }
+
+    .danger-text { color: #c62828; font-weight: bold; }
+    .success-text { color: #1b8f3a; font-weight: bold; }
+    .warning-text { color: #ef6c00; font-weight: bold; }
+
+    .history-results {
+        max-height: 460px;
+        overflow: auto;
+        border: 1px solid #e6e6e6;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .history-item {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .history-item:last-child { border-bottom: none; }
+
+    .history-title {
+        font-weight: bold;
+        color: #9d0000;
+        margin-bottom: 6px;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-right: 5px;
+        background: #f0f0f0;
+        color: #333;
+    }
+
+    .flex-between {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .hidden { display: none; }
+
+    .note-box {
+        background: #fff8e1;
+        color: #6d4c41;
+        border: 1px solid #f0d98a;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        margin-top: 8px;
+    }
+
+    .file-list {
+        max-height: 110px;
+        overflow: auto;
+        border: 1px solid #ececec;
+        border-radius: 10px;
+        padding: 8px;
+        background: #fafafa;
+    }
+
+    .file-item {
+        font-size: 13px;
+        padding: 4px 0;
+        border-bottom: 1px dashed #ddd;
+    }
+
+    .file-item:last-child { border-bottom: none; }
+
+    @media (max-width: 960px) {
+        .top-grid {
+            grid-template-columns: 1fr;
+        }
+        .stats-grid {
+            grid-template-columns: repeat(2, minmax(120px, 1fr));
+        }
+    }
+</style>
 </head>
 <body>
 
-<h2>Donor Bulk Import</h2>
+<header>
+    <h2>Galloners Club - Donor Bulk Importer</h2>
+    <div>Import old Excel/Google Sheet exports into Firestore donorDatabase</div>
+</header>
 
-<input type="file" id="fileInput" accept=".xlsx,.xls">
-<br>
-<button onclick="processFile()">Process & Import</button>
+<div class="page">
 
-<div id="log"></div>
+    <div class="top-grid">
+        <div class="card">
+            <h3>Bulk Import</h3>
+
+            <div class="row">
+                <label>Select Excel Files</label>
+                <input type="file" id="excelFiles" accept=".xlsx,.xls,.csv" multiple />
+            </div>
+
+            <div class="row">
+                <label>Default Donation Date</label>
+                <input type="date" id="defaultDonationDate" />
+                <span class="muted">Used only if a row has no detectable donation date.</span>
+            </div>
+
+            <div class="row">
+                <label>Default Group</label>
+                <input type="text" id="defaultGroup" placeholder="Optional fallback group" />
+            </div>
+
+            <div class="row">
+                <label>Default Donor Type</label>
+                <input type="text" id="defaultDonorType" placeholder="Optional fallback donor type" />
+            </div>
+
+            <div class="row">
+                <button class="btn-primary" id="analyzeBtn">Analyze Files</button>
+                <button class="btn-orange" id="clearPreviewBtn">Clear Preview</button>
+                <button class="btn-green" id="importBtn" disabled>Import Selected New Records</button>
+            </div>
+
+            <div class="note-box">
+                Matching rule for donor identity: <b>Surname + First Name + Birthday</b><br>
+                Middle name is optional and will not block matching.<br>
+                Each row is treated as <b>one donation record</b>. Old records are never overwritten.
+            </div>
+
+            <div style="margin-top:12px;">
+                <div class="muted" style="margin-bottom:6px;"><b>Selected files</b></div>
+                <div class="file-list" id="fileListBox">
+                    <div class="muted">No files selected.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Donor History Viewer</h3>
+
+            <div class="row">
+                <label>Surname</label>
+                <input type="text" id="historySurname" placeholder="Surname" />
+            </div>
+
+            <div class="row">
+                <label>First Name</label>
+                <input type="text" id="historyFirstName" placeholder="First Name" />
+            </div>
+
+            <div class="row">
+                <label>Birthday</label>
+                <input type="date" id="historyBirthday" />
+            </div>
+
+            <div class="row">
+                <button class="btn-blue" id="searchHistoryBtn">Search History</button>
+                <button class="btn-secondary" id="clearHistoryBtn">Clear</button>
+            </div>
+
+            <div id="historySummary" class="muted" style="margin-bottom:10px;">Enter donor details to view donation history.</div>
+            <div class="history-results" id="historyResults">
+                <div class="history-item muted">No donor history loaded.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="flex-between">
+            <h3 style="margin-bottom:0;">Preview Before Import</h3>
+            <div>
+                <button class="btn-secondary small-btn" id="selectAllNewBtn">Select All New</button>
+                <button class="btn-secondary small-btn" id="unselectAllBtn">Unselect All</button>
+            </div>
+        </div>
+
+        <div style="margin-top:14px;" class="stats-grid">
+            <div class="stat-box">
+                <div class="num" id="statTotal">0</div>
+                <div class="label">Rows Read</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="statReady">0</div>
+                <div class="label">Ready to Import</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="statDupDB">0</div>
+                <div class="label">Duplicates in DB</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="statDupBatch">0</div>
+                <div class="label">Duplicates in Files</div>
+            </div>
+            <div class="stat-box">
+                <div class="num" id="statMissing">0</div>
+                <div class="label">Missing Critical Data</div>
+            </div>
+        </div>
+
+        <div style="margin-top:14px;" id="previewInfo" class="muted">
+            No preview yet.
+        </div>
+
+        <div class="table-wrap" style="margin-top:12px;">
+            <table id="previewTable">
+                <thead>
+                    <tr>
+                        <th>Select</th>
+                        <th>#</th>
+                        <th>Status</th>
+                        <th>Reason</th>
+                        <th>File</th>
+                        <th>Sheet</th>
+                        <th>Row</th>
+                        <th>Serial No.</th>
+                        <th>Surname</th>
+                        <th>First Name</th>
+                        <th>Middle Name</th>
+                        <th>Birthday</th>
+                        <th>Donation Date</th>
+                        <th>Group</th>
+                        <th>Donor Type</th>
+                        <th>Sex</th>
+                        <th>Blood Type</th>
+                        <th>Contact</th>
+                    </tr>
+                </thead>
+                <tbody id="previewTbody">
+                    <tr><td colspan="18" class="muted">No rows parsed yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 <script>
+/* =========================
+   FIREBASE CONFIG
+   KEEP THE SAME CONFIG YOU ALREADY USE
+========================= */
 const firebaseConfig = {
-    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-    authDomain: "galloners-club.firebaseapp.com",
-    projectId: "galloners-club"
+    apiKey: "PASTE_YOUR_EXISTING_CONFIG_HERE",
+    authDomain: "PASTE_YOUR_EXISTING_CONFIG_HERE",
+    projectId: "PASTE_YOUR_EXISTING_CONFIG_HERE",
+    storageBucket: "PASTE_YOUR_EXISTING_CONFIG_HERE",
+    messagingSenderId: "PASTE_YOUR_EXISTING_CONFIG_HERE",
+    appId: "PASTE_YOUR_EXISTING_CONFIG_HERE"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-function log(msg){
-    document.getElementById("log").innerHTML += msg + "<br>";
+/* =========================
+   GLOBAL STATE
+========================= */
+let previewRows = [];
+let existingDbDocs = [];
+let existingDonationKeySet = new Set();
+let existingLooseKeySet = new Set();
+let existingDonorKeyMap = new Map();
+
+/* =========================
+   HELPERS
+========================= */
+function escapeHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
-function normalizeBloodType(bt){
-    if(!bt) return "Unknown";
-    bt = bt.toUpperCase().replace(" ", "");
-
-    if(bt.includes("A") && bt.includes("+")) return "A+";
-    if(bt.includes("A") && bt.includes("-")) return "A-";
-    if(bt.includes("B") && bt.includes("+")) return "B+";
-    if(bt.includes("B") && bt.includes("-")) return "B-";
-    if(bt.includes("AB") && bt.includes("+")) return "AB+";
-    if(bt.includes("AB") && bt.includes("-")) return "AB-";
-    if(bt.includes("O") && bt.includes("+")) return "O+";
-    if(bt.includes("O") && bt.includes("-")) return "O-";
-
-    return "Unknown";
+function normalizeText(value) {
+    return String(value ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase();
 }
 
-function normalizeSex(s){
-    if(!s) return "";
-    s = s.toLowerCase();
-    if(s.includes("male")) return "Male";
-    if(s.includes("female")) return "Female";
+function cleanName(value) {
+    return String(value ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .replace(/[.,]/g, "")
+        .toUpperCase();
+}
+
+function normalizeKeyText(value) {
+    return normalizeText(value)
+        .replace(/[.,]/g, "")
+        .trim();
+}
+
+function formatDateForDisplay(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function toISODate(dateObj) {
+    if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "";
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const dd = String(dateObj.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function excelSerialToDate(serial) {
+    const utcDays = Math.floor(serial - 25569);
+    const utcValue = utcDays * 86400;
+    const dateInfo = new Date(utcValue * 1000);
+    const fractionalDay = serial - Math.floor(serial) + 0.0000001;
+    let totalSeconds = Math.floor(86400 * fractionalDay);
+    const seconds = totalSeconds % 60;
+    totalSeconds -= seconds;
+    const hours = Math.floor(totalSeconds / (60 * 60));
+    const minutes = Math.floor(totalSeconds / 60) % 60;
+
+    return new Date(dateInfo.getFullYear(), dateInfo.getMonth(), dateInfo.getDate(), hours, minutes, seconds);
+}
+
+function parsePossibleDate(value) {
+    if (value === null || value === undefined || value === "") return "";
+
+    if (value instanceof Date && !isNaN(value.getTime())) {
+        return toISODate(value);
+    }
+
+    if (typeof value === "number" && value > 20000 && value < 60000) {
+        const d = excelSerialToDate(value);
+        return toISODate(d);
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return "";
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+        const [m, d, y] = raw.split("/");
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(raw)) {
+        const [m, d, y] = raw.split("-");
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(raw)) {
+        const [y, m, d] = raw.split("/");
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+        return toISODate(d);
+    }
+
     return "";
 }
 
-function detectDonorType(row){
-    if(row["MBD"]) return {type:"MBD", value:row["MBD"]};
-    if(row["Walk-in"]) return {type:"Walk-in", value:""};
-    if(row["Patient-Directed"]) return {type:"Patient Directed", value:row["Patient-Directed"]};
-    return {type:"", value:""};
+function parseDateFromFilename(filename) {
+    const name = String(filename || "");
+
+    const patterns = [
+        /(\d{4})[-_](\d{1,2})[-_](\d{1,2})/,
+        /(\d{1,2})[-_](\d{1,2})[-_](\d{4})/
+    ];
+
+    for (const p of patterns) {
+        const match = name.match(p);
+        if (match) {
+            if (match[1].length === 4) {
+                const [, y, m, d] = match;
+                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            } else {
+                const [, m, d, y] = match;
+                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            }
+        }
+    }
+
+    return "";
 }
 
-async function processFile(){
-    const file = document.getElementById("fileInput").files[0];
-    if(!file) return alert("Select file");
+function standardizeHeader(header) {
+    return String(header ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\n/g, " ")
+        .replace(/_/g, " ")
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
 
-    const reader = new FileReader();
+function getFirstMappedValue(row, aliases) {
+    const entries = Object.entries(row);
+    for (const [key, value] of entries) {
+        const normalizedKey = standardizeHeader(key);
+        if (aliases.includes(normalizedKey)) {
+            if (value !== null && value !== undefined && String(value).trim() !== "") {
+                return value;
+            }
+        }
+    }
+    return "";
+}
 
-    reader.onload = async function(e){
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type:"array"});
+function donorIdentityKey(surname, firstName, birthday) {
+    return [
+        normalizeKeyText(surname),
+        normalizeKeyText(firstName),
+        parsePossibleDate(birthday)
+    ].join("|");
+}
 
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet);
+function donationStrongKey(data) {
+    return [
+        donorIdentityKey(data.surname, data.firstName, data.birthday),
+        parsePossibleDate(data.donationDate),
+        normalizeKeyText(data.serialNumber),
+        normalizeKeyText(data.groupName)
+    ].join("|");
+}
 
-        log("Rows found: " + rows.length);
+function donationLooseKey(data) {
+    return [
+        donorIdentityKey(data.surname, data.firstName, data.birthday),
+        parsePossibleDate(data.donationDate),
+        normalizeKeyText(data.groupName)
+    ].join("|");
+}
 
-        for(let i=0;i<rows.length;i++){
-            const r = rows[i];
+function fileBatchKey(data) {
+    return [
+        donorIdentityKey(data.surname, data.firstName, data.birthday),
+        parsePossibleDate(data.donationDate),
+        normalizeKeyText(data.serialNumber),
+        normalizeKeyText(data.groupName)
+    ].join("|");
+}
 
-            try{
-                const donorTypeData = detectDonorType(r);
+function isMissingCritical(data) {
+    return !data.surname || !data.firstName || !data.birthday || !data.donationDate;
+}
 
-                const donor = {
-                    entryDate: new Date().toISOString().split("T")[0],
+function setPreviewStats(rows) {
+    const total = rows.length;
+    const ready = rows.filter(r => r.importStatus === "NEW").length;
+    const dupDB = rows.filter(r => r.importStatus === "DUPLICATE_DB").length;
+    const dupBatch = rows.filter(r => r.importStatus === "DUPLICATE_BATCH").length;
+    const missing = rows.filter(r => r.importStatus === "MISSING_DATA").length;
 
-                    donorType: donorTypeData.type,
-                    mbdDetails: donorTypeData.type === "MBD" ? donorTypeData.value : "",
-                    patientDirectedDetails: donorTypeData.type === "Patient Directed" ? donorTypeData.value : "",
+    document.getElementById("statTotal").textContent = total;
+    document.getElementById("statReady").textContent = ready;
+    document.getElementById("statDupDB").textContent = dupDB;
+    document.getElementById("statDupBatch").textContent = dupBatch;
+    document.getElementById("statMissing").textContent = missing;
 
-                    surname: r["Surname"] || "",
-                    firstName: r["Given Name"] || "",
-                    middleName: r["Middle Name"] || "",
+    document.getElementById("previewInfo").innerHTML =
+        total === 0
+        ? "No preview yet."
+        : `<b>${total}</b> rows parsed. <span class="success-text">${ready} ready</span>, <span class="danger-text">${dupDB} duplicate(s) in database</span>, <span class="warning-text">${dupBatch} duplicate(s) in current files</span>, <span class="warning-text">${missing} with missing critical data</span>.`;
+}
 
-                    birthday: r["Birthday"] || "",
-                    age: parseInt(r["Age"] || 0),
+function statusPill(status) {
+    if (status === "NEW") return `<span class="status-pill status-new">NEW</span>`;
+    if (status === "DUPLICATE_DB") return `<span class="status-pill status-dup-db">DUPLICATE IN DB</span>`;
+    if (status === "DUPLICATE_BATCH") return `<span class="status-pill status-dup-batch">DUPLICATE IN FILES</span>`;
+    return `<span class="status-pill status-warn">MISSING DATA</span>`;
+}
 
-                    sex: normalizeSex(r["Sex"]),
-                    contactNumber: r["Contact Number"] || "",
+function renderPreviewTable() {
+    const tbody = document.getElementById("previewTbody");
 
-                    address: (r["House Number/Purok/Street Name"] || "") + ", " + (r["Barangay/City"] || ""),
+    if (!previewRows.length) {
+        tbody.innerHTML = `<tr><td colspan="18" class="muted">No rows parsed yet.</td></tr>`;
+        document.getElementById("importBtn").disabled = true;
+        setPreviewStats([]);
+        return;
+    }
 
-                    numberOfDonations: parseInt(r["# of Donations"] || 0),
+    const html = previewRows.map((row, index) => {
+        const disabled = row.importStatus !== "NEW" ? "disabled" : "";
+        const checked = row.importStatus === "NEW" ? "checked" : "";
+        return `
+            <tr>
+                <td><input type="checkbox" class="rowSelector" data-index="${index}" ${checked} ${disabled}></td>
+                <td>${index + 1}</td>
+                <td>${statusPill(row.importStatus)}</td>
+                <td>${escapeHtml(row.reason || "")}</td>
+                <td>${escapeHtml(row.sourceFile || "")}</td>
+                <td>${escapeHtml(row.sourceSheet || "")}</td>
+                <td>${escapeHtml(row.sourceRowNumber || "")}</td>
+                <td>${escapeHtml(row.serialNumber || "")}</td>
+                <td>${escapeHtml(row.surname || "")}</td>
+                <td>${escapeHtml(row.firstName || "")}</td>
+                <td>${escapeHtml(row.middleName || "")}</td>
+                <td>${escapeHtml(row.birthday || "")}</td>
+                <td>${escapeHtml(row.donationDate || "")}</td>
+                <td>${escapeHtml(row.groupName || "")}</td>
+                <td>${escapeHtml(row.donorType || "")}</td>
+                <td>${escapeHtml(row.sex || "")}</td>
+                <td>${escapeHtml(row.bloodType || "")}</td>
+                <td>${escapeHtml(row.contactNumber || "")}</td>
+            </tr>
+        `;
+    }).join("");
 
-                    donorCategory: r["Type of Donor"] || "New",
+    tbody.innerHTML = html;
+    document.getElementById("importBtn").disabled = !previewRows.some(r => r.importStatus === "NEW");
+    setPreviewStats(previewRows);
+}
 
-                    bloodType: normalizeBloodType(r["Blood Type"]),
+function renderSelectedFiles(files) {
+    const box = document.getElementById("fileListBox");
+    if (!files || !files.length) {
+        box.innerHTML = `<div class="muted">No files selected.</div>`;
+        return;
+    }
 
-                    serialNumber: r["Serial Number"] || "",
+    box.innerHTML = Array.from(files).map(file => {
+        return `<div class="file-item">${escapeHtml(file.name)} <span class="muted">(${Math.round(file.size / 1024)} KB)</span></div>`;
+    }).join("");
+}
 
-                    amount: r["Amount"] || "",
-                    bloodBagBrand: r["Blood Bag Used"] || "",
-                    bloodBagType: r["Type of Blood Bag"] || "",
+async function loadExistingDonorDatabase() {
+    existingDbDocs = [];
+    existingDonationKeySet = new Set();
+    existingLooseKeySet = new Set();
+    existingDonorKeyMap = new Map();
 
-                    timeStarted: r["Time Started"] || "",
+    const snap = await db.collection("donorDatabase").get();
 
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                };
+    snap.forEach(doc => {
+        const data = doc.data() || {};
 
-                await db.collection("donorDatabase").add(donor);
+        const normalized = {
+            id: doc.id,
+            surname: data.surname || data.lastName || "",
+            firstName: data.firstName || "",
+            middleName: data.middleName || "",
+            birthday: parsePossibleDate(data.birthday || data.birthDate || data.dob || ""),
+            donationDate: parsePossibleDate(data.donationDate || data.dateDonated || data.date || ""),
+            serialNumber: data.serialNumber || data.serialNo || data.serial || "",
+            groupName: data.groupName || data.group || data.donationGroup || "",
+            donorType: data.donorType || "",
+            sex: data.sex || "",
+            bloodType: data.bloodType || data.bloodGroup || ""
+        };
 
-                log(`✔ Row ${i+1} imported`);
+        const donorKey = donorIdentityKey(normalized.surname, normalized.firstName, normalized.birthday);
+        const strongKey = donationStrongKey(normalized);
+        const looseKey = donationLooseKey(normalized);
 
-            }catch(err){
-                log(`❌ Row ${i+1} failed: ` + err.message);
+        existingDbDocs.push({ id: doc.id, ...data, _normalized: normalized });
+
+        existingDonationKeySet.add(strongKey);
+        existingLooseKeySet.add(looseKey);
+
+        if (!existingDonorKeyMap.has(donorKey)) {
+            existingDonorKeyMap.set(donorKey, []);
+        }
+        existingDonorKeyMap.get(donorKey).push({ id: doc.id, ...data, _normalized: normalized });
+    });
+}
+
+/* =========================
+   HEADER MAP
+========================= */
+const FIELD_ALIASES = {
+    serialNumber: [
+        "serial number", "serial no", "serial", "donor no", "donor number", "control no", "control number"
+    ],
+    surname: [
+        "surname", "last name", "lastname", "family name", "apelido"
+    ],
+    firstName: [
+        "first name", "firstname", "given name", "name"
+    ],
+    middleName: [
+        "middle name", "middlename", "middle initial", "mi"
+    ],
+    birthday: [
+        "birthday", "birth date", "birthdate", "date of birth", "dob"
+    ],
+    donationDate: [
+        "donation date", "date donated", "date of donation", "date bled", "bleeding date", "date", "collection date"
+    ],
+    groupName: [
+        "group", "group name", "organization", "partner organization", "sponsor", "agency", "company", "school", "office", "venue"
+    ],
+    donorType: [
+        "donor type", "type of donor", "type"
+    ],
+    sex: [
+        "sex", "gender"
+    ],
+    bloodType: [
+        "blood type", "blood group", "abo rh", "abo/rh", "blood"
+    ],
+    contactNumber: [
+        "contact", "contact number", "mobile", "mobile number", "phone", "phone number", "cellphone"
+    ],
+    address: [
+        "address", "home address", "residence"
+    ],
+    age: [
+        "age"
+    ],
+    civilStatus: [
+        "civil status", "status"
+    ],
+    occupation: [
+        "occupation", "job"
+    ],
+    nationality: [
+        "nationality"
+    ],
+    remarks: [
+        "remarks", "remark", "notes", "comment"
+    ]
+};
+
+function mapRowToDonorRecord(row, sourceFile, sourceSheet, sourceRowNumber) {
+    const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
+    const defaultGroup = document.getElementById("defaultGroup").value.trim();
+    const defaultDonorType = document.getElementById("defaultDonorType").value.trim();
+
+    const fileDate = parseDateFromFilename(sourceFile);
+
+    const mapped = {
+        serialNumber: String(getFirstMappedValue(row, FIELD_ALIASES.serialNumber) || "").trim(),
+        surname: cleanName(getFirstMappedValue(row, FIELD_ALIASES.surname) || ""),
+        firstName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.firstName) || ""),
+        middleName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.middleName) || ""),
+        birthday: parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.birthday) || ""),
+        donationDate: "",
+        groupName: String(getFirstMappedValue(row, FIELD_ALIASES.groupName) || defaultGroup || "").trim(),
+        donorType: String(getFirstMappedValue(row, FIELD_ALIASES.donorType) || defaultDonorType || "").trim(),
+        sex: String(getFirstMappedValue(row, FIELD_ALIASES.sex) || "").trim().toUpperCase(),
+        bloodType: String(getFirstMappedValue(row, FIELD_ALIASES.bloodType) || "").trim().toUpperCase(),
+        contactNumber: String(getFirstMappedValue(row, FIELD_ALIASES.contactNumber) || "").trim(),
+        address: String(getFirstMappedValue(row, FIELD_ALIASES.address) || "").trim(),
+        age: String(getFirstMappedValue(row, FIELD_ALIASES.age) || "").trim(),
+        civilStatus: String(getFirstMappedValue(row, FIELD_ALIASES.civilStatus) || "").trim(),
+        occupation: String(getFirstMappedValue(row, FIELD_ALIASES.occupation) || "").trim(),
+        nationality: String(getFirstMappedValue(row, FIELD_ALIASES.nationality) || "").trim(),
+        remarks: String(getFirstMappedValue(row, FIELD_ALIASES.remarks) || "").trim(),
+
+        sourceFile,
+        sourceSheet,
+        sourceRowNumber
+    };
+
+    const detectedDonationDate = parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.donationDate) || "");
+    mapped.donationDate = detectedDonationDate || defaultDonationDate || fileDate || "";
+
+    return mapped;
+}
+
+/* =========================
+   FILE PARSING
+========================= */
+async function analyzeFiles() {
+    const filesInput = document.getElementById("excelFiles");
+    const files = filesInput.files;
+
+    if (!files || !files.length) {
+        alert("Please select one or more Excel/CSV files first.");
+        return;
+    }
+
+    document.getElementById("analyzeBtn").disabled = true;
+    document.getElementById("analyzeBtn").textContent = "Analyzing...";
+
+    try {
+        await loadExistingDonorDatabase();
+
+        const parsedRows = [];
+
+        for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+
+            for (const sheetName of workbook.SheetNames) {
+                const sheet = workbook.Sheets[sheetName];
+                if (!sheet) continue;
+
+                const rows = XLSX.utils.sheet_to_json(sheet, {
+                    defval: "",
+                    raw: true
+                });
+
+                rows.forEach((row, idx) => {
+                    const allValuesBlank = Object.values(row).every(v => String(v ?? "").trim() === "");
+                    if (allValuesBlank) return;
+
+                    const mapped = mapRowToDonorRecord(row, file.name, sheetName, idx + 2);
+                    parsedRows.push(mapped);
+                });
             }
         }
 
-        log("🎉 IMPORT COMPLETE");
-    };
+        processPreviewRows(parsedRows);
+        renderPreviewTable();
 
-    reader.readAsArrayBuffer(file);
+    } catch (error) {
+        console.error(error);
+        alert("Error analyzing files: " + error.message);
+    } finally {
+        document.getElementById("analyzeBtn").disabled = false;
+        document.getElementById("analyzeBtn").textContent = "Analyze Files";
+    }
 }
-</script>
 
+function processPreviewRows(rows) {
+    const batchSeen = new Set();
+
+    previewRows = rows.map(row => {
+        const donorKey = donorIdentityKey(row.surname, row.firstName, row.birthday);
+        const strongKey = donationStrongKey(row);
+        const looseKey = donationLooseKey(row);
+        const batchKey = fileBatchKey(row);
+
+        let importStatus = "NEW";
+        let reason = "";
+
+        if (isMissingCritical(row)) {
+            importStatus = "MISSING_DATA";
+            reason = "Missing surname, first name, birthday, or donation date.";
+        } else if (existingDonationKeySet.has(strongKey) || existingLooseKeySet.has(looseKey)) {
+            importStatus = "DUPLICATE_DB";
+            reason = "This donation record already exists in donorDatabase.";
+        } else if (batchSeen.has(batchKey)) {
+            importStatus = "DUPLICATE_BATCH";
+            reason = "Duplicate row found in selected files.";
+        } else {
+            importStatus = "NEW";
+            reason = existingDonorKeyMap.has(donorKey)
+                ? "Existing donor found, but this appears to be a new donation record."
+                : "New donor and new donation record.";
+        }
+
+        batchSeen.add(batchKey);
+
+        return {
+            ...row,
+            donorKey,
+            strongKey,
+            looseKey,
+            batchKey,
+            importStatus,
+            reason
+        };
+    });
+}
+
+/* =========================
+   IMPORT
+========================= */
+async function importSelectedRows() {
+    const selectedIndexes = Array.from(document.querySelectorAll(".rowSelector:checked"))
+        .map(cb => Number(cb.dataset.index));
+
+    if (!selectedIndexes.length) {
+        alert("No rows selected for import.");
+        return;
+    }
+
+    const rowsToImport = selectedIndexes
+        .map(i => previewRows[i])
+        .filter(row => row && row.importStatus === "NEW");
+
+    if (!rowsToImport.length) {
+        alert("No valid NEW rows selected for import.");
+        return;
+    }
+
+    if (!confirm(`Import ${rowsToImport.length} new donation record(s)?`)) return;
+
+    document.getElementById("importBtn").disabled = true;
+    document.getElementById("importBtn").textContent = "Importing...";
+
+    try {
+        const batchSize = 400;
+        let importedCount = 0;
+
+        for (let i = 0; i < rowsToImport.length; i += batchSize) {
+            const chunk = rowsToImport.slice(i, i + batchSize);
+            const batch = db.batch();
+
+            chunk.forEach(row => {
+                const docRef = db.collection("donorDatabase").doc();
+
+                const payload = {
+                    serialNumber: row.serialNumber || "",
+                    surname: row.surname || "",
+                    firstName: row.firstName || "",
+                    middleName: row.middleName || "",
+                    birthday: row.birthday || "",
+                    donationDate: row.donationDate || "",
+                    groupName: row.groupName || "",
+                    donorType: row.donorType || "",
+                    sex: row.sex || "",
+                    bloodType: row.bloodType || "",
+                    contactNumber: row.contactNumber || "",
+                    address: row.address || "",
+                    age: row.age || "",
+                    civilStatus: row.civilStatus || "",
+                    occupation: row.occupation || "",
+                    nationality: row.nationality || "",
+                    remarks: row.remarks || "",
+
+                    donorMatchKey: donorIdentityKey(row.surname, row.firstName, row.birthday),
+                    donationStrongKey: donationStrongKey(row),
+                    donationLooseKey: donationLooseKey(row),
+
+                    importMeta: {
+                        importedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        source: "donor-import.html",
+                        sourceFile: row.sourceFile || "",
+                        sourceSheet: row.sourceSheet || "",
+                        sourceRowNumber: row.sourceRowNumber || ""
+                    }
+                };
+
+                batch.set(docRef, payload);
+            });
+
+            await batch.commit();
+            importedCount += chunk.length;
+        }
+
+        alert(`Successfully imported ${importedCount} donation record(s).`);
+
+        await loadExistingDonorDatabase();
+        processPreviewRows(previewRows);
+        renderPreviewTable();
+
+    } catch (error) {
+        console.error(error);
+        alert("Import failed: " + error.message);
+    } finally {
+        document.getElementById("importBtn").textContent = "Import Selected New Records";
+        document.getElementById("importBtn").disabled = !previewRows.some(r => r.importStatus === "NEW");
+    }
+}
+
+/* =========================
+   HISTORY VIEWER
+========================= */
+async function searchDonorHistory() {
+    const surname = cleanName(document.getElementById("historySurname").value);
+    const firstName = cleanName(document.getElementById("historyFirstName").value);
+    const birthday = document.getElementById("historyBirthday").value;
+
+    if (!surname || !firstName || !birthday) {
+        alert("Please enter surname, first name, and birthday.");
+        return;
+    }
+
+    const donorKey = donorIdentityKey(surname, firstName, birthday);
+
+    document.getElementById("historySummary").textContent = "Searching donor history...";
+    document.getElementById("historyResults").innerHTML = `<div class="history-item muted">Loading...</div>`;
+
+    try {
+        if (!existingDbDocs.length) {
+            await loadExistingDonorDatabase();
+        }
+
+        const matches = (existingDonorKeyMap.get(donorKey) || []).slice();
+
+        matches.sort((a, b) => {
+            const da = parsePossibleDate(a._normalized?.donationDate || a.donationDate || "") || "";
+            const dbb = parsePossibleDate(b._normalized?.donationDate || b.donationDate || "") || "";
+            return dbb.localeCompare(da);
+        });
+
+        document.getElementById("historySummary").innerHTML =
+            matches.length
+                ? `<b>${matches.length}</b> donation record(s) found for <b>${escapeHtml(surname)}, ${escapeHtml(firstName)}</b> with birthday <b>${escapeHtml(birthday)}</b>.`
+                : `No donation history found for <b>${escapeHtml(surname)}, ${escapeHtml(firstName)}</b> with birthday <b>${escapeHtml(birthday)}</b>.`;
+
+        if (!matches.length) {
+            document.getElementById("historyResults").innerHTML = `<div class="history-item muted">No donor history found.</div>`;
+            return;
+        }
+
+        const html = matches.map(item => {
+            const d = item._normalized || {};
+            return `
+                <div class="history-item">
+                    <div class="history-title">${escapeHtml(d.surname || item.surname || "")}, ${escapeHtml(d.firstName || item.firstName || "")} ${escapeHtml(d.middleName || item.middleName || "")}</div>
+                    <div style="margin-bottom:6px;">
+                        <span class="badge">Donation: ${escapeHtml(d.donationDate || item.donationDate || "")}</span>
+                        <span class="badge">Group: ${escapeHtml(d.groupName || item.groupName || item.group || "")}</span>
+                        <span class="badge">Type: ${escapeHtml(d.donorType || item.donorType || "")}</span>
+                    </div>
+                    <div class="muted">
+                        <b>Serial:</b> ${escapeHtml(d.serialNumber || item.serialNumber || item.serialNo || "")}
+                        &nbsp; | &nbsp;
+                        <b>Birthday:</b> ${escapeHtml(d.birthday || item.birthday || item.birthDate || "")}
+                        &nbsp; | &nbsp;
+                        <b>Sex:</b> ${escapeHtml(d.sex || item.sex || "")}
+                        &nbsp; | &nbsp;
+                        <b>Blood Type:</b> ${escapeHtml(d.bloodType || item.bloodType || item.bloodGroup || "")}
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+        document.getElementById("historyResults").innerHTML = html;
+
+    } catch (error) {
+        console.error(error);
+        document.getElementById("historySummary").textContent = "Failed to load donor history.";
+        document.getElementById("historyResults").innerHTML = `<div class="history-item danger-text">Error: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+/* =========================
+   UI ACTIONS
+========================= */
+document.getElementById("excelFiles").addEventListener("change", (e) => {
+    renderSelectedFiles(e.target.files);
+});
+
+document.getElementById("analyzeBtn").addEventListener("click", analyzeFiles);
+
+document.getElementById("importBtn").addEventListener("click", importSelectedRows);
+
+document.getElementById("clearPreviewBtn").addEventListener("click", () => {
+    previewRows = [];
+    renderPreviewTable();
+    document.getElementById("previewInfo").textContent = "Preview cleared.";
+});
+
+document.getElementById("selectAllNewBtn").addEventListener("click", () => {
+    document.querySelectorAll(".rowSelector").forEach(cb => {
+        if (!cb.disabled) cb.checked = true;
+    });
+});
+
+document.getElementById("unselectAllBtn").addEventListener("click", () => {
+    document.querySelectorAll(".rowSelector").forEach(cb => cb.checked = false);
+});
+
+document.getElementById("searchHistoryBtn").addEventListener("click", searchDonorHistory);
+
+document.getElementById("clearHistoryBtn").addEventListener("click", () => {
+    document.getElementById("historySurname").value = "";
+    document.getElementById("historyFirstName").value = "";
+    document.getElementById("historyBirthday").value = "";
+    document.getElementById("historySummary").textContent = "Enter donor details to view donation history.";
+    document.getElementById("historyResults").innerHTML = `<div class="history-item muted">No donor history loaded.</div>`;
+});
+
+/* =========================
+   OPTIONAL: LOAD DB EARLY
+========================= */
+window.addEventListener("load", async () => {
+    try {
+        await loadExistingDonorDatabase();
+    } catch (error) {
+        console.error("Initial donorDatabase preload failed:", error);
+    }
+});
+</script>
 </body>
 </html>
