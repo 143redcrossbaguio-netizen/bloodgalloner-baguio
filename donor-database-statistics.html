@@ -76,7 +76,6 @@
 
         .btn-red { background: #c00000; color: white; }
         .btn-blue { background: #2563eb; color: white; }
-        .btn-green { background: #15803d; color: white; }
 
         .status {
             padding: 12px 14px;
@@ -464,11 +463,14 @@
                 keys.includes("requestedblood") ||
                 keys.includes("bloodrequest") ||
                 keys.includes("request") ||
+                keys.includes("requests") ||
+                keys.includes("issued") ||
                 keys.includes("requesttype") ||
                 keys.includes("wb") ||
                 keys.includes("prbc") ||
                 keys.includes("ffp") ||
                 keys.includes("pc") ||
+                keys.includes("cryo") ||
                 keys.includes("wholeblood") ||
                 keys.includes("quantity") ||
                 keys.includes("qty") ||
@@ -602,8 +604,8 @@
                 officeBleeding: {"Walk-in":0,"Patient Directed":0,"Other Office":0},
                 fieldDonation: {"MBD":0},
                 bloodType: {"A+":0,"A-":0,"B+":0,"B-":0,"AB+":0,"AB-":0,"O+":0,"O-":0,"Unknown":0},
-                components: {"450 cc":0,"PRBC":0,"FFP":0,"PC":0},
-                requests: {"450 cc":0,"PRBC":0,"FFP":0,"PC":0},
+                components: {"450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0},
+                requests: {"450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0},
                 sex: {"Male":0,"Female":0,"Other":0,"Unknown":0},
                 frequency: {"First-time donors":0,"Repeat non-regular":0,"Repeat regular":0},
                 age: {"17-24":0,"25-34":0,"35-44":0,"45-54":0,"55-65":0,"66+":0,"Unknown":0}
@@ -653,13 +655,11 @@
 
         function applyRelease(s, r) {
             const items = getReleaseItems(r);
-
             if (!items.length) return;
 
             items.forEach(item => {
                 const key = normalizeRequestComponent(item.component);
                 const qty = Number(item.quantity) || 0;
-
                 if (!key || !qty) return;
 
                 s.requests[key] = (s.requests[key] || 0) + qty;
@@ -671,6 +671,24 @@
 
             if (Array.isArray(r.items)) {
                 r.items.forEach(x => {
+                    items.push({
+                        component: x.component || x.product || x.type || x.name || "",
+                        quantity: x.quantity || x.qty || x.units || x.count || x.value || 0
+                    });
+                });
+            }
+
+            if (Array.isArray(r.requests)) {
+                r.requests.forEach(x => {
+                    items.push({
+                        component: x.component || x.product || x.type || x.name || "",
+                        quantity: x.quantity || x.qty || x.units || x.count || x.value || 0
+                    });
+                });
+            }
+
+            if (Array.isArray(r.issued)) {
+                r.issued.forEach(x => {
                     items.push({
                         component: x.component || x.product || x.type || x.name || "",
                         quantity: x.quantity || x.qty || x.units || x.count || x.value || 0
@@ -697,6 +715,9 @@
             if (r.PC != null) items.push({ component: "PC", quantity: r.PC });
             if (r.pc != null) items.push({ component: "PC", quantity: r.pc });
 
+            if (r.CRYO != null) items.push({ component: "CRYO", quantity: r.CRYO });
+            if (r.cryo != null) items.push({ component: "CRYO", quantity: r.cryo });
+
             if (r.wholeBlood != null) items.push({ component: "WB", quantity: r.wholeBlood });
             if (r.wholeblood != null) items.push({ component: "WB", quantity: r.wholeblood });
 
@@ -710,6 +731,8 @@
                 if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
                 if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
                 if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+                if (p.CRYO != null) items.push({ component: "CRYO", quantity: p.CRYO });
+                if (p.cryo != null) items.push({ component: "CRYO", quantity: p.cryo });
             }
 
             if (r.bloodRequest && typeof r.bloodRequest === "object") {
@@ -722,6 +745,8 @@
                 if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
                 if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
                 if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+                if (p.CRYO != null) items.push({ component: "CRYO", quantity: p.CRYO });
+                if (p.cryo != null) items.push({ component: "CRYO", quantity: p.cryo });
             }
 
             if (r.requestedBlood && typeof r.requestedBlood === "object") {
@@ -734,6 +759,8 @@
                 if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
                 if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
                 if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+                if (p.CRYO != null) items.push({ component: "CRYO", quantity: p.CRYO });
+                if (p.cryo != null) items.push({ component: "CRYO", quantity: p.cryo });
             }
 
             if (r.request && typeof r.request === "object") {
@@ -746,6 +773,8 @@
                 if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
                 if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
                 if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+                if (p.CRYO != null) items.push({ component: "CRYO", quantity: p.CRYO });
+                if (p.cryo != null) items.push({ component: "CRYO", quantity: p.cryo });
             }
 
             return items;
@@ -916,6 +945,7 @@
             if (s.includes("prbc")) return "PRBC";
             if (s.includes("ffp")) return "FFP";
             if (s === "pc" || s.includes("platelet")) return "PC";
+            if (s.includes("cryo")) return "CRYO";
             return "";
         }
 
