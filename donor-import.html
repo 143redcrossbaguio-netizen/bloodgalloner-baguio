@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Donor Import Tool</title>
+    <meta charset="UTF-8">
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+    <!-- XLSX Reader -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body { font-family: Arial; padding:20px; background:#f4f4f4; }
+        button { padding:10px; margin-top:10px; }
+        #log { margin-top:20px; background:#fff; padding:15px; height:300px; overflow:auto; }
+    </style>
+</head>
+<body>
+
+<h2>Donor Bulk Import</h2>
+
+<input type="file" id="fileInput" accept=".xlsx,.xls">
+<br>
+<button onclick="processFile()">Process & Import</button>
+
+<div id="log"></div>
+
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function log(msg){
+    document.getElementById("log").innerHTML += msg + "<br>";
+}
+
+function normalizeBloodType(bt){
+    if(!bt) return "Unknown";
+    bt = bt.toUpperCase().replace(" ", "");
+
+    if(bt.includes("A") && bt.includes("+")) return "A+";
+    if(bt.includes("A") && bt.includes("-")) return "A-";
+    if(bt.includes("B") && bt.includes("+")) return "B+";
+    if(bt.includes("B") && bt.includes("-")) return "B-";
+    if(bt.includes("AB") && bt.includes("+")) return "AB+";
+    if(bt.includes("AB") && bt.includes("-")) return "AB-";
+    if(bt.includes("O") && bt.includes("+")) return "O+";
+    if(bt.includes("O") && bt.includes("-")) return "O-";
+
+    return "Unknown";
+}
+
+function normalizeSex(s){
+    if(!s) return "";
+    s = s.toLowerCase();
+    if(s.includes("male")) return "Male";
+    if(s.includes("female")) return "Female";
+    return "";
+}
+
+function detectDonorType(row){
+    if(row["MBD"]) return {type:"MBD", value:row["MBD"]};
+    if(row["Walk-in"]) return {type:"Walk-in", value:""};
+    if(row["Patient-Directed"]) return {type:"Patient Directed", value:row["Patient-Directed"]};
+    return {type:"", value:""};
+}
+
+async function processFile(){
+    const file = document.getElementById("fileInput").files[0];
+    if(!file) return alert("Select file");
+
+    const reader = new FileReader();
+
+    reader.onload = async function(e){
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type:"array"});
+
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        log("Rows found: " + rows.length);
+
+        for(let i=0;i<rows.length;i++){
+            const r = rows[i];
+
+            try{
+                const donorTypeData = detectDonorType(r);
+
+                const donor = {
+                    entryDate: new Date().toISOString().split("T")[0],
+
+                    donorType: donorTypeData.type,
+                    mbdDetails: donorTypeData.type === "MBD" ? donorTypeData.value : "",
+                    patientDirectedDetails: donorTypeData.type === "Patient Directed" ? donorTypeData.value : "",
+
+                    surname: r["Surname"] || "",
+                    firstName: r["Given Name"] || "",
+                    middleName: r["Middle Name"] || "",
+
+                    birthday: r["Birthday"] || "",
+                    age: parseInt(r["Age"] || 0),
+
+                    sex: normalizeSex(r["Sex"]),
+                    contactNumber: r["Contact Number"] || "",
+
+                    address: (r["House Number/Purok/Street Name"] || "") + ", " + (r["Barangay/City"] || ""),
+
+                    numberOfDonations: parseInt(r["# of Donations"] || 0),
+
+                    donorCategory: r["Type of Donor"] || "New",
+
+                    bloodType: normalizeBloodType(r["Blood Type"]),
+
+                    serialNumber: r["Serial Number"] || "",
+
+                    amount: r["Amount"] || "",
+                    bloodBagBrand: r["Blood Bag Used"] || "",
+                    bloodBagType: r["Type of Blood Bag"] || "",
+
+                    timeStarted: r["Time Started"] || "",
+
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                await db.collection("donorDatabase").add(donor);
+
+                log(`✔ Row ${i+1} imported`);
+
+            }catch(err){
+                log(`❌ Row ${i+1} failed: ` + err.message);
+            }
+        }
+
+        log("🎉 IMPORT COMPLETE");
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+</script>
+
+</body>
+</html>
