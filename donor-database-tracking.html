@@ -35,22 +35,23 @@
             gap: 18px;
             max-width: 100%;
             padding: 18px;
+            align-items: flex-start;
         }
 
         .left-panel {
-            width: 250px;
-            min-width: 250px;
+            width: 270px;
+            min-width: 270px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 3px 10px rgba(0,0,0,0.12);
             padding: 18px;
-            height: fit-content;
             position: sticky;
             top: 18px;
+            height: fit-content;
         }
 
         .left-panel h3 {
-            margin-top: 0;
+            margin: 0 0 12px 0;
             color: #b30000;
             font-size: 20px;
             border-bottom: 2px solid #eee;
@@ -77,11 +78,13 @@
             color: #b30000;
         }
 
-        .search-box {
+        .search-box,
+        .action-box {
             margin-top: 18px;
         }
 
-        .search-box label {
+        .search-box label,
+        .action-box label {
             display: block;
             font-weight: bold;
             margin-bottom: 6px;
@@ -92,6 +95,12 @@
             padding: 10px 12px;
             border: 1px solid #ccc;
             border-radius: 8px;
+        }
+
+        .left-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .content-panel {
@@ -181,21 +190,40 @@
             display: none;
         }
 
+        .subtotal-bar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 10px 14px;
+            background: #fff8f0;
+            border-top: 1px solid #eee;
+            border-bottom: 1px solid #eee;
+            font-weight: bold;
+            color: #7a2e00;
+        }
+
+        .year-subtotal {
+            background: #fff1f1;
+            color: #8b0000;
+        }
+
         .table-wrap {
-            overflow-x: auto;
+            overflow: auto;
             width: 100%;
             background: white;
+            max-height: 70vh;
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
-            min-width: 2100px;
+            min-width: 2250px;
             font-size: 13px;
         }
 
         th, td {
-            border: 1px solid #ccc;
+            border: 1px solid #cfcfcf;
             padding: 8px 10px;
             text-align: center;
             vertical-align: middle;
@@ -205,14 +233,17 @@
         th {
             font-weight: bold;
             color: #111;
+            position: sticky;
+            top: 0;
+            z-index: 3;
         }
 
         th.col-mbd { background: #e7c1a7; }
         th.col-walkin { background: #b9d2f0; }
         th.col-patient { background: #bcd796; }
         th.col-normal { background: #efefef; }
-        th.col-bloodtype { background: #f8f8f8; }
-        th.col-serial { background: #f3f3f3; }
+        th.col-bloodtype { background: #f4f4f4; }
+        th.col-serial { background: #f0f0f0; }
         th.col-amount { background: #c9d7ff; }
         th.col-actions { background: #ececec; }
 
@@ -238,7 +269,7 @@
         button {
             border: none;
             border-radius: 6px;
-            padding: 7px 10px;
+            padding: 9px 12px;
             font-size: 12px;
             font-weight: bold;
             cursor: pointer;
@@ -264,6 +295,24 @@
             color: white;
         }
 
+        .print-btn {
+            background: #444;
+            color: white;
+            width: 100%;
+        }
+
+        .export-btn {
+            background: #0b7a3b;
+            color: white;
+            width: 100%;
+        }
+
+        .collapse-btn {
+            background: #8c1d1d;
+            color: white;
+            width: 100%;
+        }
+
         .edit-input,
         .edit-select {
             width: 100%;
@@ -282,6 +331,50 @@
             text-align: center;
             color: #666;
             font-weight: bold;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+
+            header,
+            .left-panel,
+            .toolbar {
+                display: none !important;
+            }
+
+            .page-wrap {
+                display: block;
+                padding: 0;
+            }
+
+            .content-panel {
+                width: 100%;
+            }
+
+            .year-group,
+            .month-group,
+            .table-wrap {
+                box-shadow: none;
+                border-radius: 0;
+                max-height: none;
+                overflow: visible;
+            }
+
+            th {
+                position: static;
+            }
+
+            .actions-cell,
+            th.col-actions,
+            td.actions-cell {
+                display: none !important;
+            }
+
+            .group-body.hidden {
+                display: block !important;
+            }
         }
 
         @media (max-width: 1000px) {
@@ -319,12 +412,22 @@
             <label for="searchInput">Search</label>
             <input type="text" id="searchInput" placeholder="Search surname, serial, contact, blood type...">
         </div>
+
+        <div class="action-box">
+            <label>Actions</label>
+            <div class="left-buttons">
+                <button class="print-btn" id="printBtn">Print</button>
+                <button class="export-btn" id="exportBtn">Export CSV</button>
+                <button class="collapse-btn" id="collapseAllBtn">Collapse All</button>
+                <button class="collapse-btn" id="expandAllBtn">Expand All</button>
+            </div>
+        </div>
     </div>
 
     <div class="content-panel">
         <div class="toolbar">
             <h3>Grouped by Year and Month</h3>
-            <div>Records are arranged in the same order as your preferred tracking sheet layout.</div>
+            <div>Tracking layout follows your preferred sheet arrangement.</div>
             <div id="statusMessage" class="status-message"></div>
         </div>
 
@@ -357,9 +460,14 @@
     const displayedCountEl = document.getElementById("displayedCount");
     const searchInput = document.getElementById("searchInput");
     const statusMessage = document.getElementById("statusMessage");
+    const printBtn = document.getElementById("printBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const collapseAllBtn = document.getElementById("collapseAllBtn");
+    const expandAllBtn = document.getElementById("expandAllBtn");
 
     let allDonors = [];
     let filteredDonors = [];
+    let collapsedGroups = {};
 
     function showMessage(message, type) {
         statusMessage.textContent = message;
@@ -375,6 +483,12 @@
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    function csvEscape(value) {
+        if (value === null || value === undefined) return "";
+        const str = String(value).replace(/"/g, '""');
+        return `"${str}"`;
     }
 
     function getMonthName(monthNumber) {
@@ -428,7 +542,8 @@
             donor.bloodBagBrand,
             donor.bloodBagType,
             donor.timeStarted,
-            donor.timeEnded
+            donor.timeEnded,
+            donor.remarks
         ].join(" ").toLowerCase();
 
         return text.includes(keyword.toLowerCase());
@@ -457,6 +572,22 @@
         return grouped;
     }
 
+    function getGroupKey(type, a, b = "") {
+        return `${type}-${a}-${b}`;
+    }
+
+    function isCollapsed(key) {
+        return collapsedGroups[key] === true;
+    }
+
+    function countType(records, type) {
+        return records.filter(r => r.donorType === type).length;
+    }
+
+    function countBloodType(records, bloodType) {
+        return records.filter(r => r.bloodType === bloodType).length;
+    }
+
     function renderTracking() {
         const keyword = searchInput.value.trim();
         filteredDonors = allDonors.filter(donor => matchesSearch(donor, keyword));
@@ -482,32 +613,48 @@
         sortedYears.forEach((year, yearIndex) => {
             const monthsObj = grouped[year];
             const sortedMonths = Object.keys(monthsObj).sort((a, b) => Number(b) - Number(a));
+            const yearKey = getGroupKey("year", year);
 
-            let yearTotal = 0;
+            let yearRecords = [];
             sortedMonths.forEach(month => {
-                yearTotal += monthsObj[month].records.length;
+                yearRecords = yearRecords.concat(monthsObj[month].records);
             });
+
+            const yearCollapsed = isCollapsed(yearKey);
 
             html += `
                 <div class="year-group">
-                    <div class="year-header" onclick="toggleGroup('year-body-${yearIndex}', 'year-icon-${yearIndex}')">
-                        <span>${escapeHtml(year)} (${yearTotal})</span>
-                        <span id="year-icon-${yearIndex}" class="toggle-icon">−</span>
+                    <div class="year-header" onclick="toggleGroup('${yearKey}', 'year-body-${yearIndex}', 'year-icon-${yearIndex}')">
+                        <span>${escapeHtml(year)} (${yearRecords.length})</span>
+                        <span id="year-icon-${yearIndex}" class="toggle-icon">${yearCollapsed ? "+" : "−"}</span>
                     </div>
-                    <div id="year-body-${yearIndex}" class="group-body">
+                    <div id="year-body-${yearIndex}" class="group-body ${yearCollapsed ? "hidden" : ""}">
             `;
 
             sortedMonths.forEach((month, monthIndex) => {
                 const monthBlock = monthsObj[month];
                 const records = monthBlock.records;
+                const monthKey = getGroupKey("month", year, month);
+                const monthCollapsed = isCollapsed(monthKey);
 
                 html += `
                     <div class="month-group">
-                        <div class="month-header" onclick="toggleGroup('month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
+                        <div class="month-header" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
                             <span>${escapeHtml(monthBlock.monthName)} (${records.length})</span>
-                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">−</span>
+                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
                         </div>
-                        <div id="month-body-${yearIndex}-${monthIndex}" class="group-body">
+
+                        <div class="subtotal-bar">
+                            <span>MBD: ${countType(records, "MBD")}</span>
+                            <span>Walk-in: ${countType(records, "Walk-in")}</span>
+                            <span>Patient-Directed: ${countType(records, "Patient Directed")}</span>
+                            <span>O+: ${countBloodType(records, "O+")}</span>
+                            <span>A+: ${countBloodType(records, "A+")}</span>
+                            <span>B+: ${countBloodType(records, "B+")}</span>
+                            <span>AB+: ${countBloodType(records, "AB+")}</span>
+                        </div>
+
+                        <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
                             <div class="table-wrap">
                                 <table>
                                     <thead>
@@ -579,12 +726,25 @@
                                     </tbody>
                                 </table>
                             </div>
+
+                            <div class="subtotal-bar">
+                                <span>Month Total: ${records.length}</span>
+                                <span>MBD: ${countType(records, "MBD")}</span>
+                                <span>Walk-in: ${countType(records, "Walk-in")}</span>
+                                <span>Patient-Directed: ${countType(records, "Patient Directed")}</span>
+                            </div>
                         </div>
                     </div>
                 `;
             });
 
             html += `
+                        <div class="subtotal-bar year-subtotal">
+                            <span>Year Total: ${yearRecords.length}</span>
+                            <span>MBD: ${countType(yearRecords, "MBD")}</span>
+                            <span>Walk-in: ${countType(yearRecords, "Walk-in")}</span>
+                            <span>Patient-Directed: ${countType(yearRecords, "Patient Directed")}</span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -613,15 +773,9 @@
         if (!row) return;
 
         row.innerHTML = `
-            <td>
-                ${buildEditInput(donor.mbdDetails || "")}
-            </td>
-            <td>
-                ${buildEditSelect(["", "YES"], donor.donorType === "Walk-in" ? "YES" : "")}
-            </td>
-            <td>
-                ${buildEditInput(donor.patientDirectedDetails || "")}
-            </td>
+            <td>${buildEditInput(donor.mbdDetails || "")}</td>
+            <td>${buildEditSelect(["", "YES"], donor.donorType === "Walk-in" ? "YES" : "")}</td>
+            <td>${buildEditInput(donor.patientDirectedDetails || "")}</td>
             <td>${buildEditInput(donor.surname || "")}</td>
             <td>${buildEditInput(donor.firstName || "")}</td>
             <td>${buildEditInput(donor.middleName || "")}</td>
@@ -655,7 +809,7 @@
         const walkInValue = fields[1].value;
         const patientDirectedDetails = fields[2].value.trim();
 
-        let donorType = "Walk-in";
+        let donorType = "";
         if (mbdDetails) donorType = "MBD";
         else if (patientDirectedDetails) donorType = "Patient Directed";
         else if (walkInValue === "YES") donorType = "Walk-in";
@@ -708,15 +862,99 @@
         }
     };
 
-    window.toggleGroup = function(bodyId, iconId) {
+    window.toggleGroup = function(groupKey, bodyId, iconId) {
         const body = document.getElementById(bodyId);
         const icon = document.getElementById(iconId);
 
         if (!body || !icon) return;
 
-        body.classList.toggle("hidden");
-        icon.textContent = body.classList.contains("hidden") ? "+" : "−";
+        const willHide = !body.classList.contains("hidden");
+
+        if (willHide) {
+            body.classList.add("hidden");
+            icon.textContent = "+";
+            collapsedGroups[groupKey] = true;
+        } else {
+            body.classList.remove("hidden");
+            icon.textContent = "−";
+            collapsedGroups[groupKey] = false;
+        }
     };
+
+    function exportCSV() {
+        if (!filteredDonors.length) {
+            showMessage("No records to export.", "error");
+            return;
+        }
+
+        const header = [
+            "Entry Date",
+            "MBD",
+            "Walk-in",
+            "Patient-Directed",
+            "Surname",
+            "Given Name",
+            "Middle Name",
+            "Birthday",
+            "Age",
+            "Sex",
+            "Contact Number",
+            "House Number/Purok/Street Name",
+            "Barangay/City",
+            "# of Donations",
+            "Blood Type",
+            "Serial Number",
+            "Amount",
+            "Blood Bag Used",
+            "Type of Blood Bag",
+            "Time Started",
+            "Time Ended",
+            "Remarks"
+        ];
+
+        const rows = filteredDonors.map(donor => [
+            donor.entryDate || "",
+            donor.donorType === "MBD" ? (donor.mbdDetails || "YES") : "",
+            donor.donorType === "Walk-in" ? "YES" : "",
+            donor.donorType === "Patient Directed" ? (donor.patientDirectedDetails || "YES") : "",
+            donor.surname || "",
+            donor.firstName || "",
+            donor.middleName || "",
+            donor.birthday || "",
+            donor.age || "",
+            donor.sex || "",
+            donor.contactNumber || "",
+            donor.address || "",
+            donor.cityProvince || "",
+            donor.numberOfDonations || "",
+            donor.bloodType || "",
+            donor.serialNumber || "",
+            donor.amount || "",
+            donor.bloodBagBrand || "",
+            donor.bloodBagType || "",
+            donor.timeStarted || "",
+            donor.timeEnded || "",
+            donor.remarks || ""
+        ]);
+
+        const csvContent = [
+            header.map(csvEscape).join(","),
+            ...rows.map(row => row.map(csvEscape).join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        const today = new Date().toISOString().slice(0, 10);
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", `donor-database-tracking-${today}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showMessage("CSV exported successfully.", "success");
+    }
 
     async function loadDonors() {
         try {
@@ -754,6 +992,28 @@
     }
 
     searchInput.addEventListener("input", renderTracking);
+
+    printBtn.addEventListener("click", function() {
+        window.print();
+    });
+
+    exportBtn.addEventListener("click", exportCSV);
+
+    collapseAllBtn.addEventListener("click", function() {
+        const grouped = groupDonors(filteredDonors);
+        Object.keys(grouped).forEach(year => {
+            collapsedGroups[getGroupKey("year", year)] = true;
+            Object.keys(grouped[year]).forEach(month => {
+                collapsedGroups[getGroupKey("month", year, month)] = true;
+            });
+        });
+        renderTracking();
+    });
+
+    expandAllBtn.addEventListener("click", function() {
+        collapsedGroups = {};
+        renderTracking();
+    });
 
     auth.onAuthStateChanged(user => {
         if (user) {
