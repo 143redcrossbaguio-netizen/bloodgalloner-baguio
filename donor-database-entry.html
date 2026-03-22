@@ -26,7 +26,6 @@
             text-align: center;
             font-size: 24px;
             font-weight: bold;
-            letter-spacing: 0.3px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.18);
         }
 
@@ -69,17 +68,13 @@
         }
 
         .lookup-grid,
-        .field-row,
-        .two-col,
-        .three-col {
+        .field-row {
             display: grid;
             gap: 12px;
         }
 
         .lookup-grid { grid-template-columns: 1.3fr 0.8fr 0.8fr auto; }
         .field-row { grid-template-columns: 1fr 1fr; }
-        .two-col { grid-template-columns: 1fr 1fr; }
-        .three-col { grid-template-columns: 1fr 1fr 1fr; }
 
         .form-grid {
             display: grid;
@@ -296,8 +291,6 @@
         @media (max-width: 1000px) {
             .form-grid,
             .field-row,
-            .two-col,
-            .three-col,
             .lookup-grid {
                 grid-template-columns: 1fr;
             }
@@ -363,6 +356,7 @@
                                 <th>Contact</th>
                                 <th>Blood Type</th>
                                 <th>Last Entry Date</th>
+                                <th>Type of Donor</th>
                                 <th># of Donations</th>
                             </tr>
                         </thead>
@@ -493,12 +487,22 @@
                     </div>
 
                     <div class="field-group">
+                        <label for="donorCategory">12. Type of Donor</label>
+                        <select id="donorCategory" class="readonly-fill" disabled>
+                            <option value="">Auto</option>
+                            <option value="New">New</option>
+                            <option value="Repeat">Repeat</option>
+                            <option value="Lapse">Lapse</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group">
                         <label for="numberOfDonations">13. Number of Donations</label>
                         <input type="number" id="numberOfDonations" min="0" value="0" class="readonly-fill">
                     </div>
 
                     <div class="field-group">
-                        <label for="bloodType">12. Blood Type</label>
+                        <label for="bloodType">14. Blood Type</label>
                         <select id="bloodType" required>
                             <option value="">Select</option>
                             <option value="A+">A+</option>
@@ -514,7 +518,7 @@
                     </div>
 
                     <div class="field-group">
-                        <label for="bloodBagBrand">14. Blood Bag Used (KARMI / TERUMO)</label>
+                        <label for="bloodBagBrand">15. Blood Bag Used (KARMI / TERUMO)</label>
                         <select id="bloodBagBrand" required>
                             <option value="">Select</option>
                             <option value="KARMI">KARMI</option>
@@ -523,7 +527,7 @@
                     </div>
 
                     <div class="field-group">
-                        <label for="bloodBagType">15. Blood Bag Type</label>
+                        <label for="bloodBagType">16. Blood Bag Type</label>
                         <select id="bloodBagType" required>
                             <option value="">Select</option>
                             <option value="Single">Single</option>
@@ -534,7 +538,7 @@
                     </div>
 
                     <div class="field-group">
-                        <label for="amount">16. Amount</label>
+                        <label for="amount">17. Amount</label>
                         <select id="amount" required>
                             <option value="">Select</option>
                             <option value="450 ml">450 ml</option>
@@ -544,7 +548,7 @@
                     </div>
 
                     <div class="field-group">
-                        <label>17. Time Started / Time Ended</label>
+                        <label>18. Time Started / Time Ended</label>
                         <div class="field-row">
                             <input type="time" id="timeStarted">
                             <input type="time" id="timeEnded">
@@ -552,7 +556,7 @@
                     </div>
 
                     <div class="field-group full-width">
-                        <label for="remarks">18. Remarks</label>
+                        <label for="remarks">19. Remarks</label>
                         <textarea id="remarks"></textarea>
                     </div>
                 </div>
@@ -593,6 +597,7 @@
     const entryDate = document.getElementById("entryDate");
     const birthday = document.getElementById("birthday");
     const age = document.getElementById("age");
+    const donorCategory = document.getElementById("donorCategory");
     const statusMessage = document.getElementById("statusMessage");
     const authIndicator = document.getElementById("authIndicator");
 
@@ -681,8 +686,46 @@
         if (selected === "MBD") mbdBox.classList.remove("hidden");
     }
 
+    function normalizeText(value) {
+        return String(value || "").trim().toLowerCase();
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function calculateDonorCategory(lastEntryDate) {
+        if (!lastEntryDate || !entryDate.value) return "New";
+
+        const newDate = new Date(entryDate.value + "T00:00:00");
+        const lastDate = new Date(lastEntryDate + "T00:00:00");
+
+        const diffMs = newDate - lastDate;
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+        if (diffDays <= 365) {
+            return "Repeat";
+        }
+        return "Lapse";
+    }
+
+    function updateDonorCategory() {
+        if (!loadedDonorRecord) {
+            donorCategory.value = "New";
+            return;
+        }
+        donorCategory.value = calculateDonorCategory(loadedDonorRecord.entryDate);
+    }
+
     donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
     birthday.addEventListener("change", computeAge);
+    entryDate.addEventListener("change", updateDonorCategory);
 
     async function getActiveGroup() {
         const doc = await db.collection("donorEntryGroups").doc("active").get();
@@ -738,10 +781,6 @@
         });
     }
 
-    function normalizeText(value) {
-        return String(value || "").trim().toLowerCase();
-    }
-
     function renderLookupResults(results) {
         donorLookupResults = results;
 
@@ -762,21 +801,12 @@
                 <td>${escapeHtml(record.contactNumber || "")}</td>
                 <td>${escapeHtml(record.bloodType || "")}</td>
                 <td>${escapeHtml(record.entryDate || "")}</td>
+                <td>${escapeHtml(record.donorCategory || "New")}</td>
                 <td>${escapeHtml(record.numberOfDonations || 0)}</td>
             </tr>
         `).join("");
 
         lookupResultsBox.classList.remove("hidden");
-    }
-
-    function escapeHtml(text) {
-        if (text === null || text === undefined) return "";
-        return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
     }
 
     async function searchExistingDonors() {
@@ -856,6 +886,7 @@
 
         const previousCount = parseInt(donor.numberOfDonations || "0");
         document.getElementById("numberOfDonations").value = previousCount + 1;
+        updateDonorCategory();
 
         document.getElementById("serialNumber").value = "";
         document.getElementById("bloodBagBrand").value = "";
@@ -865,7 +896,7 @@
         document.getElementById("timeEnded").value = "";
         document.getElementById("remarks").value = "";
 
-        loadedDonorInfo.textContent = `Loaded donor: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | Last entry date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0}`;
+        loadedDonorInfo.textContent = `Loaded donor: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | Last entry date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0} | Type of donor for this entry: ${donorCategory.value || "New"}`;
         loadedDonorInfo.classList.remove("hidden");
 
         showMessage("Existing donor loaded. Enter new donation details for this new date.", "success");
@@ -875,6 +906,7 @@
         loadedDonorRecord = null;
         loadedDonorInfo.classList.add("hidden");
         loadedDonorInfo.textContent = "";
+        donorCategory.value = "New";
     }
 
     searchDonorBtn.addEventListener("click", searchExistingDonors);
@@ -962,29 +994,29 @@
             return;
         }
 
-        let donorType = getSelectedDonorType();
+        let donorTypeValue = getSelectedDonorType();
         let patientDirectedValue = patientDirectedDetails.value.trim();
         let mbdValue = mbdDetails.value.trim();
 
         const activeGroup = await getActiveGroup();
         if (activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value) {
-            donorType = activeGroup.donorType;
+            donorTypeValue = activeGroup.donorType;
             if (activeGroup.donorType === "MBD") {
                 mbdValue = activeGroup.organization || "";
             }
         }
 
-        if (!donorType) {
+        if (!donorTypeValue) {
             showMessage("Please select donor type.", "error");
             return;
         }
 
-        if (donorType === "Patient Directed" && !patientDirectedValue) {
+        if (donorTypeValue === "Patient Directed" && !patientDirectedValue) {
             showMessage("Please enter patient directed details.", "error");
             return;
         }
 
-        if (donorType === "MBD" && !mbdValue) {
+        if (donorTypeValue === "MBD" && !mbdValue) {
             showMessage("Please enter MBD site or organization.", "error");
             return;
         }
@@ -995,12 +1027,14 @@
             return;
         }
 
+        updateDonorCategory();
+
         const donorData = {
             entryDate: entryDate.value,
             serialNumber: "PRC2600-" + serialManual,
-            donorType: donorType,
-            patientDirectedDetails: donorType === "Patient Directed" ? patientDirectedValue : "",
-            mbdDetails: donorType === "MBD" ? mbdValue : "",
+            donorType: donorTypeValue,
+            patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
+            mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
             surname: document.getElementById("surname").value.trim(),
             firstName: document.getElementById("firstName").value.trim(),
             middleName: document.getElementById("middleName").value.trim(),
@@ -1012,6 +1046,7 @@
             cityProvince: document.getElementById("cityProvince").value.trim(),
             occupation: document.getElementById("occupation").value.trim(),
             contactNumber: document.getElementById("contactNumber").value.trim(),
+            donorCategory: donorCategory.value || "New",
             numberOfDonations: parseInt(document.getElementById("numberOfDonations").value || "0"),
             bloodType: document.getElementById("bloodType").value,
             bloodBagBrand: document.getElementById("bloodBagBrand").value,
@@ -1021,6 +1056,7 @@
             timeEnded: document.getElementById("timeEnded").value,
             remarks: document.getElementById("remarks").value.trim(),
             loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
+            lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdBy: currentUser.uid
         };
@@ -1039,6 +1075,7 @@
             clearLoadedDonor();
             entryDate.value = preservedDate;
             age.value = "";
+            donorCategory.value = "New";
 
             patientDirectedBox.classList.add("hidden");
             walkInBox.classList.add("hidden");
@@ -1056,6 +1093,7 @@
             clearLoadedDonor();
             setTodayDate();
             age.value = "";
+            donorCategory.value = "New";
             patientDirectedBox.classList.add("hidden");
             walkInBox.classList.add("hidden");
             mbdBox.classList.add("hidden");
@@ -1078,6 +1116,7 @@
     });
 
     setTodayDate();
+    donorCategory.value = "New";
 </script>
 
 </body>
