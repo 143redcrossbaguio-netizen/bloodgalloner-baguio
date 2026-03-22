@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Donor Database - Statistics</title>
+    <meta charset="UTF-8">
+
+    <style>
+        body{
+            margin:0;
+            font-family:Arial,sans-serif;
+            background:#f4f7fb;
+            color:#333;
+        }
+
+        header{
+            background:#00897b;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
+        .container{
+            max-width:1300px;
+            margin:20px auto;
+            background:white;
+            padding:20px;
+            border-radius:12px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .controls{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            margin-bottom:18px;
+        }
+
+        .controls input,
+        .controls select{
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:6px;
+            min-width:180px;
+        }
+
+        .cards{
+            display:grid;
+            grid-template-columns:repeat(4,1fr);
+            gap:14px;
+            margin-bottom:18px;
+        }
+
+        .card{
+            background:#f8fafc;
+            border:1px solid #dde6ef;
+            border-radius:12px;
+            padding:16px;
+        }
+
+        .cardTitle{
+            font-size:12px;
+            color:#6b7280;
+            font-weight:bold;
+            text-transform:uppercase;
+            margin-bottom:8px;
+        }
+
+        .cardValue{
+            font-size:28px;
+            font-weight:bold;
+            color:#00695c;
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:16px;
+        }
+
+        table{
+            width:100%;
+            border-collapse:collapse;
+            margin-top:8px;
+        }
+
+        th, td{
+            border:1px solid #ddd;
+            padding:8px;
+            text-align:center;
+        }
+
+        th{
+            background:#00897b;
+            color:white;
+        }
+
+        .section{
+            background:#fafbfd;
+            border:1px solid #dde6ef;
+            border-radius:12px;
+            padding:14px;
+        }
+
+        .sectionTitle{
+            font-size:16px;
+            font-weight:bold;
+            color:#00695c;
+            margin-bottom:8px;
+        }
+
+        @media (max-width:1000px){
+            .cards{
+                grid-template-columns:repeat(2,1fr);
+            }
+
+            .grid{
+                grid-template-columns:1fr;
+            }
+        }
+
+        @media (max-width:600px){
+            .cards{
+                grid-template-columns:1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>Donor Database - Statistics</h2>
+</header>
+
+<div class="container">
+    <div class="controls">
+        <select id="monthFilter">
+            <option value="">ALL MONTHS</option>
+        </select>
+        <input type="text" id="searchInput" placeholder="Search surname / donor ID">
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <div class="cardTitle">Total Donors</div>
+            <div class="cardValue" id="totalDonors">0</div>
+        </div>
+        <div class="card">
+            <div class="cardTitle">Active</div>
+            <div class="cardValue" id="totalActive">0</div>
+        </div>
+        <div class="card">
+            <div class="cardTitle">Deferred</div>
+            <div class="cardValue" id="totalDeferred">0</div>
+        </div>
+        <div class="card">
+            <div class="cardTitle">Inactive</div>
+            <div class="cardValue" id="totalInactive">0</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="section">
+            <div class="sectionTitle">Blood Type Summary</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>A+</th><th>A-</th><th>B+</th><th>B-</th>
+                        <th>AB+</th><th>AB-</th><th>O+</th><th>O-</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr id="bloodTypeRow">
+                        <td>0</td><td>0</td><td>0</td><td>0</td>
+                        <td>0</td><td>0</td><td>0</td><td>0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="sectionTitle">Sex Summary</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Male</th>
+                        <th>Female</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="maleCount">0</td>
+                        <td id="femaleCount">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section" style="margin-top:16px;">
+        <div class="sectionTitle">Monthly Registration Summary</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Total Registered</th>
+                </tr>
+            </thead>
+            <tbody id="monthlyTableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const monthFilter = document.getElementById("monthFilter");
+const searchInput = document.getElementById("searchInput");
+const monthlyTableBody = document.getElementById("monthlyTableBody");
+
+let allDonors = [];
+
+function monthName(monthKey){
+    const months = {
+        "01":"JANUARY","02":"FEBRUARY","03":"MARCH","04":"APRIL",
+        "05":"MAY","06":"JUNE","07":"JULY","08":"AUGUST",
+        "09":"SEPTEMBER","10":"OCTOBER","11":"NOVEMBER","12":"DECEMBER"
+    };
+    const [year, month] = monthKey.split("-");
+    return `${months[month] || month} ${year}`;
+}
+
+async function loadDonors(){
+    try{
+        allDonors = [];
+        const snapshot = await getDocs(collection(db, "donorDatabase"));
+        snapshot.forEach(docSnap => {
+            allDonors.push({
+                id: docSnap.id,
+                ...docSnap.data()
+            });
+        });
+        populateMonthFilter();
+        renderStats();
+    }catch(error){
+        console.error(error);
+        alert("Failed to load donor statistics.");
+    }
+}
+
+function populateMonthFilter(){
+    const monthSet = new Set();
+    allDonors.forEach(d => {
+        const month = (d.dateRegistered || "").slice(0,7);
+        if(month) monthSet.add(month);
+    });
+
+    const current = monthFilter.value;
+    monthFilter.innerHTML = `<option value="">ALL MONTHS</option>`;
+
+    [...monthSet].sort().reverse().forEach(month => {
+        const opt = document.createElement("option");
+        opt.value = month;
+        opt.textContent = monthName(month);
+        if(month === current) opt.selected = true;
+        monthFilter.appendChild(opt);
+    });
+}
+
+function getFilteredDonors(){
+    const month = monthFilter.value;
+    const search = searchInput.value.trim().toUpperCase();
+
+    return allDonors.filter(d => {
+        const regMonth = (d.dateRegistered || "").slice(0,7);
+        const donorId = (d.donorId || "").toUpperCase();
+        const surname = (d.surname || "").toUpperCase();
+        const firstname = (d.firstname || "").toUpperCase();
+
+        const matchMonth = !month || regMonth === month;
+        const matchSearch = !search || donorId.includes(search) || surname.includes(search) || firstname.includes(search);
+
+        return matchMonth && matchSearch;
+    });
+}
+
+function renderStats(){
+    const donors = getFilteredDonors();
+
+    let active = 0;
+    let deferred = 0;
+    let inactive = 0;
+    let male = 0;
+    let female = 0;
+
+    const blood = {
+        "A+":0, "A-":0, "B+":0, "B-":0,
+        "AB+":0, "AB-":0, "O+":0, "O-":0
+    };
+
+    const monthly = {};
+
+    donors.forEach(d => {
+        const status = (d.statusDonor || "").toUpperCase();
+        const sex = (d.sex || "").toUpperCase();
+        const bt = d.bloodType || "";
+        const month = (d.dateRegistered || "").slice(0,7);
+
+        if(status === "ACTIVE") active++;
+        if(status === "DEFERRED") deferred++;
+        if(status === "INACTIVE") inactive++;
+
+        if(sex === "MALE") male++;
+        if(sex === "FEMALE") female++;
+
+        if(blood[bt] !== undefined) blood[bt]++;
+
+        if(month){
+            monthly[month] = (monthly[month] || 0) + 1;
+        }
+    });
+
+    document.getElementById("totalDonors").textContent = donors.length;
+    document.getElementById("totalActive").textContent = active;
+    document.getElementById("totalDeferred").textContent = deferred;
+    document.getElementById("totalInactive").textContent = inactive;
+    document.getElementById("maleCount").textContent = male;
+    document.getElementById("femaleCount").textContent = female;
+
+    const bloodTypeRow = document.getElementById("bloodTypeRow");
+    bloodTypeRow.innerHTML = `
+        <td>${blood["A+"]}</td>
+        <td>${blood["A-"]}</td>
+        <td>${blood["B+"]}</td>
+        <td>${blood["B-"]}</td>
+        <td>${blood["AB+"]}</td>
+        <td>${blood["AB-"]}</td>
+        <td>${blood["O+"]}</td>
+        <td>${blood["O-"]}</td>
+    `;
+
+    monthlyTableBody.innerHTML = "";
+    const months = Object.keys(monthly).sort().reverse();
+
+    if(months.length === 0){
+        monthlyTableBody.innerHTML = `<tr><td colspan="2">No statistics found.</td></tr>`;
+        return;
+    }
+
+    months.forEach(month => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${monthName(month)}</td>
+            <td>${monthly[month]}</td>
+        `;
+        monthlyTableBody.appendChild(tr);
+    });
+}
+
+monthFilter.addEventListener("change", renderStats);
+searchInput.addEventListener("input", renderStats);
+
+onAuthStateChanged(auth, async (user) => {
+    if(!user){
+        window.location.href = "index.html";
+        return;
+    }
+    await loadDonors();
+});
+</script>
+
+</body>
+</html>
