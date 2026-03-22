@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Donor Database - Tracking</title>
+    <meta charset="UTF-8">
+
+    <style>
+        body{
+            margin:0;
+            font-family:Arial,sans-serif;
+            background:#f4f7fb;
+        }
+
+        header{
+            background:#1565c0;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
+        .container{
+            max-width:1400px;
+            margin:20px auto;
+            background:white;
+            padding:20px;
+            border-radius:12px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .controls{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            margin-bottom:16px;
+        }
+
+        .controls input,
+        .controls select{
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:6px;
+            min-width:180px;
+        }
+
+        table{
+            width:100%;
+            border-collapse:collapse;
+            margin-top:8px;
+        }
+
+        th, td{
+            border:1px solid #ddd;
+            padding:8px;
+            text-align:center;
+            font-size:14px;
+        }
+
+        th{
+            background:#1565c0;
+            color:white;
+        }
+
+        .left{
+            text-align:left;
+        }
+
+        .actionBtn{
+            border:none;
+            border-radius:6px;
+            padding:6px 10px;
+            color:white;
+            font-weight:bold;
+            cursor:pointer;
+            margin:2px;
+        }
+
+        .editBtn{ background:#2e7d32; }
+        .deleteBtn{ background:#c62828; }
+
+        .empty{
+            text-align:center;
+            padding:20px;
+            font-weight:bold;
+            color:#666;
+        }
+
+        .modal{
+            display:none;
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,0.45);
+            z-index:999;
+            overflow:auto;
+        }
+
+        .modalContent{
+            background:white;
+            max-width:900px;
+            margin:30px auto;
+            padding:20px;
+            border-radius:12px;
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns:repeat(2,1fr);
+            gap:14px;
+        }
+
+        .full{
+            grid-column:1 / -1;
+        }
+
+        label{
+            display:block;
+            font-weight:bold;
+            margin-bottom:6px;
+        }
+
+        input, select, textarea{
+            width:100%;
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:6px;
+            box-sizing:border-box;
+        }
+
+        textarea{
+            min-height:80px;
+            resize:vertical;
+        }
+
+        .modalActions{
+            display:flex;
+            gap:10px;
+            margin-top:18px;
+            flex-wrap:wrap;
+        }
+
+        .saveBtn{ background:#2e7d32; }
+        .closeBtn{ background:#444; }
+
+        .modalActions button{
+            border:none;
+            border-radius:8px;
+            padding:12px 16px;
+            color:white;
+            font-weight:bold;
+            cursor:pointer;
+        }
+
+        @media (max-width:800px){
+            .grid{
+                grid-template-columns:1fr;
+            }
+            .full{
+                grid-column:auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>Donor Database - Tracking</h2>
+</header>
+
+<div class="container">
+    <div class="controls">
+        <input type="text" id="searchInput" placeholder="Search donor ID / name">
+        <select id="bloodFilter">
+            <option value="">ALL BLOOD TYPES</option>
+            <option>A+</option><option>A-</option>
+            <option>B+</option><option>B-</option>
+            <option>AB+</option><option>AB-</option>
+            <option>O+</option><option>O-</option>
+        </select>
+        <select id="statusFilter">
+            <option value="">ALL STATUS</option>
+            <option>ACTIVE</option>
+            <option>INACTIVE</option>
+            <option>DEFERRED</option>
+        </select>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Donor ID</th>
+                <th>Name</th>
+                <th>Sex</th>
+                <th>Blood Type</th>
+                <th>Contact</th>
+                <th>Status</th>
+                <th>Last Donation</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<div class="modal" id="editModal">
+    <div class="modalContent">
+        <h3>Edit Donor Record</h3>
+
+        <div class="grid">
+            <div>
+                <label>Donor ID</label>
+                <input type="text" id="editDonorId" readonly>
+            </div>
+
+            <div>
+                <label>Date Registered</label>
+                <input type="date" id="editDateRegistered">
+            </div>
+
+            <div>
+                <label>Surname</label>
+                <input type="text" id="editSurname">
+            </div>
+
+            <div>
+                <label>First Name</label>
+                <input type="text" id="editFirstname">
+            </div>
+
+            <div>
+                <label>Middle Name</label>
+                <input type="text" id="editMiddlename">
+            </div>
+
+            <div>
+                <label>Sex</label>
+                <select id="editSex">
+                    <option value="">Select</option>
+                    <option>MALE</option>
+                    <option>FEMALE</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Birthdate</label>
+                <input type="date" id="editBirthdate">
+            </div>
+
+            <div>
+                <label>Blood Type</label>
+                <select id="editBloodType">
+                    <option value="">Select</option>
+                    <option>A+</option><option>A-</option>
+                    <option>B+</option><option>B-</option>
+                    <option>AB+</option><option>AB-</option>
+                    <option>O+</option><option>O-</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Contact Number</label>
+                <input type="text" id="editContactNumber">
+            </div>
+
+            <div>
+                <label>Status</label>
+                <select id="editStatusDonor">
+                    <option value="">Select</option>
+                    <option>ACTIVE</option>
+                    <option>INACTIVE</option>
+                    <option>DEFERRED</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Last Donation Date</label>
+                <input type="date" id="editLastDonationDate">
+            </div>
+
+            <div>
+                <label>Occupation</label>
+                <input type="text" id="editOccupation">
+            </div>
+
+            <div class="full">
+                <label>Address</label>
+                <textarea id="editAddress"></textarea>
+            </div>
+
+            <div class="full">
+                <label>Notes</label>
+                <textarea id="editNotes"></textarea>
+            </div>
+        </div>
+
+        <div class="modalActions">
+            <button class="saveBtn" id="saveEditBtn">SAVE CHANGES</button>
+            <button class="closeBtn" id="closeModalBtn">CLOSE</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const tableBody = document.getElementById("tableBody");
+const searchInput = document.getElementById("searchInput");
+const bloodFilter = document.getElementById("bloodFilter");
+const statusFilter = document.getElementById("statusFilter");
+const editModal = document.getElementById("editModal");
+const saveEditBtn = document.getElementById("saveEditBtn");
+const closeModalBtn = document.getElementById("closeModalBtn");
+
+let allDonors = [];
+let currentEditId = null;
+
+function getAgeFromBirthdate(birthdate){
+    if(!birthdate) return "";
+    const dob = new Date(birthdate);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if(m < 0 || (m === 0 && today.getDate() < dob.getDate())){
+        age--;
+    }
+    return age;
+}
+
+async function loadDonors(){
+    try{
+        allDonors = [];
+        const snapshot = await getDocs(collection(db, "donorDatabase"));
+        snapshot.forEach(docSnap => {
+            allDonors.push({
+                id: docSnap.id,
+                ...docSnap.data()
+            });
+        });
+        allDonors.sort((a,b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        renderTable();
+    }catch(error){
+        console.error(error);
+        alert("Failed to load donor records.");
+    }
+}
+
+function getFilteredDonors(){
+    const search = searchInput.value.trim().toUpperCase();
+    const blood = bloodFilter.value;
+    const status = statusFilter.value;
+
+    return allDonors.filter(donor => {
+        const fullName = `${donor.surname || ""} ${donor.firstname || ""} ${donor.middlename || ""}`.toUpperCase();
+        const donorId = (donor.donorId || "").toUpperCase();
+
+        const matchSearch = !search || donorId.includes(search) || fullName.includes(search);
+        const matchBlood = !blood || donor.bloodType === blood;
+        const matchStatus = !status || donor.statusDonor === status;
+
+        return matchSearch && matchBlood && matchStatus;
+    });
+}
+
+function renderTable(){
+    const donors = getFilteredDonors();
+    tableBody.innerHTML = "";
+
+    if(donors.length === 0){
+        tableBody.innerHTML = `<tr><td colspan="8" class="empty">No donor records found.</td></tr>`;
+        return;
+    }
+
+    donors.forEach(donor => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${donor.donorId || ""}</td>
+            <td class="left">${donor.surname || ""}, ${donor.firstname || ""} ${donor.middlename || ""}</td>
+            <td>${donor.sex || ""}</td>
+            <td>${donor.bloodType || ""}</td>
+            <td>${donor.contactNumber || ""}</td>
+            <td>${donor.statusDonor || ""}</td>
+            <td>${donor.lastDonationDate || ""}</td>
+            <td>
+                <button class="actionBtn editBtn" data-id="${donor.id}">EDIT</button>
+                <button class="actionBtn deleteBtn" data-id="${donor.id}">DELETE</button>
+            </td>
+        `;
+        tableBody.appendChild(tr);
+    });
+}
+
+function openEditModal(donor){
+    currentEditId = donor.id;
+    document.getElementById("editDonorId").value = donor.donorId || "";
+    document.getElementById("editDateRegistered").value = donor.dateRegistered || "";
+    document.getElementById("editSurname").value = donor.surname || "";
+    document.getElementById("editFirstname").value = donor.firstname || "";
+    document.getElementById("editMiddlename").value = donor.middlename || "";
+    document.getElementById("editSex").value = donor.sex || "";
+    document.getElementById("editBirthdate").value = donor.birthdate || "";
+    document.getElementById("editBloodType").value = donor.bloodType || "";
+    document.getElementById("editContactNumber").value = donor.contactNumber || "";
+    document.getElementById("editStatusDonor").value = donor.statusDonor || "";
+    document.getElementById("editLastDonationDate").value = donor.lastDonationDate || "";
+    document.getElementById("editOccupation").value = donor.occupation || "";
+    document.getElementById("editAddress").value = donor.address || "";
+    document.getElementById("editNotes").value = donor.notes || "";
+    editModal.style.display = "block";
+}
+
+async function saveEdit(){
+    if(!currentEditId) return;
+
+    try{
+        const payload = {
+            dateRegistered: document.getElementById("editDateRegistered").value,
+            surname: document.getElementById("editSurname").value.trim().toUpperCase(),
+            firstname: document.getElementById("editFirstname").value.trim().toUpperCase(),
+            middlename: document.getElementById("editMiddlename").value.trim().toUpperCase(),
+            sex: document.getElementById("editSex").value,
+            birthdate: document.getElementById("editBirthdate").value,
+            age: getAgeFromBirthdate(document.getElementById("editBirthdate").value),
+            bloodType: document.getElementById("editBloodType").value,
+            contactNumber: document.getElementById("editContactNumber").value.trim(),
+            statusDonor: document.getElementById("editStatusDonor").value,
+            lastDonationDate: document.getElementById("editLastDonationDate").value,
+            occupation: document.getElementById("editOccupation").value.trim().toUpperCase(),
+            address: document.getElementById("editAddress").value.trim().toUpperCase(),
+            notes: document.getElementById("editNotes").value.trim().toUpperCase(),
+            updatedAt: new Date().toISOString()
+        };
+
+        await updateDoc(doc(db, "donorDatabase", currentEditId), payload);
+        editModal.style.display = "none";
+        currentEditId = null;
+        await loadDonors();
+        alert("Donor record updated successfully.");
+    }catch(error){
+        console.error(error);
+        alert("Failed to save changes.");
+    }
+}
+
+async function deleteDonor(id){
+    if(!confirm("Delete this donor record?")) return;
+
+    try{
+        await deleteDoc(doc(db, "donorDatabase", id));
+        await loadDonors();
+        alert("Donor record deleted.");
+    }catch(error){
+        console.error(error);
+        alert("Failed to delete donor record.");
+    }
+}
+
+tableBody.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if(!button) return;
+
+    const id = button.dataset.id;
+    if(button.classList.contains("editBtn")){
+        const donor = allDonors.find(item => item.id === id);
+        if(donor) openEditModal(donor);
+    }
+
+    if(button.classList.contains("deleteBtn")){
+        deleteDonor(id);
+    }
+});
+
+searchInput.addEventListener("input", renderTable);
+bloodFilter.addEventListener("change", renderTable);
+statusFilter.addEventListener("change", renderTable);
+saveEditBtn.addEventListener("click", saveEdit);
+closeModalBtn.addEventListener("click", () => {
+    editModal.style.display = "none";
+    currentEditId = null;
+});
+
+window.onclick = function(event){
+    if(event.target === editModal){
+        editModal.style.display = "none";
+        currentEditId = null;
+    }
+};
+
+onAuthStateChanged(auth, async (user) => {
+    if(!user){
+        window.location.href = "index.html";
+        return;
+    }
+    await loadDonors();
+});
+</script>
+
+</body>
+</html>
