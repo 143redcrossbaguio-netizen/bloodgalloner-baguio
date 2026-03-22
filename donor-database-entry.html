@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Donor Database Entry</title>
 
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
@@ -200,6 +201,17 @@
             border: 1px solid #efb7b7;
         }
 
+        .auth-indicator {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            color: #444;
+        }
+
         @media (max-width: 900px) {
             .form-grid,
             .field-row {
@@ -219,6 +231,7 @@
 
 <div class="container">
     <h3>Donor Information Entry Form</h3>
+    <div id="authIndicator" class="auth-indicator">Checking login status...</div>
 
     <form id="donorForm">
         <div class="form-grid">
@@ -427,7 +440,7 @@
 
 <script>
     // =========================================================
-    // KEEP YOUR EXISTING FIREBASE CONFIG
+    // REPLACE THIS WITH YOUR REAL EXISTING FIREBASE CONFIG
     // =========================================================
     const firebaseConfig = {
         apiKey: "YOUR_API_KEY",
@@ -450,6 +463,7 @@
     const birthday = document.getElementById("birthday");
     const age = document.getElementById("age");
     const statusMessage = document.getElementById("statusMessage");
+    const authIndicator = document.getElementById("authIndicator");
 
     const donorTypeRadios = document.querySelectorAll('input[name="donorType"]');
     const patientDirectedBox = document.getElementById("patientDirectedBox");
@@ -470,8 +484,8 @@
     const ACTIVE_GROUP_COLLECTION = "donorEntryGroups";
     const ACTIVE_GROUP_DOC_ID = "active";
 
-    let authReady = false;
     let currentUser = null;
+    let authReady = false;
 
     function setTodayDate() {
         const today = new Date();
@@ -504,6 +518,13 @@
         statusMessage.textContent = message;
         statusMessage.className = "status-message";
         statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
+    }
+
+    function setAuthIndicator(text, isGood) {
+        authIndicator.textContent = text;
+        authIndicator.style.background = isGood ? "#e8f7e8" : "#f5f5f5";
+        authIndicator.style.borderColor = isGood ? "#b7dfb9" : "#ddd";
+        authIndicator.style.color = isGood ? "#1b5e20" : "#444";
     }
 
     function getSelectedDonorType() {
@@ -612,6 +633,11 @@
 
     startWalkInGroupBtn.addEventListener("click", async function() {
         try {
+            if (!authReady) {
+                showMessage("Authentication is still loading. Please wait a moment.", "error");
+                return;
+            }
+
             if (!currentUser) {
                 showMessage("You must be logged in first.", "error");
                 return;
@@ -645,6 +671,11 @@
 
     startMbdGroupBtn.addEventListener("click", async function() {
         try {
+            if (!authReady) {
+                showMessage("Authentication is still loading. Please wait a moment.", "error");
+                return;
+            }
+
             if (!currentUser) {
                 showMessage("You must be logged in first.", "error");
                 return;
@@ -684,6 +715,11 @@
 
     endGroupBtn.addEventListener("click", async function() {
         try {
+            if (!authReady) {
+                showMessage("Authentication is still loading. Please wait a moment.", "error");
+                return;
+            }
+
             if (!currentUser) {
                 showMessage("You must be logged in first.", "error");
                 return;
@@ -702,8 +738,13 @@
         e.preventDefault();
 
         try {
+            if (!authReady) {
+                showMessage("Authentication is still loading. Please wait a moment and try again.", "error");
+                return;
+            }
+
             if (!currentUser) {
-                showMessage("You must be logged in first before saving donor data.", "error");
+                showMessage("No logged in user detected. Please log in again from your dashboard first.", "error");
                 return;
             }
 
@@ -821,11 +862,16 @@
     });
 
     auth.onAuthStateChanged(async (user) => {
-        currentUser = user;
         authReady = true;
+        currentUser = user;
 
         if (user) {
+            console.log("Logged in user:", user.uid, user.email);
+            setAuthIndicator(`Logged in as: ${user.email || user.uid}`, true);
             await renderActiveGroup();
+        } else {
+            console.log("No logged in user detected on donor entry page.");
+            setAuthIndicator("No logged in user detected on this page.", false);
         }
     });
 
