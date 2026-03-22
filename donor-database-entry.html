@@ -165,7 +165,8 @@
         }
 
         .group-info,
-        .loaded-donor-info {
+        .loaded-donor-info,
+        .type-helper {
             margin-top: 10px;
             padding: 10px 12px;
             border-radius: 8px;
@@ -183,6 +184,12 @@
             background: #edf7ed;
             border: 1px solid #b7dfb9;
             color: #166534;
+        }
+
+        .type-helper {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
         }
 
         .helper-text {
@@ -488,17 +495,27 @@
 
                     <div class="field-group">
                         <label for="donorCategory">12. Type of Donor</label>
-                        <select id="donorCategory" class="readonly-fill" disabled>
-                            <option value="">Auto</option>
+                        <select id="donorCategory">
+                            <option value="Auto">Auto</option>
                             <option value="New">New</option>
                             <option value="Repeat">Repeat</option>
                             <option value="Lapse">Lapse</option>
                         </select>
+                        <div class="helper-text">
+                            Auto will only apply logic if enough donor history is available.
+                        </div>
                     </div>
 
                     <div class="field-group">
                         <label for="numberOfDonations">13. Number of Donations</label>
-                        <input type="number" id="numberOfDonations" min="0" value="0" class="readonly-fill">
+                        <input type="number" id="numberOfDonations" min="0" value="0">
+                        <div class="helper-text">
+                            This is manual. Loading an existing donor will not automatically add +1.
+                        </div>
+                    </div>
+
+                    <div class="field-group full-width">
+                        <div id="typeHelperBox" class="type-helper hidden"></div>
                     </div>
 
                     <div class="field-group">
@@ -598,6 +615,8 @@
     const birthday = document.getElementById("birthday");
     const age = document.getElementById("age");
     const donorCategory = document.getElementById("donorCategory");
+    const numberOfDonations = document.getElementById("numberOfDonations");
+    const typeHelperBox = document.getElementById("typeHelperBox");
     const statusMessage = document.getElementById("statusMessage");
     const authIndicator = document.getElementById("authIndicator");
 
@@ -627,6 +646,8 @@
     let authReady = false;
     let loadedDonorRecord = null;
     let donorLookupResults = [];
+    let autoTypeSuggestion = "";
+    let autoTypeReason = "";
 
     function setTodayDate() {
         entryDate.value = new Date().toISOString().split("T")[0];
@@ -700,32 +721,94 @@
             .replace(/'/g, "&#039;");
     }
 
-    function calculateDonorCategory(lastEntryDate) {
-        if (!lastEntryDate || !entryDate.value) return "New";
+    function calculateAutoDonorCategory(lastEntryDate) {
+        if (!lastEntryDate || !entryDate.value) {
+            return {
+                value: "New",
+                reason: "No previous donation date found, so Auto defaults to New.",
+                enoughData: false
+            };
+        }
 
         const newDate = new Date(entryDate.value + "T00:00:00");
         const lastDate = new Date(lastEntryDate + "T00:00:00");
 
+        if (isNaN(newDate) || isNaN(lastDate)) {
+            return {
+                value: "New",
+                reason: "Date comparison is incomplete, so Auto defaults to New.",
+                enoughData: false
+            };
+        }
+
         const diffMs = newDate - lastDate;
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-        if (diffDays <= 365) {
-            return "Repeat";
+        if (diffDays < 0) {
+            return {
+                value: "New",
+                reason: "Entry date is earlier than last donation date, so Auto is not reliable.",
+                enoughData: false
+            };
         }
-        return "Lapse";
+
+        if (diffDays <= 365) {
+            return {
+                value: "Repeat",
+                reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`,
+                enoughData: true
+            };
+        }
+
+        return {
+            value: "Lapse",
+            reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`,
+            enoughData: true
+        };
     }
 
-    function updateDonorCategory() {
+    function refreshTypeHelper() {
+        const selectedMode = donorCategory.value;
+
+        if (selectedMode === "Auto") {
+            if (autoTypeSuggestion) {
+                typeHelperBox.textContent = `Auto result: ${autoTypeSuggestion}. ${autoTypeReason}`;
+                typeHelperBox.classList.remove("hidden");
+            } else {
+                typeHelperBox.textContent = "Auto result is not available yet.";
+                typeHelperBox.classList.remove("hidden");
+            }
+        } else {
+            typeHelperBox.textContent = `Manual override selected: ${selectedMode}.`;
+            typeHelperBox.classList.remove("hidden");
+        }
+    }
+
+    function updateAutoTypeSuggestion() {
         if (!loadedDonorRecord) {
-            donorCategory.value = "New";
+            autoTypeSuggestion = "New";
+            autoTypeReason = "No loaded donor history, so Auto defaults to New.";
+            refreshTypeHelper();
             return;
         }
-        donorCategory.value = calculateDonorCategory(loadedDonorRecord.entryDate);
+
+        const result = calculateAutoDonorCategory(loadedDonorRecord.entryDate);
+        autoTypeSuggestion = result.value;
+        autoTypeReason = result.reason;
+        refreshTypeHelper();
+    }
+
+    function getFinalDonorCategoryToSave() {
+        if (donorCategory.value !== "Auto") {
+            return donorCategory.value;
+        }
+        return autoTypeSuggestion || "New";
     }
 
     donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
     birthday.addEventListener("change", computeAge);
-    entryDate.addEventListener("change", updateDonorCategory);
+    entryDate.addEventListener("change", updateAutoTypeSuggestion);
+    donorCategory.addEventListener("change", refreshTypeHelper);
 
     async function getActiveGroup() {
         const doc = await db.collection("donorEntryGroups").doc("active").get();
@@ -885,8 +968,10 @@
         document.getElementById("bloodType").value = donor.bloodType || "";
 
         const previousCount = parseInt(donor.numberOfDonations || "0");
-        document.getElementById("numberOfDonations").value = previousCount + 1;
-        updateDonorCategory();
+        numberOfDonations.value = previousCount;
+
+        donorCategory.value = "Auto";
+        updateAutoTypeSuggestion();
 
         document.getElementById("serialNumber").value = "";
         document.getElementById("bloodBagBrand").value = "";
@@ -896,17 +981,19 @@
         document.getElementById("timeEnded").value = "";
         document.getElementById("remarks").value = "";
 
-        loadedDonorInfo.textContent = `Loaded donor: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | Last entry date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0} | Type of donor for this entry: ${donorCategory.value || "New"}`;
+        loadedDonorInfo.textContent = `Loaded donor: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | Last entry date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0}`;
         loadedDonorInfo.classList.remove("hidden");
 
-        showMessage("Existing donor loaded. Enter new donation details for this new date.", "success");
+        showMessage("Existing donor loaded. Number of donations was not auto-increased. Enter the value manually if needed.", "success");
     };
 
     function clearLoadedDonor() {
         loadedDonorRecord = null;
         loadedDonorInfo.classList.add("hidden");
         loadedDonorInfo.textContent = "";
-        donorCategory.value = "New";
+        donorCategory.value = "Auto";
+        numberOfDonations.value = "0";
+        updateAutoTypeSuggestion();
     }
 
     searchDonorBtn.addEventListener("click", searchExistingDonors);
@@ -1027,7 +1114,7 @@
             return;
         }
 
-        updateDonorCategory();
+        updateAutoTypeSuggestion();
 
         const donorData = {
             entryDate: entryDate.value,
@@ -1046,8 +1133,11 @@
             cityProvince: document.getElementById("cityProvince").value.trim(),
             occupation: document.getElementById("occupation").value.trim(),
             contactNumber: document.getElementById("contactNumber").value.trim(),
-            donorCategory: donorCategory.value || "New",
-            numberOfDonations: parseInt(document.getElementById("numberOfDonations").value || "0"),
+            donorCategoryMode: donorCategory.value,
+            donorCategory: getFinalDonorCategoryToSave(),
+            donorCategoryAutoSuggestion: autoTypeSuggestion || "",
+            donorCategoryAutoReason: autoTypeReason || "",
+            numberOfDonations: parseInt(numberOfDonations.value || "0"),
             bloodType: document.getElementById("bloodType").value,
             bloodBagBrand: document.getElementById("bloodBagBrand").value,
             bloodBagType: document.getElementById("bloodBagType").value,
@@ -1075,13 +1165,15 @@
             clearLoadedDonor();
             entryDate.value = preservedDate;
             age.value = "";
-            donorCategory.value = "New";
 
             patientDirectedBox.classList.add("hidden");
             walkInBox.classList.add("hidden");
             mbdBox.classList.add("hidden");
 
             await renderActiveGroup();
+            donorCategory.value = "Auto";
+            numberOfDonations.value = "0";
+            updateAutoTypeSuggestion();
         } catch (error) {
             console.error(error);
             showMessage("Failed to save donor record: " + error.message, "error");
@@ -1093,13 +1185,15 @@
             clearLoadedDonor();
             setTodayDate();
             age.value = "";
-            donorCategory.value = "New";
+            donorCategory.value = "Auto";
+            numberOfDonations.value = "0";
             patientDirectedBox.classList.add("hidden");
             walkInBox.classList.add("hidden");
             mbdBox.classList.add("hidden");
             statusMessage.className = "status-message";
             statusMessage.textContent = "";
             await renderActiveGroup();
+            updateAutoTypeSuggestion();
         }, 50);
     });
 
@@ -1116,7 +1210,9 @@
     });
 
     setTodayDate();
-    donorCategory.value = "New";
+    donorCategory.value = "Auto";
+    numberOfDonations.value = "0";
+    updateAutoTypeSuggestion();
 </script>
 
 </body>
