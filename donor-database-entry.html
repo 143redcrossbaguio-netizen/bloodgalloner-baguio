@@ -345,7 +345,7 @@
             </div>
 
             <div class="helper-text">
-                Search first if donor already donated before. Loading a donor will fill the old information but save a new record for the new date.
+                Search first if donor already donated before. Loading a donor only copies personal details for the new entry. It does not overwrite older donation records.
             </div>
 
             <div id="loadedDonorInfo" class="loaded-donor-info hidden"></div>
@@ -711,6 +711,12 @@
         return String(value || "").trim().toLowerCase();
     }
 
+    function normalizeAlpha(value) {
+        return String(value || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+    }
+
     function escapeHtml(text) {
         if (text === null || text === undefined) return "";
         return String(text)
@@ -719,6 +725,30 @@
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    function getMiddleInitial(value) {
+        const cleaned = String(value || "").trim();
+        if (!cleaned) return "";
+        return cleaned.charAt(0).toLowerCase();
+    }
+
+    function middleNameCompatible(a, b) {
+        const aa = normalizeText(a);
+        const bb = normalizeText(b);
+
+        if (!aa || !bb) return true;
+        if (aa === bb) return true;
+        if (getMiddleInitial(aa) && getMiddleInitial(aa) === getMiddleInitial(bb)) return true;
+        return false;
+    }
+
+    function getStrongIdentityKey(record) {
+        return [
+            normalizeAlpha(record.surname),
+            normalizeAlpha(record.firstName),
+            String(record.birthday || "").trim()
+        ].join("|");
     }
 
     function calculateAutoDonorCategory(lastEntryDate) {
@@ -903,15 +933,17 @@
 
             const groupedLatest = {};
             allRecords.forEach(record => {
-                const donorKey = [
-                    normalizeText(record.surname),
-                    normalizeText(record.firstName),
-                    normalizeText(record.middleName),
-                    normalizeText(record.birthday)
-                ].join("|");
+                const donorKey = getStrongIdentityKey(record);
 
                 if (!groupedLatest[donorKey]) {
                     groupedLatest[donorKey] = record;
+                } else {
+                    const existing = groupedLatest[donorKey];
+                    const existingDate = existing.entryDate || "";
+                    const newDate = record.entryDate || "";
+                    if (newDate > existingDate) {
+                        groupedLatest[donorKey] = record;
+                    }
                 }
             });
 
@@ -934,6 +966,8 @@
                 return keywordMatch && birthdayMatch && contactMatch;
             });
 
+            uniqueRecords.sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
+
             renderLookupResults(uniqueRecords);
             if (uniqueRecords.length) {
                 showMessage(`${uniqueRecords.length} donor match(es) found.`, "success");
@@ -950,10 +984,7 @@
 
         loadedDonorRecord = donor;
 
-        setSelectedDonorType(donor.donorType || "");
-        patientDirectedDetails.value = donor.patientDirectedDetails || "";
-        mbdDetails.value = donor.mbdDetails || "";
-
+        // Identity / personal info only
         document.getElementById("surname").value = donor.surname || "";
         document.getElementById("firstName").value = donor.firstName || "";
         document.getElementById("middleName").value = donor.middleName || "";
@@ -967,24 +998,23 @@
         document.getElementById("contactNumber").value = donor.contactNumber || "";
         document.getElementById("bloodType").value = donor.bloodType || "";
 
+        // Keep current/new donation-specific fields untouched:
+        // entryDate, serialNumber, donorType radio, patientDirectedDetails, mbdDetails,
+        // bag brand, bag type, amount, time started, time ended, remarks
+
         const previousCount = parseInt(donor.numberOfDonations || "0");
         numberOfDonations.value = previousCount;
 
         donorCategory.value = "Auto";
         updateAutoTypeSuggestion();
 
-        document.getElementById("serialNumber").value = "";
-        document.getElementById("bloodBagBrand").value = "";
-        document.getElementById("bloodBagType").value = "";
-        document.getElementById("amount").value = "";
-        document.getElementById("timeStarted").value = "";
-        document.getElementById("timeEnded").value = "";
-        document.getElementById("remarks").value = "";
-
-        loadedDonorInfo.textContent = `Loaded donor: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | Last entry date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0}`;
+        loadedDonorInfo.textContent =
+            `Loaded donor identity only: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | ` +
+            `Last donation date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0} | ` +
+            `Old donor type/group was preserved in past record and not copied into this new donation entry.`;
         loadedDonorInfo.classList.remove("hidden");
 
-        showMessage("Existing donor loaded. Number of donations was not auto-increased. Enter the value manually if needed.", "success");
+        showMessage("Existing donor loaded for autofill only. New donation details were kept unchanged.", "success");
     };
 
     function clearLoadedDonor() {
@@ -1161,14 +1191,26 @@
             showMessage("Donor record saved successfully.", "success");
 
             const preservedDate = entryDate.value;
+            const preservedDonorType = getSelectedDonorType();
+            const preservedPatientDirected = patientDirectedDetails.value;
+            const preservedMbd = mbdDetails.value;
+
             donorForm.reset();
             clearLoadedDonor();
+
             entryDate.value = preservedDate;
             age.value = "";
 
-            patientDirectedBox.classList.add("hidden");
-            walkInBox.classList.add("hidden");
-            mbdBox.classList.add("hidden");
+            if (preservedDonorType) {
+                setSelectedDonorType(preservedDonorType);
+            } else {
+                patientDirectedBox.classList.add("hidden");
+                walkInBox.classList.add("hidden");
+                mbdBox.classList.add("hidden");
+            }
+
+            patientDirectedDetails.value = preservedPatientDirected;
+            mbdDetails.value = preservedMbd;
 
             await renderActiveGroup();
             donorCategory.value = "Auto";
