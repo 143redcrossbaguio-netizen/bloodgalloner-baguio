@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Donor Database - Data Input</title>
+    <meta charset="UTF-8">
+
+    <style>
+        body{
+            margin:0;
+            font-family:Arial,sans-serif;
+            background:#f4f7fb;
+        }
+
+        header{
+            background:#1565c0;
+            color:white;
+            padding:15px;
+            text-align:center;
+        }
+
+        .container{
+            max-width:1000px;
+            margin:20px auto;
+            background:white;
+            padding:20px;
+            border-radius:12px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns:repeat(2,1fr);
+            gap:14px;
+        }
+
+        .full{
+            grid-column:1 / -1;
+        }
+
+        label{
+            display:block;
+            font-weight:bold;
+            margin-bottom:6px;
+            color:#333;
+        }
+
+        input, select, textarea{
+            width:100%;
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:6px;
+            box-sizing:border-box;
+        }
+
+        textarea{
+            min-height:90px;
+            resize:vertical;
+        }
+
+        .actions{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            margin-top:18px;
+        }
+
+        button{
+            border:none;
+            border-radius:8px;
+            padding:12px 16px;
+            color:white;
+            font-weight:bold;
+            cursor:pointer;
+        }
+
+        .saveBtn{ background:#2e7d32; }
+        .clearBtn{ background:#1565c0; }
+
+        .status{
+            margin-top:14px;
+            padding:12px;
+            border-radius:8px;
+            background:#eef4fb;
+            font-weight:bold;
+            color:#333;
+        }
+
+        @media (max-width:700px){
+            .grid{
+                grid-template-columns:1fr;
+            }
+            .full{
+                grid-column:auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>Donor Database - Data Input</h2>
+</header>
+
+<div class="container">
+    <div class="grid">
+        <div>
+            <label for="donorId">Donor ID</label>
+            <input type="text" id="donorId" placeholder="Enter donor ID">
+        </div>
+
+        <div>
+            <label for="dateRegistered">Date Registered</label>
+            <input type="date" id="dateRegistered">
+        </div>
+
+        <div>
+            <label for="surname">Surname</label>
+            <input type="text" id="surname" placeholder="Enter surname">
+        </div>
+
+        <div>
+            <label for="firstname">First Name</label>
+            <input type="text" id="firstname" placeholder="Enter first name">
+        </div>
+
+        <div>
+            <label for="middlename">Middle Name</label>
+            <input type="text" id="middlename" placeholder="Enter middle name">
+        </div>
+
+        <div>
+            <label for="sex">Sex</label>
+            <select id="sex">
+                <option value="">Select</option>
+                <option>MALE</option>
+                <option>FEMALE</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="birthdate">Birthdate</label>
+            <input type="date" id="birthdate">
+        </div>
+
+        <div>
+            <label for="bloodType">Blood Type</label>
+            <select id="bloodType">
+                <option value="">Select</option>
+                <option>A+</option>
+                <option>A-</option>
+                <option>B+</option>
+                <option>B-</option>
+                <option>AB+</option>
+                <option>AB-</option>
+                <option>O+</option>
+                <option>O-</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="contactNumber">Contact Number</label>
+            <input type="text" id="contactNumber" placeholder="Enter contact number">
+        </div>
+
+        <div>
+            <label for="statusDonor">Status</label>
+            <select id="statusDonor">
+                <option value="">Select</option>
+                <option>ACTIVE</option>
+                <option>INACTIVE</option>
+                <option>DEFERRED</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="lastDonationDate">Last Donation Date</label>
+            <input type="date" id="lastDonationDate">
+        </div>
+
+        <div>
+            <label for="occupation">Occupation</label>
+            <input type="text" id="occupation" placeholder="Enter occupation">
+        </div>
+
+        <div class="full">
+            <label for="address">Address</label>
+            <textarea id="address" placeholder="Enter address"></textarea>
+        </div>
+
+        <div class="full">
+            <label for="notes">Notes</label>
+            <textarea id="notes" placeholder="Enter notes"></textarea>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="saveBtn" id="saveBtn">SAVE DONOR</button>
+        <button class="clearBtn" id="clearBtn">CLEAR</button>
+    </div>
+
+    <div class="status" id="statusMessage">Ready.</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const saveBtn = document.getElementById("saveBtn");
+const clearBtn = document.getElementById("clearBtn");
+const statusMessage = document.getElementById("statusMessage");
+
+function setToday(){
+    const input = document.getElementById("dateRegistered");
+    if(!input.value){
+        input.value = new Date().toISOString().split("T")[0];
+    }
+}
+
+function setStatus(message){
+    statusMessage.textContent = message;
+}
+
+function clearForm(){
+    document.getElementById("donorId").value = "";
+    document.getElementById("dateRegistered").value = new Date().toISOString().split("T")[0];
+    document.getElementById("surname").value = "";
+    document.getElementById("firstname").value = "";
+    document.getElementById("middlename").value = "";
+    document.getElementById("sex").value = "";
+    document.getElementById("birthdate").value = "";
+    document.getElementById("bloodType").value = "";
+    document.getElementById("contactNumber").value = "";
+    document.getElementById("statusDonor").value = "";
+    document.getElementById("lastDonationDate").value = "";
+    document.getElementById("occupation").value = "";
+    document.getElementById("address").value = "";
+    document.getElementById("notes").value = "";
+    setStatus("Form cleared.");
+}
+
+function getAgeFromBirthdate(birthdate){
+    if(!birthdate) return "";
+    const dob = new Date(birthdate);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if(m < 0 || (m === 0 && today.getDate() < dob.getDate())){
+        age--;
+    }
+    return age;
+}
+
+async function donorIdExists(donorId){
+    const q = query(collection(db, "donorDatabase"), where("donorId", "==", donorId));
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+}
+
+async function saveDonor(){
+    if(!auth.currentUser){
+        alert("You are not logged in.");
+        window.location.href = "index.html";
+        return;
+    }
+
+    const donorId = document.getElementById("donorId").value.trim().toUpperCase();
+    const dateRegistered = document.getElementById("dateRegistered").value;
+    const surname = document.getElementById("surname").value.trim().toUpperCase();
+    const firstname = document.getElementById("firstname").value.trim().toUpperCase();
+    const middlename = document.getElementById("middlename").value.trim().toUpperCase();
+    const sex = document.getElementById("sex").value;
+    const birthdate = document.getElementById("birthdate").value;
+    const bloodType = document.getElementById("bloodType").value;
+    const contactNumber = document.getElementById("contactNumber").value.trim();
+    const statusDonor = document.getElementById("statusDonor").value;
+    const lastDonationDate = document.getElementById("lastDonationDate").value;
+    const occupation = document.getElementById("occupation").value.trim().toUpperCase();
+    const address = document.getElementById("address").value.trim().toUpperCase();
+    const notes = document.getElementById("notes").value.trim().toUpperCase();
+
+    if(!donorId || !dateRegistered || !surname || !firstname){
+        setStatus("Please fill donor ID, date registered, surname, and first name.");
+        return;
+    }
+
+    try{
+        const exists = await donorIdExists(donorId);
+        if(exists){
+            setStatus("Donor ID already exists. Use a different donor ID.");
+            return;
+        }
+
+        const donorData = {
+            donorId,
+            dateRegistered,
+            surname,
+            firstname,
+            middlename,
+            sex,
+            birthdate,
+            age: getAgeFromBirthdate(birthdate),
+            bloodType,
+            contactNumber,
+            statusDonor,
+            lastDonationDate,
+            occupation,
+            address,
+            notes,
+            createdAt: new Date().toISOString()
+        };
+
+        await addDoc(collection(db, "donorDatabase"), donorData);
+        setStatus("Donor saved successfully.");
+        clearForm();
+        setToday();
+    }catch(error){
+        console.error(error);
+        setStatus("Failed to save donor: " + error.message);
+    }
+}
+
+clearBtn.addEventListener("click", clearForm);
+saveBtn.addEventListener("click", saveDonor);
+
+onAuthStateChanged(auth, (user) => {
+    if(!user){
+        window.location.href = "index.html";
+        return;
+    }
+    setToday();
+    setStatus("Connected.");
+});
+</script>
+
+</body>
+</html>
