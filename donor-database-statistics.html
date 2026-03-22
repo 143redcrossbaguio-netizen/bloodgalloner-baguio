@@ -76,6 +76,7 @@
 
         .btn-red { background: #c00000; color: white; }
         .btn-blue { background: #2563eb; color: white; }
+        .btn-green { background: #15803d; color: white; }
 
         .status {
             padding: 12px 14px;
@@ -451,17 +452,24 @@
 
             if (typeof node !== "object") return;
 
-            const keys = Object.keys(node);
+            const keys = Object.keys(node).map(k => String(k).toLowerCase());
+
             const looksRecord =
                 keys.includes("date") ||
-                keys.includes("requestDate") ||
-                keys.includes("releasedDate") ||
+                keys.includes("requestdate") ||
+                keys.includes("releaseddate") ||
                 keys.includes("component") ||
                 keys.includes("product") ||
-                keys.includes("WB") ||
-                keys.includes("PRBC") ||
-                keys.includes("FFP") ||
-                keys.includes("PC") ||
+                keys.includes("requestedpanel") ||
+                keys.includes("requestedblood") ||
+                keys.includes("bloodrequest") ||
+                keys.includes("request") ||
+                keys.includes("requesttype") ||
+                keys.includes("wb") ||
+                keys.includes("prbc") ||
+                keys.includes("ffp") ||
+                keys.includes("pc") ||
+                keys.includes("wholeblood") ||
                 keys.includes("quantity") ||
                 keys.includes("qty") ||
                 keys.includes("units");
@@ -471,7 +479,7 @@
                 return;
             }
 
-            keys.forEach(k => walkNode(node[k], out));
+            Object.keys(node).forEach(k => walkNode(node[k], out));
         }
 
         function attachEventsOnce() {
@@ -536,6 +544,10 @@
 
                 debug("Filtered donors: " + donors.length);
                 debug("Filtered releases: " + releases.length);
+
+                if (releases.length) {
+                    debug("Sample release record: " + JSON.stringify(releases[0], null, 2));
+                }
 
                 const grouped = {};
                 const summary = emptyStats();
@@ -611,8 +623,9 @@
             s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
 
             const bag = normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "");
-            if (bag === "Single" || bag === "Double") s.components["450 cc"]++;
-            else if (bag === "Triple") {
+            if (bag === "Single" || bag === "Double") {
+                s.components["450 cc"]++;
+            } else if (bag === "Triple") {
                 s.components["PRBC"]++;
                 s.components["FFP"]++;
                 s.components["PC"]++;
@@ -640,11 +653,16 @@
 
         function applyRelease(s, r) {
             const items = getReleaseItems(r);
+
+            if (!items.length) return;
+
             items.forEach(item => {
                 const key = normalizeRequestComponent(item.component);
                 const qty = Number(item.quantity) || 0;
+
                 if (!key || !qty) return;
-                s.requests[key] += qty;
+
+                s.requests[key] = (s.requests[key] || 0) + qty;
             });
         }
 
@@ -652,23 +670,83 @@
             const items = [];
 
             if (Array.isArray(r.items)) {
-                r.items.forEach(x => items.push({
-                    component: x.component || x.product || x.type || "",
-                    quantity: x.quantity || x.qty || x.units || x.count || 0
-                }));
-            }
-
-            if (r.component || r.product || r.requestType) {
-                items.push({
-                    component: r.component || r.product || r.requestType || "",
-                    quantity: r.quantity || r.qty || r.units || r.count || 1
+                r.items.forEach(x => {
+                    items.push({
+                        component: x.component || x.product || x.type || x.name || "",
+                        quantity: x.quantity || x.qty || x.units || x.count || x.value || 0
+                    });
                 });
             }
 
-            if (r.WB != null) items.push({ component:"WB", quantity:r.WB });
-            if (r.PRBC != null) items.push({ component:"PRBC", quantity:r.PRBC });
-            if (r.FFP != null) items.push({ component:"FFP", quantity:r.FFP });
-            if (r.PC != null) items.push({ component:"PC", quantity:r.PC });
+            if (r.component || r.product || r.requestType || r.type || r.name) {
+                items.push({
+                    component: r.component || r.product || r.requestType || r.type || r.name || "",
+                    quantity: r.quantity || r.qty || r.units || r.count || r.value || 1
+                });
+            }
+
+            if (r.WB != null) items.push({ component: "WB", quantity: r.WB });
+            if (r.wb != null) items.push({ component: "WB", quantity: r.wb });
+
+            if (r.PRBC != null) items.push({ component: "PRBC", quantity: r.PRBC });
+            if (r.prbc != null) items.push({ component: "PRBC", quantity: r.prbc });
+
+            if (r.FFP != null) items.push({ component: "FFP", quantity: r.FFP });
+            if (r.ffp != null) items.push({ component: "FFP", quantity: r.ffp });
+
+            if (r.PC != null) items.push({ component: "PC", quantity: r.PC });
+            if (r.pc != null) items.push({ component: "PC", quantity: r.pc });
+
+            if (r.wholeBlood != null) items.push({ component: "WB", quantity: r.wholeBlood });
+            if (r.wholeblood != null) items.push({ component: "WB", quantity: r.wholeblood });
+
+            if (r.requestedPanel && typeof r.requestedPanel === "object") {
+                const p = r.requestedPanel;
+                if (p.WB != null) items.push({ component: "WB", quantity: p.WB });
+                if (p.wb != null) items.push({ component: "WB", quantity: p.wb });
+                if (p.PRBC != null) items.push({ component: "PRBC", quantity: p.PRBC });
+                if (p.prbc != null) items.push({ component: "PRBC", quantity: p.prbc });
+                if (p.FFP != null) items.push({ component: "FFP", quantity: p.FFP });
+                if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
+                if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
+                if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+            }
+
+            if (r.bloodRequest && typeof r.bloodRequest === "object") {
+                const p = r.bloodRequest;
+                if (p.WB != null) items.push({ component: "WB", quantity: p.WB });
+                if (p.wb != null) items.push({ component: "WB", quantity: p.wb });
+                if (p.PRBC != null) items.push({ component: "PRBC", quantity: p.PRBC });
+                if (p.prbc != null) items.push({ component: "PRBC", quantity: p.prbc });
+                if (p.FFP != null) items.push({ component: "FFP", quantity: p.FFP });
+                if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
+                if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
+                if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+            }
+
+            if (r.requestedBlood && typeof r.requestedBlood === "object") {
+                const p = r.requestedBlood;
+                if (p.WB != null) items.push({ component: "WB", quantity: p.WB });
+                if (p.wb != null) items.push({ component: "WB", quantity: p.wb });
+                if (p.PRBC != null) items.push({ component: "PRBC", quantity: p.PRBC });
+                if (p.prbc != null) items.push({ component: "PRBC", quantity: p.prbc });
+                if (p.FFP != null) items.push({ component: "FFP", quantity: p.FFP });
+                if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
+                if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
+                if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+            }
+
+            if (r.request && typeof r.request === "object") {
+                const p = r.request;
+                if (p.WB != null) items.push({ component: "WB", quantity: p.WB });
+                if (p.wb != null) items.push({ component: "WB", quantity: p.wb });
+                if (p.PRBC != null) items.push({ component: "PRBC", quantity: p.PRBC });
+                if (p.prbc != null) items.push({ component: "PRBC", quantity: p.prbc });
+                if (p.FFP != null) items.push({ component: "FFP", quantity: p.FFP });
+                if (p.ffp != null) items.push({ component: "FFP", quantity: p.ffp });
+                if (p.PC != null) items.push({ component: "PC", quantity: p.PC });
+                if (p.pc != null) items.push({ component: "PC", quantity: p.pc });
+            }
 
             return items;
         }
