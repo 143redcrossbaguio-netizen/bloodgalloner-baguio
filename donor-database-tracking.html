@@ -30,38 +30,30 @@
         }
 
         .page-wrap {
-            display: flex;
-            gap: 16px;
             padding: 16px;
-            align-items: flex-start;
         }
 
-        .left-panel {
-            width: 290px;
-            min-width: 290px;
+        .top-summary {
             background: white;
             border: 1px solid #dbe3ec;
             border-radius: 12px;
             box-shadow: 0 3px 10px rgba(0,0,0,0.08);
             padding: 16px;
-            position: sticky;
-            top: 16px;
+            margin-bottom: 16px;
         }
 
-        .left-panel h3 {
-            margin: 0 0 12px 0;
-            color: #8b0000;
-            font-size: 18px;
-            border-bottom: 2px solid #edf2f7;
-            padding-bottom: 8px;
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 180px 180px minmax(220px, 1fr) 220px auto auto auto auto;
+            gap: 12px;
+            align-items: end;
         }
 
         .count-card {
             background: #fff5f5;
             border: 1px solid #efc1c1;
             border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 12px;
+            padding: 12px 14px;
         }
 
         .count-title {
@@ -72,34 +64,32 @@
         }
 
         .count-value {
-            font-size: 30px;
+            font-size: 26px;
             font-weight: bold;
             color: #b30000;
         }
 
-        .box-label {
+        .field-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .field-group label {
             display: block;
             font-size: 13px;
             font-weight: bold;
-            margin: 14px 0 6px;
+            margin: 0 0 6px 0;
             color: #334155;
         }
 
-        .left-panel input,
-        .left-panel select {
+        .field-group input,
+        .field-group select {
             width: 100%;
             padding: 10px 11px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             font-size: 14px;
             background: #fff;
-        }
-
-        .left-btns {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 10px;
         }
 
         button {
@@ -112,16 +102,21 @@
         .main-btn {
             padding: 11px 14px;
             font-size: 13px;
+            white-space: nowrap;
+            height: 42px;
+        }
+
+        .small-btn {
+            padding: 8px 10px;
+            font-size: 12px;
         }
 
         .blue-btn { background: #1565c0; color: white; }
         .green-btn { background: #2e7d32; color: white; }
         .gray-btn { background: #64748b; color: white; }
         .red-btn { background: #8a1111; color: white; }
-        .orange-btn { background: #c96b00; color: white; }
 
         .content-panel {
-            flex: 1;
             min-width: 0;
         }
 
@@ -214,11 +209,6 @@
             background: #fafcff;
         }
 
-        .small-btn {
-            padding: 8px 10px;
-            font-size: 12px;
-        }
-
         .subtotal-bar {
             display: flex;
             flex-wrap: wrap;
@@ -245,7 +235,7 @@
 
         table {
             width: 100%;
-            min-width: 2500px;
+            min-width: 2450px;
             border-collapse: collapse;
             font-size: 12px;
         }
@@ -275,13 +265,6 @@
         th.col-serial { background: #f0f0f0; }
         th.col-amount { background: #c9d7ff; }
         th.col-actions { background: #ececec; }
-
-        .flag-cell {
-            font-weight: bold;
-        }
-
-        .yes-cell { color: #0b7a0b; }
-        .no-cell { color: #999; }
 
         .donation-total {
             font-weight: bold;
@@ -331,9 +314,8 @@
 
         @media print {
             body { background: white; }
-            header, .left-panel, .toolbar, .month-tools, .actions-cell, th.col-actions { display: none !important; }
-            .page-wrap { display: block; padding: 0; }
-            .content-panel { width: 100%; }
+            header, .top-summary, .toolbar, .month-tools, .actions-cell, th.col-actions { display: none !important; }
+            .page-wrap { padding: 0; }
             .year-group, .month-group, .table-wrap {
                 box-shadow: none;
                 border-radius: 0;
@@ -344,15 +326,15 @@
             .group-body.hidden { display: block !important; }
         }
 
-        @media (max-width: 1000px) {
-            .page-wrap {
-                flex-direction: column;
+        @media (max-width: 1400px) {
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
+        }
 
-            .left-panel {
-                width: 100%;
-                min-width: 100%;
-                position: static;
+        @media (max-width: 900px) {
+            .summary-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -362,39 +344,41 @@
 <header>Donor Database Tracking</header>
 
 <div class="page-wrap">
-    <aside class="left-panel">
-        <h3>Summary</h3>
+    <div class="top-summary">
+        <div class="summary-grid">
+            <div class="count-card">
+                <div class="count-title">Total Entries</div>
+                <div class="count-value" id="totalCount">0</div>
+            </div>
 
-        <div class="count-card">
-            <div class="count-title">Total Entries</div>
-            <div class="count-value" id="totalCount">0</div>
-        </div>
+            <div class="count-card">
+                <div class="count-title">Displayed Entries</div>
+                <div class="count-value" id="displayedCount">0</div>
+            </div>
 
-        <div class="count-card">
-            <div class="count-title">Displayed Entries</div>
-            <div class="count-value" id="displayedCount">0</div>
-        </div>
+            <div class="field-group">
+                <label for="searchInput">Search</label>
+                <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact">
+            </div>
 
-        <label class="box-label" for="searchInput">Search</label>
-        <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact">
+            <div class="field-group">
+                <label for="printMonthSelect">Print Selected Month</label>
+                <select id="printMonthSelect">
+                    <option value="">Select month</option>
+                </select>
+            </div>
 
-        <label class="box-label" for="printMonthSelect">Print Selected Month</label>
-        <select id="printMonthSelect">
-            <option value="">Select month</option>
-        </select>
-
-        <div class="left-btns">
             <button class="main-btn gray-btn" id="printSelectedMonthBtn">Print Selected Month</button>
             <button class="main-btn green-btn" id="exportCsvBtn">Export Filtered CSV</button>
             <button class="main-btn red-btn" id="collapseAllBtn">Collapse All</button>
             <button class="main-btn blue-btn" id="expandAllBtn">Expand All</button>
         </div>
-    </aside>
+    </div>
 
     <main class="content-panel">
         <div class="toolbar">
             <h3>Grouped by Year and Month</h3>
-            <div>Arrangement follows your earlier screenshot. Donation total logic uses the donor's latest recorded total and does not add old totals together.</div>
+            <div>MBD, Walk-in, and Patient-Directed now show donor sequence number for that date and category. Printing excludes Remarks.</div>
             <div id="statusMessage" class="status-message"></div>
         </div>
 
@@ -436,6 +420,7 @@
     let filteredDonors = [];
     let collapsedGroups = {};
     let currentDonationTotals = {};
+    let sequenceMap = {};
 
     function showMessage(message, type) {
         statusMessage.textContent = message;
@@ -568,6 +553,61 @@
         return totals;
     }
 
+    function computeSequenceMap(records) {
+        const map = {};
+        const grouped = {};
+
+        records.forEach(record => {
+            const date = record.entryDate || "";
+            const donorType = record.donorType || "";
+            let typeGroupKey = `${date}|${donorType}`;
+
+            if (donorType === "MBD") {
+                typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
+            } else if (donorType === "Patient Directed") {
+                typeGroupKey += `|patient-directed`;
+            } else if (donorType === "Walk-in") {
+                typeGroupKey += `|walk-in`;
+            }
+
+            if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
+            grouped[typeGroupKey].push(record);
+        });
+
+        Object.keys(grouped).forEach(groupKey => {
+            grouped[groupKey].sort((a, b) => {
+                const serialA = a.serialNumber || "";
+                const serialB = b.serialNumber || "";
+                return serialA.localeCompare(serialB);
+            });
+
+            grouped[groupKey].forEach((record, index) => {
+                map[record.id] = index + 1;
+            });
+        });
+
+        return map;
+    }
+
+    function getCategoryDisplay(record) {
+        const seq = sequenceMap[record.id] || "";
+        if (!seq) return "";
+
+        if (record.donorType === "Walk-in") {
+            return `Walk-in-${seq}`;
+        }
+
+        if (record.donorType === "MBD") {
+            return `${record.mbdDetails || "MBD"}-${seq}`;
+        }
+
+        if (record.donorType === "Patient Directed") {
+            return `Patient Directed-${seq}`;
+        }
+
+        return "";
+    }
+
     function groupDonors(records) {
         const grouped = {};
 
@@ -599,8 +639,8 @@
         });
 
         const sortedKeys = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
-
         const currentValue = printMonthSelect.value;
+
         printMonthSelect.innerHTML = `<option value="">Select month</option>` +
             sortedKeys.map(key => `<option value="${key}">${monthMap[key]}</option>`).join("");
 
@@ -613,6 +653,7 @@
         const keyword = searchInput.value.trim();
         filteredDonors = allDonors.filter(record => matchesSearch(record, keyword));
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
+        sequenceMap = computeSequenceMap(filteredDonors);
 
         totalCountEl.textContent = allDonors.length;
         displayedCountEl.textContent = filteredDonors.length;
@@ -680,7 +721,6 @@
                             <span>New: ${records.filter(r => r.donorCategory === "New").length}</span>
                             <span>Repeat: ${records.filter(r => r.donorCategory === "Repeat").length}</span>
                             <span>Lapse: ${records.filter(r => r.donorCategory === "Lapse").length}</span>
-                            <span>O+: ${countBloodType(records, "O+")}</span>
                         </div>
 
                         <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
@@ -718,18 +758,15 @@
                 `;
 
                 records.forEach(record => {
-                    const isMBD = record.donorType === "MBD";
-                    const isWalkIn = record.donorType === "Walk-in";
-                    const isPatientDirected = record.donorType === "Patient Directed";
                     const donorKey = buildDonorKey(record);
                     const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
                     const enteredValue = parseInt(record.numberOfDonations || "0");
 
                     html += `
                         <tr id="row-${record.id}">
-                            <td class="flag-cell ${isMBD ? 'yes-cell' : 'no-cell'}">${isMBD ? escapeHtml(record.mbdDetails || "YES") : ""}</td>
-                            <td class="flag-cell ${isWalkIn ? 'yes-cell' : 'no-cell'}">${isWalkIn ? "YES" : ""}</td>
-                            <td class="flag-cell ${isPatientDirected ? 'yes-cell' : 'no-cell'}">${isPatientDirected ? escapeHtml(record.patientDirectedDetails || "YES") : ""}</td>
+                            <td>${escapeHtml(record.donorType === "MBD" ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeHtml(record.donorType === "Walk-in" ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeHtml(record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "")}</td>
                             <td>${escapeHtml(record.surname)}</td>
                             <td>${escapeHtml(record.firstName)}</td>
                             <td>${escapeHtml(record.middleName)}</td>
@@ -809,7 +846,7 @@
 
         row.innerHTML = `
             <td>${buildEditInput(record.mbdDetails || "")}</td>
-            <td>${buildEditSelect(["", "YES"], record.donorType === "Walk-in" ? "YES" : "")}</td>
+            <td>${buildEditSelect(["", "Walk-in"], record.donorType === "Walk-in" ? "Walk-in" : "")}</td>
             <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
             <td>${buildEditInput(record.surname || "")}</td>
             <td>${buildEditInput(record.firstName || "")}</td>
@@ -849,7 +886,7 @@
         let donorType = "";
         if (mbdDetails) donorType = "MBD";
         else if (patientDirectedDetails) donorType = "Patient Directed";
-        else if (walkInValue === "YES") donorType = "Walk-in";
+        else if (walkInValue === "Walk-in") donorType = "Walk-in";
 
         const updatedData = {
             mbdDetails: mbdDetails,
@@ -920,19 +957,23 @@
         }
     };
 
+    function getRecordsForMonth(monthValue) {
+        return filteredDonors.filter(record => {
+            const { monthKey } = getYearMonth(record.entryDate);
+            return monthKey === monthValue;
+        });
+    }
+
     function buildPrintableTable(records, monthLabel) {
         const rows = records.map(record => {
             const donorKey = buildDonorKey(record);
             const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
-            const isMBD = record.donorType === "MBD";
-            const isWalkIn = record.donorType === "Walk-in";
-            const isPatientDirected = record.donorType === "Patient Directed";
 
             return `
                 <tr>
-                    <td>${isMBD ? escapeHtml(record.mbdDetails || "YES") : ""}</td>
-                    <td>${isWalkIn ? "YES" : ""}</td>
-                    <td>${isPatientDirected ? escapeHtml(record.patientDirectedDetails || "YES") : ""}</td>
+                    <td>${escapeHtml(record.donorType === "MBD" ? getCategoryDisplay(record) : "")}</td>
+                    <td>${escapeHtml(record.donorType === "Walk-in" ? getCategoryDisplay(record) : "")}</td>
+                    <td>${escapeHtml(record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "")}</td>
                     <td>${escapeHtml(record.surname)}</td>
                     <td>${escapeHtml(record.firstName)}</td>
                     <td>${escapeHtml(record.middleName)}</td>
@@ -952,7 +993,6 @@
                     <td>${escapeHtml(record.timeStarted)}</td>
                     <td>${escapeHtml(record.timeEnded)}</td>
                     <td>${escapeHtml(record.entryDate)}</td>
-                    <td>${escapeHtml(record.remarks)}</td>
                 </tr>
             `;
         }).join("");
@@ -1003,7 +1043,6 @@
                             <th>Time Started</th>
                             <th>Time Ended</th>
                             <th>Entry Date</th>
-                            <th>Remarks</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -1012,30 +1051,6 @@
             </html>
         `;
     }
-
-    function getRecordsForMonth(monthValue) {
-        return filteredDonors.filter(record => {
-            const { monthKey } = getYearMonth(record.entryDate);
-            return monthKey === monthValue;
-        });
-    }
-
-    window.printOneMonth = function(monthValue) {
-        const records = getRecordsForMonth(monthValue);
-        if (!records.length) {
-            showMessage("No records found for that month.", "error");
-            return;
-        }
-
-        const labelParts = monthValue.split("-");
-        const monthLabel = `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
-
-        const printWindow = window.open("", "_blank");
-        printWindow.document.write(buildPrintableTable(records, monthLabel));
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-    };
 
     function exportCsv(records, fileLabel) {
         if (!records.length) {
@@ -1074,9 +1089,9 @@
             const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
 
             return [
-                record.donorType === "MBD" ? (record.mbdDetails || "YES") : "",
-                record.donorType === "Walk-in" ? "YES" : "",
-                record.donorType === "Patient Directed" ? (record.patientDirectedDetails || "YES") : "",
+                record.donorType === "MBD" ? getCategoryDisplay(record) : "",
+                record.donorType === "Walk-in" ? getCategoryDisplay(record) : "",
+                record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "",
                 record.surname || "",
                 record.firstName || "",
                 record.middleName || "",
@@ -1115,6 +1130,23 @@
         link.click();
         document.body.removeChild(link);
     }
+
+    window.printOneMonth = function(monthValue) {
+        const records = getRecordsForMonth(monthValue);
+        if (!records.length) {
+            showMessage("No records found for that month.", "error");
+            return;
+        }
+
+        const labelParts = monthValue.split("-");
+        const monthLabel = `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
+
+        const printWindow = window.open("", "_blank");
+        printWindow.document.write(buildPrintableTable(records, monthLabel));
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    };
 
     window.exportOneMonthCsv = function(monthValue) {
         const records = getRecordsForMonth(monthValue);
