@@ -1,607 +1,298 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Galloners Club - Dashboard</title>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galloners Club - Dashboard</title>
 
-    <style>
-        * { box-sizing: border-box; }
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+    }
 
-        html, body {
-            margin: 0;
-            height: 100%;
-            font-family: Arial, sans-serif;
-            background: #eef3f7;
-            color: #1f2937;
+    body {
+        background: #f4f4f4;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    header {
+        height: 70px;
+        background: #b30000;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        z-index: 10;
+        position: relative;
+    }
+
+    .main {
+        display: flex;
+        height: calc(100vh - 70px);
+        width: 100%;
+    }
+
+    .sidebar {
+        width: 280px;
+        background: #ffffff;
+        border-right: 1px solid #ddd;
+        overflow-y: auto;
+        padding: 15px;
+    }
+
+    .workspace {
+        flex: 1;
+        background: #eaeaea;
+    }
+
+    iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+    }
+
+    .module {
+        margin-bottom: 12px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        background: #fff;
+    }
+
+    .module-title {
+        width: 100%;
+        border: none;
+        outline: none;
+        text-align: left;
+        padding: 14px 16px;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+        color: white;
+        transition: 0.2s;
+    }
+
+    .module-title:hover {
+        filter: brightness(0.95);
+    }
+
+    .submenu {
+        display: none;
+        background: #fafafa;
+        border-top: 1px solid #eee;
+        padding: 10px;
+    }
+
+    .submenu button {
+        width: 100%;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        text-align: left;
+        padding: 11px 12px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        background: #f1f1f1;
+        color: #333;
+        font-size: 14px;
+        transition: 0.2s;
+    }
+
+    .submenu button:hover {
+        background: #e0e0e0;
+    }
+
+    .submenu button:last-child {
+        margin-bottom: 0;
+    }
+
+    .module.active .submenu {
+        display: block;
+    }
+
+    .donor-db { background: #8e0000; }
+    .galloner { background: #b30000; }
+    .partner { background: #1565c0; }
+    .releasing { background: #ef6c00; }
+    .admin { background: #6a1b9a; }
+    .backup { background: #00897b; }
+    .logout { background: #424242; }
+
+    .welcome-screen {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #ffffff, #f7f7f7);
+        color: #777;
+        font-size: 22px;
+        font-weight: bold;
+        text-align: center;
+        padding: 30px;
+    }
+
+    @media (max-width: 900px) {
+        .sidebar {
+            width: 240px;
         }
 
-        body{
-            overflow: hidden;
+        .module-title {
+            font-size: 14px;
         }
 
-        .app-shell{
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .topbar{
-            background: linear-gradient(90deg, #8b0000, #b30000);
-            color: white;
-            padding: 12px 18px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            flex-shrink: 0;
-        }
-
-        .topbar-left{
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo{
-            width: 52px;
-            height: 52px;
-            object-fit: contain;
-            background: white;
-            border-radius: 50%;
-            padding: 4px;
-        }
-
-        .title-block h1{
-            margin: 0;
-            font-size: 20px;
-            line-height: 1.1;
-            font-weight: 700;
-        }
-
-        .title-block .sub{
-            font-size: 12px;
-            opacity: 0.92;
-            margin-top: 4px;
-        }
-
-        .topbar-right{
+        .submenu button {
             font-size: 13px;
-            font-weight: bold;
         }
+    }
 
-        .layout{
-            flex: 1;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            min-height: 0;
-        }
-
-        .sidebar{
-            background: #ffffff;
-            border-right: 1px solid #d7dee7;
-            padding: 16px 12px;
-            overflow-y: auto;
-        }
-
-        .sidebar-title{
-            font-size: 12px;
-            font-weight: bold;
-            color: #6b7280;
-            text-transform: uppercase;
-            margin: 8px 10px 10px;
-            letter-spacing: .6px;
-        }
-
-        .nav-group{
-            margin-bottom: 18px;
-        }
-
-        .nav-btn{
-            width: 100%;
-            border: none;
-            border-radius: 10px;
-            padding: 12px 14px;
-            margin-bottom: 8px;
-            text-align: left;
-            font-weight: bold;
-            cursor: pointer;
-            color: #1f2937;
-            background: #f6f8fb;
-            transition: all .18s ease;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .nav-btn:hover{
-            background: #e8eef6;
-        }
-
-        .nav-btn.active{
-            background: #b30000;
-            color: white;
-        }
-
-        .submenu{
-            display: none;
-            padding: 4px 0 6px 10px;
-        }
-
-        .submenu.open{
-            display: block;
-        }
-
-        .sub-btn{
-            width: 100%;
-            border: none;
-            border-radius: 8px;
-            padding: 10px 12px;
-            margin-bottom: 6px;
-            text-align: left;
-            cursor: pointer;
-            font-weight: bold;
-            background: #edf2f7;
-            color: #374151;
-            transition: all .18s ease;
-        }
-
-        .sub-btn:hover{
-            background: #dfe8f2;
-        }
-
-        .sub-btn.active-sub{
-            outline: 2px solid #b30000;
-        }
-
-        .sub-btn.red{ background:#fdeaea; color:#8b0000; }
-        .sub-btn.orange{ background:#fff1e6; color:#a64b00; }
-        .sub-btn.green{ background:#e9f8ef; color:#166534; }
-        .sub-btn.blue{ background:#e8f1ff; color:#0f52ba; }
-        .sub-btn.purple{ background:#f1e9ff; color:#6b21a8; }
-        .sub-btn.gray{ background:#eceff3; color:#374151; }
-
-        .logout-wrap{
-            margin-top: 10px;
-        }
-
-        .logout-btn{
-            width: 100%;
-            border: none;
-            border-radius: 12px;
-            padding: 14px;
-            background: linear-gradient(135deg, #2b2b2b, #444);
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .workspace{
-            display: flex;
+    @media (max-width: 700px) {
+        .main {
             flex-direction: column;
-            min-height: 0;
-            background: #f4f7fb;
         }
 
-        .workspace-header{
-            background: #ffffff;
-            border-bottom: 1px solid #dbe3ec;
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-shrink: 0;
-        }
-
-        .workspace-title{
-            font-size: 18px;
-            font-weight: bold;
-            color: #111827;
-        }
-
-        .workspace-subtitle{
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 2px;
-        }
-
-        .workspace-actions{
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .action-btn{
-            border: none;
-            border-radius: 8px;
-            padding: 10px 12px;
-            cursor: pointer;
-            font-weight: bold;
-            color: white;
-            background: #1565c0;
-        }
-
-        .iframe-wrap{
-            flex: 1;
-            min-height: 0;
-            padding: 12px;
-        }
-
-        .module-frame{
+        .sidebar {
             width: 100%;
-            height: 100%;
-            border: 1px solid #dbe3ec;
-            border-radius: 14px;
-            background: white;
+            height: auto;
+            max-height: 45vh;
+            border-right: none;
+            border-bottom: 1px solid #ddd;
         }
 
-        @media (max-width: 900px){
-            .layout{
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar{
-                border-right: none;
-                border-bottom: 1px solid #d7dee7;
-                max-height: 42vh;
-            }
+        .workspace {
+            height: 55vh;
         }
-
-        @media (max-width: 640px){
-            .topbar{
-                padding: 10px 12px;
-            }
-
-            .logo{
-                width: 46px;
-                height: 46px;
-            }
-
-            .title-block h1{
-                font-size: 17px;
-            }
-
-            .workspace-header{
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
-    </style>
+    }
+</style>
 </head>
-
 <body>
 
-<div class="app-shell">
+<header>
+    Galloners Club Dashboard
+</header>
 
-    <div class="topbar">
-        <div class="topbar-left">
-            <img src="images/logo.png" class="logo">
-            <div class="title-block">
-                <h1>Galloners Club Dashboard</h1>
-                <div class="sub">Philippine Red Cross - Baguio City Chapter</div>
+<div class="main">
+    <div class="sidebar">
+
+        <!-- Donor Database -->
+        <div class="module">
+            <button class="module-title donor-db" onclick="toggleModule(this)">
+                Donor Database
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('donor-database-entry.html')">Data Input</button>
+                <button onclick="loadPage('donor-database-tracking.html')">Tracking</button>
+                <button onclick="loadPage('donor-database-statistics.html')">Statistics</button>
+                <button onclick="loadPage('donor-import.html')">Bulk Import</button>
             </div>
         </div>
-        <div class="topbar-right">
-            Laboratory Panel
+
+        <!-- Galloner -->
+        <div class="module">
+            <button class="module-title galloner" onclick="toggleModule(this)">
+                Galloner
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('galloner-entry.html')">Entry</button>
+                <button onclick="loadPage('galloner-tracking.html')">Tracking</button>
+                <button onclick="loadPage('galloner-statistics.html')">Statistics</button>
+            </div>
         </div>
+
+        <!-- Partner Organization -->
+        <div class="module">
+            <button class="module-title partner" onclick="toggleModule(this)">
+                Partner Organization
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('partner-organization.html')">Open Module</button>
+            </div>
+        </div>
+
+        <!-- Releasing -->
+        <div class="module">
+            <button class="module-title releasing" onclick="toggleModule(this)">
+                Releasing
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('releasing-entry.html')">Entry</button>
+                <button onclick="loadPage('releasing-tracking.html')">Tracking</button>
+                <button onclick="loadPage('releasing-statistics.html')">Statistics</button>
+            </div>
+        </div>
+
+        <!-- Admin Manager -->
+        <div class="module">
+            <button class="module-title admin" onclick="toggleModule(this)">
+                Admin Manager
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('admin-manager.html')">Open Module</button>
+            </div>
+        </div>
+
+        <!-- Backup Manager -->
+        <div class="module">
+            <button class="module-title backup" onclick="toggleModule(this)">
+                Backup Manager
+            </button>
+            <div class="submenu">
+                <button onclick="loadPage('backup-manager.html')">Open Module</button>
+            </div>
+        </div>
+
+        <!-- Logout -->
+        <div class="module">
+            <button class="module-title logout" onclick="logoutUser()">
+                Logout
+            </button>
+        </div>
+
     </div>
 
-    <div class="layout">
-
-        <aside class="sidebar">
-            <div class="nav-group">
-                <div class="sidebar-title">Main Modules</div>
-
-                <button id="nav-donor-database" class="nav-btn active" onclick="toggleSection('donor-database')">
-                    <span>Donor Database</span>
-                    <span>▼</span>
-                </button>
-                <div id="section-donor-database" class="submenu open">
-                    <button id="btn-donor-db-entry" class="sub-btn blue" onclick="openModule('donor-database-entry.html','Donor Database - Data Input','Donor database data input panel')">Data Input</button>
-                    <button id="btn-donor-db-tracking" class="sub-btn blue" onclick="openModule('donor-database-tracking.html','Donor Database - Tracking','Donor database tracking panel')">Tracking</button>
-                    <button id="btn-donor-db-stat" class="sub-btn green" onclick="openModule('donor-database-statistics.html','Donor Database - Statistics','Donor database statistics panel')">Statistics</button>
-                </div>
-
-                <button id="nav-galloner" class="nav-btn" onclick="toggleSection('galloner')">
-                    <span>Galloner</span>
-                    <span>▼</span>
-                </button>
-                <div id="section-galloner" class="submenu">
-                    <button id="btn-donor-entry" class="sub-btn red" onclick="openModule('donor-entry.html','Donor Entry','Galloner module input panel')">Donor Entry</button>
-                    <button id="btn-tracking" class="sub-btn red" onclick="openModule('tracking.html','Tracking','Galloner tracking panel')">Tracking</button>
-                    <button id="btn-awardees" class="sub-btn purple" onclick="openModule('awardees.html','Awardees','Galloner awardees panel')">Awardees</button>
-                </div>
-
-                <button id="nav-partner" class="nav-btn" onclick="openSingleModule(this,'partner-organization.html','Partner Organization','Partner organization management panel')">
-                    <span>Partner Organization</span>
-                </button>
-
-                <button id="nav-releasing" class="nav-btn" onclick="toggleSection('releasing')">
-                    <span>Releasing</span>
-                    <span>▼</span>
-                </button>
-                <div id="section-releasing" class="submenu">
-                    <button id="btn-releasing-main" class="sub-btn orange" onclick="openModule('releasing.html','Blood Releasing','Main releasing panel')">Main</button>
-                    <button id="btn-releasing-entry" class="sub-btn orange" onclick="openModule('releasing-entry.html','Releasing Entry','Blood releasing input panel')">Entry</button>
-                    <button id="btn-releasing-tracking" class="sub-btn orange" onclick="openModule('releasing-tracking.html','Releasing Tracking','Blood releasing tracking panel')">Tracking</button>
-                    <button id="btn-releasing-stats" class="sub-btn green" onclick="openModule('releasing-statistics.html','Releasing Statistics','Releasing statistics panel')">Statistics</button>
-                    <button id="btn-facility-manager" class="sub-btn blue" onclick="openModule('facility-manager.html','Facility Manager','Facility maintenance panel')">Facility Manager</button>
-                </div>
-
-                <button id="nav-admin" class="nav-btn" onclick="openSingleModule(this,'admin-manager.html','Admin Manager','Administrative control panel')">
-                    <span>Admin Manager</span>
-                </button>
-
-                <button id="nav-backup" class="nav-btn" onclick="toggleSection('backup')">
-                    <span>Backup Manager</span>
-                    <span>▼</span>
-                </button>
-                <div id="section-backup" class="submenu">
-                    <button class="sub-btn green" onclick="downloadBackupFile()">Monthly Backup</button>
-                    <button class="sub-btn green" onclick="saveBackupToSystem()">Save Backup</button>
-                    <button id="btn-backup-viewer" class="sub-btn blue" onclick="openModule('backup-viewer.html','Backup Viewer','Backup review panel')">Backup Viewer</button>
+    <div class="workspace">
+        <iframe id="contentFrame" srcdoc="
+            <div style='height:100%;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;color:#777;background:#fff;'>
+                <div style='text-align:center;'>
+                    <h2>Welcome to Galloners Club Dashboard</h2>
+                    <p>Select a module from the left panel.</p>
                 </div>
             </div>
-
-            <div class="logout-wrap">
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
-        </aside>
-
-        <main class="workspace">
-            <div class="workspace-header">
-                <div>
-                    <div id="workspaceTitle" class="workspace-title">Donor Database - Data Input</div>
-                    <div id="workspaceSubtitle" class="workspace-subtitle">Donor database data input panel</div>
-                </div>
-                <div class="workspace-actions">
-                    <button class="action-btn" onclick="reloadFrame()">Reload</button>
-                </div>
-            </div>
-
-            <div class="iframe-wrap">
-                <iframe id="moduleFrame" class="module-frame" src=""></iframe>
-            </div>
-        </main>
-
+        "></iframe>
     </div>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<script>
+    function toggleModule(button) {
+        const currentModule = button.parentElement;
+        const allModules = document.querySelectorAll('.module');
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.firebasestorage.app",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
-    };
+        allModules.forEach(module => {
+            if (module !== currentModule) {
+                module.classList.remove('active');
+            }
+        });
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getDatabase(app);
-    const firestore = getFirestore(app);
-
-    const sections = ["donor-database", "galloner", "releasing", "backup"];
-    const frame = document.getElementById("moduleFrame");
-    const workspaceTitle = document.getElementById("workspaceTitle");
-    const workspaceSubtitle = document.getElementById("workspaceSubtitle");
-
-    let currentModuleUrl = "donor-database-entry.html";
-    let currentModuleTitle = "Donor Database - Data Input";
-    let currentModuleSubtitle = "Donor database data input panel";
-
-    function addCacheBuster(url){
-        const separator = url.includes("?") ? "&" : "?";
-        return `${url}${separator}t=${Date.now()}`;
+        currentModule.classList.toggle('active');
     }
 
-    function setFrameSource(url){
-        currentModuleUrl = url;
-        frame.src = addCacheBuster(url);
+    function loadPage(page) {
+        document.getElementById('contentFrame').src = page;
     }
 
-    function setWorkspace(title, subtitle){
-        currentModuleTitle = title;
-        currentModuleSubtitle = subtitle;
-        workspaceTitle.textContent = title;
-        workspaceSubtitle.textContent = subtitle;
-    }
-
-    onAuthStateChanged(auth, (user) => {
-        if (!user) {
+    function logoutUser() {
+        const confirmLogout = confirm("Are you sure you want to logout?");
+        if (confirmLogout) {
             window.location.href = "index.html";
-            return;
         }
-
-        setWorkspace(currentModuleTitle, currentModuleSubtitle);
-        setFrameSource(currentModuleUrl);
-
-        const defaultBtn = document.getElementById("btn-donor-db-entry");
-        if (defaultBtn) defaultBtn.classList.add("active-sub");
-    });
-
-    function clearActiveSubs(){
-        document.querySelectorAll(".sub-btn").forEach(btn => {
-            btn.classList.remove("active-sub");
-        });
     }
-
-    function clearActiveNavs(){
-        document.querySelectorAll(".nav-btn").forEach(btn => {
-            btn.classList.remove("active");
-        });
-    }
-
-    window.toggleSection = function(name) {
-        const clickedNav = document.getElementById("nav-" + name);
-
-        sections.forEach(sectionName => {
-            const section = document.getElementById("section-" + sectionName);
-            const nav = document.getElementById("nav-" + sectionName);
-
-            if(!section || !nav) return;
-
-            if(sectionName === name){
-                const willOpen = !section.classList.contains("open");
-                section.classList.toggle("open", willOpen);
-                if(willOpen){
-                    clearActiveNavs();
-                    nav.classList.add("active");
-                }
-            }else{
-                section.classList.remove("open");
-                nav.classList.remove("active");
-            }
-        });
-
-        const activeSection = document.getElementById("section-" + name);
-        if(clickedNav && activeSection && activeSection.classList.contains("open")){
-            clickedNav.classList.add("active");
-        }
-    };
-
-    window.openModule = function(url, title, subtitle){
-        setWorkspace(title, subtitle);
-        setFrameSource(url);
-        clearActiveSubs();
-
-        const matchingButton = Array.from(document.querySelectorAll(".sub-btn")).find(btn =>
-            btn.getAttribute("onclick") && btn.getAttribute("onclick").includes("'" + url + "'")
-        );
-
-        if(matchingButton){
-            matchingButton.classList.add("active-sub");
-        }
-    };
-
-    window.openSingleModule = function(navButton, url, title, subtitle){
-        clearActiveNavs();
-        navButton.classList.add("active");
-        clearActiveSubs();
-        setWorkspace(title, subtitle);
-        setFrameSource(url);
-    };
-
-    window.reloadFrame = function(){
-        setWorkspace(currentModuleTitle, currentModuleSubtitle);
-        setFrameSource(currentModuleUrl);
-    };
-
-    async function getRealtimeDatabaseBackup() {
-        const paths = ["admins", "facilities", "releasing", "bloodAugmentation"];
-        const backup = {};
-
-        for (const path of paths) {
-            const snapshot = await get(ref(db, path));
-            backup[path] = snapshot.exists() ? snapshot.val() : {};
-        }
-
-        return backup;
-    }
-
-    async function getFirestoreCollectionBackup(collectionName) {
-        const snapshot = await getDocs(collection(firestore, collectionName));
-        const data = {};
-
-        snapshot.forEach((doc) => {
-            data[doc.id] = doc.data();
-        });
-
-        return data;
-    }
-
-    async function buildBackupData() {
-        const realtimeData = await getRealtimeDatabaseBackup();
-        const donorsData = await getFirestoreCollectionBackup("donors");
-
-        return {
-            metadata: {
-                project: "galloners-club",
-                exportedAt: new Date().toISOString(),
-                exportedBy: auth.currentUser?.email || "",
-                type: "monthly-backup"
-            },
-            realtimeDatabase: realtimeData,
-            firestore: {
-                donors: donorsData
-            }
-        };
-    }
-
-    window.downloadBackupFile = async function() {
-        try {
-            if (!auth.currentUser) {
-                alert("You are not logged in.");
-                window.location.href = "index.html";
-                return;
-            }
-
-            const now = new Date();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-
-            const backupData = await buildBackupData();
-
-            const fileName = `bloodbank-backup-${now.getFullYear()}-${month}-${day}.json`;
-            const json = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([json], { type: "application/json" });
-
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            alert("Backup file downloaded successfully.");
-        } catch (error) {
-            console.error("Download backup error:", error);
-            alert("Backup file download failed.");
-        }
-    };
-
-    window.saveBackupToSystem = async function() {
-        try {
-            if (!auth.currentUser) {
-                alert("You are not logged in.");
-                window.location.href = "index.html";
-                return;
-            }
-
-            const now = new Date();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const backupKey = `${now.getFullYear()}-${month}-${day}`;
-
-            const backupData = await buildBackupData();
-            await set(ref(db, "backups/" + backupKey), backupData);
-
-            alert("Backup saved to system successfully.");
-        } catch (error) {
-            console.error("Save system backup error:", error);
-            alert("Saving backup to system failed.");
-        }
-    };
-
-    window.logout = async function() {
-        try {
-            await signOut(auth);
-            alert("Logged out successfully.");
-            window.location.href = "index.html";
-        } catch (error) {
-            console.error("Logout error:", error);
-            alert("Logout failed.");
-        }
-    };
 </script>
 
 </body>
