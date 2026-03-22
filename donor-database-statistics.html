@@ -8,6 +8,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
     <style>
         * { box-sizing: border-box; }
@@ -15,18 +16,18 @@
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background: #eef2f6;
+            background: #f3f6fa;
             color: #1f2937;
         }
 
         header {
             background: linear-gradient(90deg, #8b0000, #b30000);
             color: white;
-            padding: 14px 18px;
+            padding: 16px 20px;
             text-align: center;
             font-size: 24px;
-            font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            font-weight: 700;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.18);
         }
 
         .page {
@@ -35,38 +36,80 @@
             padding: 0 14px 24px;
         }
 
-        .panel {
-            background: white;
+        .panel,
+        .year-card,
+        .month-card {
+            background: #fff;
             border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.07);
             margin-bottom: 16px;
             overflow: hidden;
         }
 
+        .panel-head,
+        .year-head,
+        .month-head,
+        .collapse-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 700;
+        }
+
         .panel-head {
-            background: #dde7f1;
-            color: #243447;
-            font-weight: bold;
-            padding: 12px 16px;
-            border-bottom: 1px solid #d4dde7;
-            font-size: 15px;
+            background: #eef4fa;
+            color: #22313f;
+            padding: 14px 16px;
+            border-bottom: 1px solid #dbe3ec;
+        }
+
+        .year-head {
+            background: #8b0000;
+            color: white;
+            padding: 14px 16px;
+            cursor: pointer;
+        }
+
+        .month-head {
+            background: #f6f9fc;
+            color: #22313f;
+            padding: 13px 16px;
+            border-top: 1px solid #e5e7eb;
+            cursor: pointer;
+        }
+
+        .collapse-head {
+            background: #f8fafc;
+            color: #22313f;
+            padding: 13px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
         }
 
         .panel-body {
             padding: 16px;
         }
 
-        .top-grid {
+        .body-hidden {
+            display: none;
+        }
+
+        .icon {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .controls-grid {
             display: grid;
-            grid-template-columns: 200px 220px 1fr auto auto auto;
+            grid-template-columns: 190px 240px 1fr auto auto auto;
             gap: 12px;
             align-items: end;
         }
 
-        .manager-grid {
+        .mapping-grid {
             display: grid;
-            grid-template-columns: 1.2fr 230px auto;
+            grid-template-columns: 1.3fr 240px auto;
             gap: 12px;
             align-items: end;
         }
@@ -78,7 +121,7 @@
 
         .field-group label {
             font-size: 13px;
-            font-weight: bold;
+            font-weight: 700;
             margin-bottom: 6px;
             color: #334155;
         }
@@ -86,18 +129,18 @@
         .field-group input,
         .field-group select {
             width: 100%;
-            padding: 10px 11px;
+            padding: 11px 12px;
             border: 1px solid #cbd5e1;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 14px;
             background: #fff;
         }
 
         button {
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 700;
         }
 
         .btn {
@@ -107,7 +150,7 @@
         }
 
         .small-btn {
-            padding: 7px 10px;
+            padding: 8px 10px;
             font-size: 12px;
         }
 
@@ -116,35 +159,57 @@
         .gray-btn { background: #64748b; color: white; }
         .red-btn { background: #8a1111; color: white; }
 
-        .status-message {
+        .status {
             margin-top: 12px;
             padding: 12px;
-            border-radius: 8px;
-            font-weight: bold;
+            border-radius: 10px;
+            font-weight: 700;
             display: none;
         }
 
-        .status-success {
+        .status.ok {
             display: block;
             background: #e8f7e8;
             color: #1b5e20;
             border: 1px solid #b7dfb9;
         }
 
-        .status-error {
+        .status.err {
             display: block;
             background: #fdeaea;
             color: #b71c1c;
             border: 1px solid #efb7b7;
         }
 
-        .note {
+        .hint {
             margin-top: 8px;
             font-size: 12px;
             color: #64748b;
         }
 
-        .mapping-table-wrap,
+        .month-tools {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 12px 14px;
+            background: #fafcff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            padding: 14px;
+        }
+
+        .stat-box {
+            background: #ffffff;
+            border: 1px solid #e5eaf0;
+            border-radius: 14px;
+            padding: 12px;
+        }
+
         .table-wrap {
             overflow: auto;
         }
@@ -163,95 +228,30 @@
         }
 
         th {
-            font-weight: bold;
+            font-weight: 700;
         }
 
-        .sheet-title {
+        .title-row {
             background: #f2f2f2;
             text-align: left;
             font-size: 15px;
-            font-weight: bold;
+            font-weight: 700;
         }
 
         .pink { background: #e5c1c3; }
         .beige { background: #ead9c4; }
         .green { background: #dfead5; }
         .blue { background: #d9e5f7; }
-        .bold { font-weight: bold; }
         .left { text-align: left; }
-
-        .year-group,
-        .month-group {
-            background: white;
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-            overflow: hidden;
-            margin-bottom: 14px;
-        }
-
-        .year-header,
-        .month-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-            font-weight: bold;
-        }
-
-        .year-header {
-            background: #8b0000;
-            color: white;
-            padding: 14px 16px;
-            font-size: 17px;
-        }
-
-        .month-header {
-            background: #eef4f9;
-            color: #22313f;
-            padding: 13px 16px;
-            font-size: 14px;
-            border-top: 1px solid #dbe3ec;
-        }
-
-        .toggle-icon {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .group-body.hidden {
-            display: none;
-        }
-
-        .month-toolbar {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            padding: 12px 14px;
-            background: #fafcff;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .stats-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            padding: 14px;
-        }
+        .bold { font-weight: 700; }
 
         @media print {
             header,
-            .top-controls,
-            .manager-panel,
-            .status-message,
-            .month-toolbar,
-            .no-print {
+            .controls-panel,
+            .mapping-panel,
+            .month-tools,
+            .status {
                 display: none !important;
-            }
-
-            body {
-                background: white;
             }
 
             .page {
@@ -261,28 +261,22 @@
             }
 
             .panel,
-            .year-group,
-            .month-group {
+            .year-card,
+            .month-card,
+            .stat-box {
                 box-shadow: none;
-                border-radius: 0;
                 border: none;
-                margin-bottom: 10px;
+                border-radius: 0;
             }
 
-            .panel-head {
-                background: white;
-                border-bottom: none;
-                padding: 0 0 10px 0;
-            }
-
-            .group-body.hidden {
+            .body-hidden {
                 display: block !important;
             }
         }
 
         @media (max-width: 1200px) {
-            .top-grid,
-            .manager-grid {
+            .controls-grid,
+            .mapping-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -294,13 +288,15 @@
 
 <div class="page">
 
-    <div class="panel top-controls">
-        <div class="panel-head">Statistics Controls</div>
+    <div class="panel controls-panel">
+        <div class="panel-head">
+            <span>Statistics Controls</span>
+        </div>
         <div class="panel-body">
-            <div class="top-grid">
+            <div class="controls-grid">
                 <div class="field-group">
-                    <label for="monthFilter">Quick Month View</label>
-                    <input type="month" id="monthFilter">
+                    <label for="quickMonthFilter">Quick Month</label>
+                    <input type="month" id="quickMonthFilter">
                 </div>
 
                 <div class="field-group">
@@ -315,46 +311,51 @@
                 <button class="btn green-btn" id="expandAllBtn">Expand All</button>
             </div>
 
-            <div id="statusMessage" class="status-message"></div>
+            <div id="statusBox" class="status"></div>
         </div>
     </div>
 
-    <div class="panel manager-panel">
-        <div class="panel-head">Group Category Entry</div>
-        <div class="panel-body">
-            <div class="manager-grid">
-                <div class="field-group">
-                    <label for="partnerNameInput">MBD Partner / Organization Name</label>
-                    <input type="text" id="partnerNameInput" placeholder="Example: UP-APO, Peoples Park, RC143 Base">
+    <div class="panel mapping-panel">
+        <div class="collapse-head" onclick="toggleMappingPanel()">
+            <span>Group Category Entry</span>
+            <span id="mappingIcon" class="icon">−</span>
+        </div>
+        <div id="mappingBody">
+            <div class="panel-body">
+                <div class="mapping-grid">
+                    <div class="field-group">
+                        <label for="partnerNameInput">MBD Partner / Organization Name</label>
+                        <input type="text" id="partnerNameInput" placeholder="Example: DA(DEPARTMENT OF AGRICULTURE), UP-APO, Peoples Park">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="partnerCategoryInput">Category</label>
+                        <select id="partnerCategoryInput">
+                            <option value="Group">Group</option>
+                            <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
+                            <option value="Pledge 25">Pledge 25</option>
+                        </select>
+                    </div>
+
+                    <button class="btn green-btn" id="savePartnerBtn">Save Mapping</button>
                 </div>
 
-                <div class="field-group">
-                    <label for="partnerCategoryInput">Category</label>
-                    <select id="partnerCategoryInput">
-                        <option value="Group">Group</option>
-                        <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
-                        <option value="Pledge 25">Pledge 25</option>
-                    </select>
+                <div class="hint">
+                    Alias matching is enabled. Example: <b>DA</b> can match <b>DA(DEPARTMENT OF AGRICULTURE)</b>.
                 </div>
 
-                <button class="btn green-btn" id="savePartnerBtn">Save Mapping</button>
-            </div>
-
-            <div class="note">
-                This controls where MBD partners appear under Field Donation.
-            </div>
-
-            <div class="mapping-table-wrap" style="margin-top:14px;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="pink">Partner Name</th>
-                            <th class="beige">Category</th>
-                            <th class="blue">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="mappingTableBody"></tbody>
-                </table>
+                <div class="table-wrap" style="margin-top:14px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="pink">Partner Name</th>
+                                <th class="beige">Category</th>
+                                <th class="blue">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingTableBody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -374,39 +375,43 @@
         measurementId: "G-XYXJH9JNXJ"
     };
 
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
     const firestore = firebase.firestore();
+    const rtdb = firebase.database();
     const auth = firebase.auth();
 
-    const statisticsContainer = document.getElementById("statisticsContainer");
-    const monthFilter = document.getElementById("monthFilter");
+    const quickMonthFilter = document.getElementById("quickMonthFilter");
     const partnerSearch = document.getElementById("partnerSearch");
     const refreshBtn = document.getElementById("refreshBtn");
     const collapseAllBtn = document.getElementById("collapseAllBtn");
     const expandAllBtn = document.getElementById("expandAllBtn");
-    const statusMessage = document.getElementById("statusMessage");
+    const statusBox = document.getElementById("statusBox");
 
     const partnerNameInput = document.getElementById("partnerNameInput");
     const partnerCategoryInput = document.getElementById("partnerCategoryInput");
     const savePartnerBtn = document.getElementById("savePartnerBtn");
     const mappingTableBody = document.getElementById("mappingTableBody");
 
-    let allDonorRecords = [];
-    let allReleasingRecords = [];
+    const statisticsContainer = document.getElementById("statisticsContainer");
+
+    let donorRecords = [];
+    let releasingEntries = [];
     let partnerMappings = [];
     let collapsedGroups = {};
+    let mappingCollapsed = false;
 
-    function showMessage(message, type) {
-        statusMessage.textContent = message;
-        statusMessage.className = "status-message";
-        statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
+    function showStatus(message, good = true) {
+        statusBox.textContent = message;
+        statusBox.className = good ? "status ok" : "status err";
     }
 
     function normalizeText(value) {
         return String(value || "").trim().toLowerCase();
+    }
+
+    function normalizeCompact(value) {
+        return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     }
 
     function escapeHtml(text) {
@@ -425,29 +430,17 @@
     }
 
     function setDefaultMonth() {
-        const today = new Date();
-        monthFilter.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+        const d = new Date();
+        quickMonthFilter.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     }
 
-    function getMonthName(monthNumber) {
-        const names = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-        return names[monthNumber - 1] || "Unknown Month";
+    function getMonthName(n) {
+        return ["January","February","March","April","May","June","July","August","September","October","November","December"][n - 1] || "Unknown";
     }
 
-    function getYearMonth(entryDate) {
-        if (!entryDate) {
-            return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
-        }
-
-        const value = String(entryDate);
-        const parts = value.split("-");
-        if (parts.length !== 3) {
-            return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
-        }
-
+    function getYearMonth(dateStr) {
+        const parts = String(dateStr || "").split("-");
+        if (parts.length !== 3) return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
         const year = parts[0];
         const month = parseInt(parts[1], 10);
         return {
@@ -458,69 +451,33 @@
         };
     }
 
-    function getGroupKey(type, a, b = "") {
+    function getGroupKey(type, a, b="") {
         return `${type}-${a}-${b}`;
     }
 
-    function isCollapsed(key) {
-        return collapsedGroups[key] === true;
+    function countBySex(records, sex) {
+        return records.filter(r => normalizeText(r.sex) === normalizeText(sex)).length;
     }
 
-    function buildDonorGroups(records) {
-        const grouped = {};
-
-        records.forEach(record => {
-            const { year, month, monthName } = getYearMonth(record.entryDate);
-
-            if (!grouped[year]) grouped[year] = {};
-            if (!grouped[year][month]) {
-                grouped[year][month] = {
-                    monthName,
-                    records: []
-                };
-            }
-
-            grouped[year][month].records.push(record);
-        });
-
-        return grouped;
-    }
-
-    function countBySex(records, sexValue) {
-        return records.filter(r => normalizeText(r.sex) === normalizeText(sexValue)).length;
-    }
-
-    function countBySexAndPredicate(records, sexValue, predicate) {
-        return records.filter(r => normalizeText(r.sex) === normalizeText(sexValue) && predicate(r)).length;
-    }
-
-    function isFirstTime(record) {
-        return normalizeText(record.donorCategory) === "new";
-    }
-
-    function isRepeatNonRegular(record) {
-        return normalizeText(record.donorCategory) === "lapse";
-    }
-
-    function isRepeatRegular(record) {
-        return normalizeText(record.donorCategory) === "repeat";
+    function countBySexAndPredicate(records, sex, predicate) {
+        return records.filter(r => normalizeText(r.sex) === normalizeText(sex) && predicate(r)).length;
     }
 
     function getAgeGroup(age) {
-        const value = Number(age || 0);
-        if (value >= 16 && value <= 17) return "16-17";
-        if (value >= 18 && value <= 20) return "18-20";
-        if (value >= 21 && value <= 30) return "21-30";
-        if (value >= 31 && value <= 40) return "31-40";
-        if (value >= 41 && value <= 50) return "41-50";
-        if (value >= 51 && value <= 60) return "51-60";
-        if (value >= 60 && value <= 65) return "60-65";
-        if (value >= 66) return "66 & above";
+        const a = Number(age || 0);
+        if (a >= 16 && a <= 17) return "16-17";
+        if (a >= 18 && a <= 20) return "18-20";
+        if (a >= 21 && a <= 30) return "21-30";
+        if (a >= 31 && a <= 40) return "31-40";
+        if (a >= 41 && a <= 50) return "41-50";
+        if (a >= 51 && a <= 60) return "51-60";
+        if (a >= 60 && a <= 65) return "60-65";
+        if (a >= 66) return "66 & above";
         return "";
     }
 
-    function countAgeGroup(records, label, sexValue) {
-        return records.filter(r => getAgeGroup(r.age) === label && normalizeText(r.sex) === normalizeText(sexValue)).length;
+    function countAgeGroup(records, label, sex) {
+        return records.filter(r => getAgeGroup(r.age) === label && normalizeText(r.sex) === normalizeText(sex)).length;
     }
 
     function isCountableBagRecord(record) {
@@ -532,415 +489,294 @@
     }
 
     function addBagCount(counter, bagType) {
-        const normalized = normalizeText(bagType);
-        if (normalized === "single") counter.S += 1;
-        else if (normalized === "double") counter.D += 1;
-        else if (normalized === "triple") counter.T += 1;
-        else if (normalized === "quadruple") counter.Q += 1;
+        const value = normalizeText(bagType);
+        if (value === "single") counter.S += 1;
+        else if (value === "double") counter.D += 1;
+        else if (value === "triple") counter.T += 1;
+        else if (value === "quadruple") counter.Q += 1;
     }
 
     function sumBagCounters(counters) {
-        const total = blankBagCounter();
-        counters.forEach(counter => {
-            total.S += counter.S;
-            total.D += counter.D;
-            total.T += counter.T;
-            total.Q += counter.Q;
+        const out = blankBagCounter();
+        counters.forEach(c => {
+            out.S += c.S; out.D += c.D; out.T += c.T; out.Q += c.Q;
         });
-        return total;
+        return out;
     }
 
     function getOfficeBleedingRow(record) {
         if (normalizeText(record.donorType) === "walk-in") return "Walk-in";
         if (normalizeText(record.donorType) === "patient directed") {
-            if (normalizeText(record.patientDirectedDetails).includes("replacement")) {
-                return "Replacement";
-            }
+            if (normalizeText(record.patientDirectedDetails).includes("replacement")) return "Replacement";
             return "Patient-directed";
         }
         return "";
     }
 
-    function getPartnerCategory(partnerName) {
-        const normalized = normalizeText(partnerName);
-        const found = partnerMappings.find(item => normalizeText(item.partnerName) === normalized);
-        return found ? found.category : "Group";
-    }
-
-    function splitBloodTypeABO(bloodType) {
-        const value = String(bloodType || "").toUpperCase().trim();
-        if (value.startsWith("AB")) return "AB";
-        if (value.startsWith("A")) return "A";
-        if (value.startsWith("B")) return "B";
-        if (value.startsWith("O")) return "O";
-        return "";
-    }
-
     function createComponentCounter() {
-        return {
-            whole450: 0,
-            PRBC: 0,
-            FFP: 0,
-            PC: 0
-        };
+        return { whole450: 0, PRBC: 0, FFP: 0, PC: 0 };
     }
 
     function addComponentPreparation(counterMap, bloodType, bagType) {
-        const abo = splitBloodTypeABO(bloodType);
-        if (!abo) return;
+        const bt = String(bloodType || "").toUpperCase().trim();
+        if (!bt) return;
+        if (!counterMap[bt]) counterMap[bt] = createComponentCounter();
 
-        if (!counterMap[abo]) {
-            counterMap[abo] = createComponentCounter();
-        }
-
-        const normalizedBag = normalizeText(bagType);
-
-        if (normalizedBag === "single") {
-            counterMap[abo].whole450 += 1;
-        } else if (normalizedBag === "double") {
-            counterMap[abo].whole450 += 1;
-        } else if (normalizedBag === "triple") {
-            counterMap[abo].PRBC += 1;
-            counterMap[abo].FFP += 1;
-            counterMap[abo].PC += 1;
-        } else if (normalizedBag === "quadruple") {
-            counterMap[abo].whole450 += 1;
-            counterMap[abo].PRBC += 1;
-            counterMap[abo].FFP += 1;
-            counterMap[abo].PC += 1;
+        const value = normalizeText(bagType);
+        if (value === "single") counterMap[bt].whole450 += 1;
+        else if (value === "double") counterMap[bt].whole450 += 1;
+        else if (value === "triple") {
+            counterMap[bt].PRBC += 1;
+            counterMap[bt].FFP += 1;
+            counterMap[bt].PC += 1;
+        } else if (value === "quadruple") {
+            counterMap[bt].whole450 += 1;
+            counterMap[bt].PRBC += 1;
+            counterMap[bt].FFP += 1;
+            counterMap[bt].PC += 1;
         }
     }
 
-    function resolveReleasingDate(record) {
-        return record.entryDate || record.date || record.requestDate || record.dateReleased || record.releaseDate || "";
+    function buildPartnerAliases(partnerName) {
+        const raw = String(partnerName || "").trim();
+        const set = new Set();
+        if (!raw) return set;
+
+        set.add(normalizeCompact(raw));
+
+        const beforeParen = raw.split("(")[0].trim();
+        if (beforeParen) set.add(normalizeCompact(beforeParen));
+
+        const match = raw.match(/\((.*?)\)/);
+        if (match && match[1]) {
+            set.add(normalizeCompact(match[1]));
+            const acronym = match[1]
+                .split(/[\s\/,-]+/)
+                .filter(Boolean)
+                .map(w => w[0])
+                .join("");
+            if (acronym) set.add(normalizeCompact(acronym));
+        }
+
+        return set;
     }
 
-    function resolveReleasingUnits(record) {
-        const raw = record.units ?? record.quantity ?? record.numberOfUnits ?? record.unit ?? 0;
-        const value = Number(raw);
-        return Number.isFinite(value) ? value : 0;
+    function getPartnerCategory(partnerName) {
+        const compact = normalizeCompact(partnerName);
+        if (!compact) return "Group";
+
+        for (const item of partnerMappings) {
+            const aliases = buildPartnerAliases(item.partnerName);
+            const stored = normalizeCompact(item.partnerName);
+
+            if (
+                aliases.has(compact) ||
+                stored === compact ||
+                stored.includes(compact) ||
+                compact.includes(stored)
+            ) {
+                return item.category;
+            }
+        }
+
+        return "Group";
     }
 
-    function resolveReleasingBloodType(record) {
-        return String(record.bloodType || record.requestBloodType || record.bt || "").toUpperCase().trim();
+    async function loadDonors() {
+        const snap = await firestore.collection("donorDatabase").orderBy("entryDate", "asc").get();
+        donorRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
 
-    function resolveReleasingComponent(record) {
-        return normalizeText(record.component || record.componentType || record.requestType || record.productType || record.bloodComponent || "");
+    async function loadMappings() {
+        const snap = await firestore.collection("donorGroupCategories").orderBy("partnerNameLower", "asc").get();
+        partnerMappings = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderMappings();
     }
 
-    function componentLabelFromRelease(componentValue) {
-        const value = normalizeText(componentValue);
-
-        if (value.includes("450") || value.includes("whole blood") || value.includes("wb")) return "450 cc";
-        if (value.includes("prbc") || value.includes("packed")) return "PRBC";
-        if (value.includes("ffp")) return "FFP";
-        if (value === "pc" || value.includes("platelet")) return "PC";
-
-        return "";
+    async function loadReleasing() {
+        const snap = await rtdb.ref("releasing").once("value");
+        const data = snap.val() || {};
+        releasingEntries = Object.keys(data).map(key => ({ id: key, ...data[key] }));
     }
 
-    function countSexRows(records) {
-        const male = countBySex(records, "Male");
-        const female = countBySex(records, "Female");
-        return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="2" class="sheet-title">f. Sex Distribution of Donors</th>
-                    </tr>
-                    <tr>
-                        <td class="pink left">1 Male</td>
-                        <td class="beige">${male}</td>
-                    </tr>
-                    <tr>
-                        <td class="pink left">2 Female</td>
-                        <td class="beige">${female}</td>
-                    </tr>
-                    <tr>
-                        <td class="pink left bold">Total No. of Donors</td>
-                        <td class="beige bold">${male + female}</td>
-                    </tr>
-                </tbody>
-            </table>
-        `;
+    function renderMappings() {
+        const keyword = normalizeText(partnerSearch.value);
+        const rows = partnerMappings.filter(r => !keyword || normalizeText(r.partnerName).includes(keyword));
+
+        mappingTableBody.innerHTML = rows.map(r => `
+            <tr>
+                <td class="left">${escapeHtml(r.partnerName)}</td>
+                <td>${escapeHtml(r.category)}</td>
+                <td><button class="small-btn red-btn" onclick="deleteMapping('${r.id}')">Delete</button></td>
+            </tr>
+        `).join("") || `<tr><td colspan="3">No partner mapping saved.</td></tr>`;
     }
 
-    function countFrequencyRows(records) {
-        const rows = [
-            ["1", "First-time", isFirstTime],
-            ["2", "Repeat non-regular", isRepeatNonRegular],
-            ["3", "Repeat regular", isRepeatRegular],
-            ["", "once a year", () => false],
-            ["", "2x a year", () => false],
-            ["", "3x a year", () => false],
-            ["", "4x a year", () => false],
-            ["", "5x a year", () => false],
-            ["", "6x a year", () => false],
-            ["", "6x up", () => false]
-        ];
+    async function saveMapping() {
+        const partnerName = partnerNameInput.value.trim();
+        const category = partnerCategoryInput.value;
 
-        let totalMale = 0;
-        let totalFemale = 0;
+        if (!partnerName) {
+            showStatus("Please enter a partner / organization name.", false);
+            return;
+        }
 
-        const body = rows.map(row => {
-            const male = countBySexAndPredicate(records, "Male", row[2]);
-            const female = countBySexAndPredicate(records, "Female", row[2]);
-            totalMale += male;
-            totalFemale += female;
+        const id = normalizeCompact(partnerName) || Date.now().toString();
 
-            return `
-                <tr>
-                    <td class="pink">${row[0]}</td>
-                    <td class="pink left">${row[1]}</td>
-                    <td class="beige">${male}</td>
-                    <td class="beige">${female}</td>
-                </tr>
-            `;
-        }).join("");
+        await firestore.collection("donorGroupCategories").doc(id).set({
+            partnerName,
+            partnerNameLower: normalizeText(partnerName),
+            category,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-        return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="2" class="sheet-title">g. Distribution of Donors according to Frequency of Donation</th>
-                        <th class="pink">MALE</th>
-                        <th class="pink">FEMALE</th>
-                    </tr>
-                    ${body}
-                    <tr>
-                        <td colspan="2" class="pink left bold">Total No. of Donors</td>
-                        <td class="beige bold">${totalMale}</td>
-                        <td class="beige bold">${totalFemale}</td>
-                    </tr>
-                </tbody>
-            </table>
-        `;
+        partnerNameInput.value = "";
+        partnerCategoryInput.value = "Group";
+        await loadMappings();
+        renderStatistics();
+        showStatus("Partner mapping saved successfully.", true);
     }
 
-    function countAgeRows(records) {
-        const groups = ["16-17", "18-20", "21-30", "31-40", "41-50", "51-60", "60-65", "66 & above"];
-        let totalMale = 0;
-        let totalFemale = 0;
+    window.deleteMapping = async function(id) {
+        await firestore.collection("donorGroupCategories").doc(id).delete();
+        await loadMappings();
+        renderStatistics();
+        showStatus("Partner mapping deleted.", true);
+    };
 
-        const body = groups.map((group, index) => {
-            const male = countAgeGroup(records, group, "Male");
-            const female = countAgeGroup(records, group, "Female");
-            totalMale += male;
-            totalFemale += female;
-
-            return `
-                <tr>
-                    <td class="pink">${index + 1}</td>
-                    <td class="pink left">${group}</td>
-                    <td class="beige">${male}</td>
-                    <td class="beige">${female}</td>
-                </tr>
-            `;
-        }).join("");
-
-        return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="2" class="sheet-title">h. Distribution of Donors By Age Group</th>
-                        <th class="pink">MALE</th>
-                        <th class="pink">FEMALE</th>
-                    </tr>
-                    ${body}
-                    <tr>
-                        <td colspan="2" class="pink left bold">Total</td>
-                        <td class="beige bold">${totalMale}</td>
-                        <td class="beige bold">${totalFemale}</td>
-                    </tr>
-                </tbody>
-            </table>
-        `;
+    function getMonthRecords(monthKey) {
+        return donorRecords.filter(r => String(r.entryDate || "").startsWith(monthKey));
     }
 
-    function officeBleedingRows(records) {
-        const countable = records.filter(r => isCountableBagRecord(r) && normalizeText(r.donorType) !== "mbd");
+    function getMonthReleasing(monthKey) {
+        return releasingEntries.filter(r => String(r.date || "").startsWith(monthKey));
+    }
 
+    function officeBleedingHtml(records) {
+        const items = records.filter(r => isCountableBagRecord(r) && normalizeText(r.donorType) !== "mbd");
         const replacement = blankBagCounter();
         const walkin = blankBagCounter();
-        const patientDirected = blankBagCounter();
+        const pd = blankBagCounter();
 
-        countable.forEach(record => {
-            const row = getOfficeBleedingRow(record);
-            if (row === "Replacement") addBagCount(replacement, record.bloodBagType);
-            else if (row === "Walk-in") addBagCount(walkin, record.bloodBagType);
-            else if (row === "Patient-directed") addBagCount(patientDirected, record.bloodBagType);
+        items.forEach(r => {
+            const row = getOfficeBleedingRow(r);
+            if (row === "Replacement") addBagCount(replacement, r.bloodBagType);
+            else if (row === "Walk-in") addBagCount(walkin, r.bloodBagType);
+            else if (row === "Patient-directed") addBagCount(pd, r.bloodBagType);
         });
 
-        const total = sumBagCounters([replacement, walkin, patientDirected]);
+        const total = sumBagCounters([replacement, walkin, pd]);
 
         return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="2" class="sheet-title">a. Office Bleeding</th>
-                        <th class="green">450 cc S</th>
-                        <th class="green">450 cc D</th>
-                        <th class="green">450 cc T</th>
-                        <th class="green">450 cc Q</th>
-                    </tr>
-                    <tr>
-                        <td colspan="2" class="beige left">1. Replacement</td>
-                        <td>${replacement.S}</td>
-                        <td>${replacement.D}</td>
-                        <td>${replacement.T}</td>
-                        <td>${replacement.Q}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" class="beige left">2. Walk-in</td>
-                        <td>${walkin.S}</td>
-                        <td>${walkin.D}</td>
-                        <td>${walkin.T}</td>
-                        <td>${walkin.Q}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" class="beige left">3. Patient-directed</td>
-                        <td>${patientDirected.S}</td>
-                        <td>${patientDirected.D}</td>
-                        <td>${patientDirected.T}</td>
-                        <td>${patientDirected.Q}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" class="blue bold">Total</td>
-                        <td class="blue bold">${total.S}</td>
-                        <td class="blue bold">${total.D}</td>
-                        <td class="blue bold">${total.T}</td>
-                        <td class="blue bold">${total.Q}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr>
+                            <th colspan="2" class="title-row">a. Office Bleeding</th>
+                            <th class="green">450 cc S</th>
+                            <th class="green">450 cc D</th>
+                            <th class="green">450 cc T</th>
+                            <th class="green">450 cc Q</th>
+                        </tr>
+                        <tr><td colspan="2" class="beige left">1. Replacement</td><td>${replacement.S}</td><td>${replacement.D}</td><td>${replacement.T}</td><td>${replacement.Q}</td></tr>
+                        <tr><td colspan="2" class="beige left">2. Walk-in</td><td>${walkin.S}</td><td>${walkin.D}</td><td>${walkin.T}</td><td>${walkin.Q}</td></tr>
+                        <tr><td colspan="2" class="beige left">3. Patient-directed</td><td>${pd.S}</td><td>${pd.D}</td><td>${pd.T}</td><td>${pd.Q}</td></tr>
+                        <tr><td colspan="2" class="blue bold">Total</td><td class="blue bold">${total.S}</td><td class="blue bold">${total.D}</td><td class="blue bold">${total.T}</td><td class="blue bold">${total.Q}</td></tr>
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    function aggregateFieldDonationRows(records, categoryLabel) {
-        const filtered = records.filter(record => {
-            if (!isCountableBagRecord(record)) return false;
-            if (normalizeText(record.donorType) !== "mbd") return false;
-            return getPartnerCategory(record.mbdDetails) === categoryLabel;
-        });
+    function aggregateFieldDonationRows(records, category) {
+        const filtered = records.filter(r =>
+            isCountableBagRecord(r) &&
+            normalizeText(r.donorType) === "mbd" &&
+            getPartnerCategory(r.mbdDetails) === category
+        );
 
         const grouped = {};
+        filtered.forEach(r => {
+            const name = String(r.mbdDetails || "").trim();
+            const date = String(r.entryDate || "").trim();
+            const key = `${name}|${date}`;
 
-        filtered.forEach(record => {
-            const groupName = String(record.mbdDetails || "").trim();
-            const date = String(record.entryDate || "").trim();
-            const key = `${groupName}|${date}`;
-
-            if (!grouped[key]) {
-                grouped[key] = {
-                    groupName,
-                    place: groupName,
-                    date,
-                    bags: blankBagCounter()
-                };
-            }
-
-            addBagCount(grouped[key].bags, record.bloodBagType);
+            if (!grouped[key]) grouped[key] = { groupName: name, place: name, date, bags: blankBagCounter() };
+            addBagCount(grouped[key].bags, r.bloodBagType);
         });
 
-        return Object.values(grouped).sort((a, b) => {
-            const dateCompare = a.date.localeCompare(b.date);
-            if (dateCompare !== 0) return dateCompare;
-            return a.groupName.localeCompare(b.groupName);
-        });
+        return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date) || a.groupName.localeCompare(b.groupName));
     }
 
-    function buildFieldDonationCategorySection(title, subHeaders, rows) {
-        let subtotal = blankBagCounter();
+    function fieldSection(title, headers, rows) {
+        let sub = blankBagCounter();
 
-        const rowHtml = rows.map(row => {
-            subtotal.S += row.bags.S;
-            subtotal.D += row.bags.D;
-            subtotal.T += row.bags.T;
-            subtotal.Q += row.bags.Q;
-
+        const body = rows.map(r => {
+            sub.S += r.bags.S; sub.D += r.bags.D; sub.T += r.bags.T; sub.Q += r.bags.Q;
             return `
                 <tr>
-                    <td class="pink left">${escapeHtml(row.groupName)}</td>
-                    <td class="beige left">${escapeHtml(row.place)}</td>
-                    <td class="beige">${escapeHtml(row.date)}</td>
-                    <td>${row.bags.S}</td>
-                    <td>${row.bags.D}</td>
-                    <td>${row.bags.T}</td>
-                    <td>${row.bags.Q}</td>
+                    <td class="pink left">${escapeHtml(r.groupName)}</td>
+                    <td class="beige left">${escapeHtml(r.place)}</td>
+                    <td class="beige">${escapeHtml(r.date)}</td>
+                    <td>${r.bags.S}</td><td>${r.bags.D}</td><td>${r.bags.T}</td><td>${r.bags.Q}</td>
                 </tr>
             `;
-        }).join("");
+        }).join("") || `
+            <tr>
+                <td class="pink">&nbsp;</td><td class="beige">&nbsp;</td><td class="beige">&nbsp;</td>
+                <td>0</td><td>0</td><td>0</td><td>0</td>
+            </tr>
+        `;
 
         return `
+            <tr><td colspan="7" class="pink left bold">${escapeHtml(title)}</td></tr>
             <tr>
-                <td colspan="7" class="pink left bold">${escapeHtml(title)}</td>
-            </tr>
-            <tr>
-                <td class="pink">${escapeHtml(subHeaders[0])}</td>
-                <td class="beige">${escapeHtml(subHeaders[1])}</td>
-                <td class="beige">${escapeHtml(subHeaders[2])}</td>
+                <td class="pink">${headers[0]}</td>
+                <td class="beige">${headers[1]}</td>
+                <td class="beige">${headers[2]}</td>
                 <td class="green">450 cc S</td>
                 <td class="green">450 cc D</td>
                 <td class="green">450 cc T</td>
                 <td class="green">450 cc Q</td>
             </tr>
-            ${rowHtml || `
-                <tr>
-                    <td class="pink">&nbsp;</td>
-                    <td class="beige">&nbsp;</td>
-                    <td class="beige">&nbsp;</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                    <td>0</td>
-                </tr>
-            `}
+            ${body}
             <tr>
                 <td colspan="3" class="left bold">Sub total</td>
-                <td class="blue bold">${subtotal.S}</td>
-                <td class="blue bold">${subtotal.D}</td>
-                <td class="blue bold">${subtotal.T}</td>
-                <td class="blue bold">${subtotal.Q}</td>
+                <td class="blue bold">${sub.S}</td><td class="blue bold">${sub.D}</td><td class="blue bold">${sub.T}</td><td class="blue bold">${sub.Q}</td>
             </tr>
         `;
     }
 
-    function fieldDonationRows(records) {
+    function fieldDonationHtml(records) {
         const groupRows = aggregateFieldDonationRows(records, "Group");
         const rcRows = aggregateFieldDonationRows(records, "RC143 / BRGY Base");
         const pledgeRows = aggregateFieldDonationRows(records, "Pledge 25");
 
-        const totals = sumBagCounters([
-            groupRows.reduce((acc, row) => ({ S: acc.S + row.bags.S, D: acc.D + row.bags.D, T: acc.T + row.bags.T, Q: acc.Q + row.bags.Q }), blankBagCounter()),
-            rcRows.reduce((acc, row) => ({ S: acc.S + row.bags.S, D: acc.D + row.bags.D, T: acc.T + row.bags.T, Q: acc.Q + row.bags.Q }), blankBagCounter()),
-            pledgeRows.reduce((acc, row) => ({ S: acc.S + row.bags.S, D: acc.D + row.bags.D, T: acc.T + row.bags.T, Q: acc.Q + row.bags.Q }), blankBagCounter())
+        const total = sumBagCounters([
+            groupRows.reduce((a, r) => ({ S: a.S + r.bags.S, D: a.D + r.bags.D, T: a.T + r.bags.T, Q: a.Q + r.bags.Q }), blankBagCounter()),
+            rcRows.reduce((a, r) => ({ S: a.S + r.bags.S, D: a.D + r.bags.D, T: a.T + r.bags.T, Q: a.Q + r.bags.Q }), blankBagCounter()),
+            pledgeRows.reduce((a, r) => ({ S: a.S + r.bags.S, D: a.D + r.bags.D, T: a.T + r.bags.T, Q: a.Q + r.bags.Q }), blankBagCounter())
         ]);
 
         return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="7" class="sheet-title">b. Field Donation</th>
-                    </tr>
-                    ${buildFieldDonationCategorySection("MBD (Mobile blood donation)", ["Group", "Place", "Date"], groupRows)}
-                    ${buildFieldDonationCategorySection("RC143 or Brgy base", ["Municipality", "Barangay Street (location)", "Date"], rcRows)}
-                    ${buildFieldDonationCategorySection("Pledge 25", ["Municipality", "School or Barangay street (location)", "Date"], pledgeRows)}
-                    <tr>
-                        <td colspan="3" class="pink left bold">Grand Total</td>
-                        <td class="blue bold">${totals.S}</td>
-                        <td class="blue bold">${totals.D}</td>
-                        <td class="blue bold">${totals.T}</td>
-                        <td class="blue bold">${totals.Q}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr><th colspan="7" class="title-row">b. Field Donation</th></tr>
+                        ${fieldSection("MBD (Mobile blood donation)", ["Group", "Place", "Date"], groupRows)}
+                        ${fieldSection("RC143 or Brgy base", ["Municipality", "Barangay Street (location)", "Date"], rcRows)}
+                        ${fieldSection("Pledge 25", ["Municipality", "School or Barangay street (location)", "Date"], pledgeRows)}
+                        <tr>
+                            <td colspan="3" class="pink left bold">Grand Total</td>
+                            <td class="blue bold">${total.S}</td><td class="blue bold">${total.D}</td><td class="blue bold">${total.T}</td><td class="blue bold">${total.Q}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    function bloodTypeDistributionRows(records) {
-        const countable = records.filter(r => isCountableBagRecord(r));
-
+    function bloodTypeDistributionHtml(records) {
         const rows = {
             "O+": blankBagCounter(),
             "A+": blankBagCounter(),
@@ -952,49 +788,42 @@
             "AB-": blankBagCounter()
         };
 
-        countable.forEach(record => {
-            const bt = String(record.bloodType || "").toUpperCase().trim();
-            if (rows[bt]) {
-                addBagCount(rows[bt], record.bloodBagType);
-            }
+        records.filter(isCountableBagRecord).forEach(r => {
+            const bt = String(r.bloodType || "").toUpperCase().trim();
+            if (rows[bt]) addBagCount(rows[bt], r.bloodBagType);
         });
 
         const total = sumBagCounters(Object.values(rows));
 
         return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="2" class="sheet-title">c. Blood Type Distribution of Blood Collection</th>
-                        <th class="green">450 cc S</th>
-                        <th class="green">450 cc D</th>
-                        <th class="green">450 cc T</th>
-                        <th class="green">450 cc Q</th>
-                    </tr>
-                    ${Object.keys(rows).map(bt => `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
                         <tr>
-                            <td colspan="2" class="beige">${bt}</td>
-                            <td>${rows[bt].S}</td>
-                            <td>${rows[bt].D}</td>
-                            <td>${rows[bt].T}</td>
-                            <td>${rows[bt].Q}</td>
+                            <th colspan="2" class="title-row">c. Blood Type Distribution of Blood Collection</th>
+                            <th class="green">450 cc S</th>
+                            <th class="green">450 cc D</th>
+                            <th class="green">450 cc T</th>
+                            <th class="green">450 cc Q</th>
                         </tr>
-                    `).join("")}
-                    <tr>
-                        <td colspan="2" class="beige bold">Total</td>
-                        <td class="blue bold">${total.S}</td>
-                        <td class="blue bold">${total.D}</td>
-                        <td class="blue bold">${total.T}</td>
-                        <td class="blue bold">${total.Q}</td>
-                    </tr>
-                </tbody>
-            </table>
+                        ${Object.keys(rows).map(bt => `
+                            <tr>
+                                <td colspan="2" class="beige">${bt}</td>
+                                <td>${rows[bt].S}</td><td>${rows[bt].D}</td><td>${rows[bt].T}</td><td>${rows[bt].Q}</td>
+                            </tr>
+                        `).join("")}
+                        <tr>
+                            <td colspan="2" class="beige bold">Total</td>
+                            <td class="blue bold">${total.S}</td><td class="blue bold">${total.D}</td><td class="blue bold">${total.T}</td><td class="blue bold">${total.Q}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    function componentPreparationRows(records) {
-        const countable = records.filter(r => isCountableBagRecord(r));
-        const componentMap = {
+    function componentPreparationHtml(records) {
+        const map = {
             "O+": createComponentCounter(),
             "A+": createComponentCounter(),
             "B+": createComponentCounter(),
@@ -1005,54 +834,48 @@
             "AB-": createComponentCounter()
         };
 
-        countable.forEach(record => {
-            addComponentPreparation(componentMap, record.bloodType, record.bloodBagType);
-        });
+        records.filter(isCountableBagRecord).forEach(r => addComponentPreparation(map, r.bloodType, r.bloodBagType));
 
-        const totalWhole = Object.values(componentMap).reduce((sum, row) => sum + row.whole450, 0);
-        const totalPRBC = Object.values(componentMap).reduce((sum, row) => sum + row.PRBC, 0);
-        const totalFFP = Object.values(componentMap).reduce((sum, row) => sum + row.FFP, 0);
-        const totalPC = Object.values(componentMap).reduce((sum, row) => sum + row.PC, 0);
+        const totalWhole = Object.values(map).reduce((s, r) => s + r.whole450, 0);
+        const totalPRBC = Object.values(map).reduce((s, r) => s + r.PRBC, 0);
+        const totalFFP = Object.values(map).reduce((s, r) => s + r.FFP, 0);
+        const totalPC = Object.values(map).reduce((s, r) => s + r.PC, 0);
 
         return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="5" class="sheet-title">d. Component Preparation</th>
-                    </tr>
-                    <tr>
-                        <th class="beige">Components</th>
-                        <th class="green">450 cc</th>
-                        <th class="green">PRBC</th>
-                        <th class="green">FFP</th>
-                        <th class="green">PC</th>
-                    </tr>
-                    <tr>
-                        <td class="beige left bold">No. of components prepared</td>
-                        <td class="blue bold">${totalWhole}</td>
-                        <td class="blue bold">${totalPRBC}</td>
-                        <td class="blue bold">${totalFFP}</td>
-                        <td class="blue bold">${totalPC}</td>
-                    </tr>
-                    ${Object.keys(componentMap).map(bt => `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr><th colspan="5" class="title-row">d. Component Preparation</th></tr>
                         <tr>
-                            <td class="beige left">${bt}</td>
-                            <td>${componentMap[bt].whole450}</td>
-                            <td>${componentMap[bt].PRBC}</td>
-                            <td>${componentMap[bt].FFP}</td>
-                            <td>${componentMap[bt].PC}</td>
+                            <th class="beige">Components</th>
+                            <th class="green">450 cc</th>
+                            <th class="green">PRBC</th>
+                            <th class="green">FFP</th>
+                            <th class="green">PC</th>
                         </tr>
-                    `).join("")}
-                </tbody>
-            </table>
+                        <tr>
+                            <td class="beige left bold">No. of components prepared</td>
+                            <td class="blue bold">${totalWhole}</td>
+                            <td class="blue bold">${totalPRBC}</td>
+                            <td class="blue bold">${totalFFP}</td>
+                            <td class="blue bold">${totalPC}</td>
+                        </tr>
+                        ${Object.keys(map).map(bt => `
+                            <tr>
+                                <td class="beige left">${bt}</td>
+                                <td>${map[bt].whole450}</td>
+                                <td>${map[bt].PRBC}</td>
+                                <td>${map[bt].FFP}</td>
+                                <td>${map[bt].PC}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    function bloodRequestsRows(monthKey) {
-        const filtered = allReleasingRecords.filter(record => {
-            return String(resolveReleasingDate(record) || "").startsWith(monthKey);
-        });
-
+    function bloodRequestsHtml(monthKey) {
         const rows = {
             "O+": { "450 cc": 0, "PRBC": 0, "FFP": 0, "PC": 0 },
             "A+": { "450 cc": 0, "PRBC": 0, "FFP": 0, "PC": 0 },
@@ -1064,23 +887,28 @@
             "AB-": { "450 cc": 0, "PRBC": 0, "FFP": 0, "PC": 0 }
         };
 
-        filtered.forEach(record => {
-            const bt = resolveReleasingBloodType(record);
-            const component = componentLabelFromRelease(resolveReleasingComponent(record));
-            const units = resolveReleasingUnits(record);
+        getMonthReleasing(monthKey).forEach(entry => {
+            const requests = Array.isArray(entry.requests) ? entry.requests : [];
+            requests.forEach(item => {
+                const bt = String(item.bloodType || "").toUpperCase().trim();
+                const qty = Number(item.qty || 0);
+                const type = normalizeText(item.type);
 
-            if (rows[bt] && component && units > 0) {
-                rows[bt][component] += units;
-            }
+                if (!rows[bt] || qty <= 0) return;
+
+                if (type === "wb" || type === "whole blood" || type === "450cc" || type === "450 cc") {
+                    rows[bt]["450 cc"] += qty;
+                } else if (type === "prbc") {
+                    rows[bt]["PRBC"] += qty;
+                } else if (type === "ffp") {
+                    rows[bt]["FFP"] += qty;
+                } else if (type === "pc") {
+                    rows[bt]["PC"] += qty;
+                }
+            });
         });
 
-        const total = {
-            "450 cc": 0,
-            "PRBC": 0,
-            "FFP": 0,
-            "PC": 0
-        };
-
+        const total = { "450 cc": 0, "PRBC": 0, "FFP": 0, "PC": 0 };
         Object.keys(rows).forEach(bt => {
             total["450 cc"] += rows[bt]["450 cc"];
             total["PRBC"] += rows[bt]["PRBC"];
@@ -1089,297 +917,168 @@
         });
 
         return `
-            <table>
-                <tbody>
-                    <tr>
-                        <th colspan="5" class="sheet-title">e. Blood Requests Received</th>
-                    </tr>
-                    <tr>
-                        <th class="beige">Blood Type</th>
-                        <th class="green">450 cc</th>
-                        <th class="green">PRBC</th>
-                        <th class="green">FFP</th>
-                        <th class="green">PC</th>
-                    </tr>
-                    ${Object.keys(rows).map(bt => `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr><th colspan="5" class="title-row">e. Blood Requests Received</th></tr>
                         <tr>
-                            <td class="beige">${bt}</td>
-                            <td>${rows[bt]["450 cc"]}</td>
-                            <td>${rows[bt]["PRBC"]}</td>
-                            <td>${rows[bt]["FFP"]}</td>
-                            <td>${rows[bt]["PC"]}</td>
+                            <th class="beige">Blood Type</th>
+                            <th class="green">450 cc</th>
+                            <th class="green">PRBC</th>
+                            <th class="green">FFP</th>
+                            <th class="green">PC</th>
                         </tr>
-                    `).join("")}
-                    <tr>
-                        <td class="beige bold">Total</td>
-                        <td class="blue bold">${total["450 cc"]}</td>
-                        <td class="blue bold">${total["PRBC"]}</td>
-                        <td class="blue bold">${total["FFP"]}</td>
-                        <td class="blue bold">${total["PC"]}</td>
-                    </tr>
-                </tbody>
-            </table>
+                        ${Object.keys(rows).map(bt => `
+                            <tr>
+                                <td class="beige">${bt}</td>
+                                <td>${rows[bt]["450 cc"]}</td>
+                                <td>${rows[bt]["PRBC"]}</td>
+                                <td>${rows[bt]["FFP"]}</td>
+                                <td>${rows[bt]["PC"]}</td>
+                            </tr>
+                        `).join("")}
+                        <tr>
+                            <td class="beige bold">Total</td>
+                            <td class="blue bold">${total["450 cc"]}</td>
+                            <td class="blue bold">${total["PRBC"]}</td>
+                            <td class="blue bold">${total["FFP"]}</td>
+                            <td class="blue bold">${total["PC"]}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    function renderPartnerMappings() {
-        const keyword = normalizeText(partnerSearch.value);
-        const rows = partnerMappings.filter(item => !keyword || normalizeText(item.partnerName).includes(keyword));
+    function sexHtml(records) {
+        const male = countBySex(records, "Male");
+        const female = countBySex(records, "Female");
 
-        mappingTableBody.innerHTML = rows.map(item => `
-            <tr>
-                <td class="left">${escapeHtml(item.partnerName)}</td>
-                <td>${escapeHtml(item.category)}</td>
-                <td>
-                    <button class="small-btn red-btn" onclick="deleteMapping('${item.id}')">Delete</button>
-                </td>
-            </tr>
-        `).join("") || `
-            <tr>
-                <td colspan="3">No partner mapping saved.</td>
-            </tr>
+        return `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr><th colspan="2" class="title-row">f. Sex Distribution of Donors</th></tr>
+                        <tr><td class="pink left">1 Male</td><td class="beige">${male}</td></tr>
+                        <tr><td class="pink left">2 Female</td><td class="beige">${female}</td></tr>
+                        <tr><td class="pink left bold">Total No. of Donors</td><td class="beige bold">${male + female}</td></tr>
+                    </tbody>
+                </table>
+            </div></div>
         `;
     }
 
-    window.deleteMapping = async function(id) {
-        try {
-            await firestore.collection("donorGroupCategories").doc(id).delete();
-            await loadPartnerMappings();
-            renderStatistics();
-            showMessage("Partner mapping deleted.", "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to delete mapping: " + error.message, "error");
-        }
-    };
-
-    async function savePartnerMapping() {
-        const partnerName = String(partnerNameInput.value || "").trim();
-        const category = partnerCategoryInput.value;
-
-        if (!partnerName) {
-            showMessage("Please enter a partner / organization name.", "error");
-            return;
-        }
-
-        try {
-            const docId = normalizeText(partnerName).replace(/[^a-z0-9]+/g, "-");
-            await firestore.collection("donorGroupCategories").doc(docId).set({
-                partnerName,
-                partnerNameLower: normalizeText(partnerName),
-                category,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            partnerNameInput.value = "";
-            partnerCategoryInput.value = "Group";
-
-            await loadPartnerMappings();
-            renderStatistics();
-            showMessage("Partner mapping saved successfully.", "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to save mapping: " + error.message, "error");
-        }
-    }
-
-    async function loadDonorRecords() {
-        const snapshot = await firestore.collection("donorDatabase").orderBy("entryDate", "asc").get();
-        allDonorRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
-
-    async function loadReleasingRecords() {
-        try {
-            const snapshot = await firestore.collection("releasing").get();
-            allReleasingRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        } catch (error) {
-            allReleasingRecords = [];
-        }
-    }
-
-    async function loadPartnerMappings() {
-        const snapshot = await firestore.collection("donorGroupCategories").orderBy("partnerNameLower", "asc").get();
-        partnerMappings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderPartnerMappings();
-    }
-
-    function getUniqueMonths(records) {
-        const set = new Set();
-        records.forEach(record => {
-            const date = String(record.entryDate || "");
-            if (date.length >= 7) set.add(date.slice(0, 7));
-        });
-        return Array.from(set).sort((a, b) => b.localeCompare(a));
-    }
-
-    function exportMonthCsv(monthKey, records) {
-        const header = [
-            "Section",
-            "Label",
-            "Value 1",
-            "Value 2",
-            "Value 3",
-            "Value 4",
-            "Value 5"
+    function frequencyHtml(records) {
+        const defs = [
+            ["1", "First-time", r => normalizeText(r.donorCategory) === "new"],
+            ["2", "Repeat non-regular", r => normalizeText(r.donorCategory) === "lapse"],
+            ["3", "Repeat regular", r => normalizeText(r.donorCategory) === "repeat"],
+            ["", "once a year", () => false],
+            ["", "2x a year", () => false],
+            ["", "3x a year", () => false],
+            ["", "4x a year", () => false],
+            ["", "5x a year", () => false],
+            ["", "6x a year", () => false],
+            ["", "6x up", () => false]
         ];
 
-        const rows = [];
+        let tm = 0, tf = 0;
 
-        const sexMale = countBySex(records, "Male");
-        const sexFemale = countBySex(records, "Female");
-        rows.push(["Sex Distribution", "Male", sexMale, "", "", "", ""]);
-        rows.push(["Sex Distribution", "Female", sexFemale, "", "", "", ""]);
-        rows.push(["Sex Distribution", "Total", sexMale + sexFemale, "", "", "", ""]);
+        return `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr>
+                            <th colspan="2" class="title-row">g. Distribution of Donors according to Frequency of Donation</th>
+                            <th class="pink">MALE</th>
+                            <th class="pink">FEMALE</th>
+                        </tr>
+                        ${defs.map(row => {
+                            const m = countBySexAndPredicate(records, "Male", row[2]);
+                            const f = countBySexAndPredicate(records, "Female", row[2]);
+                            tm += m; tf += f;
+                            return `<tr><td class="pink">${row[0]}</td><td class="pink left">${row[1]}</td><td class="beige">${m}</td><td class="beige">${f}</td></tr>`;
+                        }).join("")}
+                        <tr><td colspan="2" class="pink left bold">Total No. of Donors</td><td class="beige bold">${tm}</td><td class="beige bold">${tf}</td></tr>
+                    </tbody>
+                </table>
+            </div></div>
+        `;
+    }
 
-        const officeCountable = records.filter(r => isCountableBagRecord(r) && normalizeText(r.donorType) !== "mbd");
-        const replacement = blankBagCounter();
-        const walkin = blankBagCounter();
-        const patientDirected = blankBagCounter();
+    function ageHtml(records) {
+        const groups = ["16-17", "18-20", "21-30", "31-40", "41-50", "51-60", "60-65", "66 & above"];
+        let tm = 0, tf = 0;
 
-        officeCountable.forEach(record => {
-            const row = getOfficeBleedingRow(record);
-            if (row === "Replacement") addBagCount(replacement, record.bloodBagType);
-            else if (row === "Walk-in") addBagCount(walkin, record.bloodBagType);
-            else if (row === "Patient-directed") addBagCount(patientDirected, record.bloodBagType);
-        });
-
-        rows.push(["Office Bleeding", "Replacement", replacement.S, replacement.D, replacement.T, replacement.Q, ""]);
-        rows.push(["Office Bleeding", "Walk-in", walkin.S, walkin.D, walkin.T, walkin.Q, ""]);
-        rows.push(["Office Bleeding", "Patient-directed", patientDirected.S, patientDirected.D, patientDirected.T, patientDirected.Q, ""]);
-
-        const csv = [
-            header.map(csvEscape).join(","),
-            ...rows.map(row => row.map(csvEscape).join(","))
-        ].join("\n");
-
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `donor-statistics-${monthKey}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        return `
+            <div class="stat-box"><div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr>
+                            <th colspan="2" class="title-row">h. Distribution of Donors By Age Group</th>
+                            <th class="pink">MALE</th>
+                            <th class="pink">FEMALE</th>
+                        </tr>
+                        ${groups.map((g, i) => {
+                            const m = countAgeGroup(records, g, "Male");
+                            const f = countAgeGroup(records, g, "Female");
+                            tm += m; tf += f;
+                            return `<tr><td class="pink">${i + 1}</td><td class="pink left">${g}</td><td class="beige">${m}</td><td class="beige">${f}</td></tr>`;
+                        }).join("")}
+                        <tr><td colspan="2" class="pink left bold">Total</td><td class="beige bold">${tm}</td><td class="beige bold">${tf}</td></tr>
+                    </tbody>
+                </table>
+            </div></div>
+        `;
     }
 
     function renderMonthSections(monthKey, records) {
         return `
-            <div class="stats-stack">
-                <div class="table-wrap">${officeBleedingRows(records)}</div>
-                <div class="table-wrap">${fieldDonationRows(records)}</div>
-                <div class="table-wrap">${bloodTypeDistributionRows(records)}</div>
-                <div class="table-wrap">${componentPreparationRows(records)}</div>
-                <div class="table-wrap">${bloodRequestsRows(monthKey)}</div>
-                <div class="table-wrap">${countSexRows(records)}</div>
-                <div class="table-wrap">${countFrequencyRows(records)}</div>
-                <div class="table-wrap">${countAgeRows(records)}</div>
+            <div class="stats-grid">
+                ${officeBleedingHtml(records)}
+                ${fieldDonationHtml(records)}
+                ${bloodTypeDistributionHtml(records)}
+                ${componentPreparationHtml(records)}
+                ${bloodRequestsHtml(monthKey)}
+                ${sexHtml(records)}
+                ${frequencyHtml(records)}
+                ${ageHtml(records)}
             </div>
         `;
     }
 
-    function renderStatistics() {
-        const grouped = buildDonorGroups(allDonorRecords);
-        const sortedYears = Object.keys(grouped).sort((a, b) => {
-            if (a === "No Year") return 1;
-            if (b === "No Year") return -1;
-            return Number(b) - Number(a);
+    function exportMonthCsv(monthKey, records) {
+        const lines = [["Section","Label","Value1","Value2","Value3","Value4","Value5"]];
+        const reqEntries = getMonthReleasing(monthKey);
+
+        lines.push(["Blood Requests Source","Month",monthKey,"","","",""]);
+        reqEntries.forEach(entry => {
+            const reqs = Array.isArray(entry.requests) ? entry.requests : [];
+            reqs.forEach(item => {
+                lines.push(["Request", item.bloodType || "", item.type || "", item.qty || 0, "", "", ""]);
+            });
         });
 
-        if (!sortedYears.length) {
-            statisticsContainer.innerHTML = `
-                <div class="panel">
-                    <div class="panel-body">No donor statistics found.</div>
-                </div>
-            `;
-            return;
-        }
-
-        let html = "";
-
-        sortedYears.forEach((year, yearIndex) => {
-            const monthsObj = grouped[year];
-            const sortedMonths = Object.keys(monthsObj).sort((a, b) => Number(b) - Number(a));
-            const yearKey = getGroupKey("year", year);
-            const yearCollapsed = isCollapsed(yearKey);
-
-            let yearRecords = [];
-            sortedMonths.forEach(month => {
-                yearRecords = yearRecords.concat(monthsObj[month].records);
-            });
-
-            html += `
-                <div class="year-group">
-                    <div class="year-header" onclick="toggleGroup('${yearKey}', 'year-body-${yearIndex}', 'year-icon-${yearIndex}')">
-                        <span>${escapeHtml(year)} (${yearRecords.length} entries)</span>
-                        <span id="year-icon-${yearIndex}" class="toggle-icon">${yearCollapsed ? "+" : "−"}</span>
-                    </div>
-                    <div id="year-body-${yearIndex}" class="group-body ${yearCollapsed ? "hidden" : ""}">
-            `;
-
-            sortedMonths.forEach((month, monthIndex) => {
-                const monthBlock = monthsObj[month];
-                const records = monthBlock.records;
-                const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-                const monthToggleKey = getGroupKey("month", year, month);
-                const monthCollapsed = isCollapsed(monthToggleKey);
-                const selectedMatch = monthFilter.value === monthKey;
-
-                html += `
-                    <div class="month-group">
-                        <div class="month-header" onclick="toggleGroup('${monthToggleKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
-                            <span>${escapeHtml(monthBlock.monthName)} (${records.length} entries)${selectedMatch ? " • selected" : ""}</span>
-                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
-                        </div>
-
-                        <div class="month-toolbar">
-                            <button class="small-btn blue-btn" onclick="setMonthFilter('${monthKey}')">View Month</button>
-                            <button class="small-btn gray-btn" onclick="printMonthStatistics('${monthKey}')">Print Month</button>
-                            <button class="small-btn green-btn" onclick="exportMonthStatistics('${monthKey}')">Export CSV</button>
-                        </div>
-
-                        <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
-                            ${renderMonthSections(monthKey, records)}
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += `
-                    </div>
-                </div>
-            `;
-        });
-
-        statisticsContainer.innerHTML = html;
+        const csv = lines.map(r => r.map(csvEscape).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `donor-statistics-${monthKey}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
-    window.toggleGroup = function(groupKey, bodyId, iconId) {
-        const body = document.getElementById(bodyId);
-        const icon = document.getElementById(iconId);
-        if (!body || !icon) return;
-
-        const willHide = !body.classList.contains("hidden");
-        if (willHide) {
-            body.classList.add("hidden");
-            icon.textContent = "+";
-            collapsedGroups[groupKey] = true;
-        } else {
-            body.classList.remove("hidden");
-            icon.textContent = "−";
-            collapsedGroups[groupKey] = false;
-        }
-    };
-
-    window.setMonthFilter = function(monthKey) {
-        monthFilter.value = monthKey;
-        showMessage(`Quick month set to ${monthKey}.`, "success");
+    window.setQuickMonth = function(monthKey) {
+        quickMonthFilter.value = monthKey;
+        showStatus(`Quick month set to ${monthKey}.`, true);
     };
 
     window.printMonthStatistics = function(monthKey) {
-        monthFilter.value = monthKey;
-        const records = allDonorRecords.filter(record => String(record.entryDate || "").startsWith(monthKey));
+        const records = getMonthRecords(monthKey);
         if (!records.length) {
-            showMessage("No statistics found for that month.", "error");
+            showStatus("No statistics found for that month.", false);
             return;
         }
 
@@ -1392,65 +1091,146 @@
                     body { font-family: Arial, sans-serif; margin: 20px; }
                     table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
                     th, td { border: 1px solid #222; padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap; }
-                    .sheet-title { background: #f2f2f2; text-align: left; font-weight: bold; }
+                    .title-row { background: #f2f2f2; text-align: left; font-weight: bold; }
                     .pink { background: #e5c1c3; }
                     .beige { background: #ead9c4; }
                     .green { background: #dfead5; }
                     .blue { background: #d9e5f7; }
-                    .bold { font-weight: bold; }
                     .left { text-align: left; }
+                    .bold { font-weight: bold; }
                     h2 { margin: 0 0 14px 0; color: #8b0000; }
                 </style>
             </head>
             <body>
                 <h2>Donor Database Statistics - ${monthKey}</h2>
-                ${officeBleedingRows(records)}
-                ${fieldDonationRows(records)}
-                ${bloodTypeDistributionRows(records)}
-                ${componentPreparationRows(records)}
-                ${bloodRequestsRows(monthKey)}
-                ${countSexRows(records)}
-                ${countFrequencyRows(records)}
-                ${countAgeRows(records)}
+                ${officeBleedingHtml(records)}
+                ${fieldDonationHtml(records)}
+                ${bloodTypeDistributionHtml(records)}
+                ${componentPreparationHtml(records)}
+                ${bloodRequestsHtml(monthKey)}
+                ${sexHtml(records)}
+                ${frequencyHtml(records)}
+                ${ageHtml(records)}
             </body>
             </html>
         `;
 
-        const printWindow = window.open("", "_blank");
-        printWindow.document.write(html);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
+        const w = window.open("", "_blank");
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        w.print();
     };
 
     window.exportMonthStatistics = function(monthKey) {
-        const records = allDonorRecords.filter(record => String(record.entryDate || "").startsWith(monthKey));
+        const records = getMonthRecords(monthKey);
         if (!records.length) {
-            showMessage("No statistics found for that month.", "error");
+            showStatus("No statistics found for that month.", false);
             return;
         }
         exportMonthCsv(monthKey, records);
-        showMessage(`CSV exported for ${monthKey}.`, "success");
+        showStatus(`CSV exported for ${monthKey}.`, true);
     };
 
-    async function initializePage() {
+    window.toggleGroup = function(groupKey, bodyId, iconId) {
+        const body = document.getElementById(bodyId);
+        const icon = document.getElementById(iconId);
+        if (!body || !icon) return;
+
+        const hide = !body.classList.contains("body-hidden");
+        body.classList.toggle("body-hidden", hide);
+        icon.textContent = hide ? "+" : "−";
+        collapsedGroups[groupKey] = hide;
+    };
+
+    window.toggleMappingPanel = function() {
+        mappingCollapsed = !mappingCollapsed;
+        document.getElementById("mappingBody").classList.toggle("body-hidden", mappingCollapsed);
+        document.getElementById("mappingIcon").textContent = mappingCollapsed ? "+" : "−";
+    };
+
+    function renderStatistics() {
+        const grouped = buildDonorGroups(donorRecords);
+        const years = Object.keys(grouped).sort((a, b) => Number(b) - Number(a));
+
+        if (!years.length) {
+            statisticsContainer.innerHTML = `<div class="panel"><div class="panel-body">No donor statistics found.</div></div>`;
+            return;
+        }
+
+        let html = "";
+
+        years.forEach((year, yi) => {
+            const monthsObj = grouped[year];
+            const months = Object.keys(monthsObj).sort((a, b) => Number(b) - Number(a));
+            const yearKey = getGroupKey("year", year);
+            const yearHidden = collapsedGroups[yearKey] === true;
+
+            let yearTotal = 0;
+            months.forEach(m => yearTotal += monthsObj[m].records.length);
+
+            html += `
+                <div class="year-card">
+                    <div class="year-head" onclick="toggleGroup('${yearKey}', 'yearBody${yi}', 'yearIcon${yi}')">
+                        <span>${year} (${yearTotal} entries)</span>
+                        <span id="yearIcon${yi}" class="icon">${yearHidden ? "+" : "−"}</span>
+                    </div>
+                    <div id="yearBody${yi}" class="${yearHidden ? "body-hidden" : ""}">
+            `;
+
+            months.forEach((m, mi) => {
+                const monthName = monthsObj[m].monthName;
+                const monthKey = `${year}-${String(m).padStart(2, "0")}`;
+                const records = monthsObj[m].records;
+                const monthGroupKey = getGroupKey("month", year, m);
+                const monthHidden = collapsedGroups[monthGroupKey] === true;
+                const selected = quickMonthFilter.value === monthKey;
+
+                html += `
+                    <div class="month-card">
+                        <div class="month-head" onclick="toggleGroup('${monthGroupKey}', 'monthBody${yi}_${mi}', 'monthIcon${yi}_${mi}')">
+                            <span>${monthName} (${records.length} entries)${selected ? " • selected" : ""}</span>
+                            <span id="monthIcon${yi}_${mi}" class="icon">${monthHidden ? "+" : "−"}</span>
+                        </div>
+
+                        <div class="month-tools">
+                            <button class="small-btn blue-btn" onclick="setQuickMonth('${monthKey}')">Quick Select</button>
+                            <button class="small-btn gray-btn" onclick="printMonthStatistics('${monthKey}')">Print Month</button>
+                            <button class="small-btn green-btn" onclick="exportMonthStatistics('${monthKey}')">Export CSV</button>
+                        </div>
+
+                        <div id="monthBody${yi}_${mi}" class="${monthHidden ? "body-hidden" : ""}">
+                            ${renderMonthSections(monthKey, records)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+        });
+
+        statisticsContainer.innerHTML = html;
+    }
+
+    async function init() {
         try {
-            await loadPartnerMappings();
-            await loadDonorRecords();
-            await loadReleasingRecords();
+            await loadMappings();
+            await loadDonors();
+            await loadReleasing();
             renderStatistics();
+            showStatus("Statistics loaded.", true);
         } catch (error) {
             console.error(error);
-            showMessage("Failed to load statistics: " + error.message, "error");
+            showStatus("Failed to load statistics: " + error.message, false);
         }
     }
 
-    savePartnerBtn.addEventListener("click", savePartnerMapping);
-    refreshBtn.addEventListener("click", initializePage);
-    partnerSearch.addEventListener("input", renderPartnerMappings);
+    savePartnerBtn.addEventListener("click", saveMapping);
+    refreshBtn.addEventListener("click", init);
+    partnerSearch.addEventListener("input", renderMappings);
 
     collapseAllBtn.addEventListener("click", function() {
-        const grouped = buildDonorGroups(allDonorRecords);
+        const grouped = buildDonorGroups(donorRecords);
         Object.keys(grouped).forEach(year => {
             collapsedGroups[getGroupKey("year", year)] = true;
             Object.keys(grouped[year]).forEach(month => {
@@ -1467,11 +1247,11 @@
 
     auth.onAuthStateChanged(user => {
         if (!user) {
-            showMessage("Please log in first.", "error");
+            showStatus("Please log in first.", false);
             return;
         }
         setDefaultMonth();
-        initializePage();
+        init();
     });
 </script>
 
