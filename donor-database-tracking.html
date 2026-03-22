@@ -1,510 +1,769 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Donor Database - Tracking</title>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donor Database Tracking</title>
+
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
 
     <style>
-        body{
-            margin:0;
-            font-family:Arial,sans-serif;
-            background:#f4f7fb;
+        * {
+            box-sizing: border-box;
         }
 
-        header{
-            background:#1565c0;
-            color:white;
-            padding:15px;
-            text-align:center;
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            color: #222;
         }
 
-        .container{
-            max-width:1400px;
-            margin:20px auto;
-            background:white;
-            padding:20px;
-            border-radius:12px;
-            box-shadow:0 3px 10px rgba(0,0,0,0.08);
+        header {
+            background: #b30000;
+            color: white;
+            padding: 16px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
         }
 
-        .controls{
-            display:flex;
-            gap:10px;
-            flex-wrap:wrap;
-            margin-bottom:16px;
+        .page-wrap {
+            display: flex;
+            gap: 18px;
+            max-width: 100%;
+            padding: 18px;
         }
 
-        .controls input,
-        .controls select{
-            padding:10px;
-            border:1px solid #ccc;
-            border-radius:6px;
-            min-width:180px;
+        .left-panel {
+            width: 250px;
+            min-width: 250px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+            padding: 18px;
+            height: fit-content;
+            position: sticky;
+            top: 18px;
         }
 
-        table{
-            width:100%;
-            border-collapse:collapse;
-            margin-top:8px;
+        .left-panel h3 {
+            margin-top: 0;
+            color: #b30000;
+            font-size: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
         }
 
-        th, td{
-            border:1px solid #ddd;
-            padding:8px;
-            text-align:center;
-            font-size:14px;
+        .count-card {
+            background: #fff5f5;
+            border: 1px solid #efc1c1;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 14px;
         }
 
-        th{
-            background:#1565c0;
-            color:white;
+        .count-title {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 6px;
         }
 
-        .left{
-            text-align:left;
+        .count-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #b30000;
         }
 
-        .actionBtn{
-            border:none;
-            border-radius:6px;
-            padding:6px 10px;
-            color:white;
-            font-weight:bold;
-            cursor:pointer;
-            margin:2px;
+        .search-box {
+            margin-top: 18px;
         }
 
-        .editBtn{ background:#2e7d32; }
-        .deleteBtn{ background:#c62828; }
-
-        .empty{
-            text-align:center;
-            padding:20px;
-            font-weight:bold;
-            color:#666;
+        .search-box label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
         }
 
-        .modal{
-            display:none;
-            position:fixed;
-            inset:0;
-            background:rgba(0,0,0,0.45);
-            z-index:999;
-            overflow:auto;
+        .search-box input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
         }
 
-        .modalContent{
-            background:white;
-            max-width:900px;
-            margin:30px auto;
-            padding:20px;
-            border-radius:12px;
+        .content-panel {
+            flex: 1;
+            min-width: 0;
         }
 
-        .grid{
-            display:grid;
-            grid-template-columns:repeat(2,1fr);
-            gap:14px;
+        .toolbar {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+            padding: 16px;
+            margin-bottom: 18px;
         }
 
-        .full{
-            grid-column:1 / -1;
+        .toolbar h3 {
+            margin: 0 0 8px 0;
+            color: #b30000;
         }
 
-        label{
-            display:block;
-            font-weight:bold;
-            margin-bottom:6px;
+        .status-message {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
         }
 
-        input, select, textarea{
-            width:100%;
-            padding:10px;
-            border:1px solid #ccc;
-            border-radius:6px;
-            box-sizing:border-box;
+        .status-success {
+            display: block;
+            background: #e8f7e8;
+            color: #1b5e20;
+            border: 1px solid #b7dfb9;
         }
 
-        textarea{
-            min-height:80px;
-            resize:vertical;
+        .status-error {
+            display: block;
+            background: #fdeaea;
+            color: #b71c1c;
+            border: 1px solid #efb7b7;
         }
 
-        .modalActions{
-            display:flex;
-            gap:10px;
-            margin-top:18px;
-            flex-wrap:wrap;
+        .year-group,
+        .month-group {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+            margin-bottom: 14px;
+            overflow: hidden;
         }
 
-        .saveBtn{ background:#2e7d32; }
-        .closeBtn{ background:#444; }
-
-        .modalActions button{
-            border:none;
-            border-radius:8px;
-            padding:12px 16px;
-            color:white;
-            font-weight:bold;
-            cursor:pointer;
+        .year-header,
+        .month-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            font-weight: bold;
         }
 
-        @media (max-width:800px){
-            .grid{
-                grid-template-columns:1fr;
+        .year-header {
+            padding: 16px 18px;
+            background: #b30000;
+            color: white;
+            font-size: 18px;
+        }
+
+        .month-header {
+            padding: 14px 18px;
+            background: #f8f8f8;
+            color: #333;
+            border-top: 1px solid #eee;
+            font-size: 15px;
+        }
+
+        .toggle-icon {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .group-body {
+            display: block;
+        }
+
+        .group-body.hidden {
+            display: none;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            width: 100%;
+            background: white;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 2100px;
+            font-size: 13px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px 10px;
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        th {
+            font-weight: bold;
+            color: #111;
+        }
+
+        th.col-mbd { background: #e7c1a7; }
+        th.col-walkin { background: #b9d2f0; }
+        th.col-patient { background: #bcd796; }
+        th.col-normal { background: #efefef; }
+        th.col-bloodtype { background: #f8f8f8; }
+        th.col-serial { background: #f3f3f3; }
+        th.col-amount { background: #c9d7ff; }
+        th.col-actions { background: #ececec; }
+
+        .flag-cell {
+            font-weight: bold;
+        }
+
+        .yes-cell {
+            color: #0b7a0b;
+        }
+
+        .no-cell {
+            color: #999;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: none;
+            border-radius: 6px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .edit-btn {
+            background: #1976d2;
+            color: white;
+        }
+
+        .delete-btn {
+            background: #b30000;
+            color: white;
+        }
+
+        .save-btn {
+            background: #2e7d32;
+            color: white;
+        }
+
+        .cancel-btn {
+            background: #666;
+            color: white;
+        }
+
+        .edit-input,
+        .edit-select {
+            width: 100%;
+            min-width: 80px;
+            padding: 6px 8px;
+            border: 1px solid #bbb;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .empty-box {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+            padding: 28px;
+            text-align: center;
+            color: #666;
+            font-weight: bold;
+        }
+
+        @media (max-width: 1000px) {
+            .page-wrap {
+                flex-direction: column;
             }
-            .full{
-                grid-column:auto;
+
+            .left-panel {
+                width: 100%;
+                min-width: 100%;
+                position: static;
             }
         }
     </style>
 </head>
 <body>
 
-<header>
-    <h2>Donor Database - Tracking</h2>
-</header>
+<header>Donor Database Tracking</header>
 
-<div class="container">
-    <div class="controls">
-        <input type="text" id="searchInput" placeholder="Search donor ID / name">
-        <select id="bloodFilter">
-            <option value="">ALL BLOOD TYPES</option>
-            <option>A+</option><option>A-</option>
-            <option>B+</option><option>B-</option>
-            <option>AB+</option><option>AB-</option>
-            <option>O+</option><option>O-</option>
-        </select>
-        <select id="statusFilter">
-            <option value="">ALL STATUS</option>
-            <option>ACTIVE</option>
-            <option>INACTIVE</option>
-            <option>DEFERRED</option>
-        </select>
+<div class="page-wrap">
+    <div class="left-panel">
+        <h3>Summary</h3>
+
+        <div class="count-card">
+            <div class="count-title">Total Entries</div>
+            <div class="count-value" id="totalCount">0</div>
+        </div>
+
+        <div class="count-card">
+            <div class="count-title">Displayed Entries</div>
+            <div class="count-value" id="displayedCount">0</div>
+        </div>
+
+        <div class="search-box">
+            <label for="searchInput">Search</label>
+            <input type="text" id="searchInput" placeholder="Search surname, serial, contact, blood type...">
+        </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Donor ID</th>
-                <th>Name</th>
-                <th>Sex</th>
-                <th>Blood Type</th>
-                <th>Contact</th>
-                <th>Status</th>
-                <th>Last Donation</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-    </table>
-</div>
-
-<div class="modal" id="editModal">
-    <div class="modalContent">
-        <h3>Edit Donor Record</h3>
-
-        <div class="grid">
-            <div>
-                <label>Donor ID</label>
-                <input type="text" id="editDonorId" readonly>
-            </div>
-
-            <div>
-                <label>Date Registered</label>
-                <input type="date" id="editDateRegistered">
-            </div>
-
-            <div>
-                <label>Surname</label>
-                <input type="text" id="editSurname">
-            </div>
-
-            <div>
-                <label>First Name</label>
-                <input type="text" id="editFirstname">
-            </div>
-
-            <div>
-                <label>Middle Name</label>
-                <input type="text" id="editMiddlename">
-            </div>
-
-            <div>
-                <label>Sex</label>
-                <select id="editSex">
-                    <option value="">Select</option>
-                    <option>MALE</option>
-                    <option>FEMALE</option>
-                </select>
-            </div>
-
-            <div>
-                <label>Birthdate</label>
-                <input type="date" id="editBirthdate">
-            </div>
-
-            <div>
-                <label>Blood Type</label>
-                <select id="editBloodType">
-                    <option value="">Select</option>
-                    <option>A+</option><option>A-</option>
-                    <option>B+</option><option>B-</option>
-                    <option>AB+</option><option>AB-</option>
-                    <option>O+</option><option>O-</option>
-                </select>
-            </div>
-
-            <div>
-                <label>Contact Number</label>
-                <input type="text" id="editContactNumber">
-            </div>
-
-            <div>
-                <label>Status</label>
-                <select id="editStatusDonor">
-                    <option value="">Select</option>
-                    <option>ACTIVE</option>
-                    <option>INACTIVE</option>
-                    <option>DEFERRED</option>
-                </select>
-            </div>
-
-            <div>
-                <label>Last Donation Date</label>
-                <input type="date" id="editLastDonationDate">
-            </div>
-
-            <div>
-                <label>Occupation</label>
-                <input type="text" id="editOccupation">
-            </div>
-
-            <div class="full">
-                <label>Address</label>
-                <textarea id="editAddress"></textarea>
-            </div>
-
-            <div class="full">
-                <label>Notes</label>
-                <textarea id="editNotes"></textarea>
-            </div>
+    <div class="content-panel">
+        <div class="toolbar">
+            <h3>Grouped by Year and Month</h3>
+            <div>Records are arranged in the same order as your preferred tracking sheet layout.</div>
+            <div id="statusMessage" class="status-message"></div>
         </div>
 
-        <div class="modalActions">
-            <button class="saveBtn" id="saveEditBtn">SAVE CHANGES</button>
-            <button class="closeBtn" id="closeModalBtn">CLOSE</button>
-        </div>
+        <div id="trackingContainer"></div>
     </div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+<script>
+    // ==========================================
+    // KEEP YOUR EXISTING FIREBASE CONFIG
+    // ==========================================
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
 
-const firebaseConfig = {
-    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-    authDomain: "galloners-club.firebaseapp.com",
-    projectId: "galloners-club",
-    storageBucket: "galloners-club.firebasestorage.app",
-    messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-const tableBody = document.getElementById("tableBody");
-const searchInput = document.getElementById("searchInput");
-const bloodFilter = document.getElementById("bloodFilter");
-const statusFilter = document.getElementById("statusFilter");
-const editModal = document.getElementById("editModal");
-const saveEditBtn = document.getElementById("saveEditBtn");
-const closeModalBtn = document.getElementById("closeModalBtn");
-
-let allDonors = [];
-let currentEditId = null;
-
-function getAgeFromBirthdate(birthdate){
-    if(!birthdate) return "";
-    const dob = new Date(birthdate);
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const m = today.getMonth() - dob.getMonth();
-    if(m < 0 || (m === 0 && today.getDate() < dob.getDate())){
-        age--;
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
     }
-    return age;
-}
 
-async function loadDonors(){
-    try{
-        allDonors = [];
-        const snapshot = await getDocs(collection(db, "donorDatabase"));
-        snapshot.forEach(docSnap => {
-            allDonors.push({
-                id: docSnap.id,
-                ...docSnap.data()
-            });
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    const trackingContainer = document.getElementById("trackingContainer");
+    const totalCountEl = document.getElementById("totalCount");
+    const displayedCountEl = document.getElementById("displayedCount");
+    const searchInput = document.getElementById("searchInput");
+    const statusMessage = document.getElementById("statusMessage");
+
+    let allDonors = [];
+    let filteredDonors = [];
+
+    function showMessage(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = "status-message";
+        statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function getMonthName(monthNumber) {
+        const names = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+        return names[monthNumber - 1] || "Unknown Month";
+    }
+
+    function getYearMonth(entryDate) {
+        if (!entryDate) {
+            return { year: "No Year", month: 0, monthName: "No Month" };
+        }
+
+        const parts = entryDate.split("-");
+        if (parts.length !== 3) {
+            return { year: "No Year", month: 0, monthName: "No Month" };
+        }
+
+        const year = parts[0];
+        const month = parseInt(parts[1], 10);
+        return {
+            year,
+            month,
+            monthName: getMonthName(month)
+        };
+    }
+
+    function matchesSearch(donor, keyword) {
+        if (!keyword) return true;
+
+        const text = [
+            donor.entryDate,
+            donor.serialNumber,
+            donor.donorType,
+            donor.patientDirectedDetails,
+            donor.mbdDetails,
+            donor.surname,
+            donor.firstName,
+            donor.middleName,
+            donor.birthday,
+            donor.age,
+            donor.sex,
+            donor.contactNumber,
+            donor.address,
+            donor.cityProvince,
+            donor.numberOfDonations,
+            donor.bloodType,
+            donor.amount,
+            donor.bloodBagBrand,
+            donor.bloodBagType,
+            donor.timeStarted,
+            donor.timeEnded
+        ].join(" ").toLowerCase();
+
+        return text.includes(keyword.toLowerCase());
+    }
+
+    function groupDonors(records) {
+        const grouped = {};
+
+        records.forEach(donor => {
+            const { year, month, monthName } = getYearMonth(donor.entryDate);
+
+            if (!grouped[year]) {
+                grouped[year] = {};
+            }
+
+            if (!grouped[year][month]) {
+                grouped[year][month] = {
+                    monthName,
+                    records: []
+                };
+            }
+
+            grouped[year][month].records.push(donor);
         });
-        allDonors.sort((a,b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-        renderTable();
-    }catch(error){
-        console.error(error);
-        alert("Failed to load donor records.");
-    }
-}
 
-function getFilteredDonors(){
-    const search = searchInput.value.trim().toUpperCase();
-    const blood = bloodFilter.value;
-    const status = statusFilter.value;
-
-    return allDonors.filter(donor => {
-        const fullName = `${donor.surname || ""} ${donor.firstname || ""} ${donor.middlename || ""}`.toUpperCase();
-        const donorId = (donor.donorId || "").toUpperCase();
-
-        const matchSearch = !search || donorId.includes(search) || fullName.includes(search);
-        const matchBlood = !blood || donor.bloodType === blood;
-        const matchStatus = !status || donor.statusDonor === status;
-
-        return matchSearch && matchBlood && matchStatus;
-    });
-}
-
-function renderTable(){
-    const donors = getFilteredDonors();
-    tableBody.innerHTML = "";
-
-    if(donors.length === 0){
-        tableBody.innerHTML = `<tr><td colspan="8" class="empty">No donor records found.</td></tr>`;
-        return;
+        return grouped;
     }
 
-    donors.forEach(donor => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${donor.donorId || ""}</td>
-            <td class="left">${donor.surname || ""}, ${donor.firstname || ""} ${donor.middlename || ""}</td>
-            <td>${donor.sex || ""}</td>
-            <td>${donor.bloodType || ""}</td>
-            <td>${donor.contactNumber || ""}</td>
-            <td>${donor.statusDonor || ""}</td>
-            <td>${donor.lastDonationDate || ""}</td>
+    function renderTracking() {
+        const keyword = searchInput.value.trim();
+        filteredDonors = allDonors.filter(donor => matchesSearch(donor, keyword));
+
+        totalCountEl.textContent = allDonors.length;
+        displayedCountEl.textContent = filteredDonors.length;
+
+        if (!filteredDonors.length) {
+            trackingContainer.innerHTML = `<div class="empty-box">No donor records found.</div>`;
+            return;
+        }
+
+        const grouped = groupDonors(filteredDonors);
+
+        const sortedYears = Object.keys(grouped).sort((a, b) => {
+            if (a === "No Year") return 1;
+            if (b === "No Year") return -1;
+            return Number(b) - Number(a);
+        });
+
+        let html = "";
+
+        sortedYears.forEach((year, yearIndex) => {
+            const monthsObj = grouped[year];
+            const sortedMonths = Object.keys(monthsObj).sort((a, b) => Number(b) - Number(a));
+
+            let yearTotal = 0;
+            sortedMonths.forEach(month => {
+                yearTotal += monthsObj[month].records.length;
+            });
+
+            html += `
+                <div class="year-group">
+                    <div class="year-header" onclick="toggleGroup('year-body-${yearIndex}', 'year-icon-${yearIndex}')">
+                        <span>${escapeHtml(year)} (${yearTotal})</span>
+                        <span id="year-icon-${yearIndex}" class="toggle-icon">−</span>
+                    </div>
+                    <div id="year-body-${yearIndex}" class="group-body">
+            `;
+
+            sortedMonths.forEach((month, monthIndex) => {
+                const monthBlock = monthsObj[month];
+                const records = monthBlock.records;
+
+                html += `
+                    <div class="month-group">
+                        <div class="month-header" onclick="toggleGroup('month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
+                            <span>${escapeHtml(monthBlock.monthName)} (${records.length})</span>
+                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">−</span>
+                        </div>
+                        <div id="month-body-${yearIndex}-${monthIndex}" class="group-body">
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th class="col-mbd">MBD</th>
+                                            <th class="col-walkin">Walk-in</th>
+                                            <th class="col-patient">Patient-Directed</th>
+                                            <th class="col-normal">Surname</th>
+                                            <th class="col-normal">Given Name</th>
+                                            <th class="col-normal">Middle Name</th>
+                                            <th class="col-normal">Birthday</th>
+                                            <th class="col-normal">Age</th>
+                                            <th class="col-normal">Sex</th>
+                                            <th class="col-normal">Contact Number</th>
+                                            <th class="col-normal">House Number/Purok/Street Name</th>
+                                            <th class="col-normal">Barangay/City</th>
+                                            <th class="col-normal"># of Donations</th>
+                                            <th class="col-bloodtype">Blood Type</th>
+                                            <th class="col-serial">Serial Number</th>
+                                            <th class="col-amount">Amount</th>
+                                            <th class="col-normal">Blood Bag Used</th>
+                                            <th class="col-normal">Type of Blood Bag</th>
+                                            <th class="col-normal">Time Started</th>
+                                            <th class="col-normal">Time Ended</th>
+                                            <th class="col-normal">Remarks</th>
+                                            <th class="col-actions">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+
+                records.forEach(donor => {
+                    const isMBD = donor.donorType === "MBD";
+                    const isWalkIn = donor.donorType === "Walk-in";
+                    const isPatientDirected = donor.donorType === "Patient Directed";
+
+                    html += `
+                        <tr id="row-${donor.id}">
+                            <td class="flag-cell ${isMBD ? 'yes-cell' : 'no-cell'}">${isMBD ? escapeHtml(donor.mbdDetails || "YES") : ""}</td>
+                            <td class="flag-cell ${isWalkIn ? 'yes-cell' : 'no-cell'}">${isWalkIn ? "YES" : ""}</td>
+                            <td class="flag-cell ${isPatientDirected ? 'yes-cell' : 'no-cell'}">${isPatientDirected ? escapeHtml(donor.patientDirectedDetails || "YES") : ""}</td>
+                            <td>${escapeHtml(donor.surname)}</td>
+                            <td>${escapeHtml(donor.firstName)}</td>
+                            <td>${escapeHtml(donor.middleName)}</td>
+                            <td>${escapeHtml(donor.birthday)}</td>
+                            <td>${escapeHtml(donor.age)}</td>
+                            <td>${escapeHtml(donor.sex)}</td>
+                            <td>${escapeHtml(donor.contactNumber)}</td>
+                            <td>${escapeHtml(donor.address)}</td>
+                            <td>${escapeHtml(donor.cityProvince)}</td>
+                            <td>${escapeHtml(donor.numberOfDonations)}</td>
+                            <td>${escapeHtml(donor.bloodType)}</td>
+                            <td>${escapeHtml(donor.serialNumber)}</td>
+                            <td>${escapeHtml(donor.amount)}</td>
+                            <td>${escapeHtml(donor.bloodBagBrand)}</td>
+                            <td>${escapeHtml(donor.bloodBagType)}</td>
+                            <td>${escapeHtml(donor.timeStarted)}</td>
+                            <td>${escapeHtml(donor.timeEnded)}</td>
+                            <td>${escapeHtml(donor.remarks)}</td>
+                            <td class="actions-cell">
+                                <button class="edit-btn" onclick="startEdit('${donor.id}')">Edit</button>
+                                <button class="delete-btn" onclick="deleteDonor('${donor.id}')">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+
+        trackingContainer.innerHTML = html;
+    }
+
+    function buildEditSelect(options, selectedValue) {
+        return `
+            <select class="edit-select">
+                ${options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === selectedValue ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
+            </select>
+        `;
+    }
+
+    function buildEditInput(value, type = "text") {
+        return `<input class="edit-input" type="${type}" value="${escapeHtml(value || "")}">`;
+    }
+
+    window.startEdit = function(id) {
+        const donor = allDonors.find(item => item.id === id);
+        if (!donor) return;
+
+        const row = document.getElementById(`row-${id}`);
+        if (!row) return;
+
+        row.innerHTML = `
             <td>
-                <button class="actionBtn editBtn" data-id="${donor.id}">EDIT</button>
-                <button class="actionBtn deleteBtn" data-id="${donor.id}">DELETE</button>
+                ${buildEditInput(donor.mbdDetails || "")}
+            </td>
+            <td>
+                ${buildEditSelect(["", "YES"], donor.donorType === "Walk-in" ? "YES" : "")}
+            </td>
+            <td>
+                ${buildEditInput(donor.patientDirectedDetails || "")}
+            </td>
+            <td>${buildEditInput(donor.surname || "")}</td>
+            <td>${buildEditInput(donor.firstName || "")}</td>
+            <td>${buildEditInput(donor.middleName || "")}</td>
+            <td>${buildEditInput(donor.birthday || "", "date")}</td>
+            <td>${buildEditInput(donor.age || "", "number")}</td>
+            <td>${buildEditSelect(["Male", "Female"], donor.sex || "")}</td>
+            <td>${buildEditInput(donor.contactNumber || "")}</td>
+            <td>${buildEditInput(donor.address || "")}</td>
+            <td>${buildEditInput(donor.cityProvince || "")}</td>
+            <td>${buildEditInput(donor.numberOfDonations || 0, "number")}</td>
+            <td>${buildEditSelect(["A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], donor.bloodType || "")}</td>
+            <td>${buildEditInput(donor.serialNumber || "")}</td>
+            <td>${buildEditSelect(["450 ml", "QNS", "UB"], donor.amount || "")}</td>
+            <td>${buildEditSelect(["KARMI", "TERUMO"], donor.bloodBagBrand || "")}</td>
+            <td>${buildEditSelect(["Single", "Double", "Triple", "Quadruple"], donor.bloodBagType || "")}</td>
+            <td>${buildEditInput(donor.timeStarted || "", "time")}</td>
+            <td>${buildEditInput(donor.timeEnded || "", "time")}</td>
+            <td>${buildEditInput(donor.remarks || "")}</td>
+            <td class="actions-cell">
+                <button class="save-btn" onclick="saveEdit('${id}')">Save</button>
+                <button class="cancel-btn" onclick="renderTracking()">Cancel</button>
             </td>
         `;
-        tableBody.appendChild(tr);
-    });
-}
+    };
 
-function openEditModal(donor){
-    currentEditId = donor.id;
-    document.getElementById("editDonorId").value = donor.donorId || "";
-    document.getElementById("editDateRegistered").value = donor.dateRegistered || "";
-    document.getElementById("editSurname").value = donor.surname || "";
-    document.getElementById("editFirstname").value = donor.firstname || "";
-    document.getElementById("editMiddlename").value = donor.middlename || "";
-    document.getElementById("editSex").value = donor.sex || "";
-    document.getElementById("editBirthdate").value = donor.birthdate || "";
-    document.getElementById("editBloodType").value = donor.bloodType || "";
-    document.getElementById("editContactNumber").value = donor.contactNumber || "";
-    document.getElementById("editStatusDonor").value = donor.statusDonor || "";
-    document.getElementById("editLastDonationDate").value = donor.lastDonationDate || "";
-    document.getElementById("editOccupation").value = donor.occupation || "";
-    document.getElementById("editAddress").value = donor.address || "";
-    document.getElementById("editNotes").value = donor.notes || "";
-    editModal.style.display = "block";
-}
+    window.saveEdit = async function(id) {
+        const row = document.getElementById(`row-${id}`);
+        const fields = row.querySelectorAll("input, select");
 
-async function saveEdit(){
-    if(!currentEditId) return;
+        const mbdDetails = fields[0].value.trim();
+        const walkInValue = fields[1].value;
+        const patientDirectedDetails = fields[2].value.trim();
 
-    try{
-        const payload = {
-            dateRegistered: document.getElementById("editDateRegistered").value,
-            surname: document.getElementById("editSurname").value.trim().toUpperCase(),
-            firstname: document.getElementById("editFirstname").value.trim().toUpperCase(),
-            middlename: document.getElementById("editMiddlename").value.trim().toUpperCase(),
-            sex: document.getElementById("editSex").value,
-            birthdate: document.getElementById("editBirthdate").value,
-            age: getAgeFromBirthdate(document.getElementById("editBirthdate").value),
-            bloodType: document.getElementById("editBloodType").value,
-            contactNumber: document.getElementById("editContactNumber").value.trim(),
-            statusDonor: document.getElementById("editStatusDonor").value,
-            lastDonationDate: document.getElementById("editLastDonationDate").value,
-            occupation: document.getElementById("editOccupation").value.trim().toUpperCase(),
-            address: document.getElementById("editAddress").value.trim().toUpperCase(),
-            notes: document.getElementById("editNotes").value.trim().toUpperCase(),
-            updatedAt: new Date().toISOString()
+        let donorType = "Walk-in";
+        if (mbdDetails) donorType = "MBD";
+        else if (patientDirectedDetails) donorType = "Patient Directed";
+        else if (walkInValue === "YES") donorType = "Walk-in";
+
+        const updatedData = {
+            mbdDetails: mbdDetails,
+            patientDirectedDetails: patientDirectedDetails,
+            donorType: donorType,
+            surname: fields[3].value.trim(),
+            firstName: fields[4].value.trim(),
+            middleName: fields[5].value.trim(),
+            birthday: fields[6].value,
+            age: parseInt(fields[7].value || "0"),
+            sex: fields[8].value,
+            contactNumber: fields[9].value.trim(),
+            address: fields[10].value.trim(),
+            cityProvince: fields[11].value.trim(),
+            numberOfDonations: parseInt(fields[12].value || "0"),
+            bloodType: fields[13].value,
+            serialNumber: fields[14].value.trim(),
+            amount: fields[15].value,
+            bloodBagBrand: fields[16].value,
+            bloodBagType: fields[17].value,
+            timeStarted: fields[18].value,
+            timeEnded: fields[19].value,
+            remarks: fields[20].value.trim()
         };
 
-        await updateDoc(doc(db, "donorDatabase", currentEditId), payload);
-        editModal.style.display = "none";
-        currentEditId = null;
-        await loadDonors();
-        alert("Donor record updated successfully.");
-    }catch(error){
-        console.error(error);
-        alert("Failed to save changes.");
+        try {
+            await db.collection("donorDatabase").doc(id).update(updatedData);
+            showMessage("Record updated successfully.", "success");
+            loadDonors();
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to update record: " + error.message, "error");
+        }
+    };
+
+    window.deleteDonor = async function(id) {
+        const confirmed = confirm("Delete this donor record?");
+        if (!confirmed) return;
+
+        try {
+            await db.collection("donorDatabase").doc(id).delete();
+            showMessage("Record deleted successfully.", "success");
+            loadDonors();
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to delete record: " + error.message, "error");
+        }
+    };
+
+    window.toggleGroup = function(bodyId, iconId) {
+        const body = document.getElementById(bodyId);
+        const icon = document.getElementById(iconId);
+
+        if (!body || !icon) return;
+
+        body.classList.toggle("hidden");
+        icon.textContent = body.classList.contains("hidden") ? "+" : "−";
+    };
+
+    async function loadDonors() {
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
+                totalCountEl.textContent = "0";
+                displayedCountEl.textContent = "0";
+                return;
+            }
+
+            const snapshot = await db.collection("donorDatabase").orderBy("entryDate", "desc").get();
+
+            allDonors = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            allDonors.sort((a, b) => {
+                const dateA = a.entryDate || "";
+                const dateB = b.entryDate || "";
+                if (dateA !== dateB) return dateB.localeCompare(dateA);
+
+                const serialA = a.serialNumber || "";
+                const serialB = b.serialNumber || "";
+                return serialA.localeCompare(serialB);
+            });
+
+            renderTracking();
+        } catch (error) {
+            console.error(error);
+            trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
+            showMessage("Failed to load donor records: " + error.message, "error");
+        }
     }
-}
 
-async function deleteDonor(id){
-    if(!confirm("Delete this donor record?")) return;
+    searchInput.addEventListener("input", renderTracking);
 
-    try{
-        await deleteDoc(doc(db, "donorDatabase", id));
-        await loadDonors();
-        alert("Donor record deleted.");
-    }catch(error){
-        console.error(error);
-        alert("Failed to delete donor record.");
-    }
-}
-
-tableBody.addEventListener("click", (event) => {
-    const button = event.target.closest("button");
-    if(!button) return;
-
-    const id = button.dataset.id;
-    if(button.classList.contains("editBtn")){
-        const donor = allDonors.find(item => item.id === id);
-        if(donor) openEditModal(donor);
-    }
-
-    if(button.classList.contains("deleteBtn")){
-        deleteDonor(id);
-    }
-});
-
-searchInput.addEventListener("input", renderTable);
-bloodFilter.addEventListener("change", renderTable);
-statusFilter.addEventListener("change", renderTable);
-saveEditBtn.addEventListener("click", saveEdit);
-closeModalBtn.addEventListener("click", () => {
-    editModal.style.display = "none";
-    currentEditId = null;
-});
-
-window.onclick = function(event){
-    if(event.target === editModal){
-        editModal.style.display = "none";
-        currentEditId = null;
-    }
-};
-
-onAuthStateChanged(auth, async (user) => {
-    if(!user){
-        window.location.href = "index.html";
-        return;
-    }
-    await loadDonors();
-});
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            loadDonors();
+        } else {
+            trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
+            totalCountEl.textContent = "0";
+            displayedCountEl.textContent = "0";
+        }
+    });
 </script>
 
 </body>
