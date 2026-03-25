@@ -362,7 +362,7 @@
     </style>
 </head>
 <body>
-<header>Donor Database Statistics</header>
+<header id="pageHeader">Donor Database Statistics</header>
 
 <div class="page">
     <div class="card toolbar-card">
@@ -387,7 +387,7 @@
             </div>
 
             <button class="btn-red" onclick="reloadStatistics()">Reload Statistics</button>
-            <button class="btn-blue" onclick="window.print()">Print</button>
+            <button class="btn-blue" onclick="printFilteredStatistics()">Print</button>
             <button class="btn-green" onclick="exportCSV()">Export CSV</button>
         </div>
     </div>
@@ -688,6 +688,45 @@ function buildStatistics(){
         console.error(error);
         document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
         setStatus("Failed to build statistics.", "error");
+    }
+}
+
+function printFilteredStatistics(){
+    try{
+        buildStatistics();
+
+        const originalTitle = document.title;
+        const headerEl = document.getElementById("pageHeader");
+        const originalHeader = headerEl ? headerEl.textContent : "Donor Database Statistics";
+
+        const year = document.getElementById("filterYear").value;
+        const month = document.getElementById("filterMonth").value;
+
+        let printTitle = "Donor Database Statistics";
+
+        if (year !== "ALL" && month !== "ALL"){
+            printTitle += " - " + MONTHS[Number(month)-1] + " " + year;
+        } else if (year !== "ALL"){
+            printTitle += " - Year " + year;
+        } else if (month !== "ALL"){
+            printTitle += " - " + MONTHS[Number(month)-1] + " (All Years)";
+        } else {
+            printTitle += " - All Records";
+        }
+
+        document.title = printTitle;
+        if (headerEl) headerEl.textContent = printTitle;
+
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                document.title = originalTitle;
+                if (headerEl) headerEl.textContent = originalHeader;
+            }, 300);
+        }, 150);
+    }catch(error){
+        console.error(error);
+        alert("Failed to print filtered statistics.");
     }
 }
 
