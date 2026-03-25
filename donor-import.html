@@ -28,13 +28,13 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
     .container {
-        max-width: 1500px;
+        max-width: 1550px;
         margin: 16px auto;
         padding: 0 14px 20px;
     }
     .grid {
         display: grid;
-        grid-template-columns: 1.2fr 1fr;
+        grid-template-columns: 1.25fr 1fr;
         gap: 16px;
         margin-bottom: 16px;
     }
@@ -57,7 +57,7 @@
         margin-bottom: 10px;
     }
     .row label {
-        min-width: 150px;
+        min-width: 160px;
         font-weight: bold;
         color: #334155;
     }
@@ -93,6 +93,7 @@
         padding: 12px;
         font-size: 13px;
         margin-top: 10px;
+        line-height: 1.4;
     }
 
     .stats-grid {
@@ -130,7 +131,7 @@
     }
     table {
         width: 100%;
-        min-width: 2400px;
+        min-width: 2700px;
         border-collapse: collapse;
         font-size: 12px;
     }
@@ -232,10 +233,11 @@
 
             <div class="note">
                 <b>Importer rules:</b><br>
+                • Reads all selected Excel files and all tabs/sheets inside each file<br>
                 • Required only: <b>Surname + First Name + Birthday</b><br>
-                • If donation date is missing, importer uses row date → filename month → default donation date<br>
+                • Donation date fallback order: <b>row date → sheet name → file name → default donation date</b><br>
                 • Existing donor records are <b>never overwritten</b><br>
-                • Donation count is intelligently increased based on the donor’s highest recorded total<br>
+                • Donation count continues from the donor’s highest saved count<br>
                 • MBD / Walk-in / Patient Directed grouping is auto-detected and sequence-numbered
             </div>
 
@@ -307,7 +309,7 @@
                     <th>First Name</th>
                     <th>Middle Name</th>
                     <th>Birthday</th>
-                    <th>Donation Date</th>
+                    <th>Entry Date</th>
                     <th>Donor Type</th>
                     <th>MBD Details</th>
                     <th>Patient Directed Details</th>
@@ -467,8 +469,8 @@ function parsePossibleDate(value) {
     return "";
 }
 
-function parseDateFromFilename(filename) {
-    const name = String(filename || "").toLowerCase();
+function parseDateFromText(text) {
+    const name = String(text || "").toLowerCase();
 
     const patterns = [
         /(\d{4})[-_](\d{1,2})[-_](\d{1,2})/,
@@ -583,21 +585,6 @@ function normalizeDonorCategory(value) {
     return String(value || "").trim();
 }
 
-function getYearMonth(entryDate) {
-    const parsed = parsePossibleDate(entryDate);
-    if (!parsed) {
-        return { year: "No Year", month: "00", monthName: "No Month", monthKey: "0000-00" };
-    }
-    const [year, month] = parsed.split("-");
-    const monthNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
-    return {
-        year,
-        month,
-        monthName: monthNames[Number(month) - 1] || "NO MONTH",
-        monthKey: `${year}-${month}`
-    };
-}
-
 function buildSequenceGroupKey(record) {
     const date = record.entryDate || record.donationDate || "";
     const donorType = record.donorType || "";
@@ -612,31 +599,6 @@ function buildSequenceGroupKey(record) {
     }
 
     return typeGroupKey;
-}
-
-function computeSequenceMap(records) {
-    const map = {};
-    const grouped = {};
-
-    records.forEach(record => {
-        const groupKey = buildSequenceGroupKey(record);
-        if (!grouped[groupKey]) grouped[groupKey] = [];
-        grouped[groupKey].push(record);
-    });
-
-    Object.keys(grouped).forEach(groupKey => {
-        grouped[groupKey].sort((a, b) => {
-            const serialA = a.serialNumber || "";
-            const serialB = b.serialNumber || "";
-            return serialA.localeCompare(serialB);
-        });
-
-        grouped[groupKey].forEach((record, index) => {
-            map[record.previewId] = index + 1;
-        });
-    });
-
-    return map;
 }
 
 function getCategoryDisplay(record, sequence) {
@@ -654,37 +616,6 @@ function computeExistingMaxDonationCount(dKey) {
         maxCount = Math.max(maxCount, parseIntSafe(record.numberOfDonations));
     });
     return maxCount;
-}
-
-function computeImportedFinalCounts(rows) {
-    const donorGroups = {};
-
-    rows.forEach(row => {
-        if (!donorGroups[row._donorKey]) donorGroups[row._donorKey] = [];
-        donorGroups[row._donorKey].push(row);
-    });
-
-    Object.keys(donorGroups).forEach(key => {
-        const donorRows = donorGroups[key];
-
-        donorRows.sort((a, b) => {
-            const dateCompare = (a.entryDate || "").localeCompare(b.entryDate || "");
-            if (dateCompare !== 0) return dateCompare;
-            return (a.serialNumber || "").localeCompare(b.serialNumber || "");
-        });
-
-        let baseline = computeExistingMaxDonationCount(key);
-
-        donorRows.forEach(row => {
-            const importedCount = parseIntSafe(row.numberOfDonationsImported);
-            if (importedCount > baseline) {
-                baseline = importedCount;
-            } else {
-                baseline += 1;
-            }
-            row.numberOfDonationsFinal = baseline;
-        });
-    });
 }
 
 async function loadExistingRecords() {
@@ -724,7 +655,8 @@ async function loadExistingRecords() {
 
 function mapRowToRecord(row, fileName, sheetName, sourceRowNumber) {
     const detectedDonationDate = parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.donationDate) || "");
-    const fileDate = parseDateFromFilename(fileName);
+    const sheetDate = parseDateFromText(sheetName);
+    const fileDate = parseDateFromText(fileName);
     const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
     const defaultMbdGroup = document.getElementById("defaultMbdGroup").value.trim();
 
@@ -734,7 +666,7 @@ function mapRowToRecord(row, fileName, sheetName, sourceRowNumber) {
         firstName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.firstName) || ""),
         middleName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.middleName) || ""),
         birthday: parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.birthday) || ""),
-        entryDate: detectedDonationDate || fileDate || defaultDonationDate || "",
+        entryDate: detectedDonationDate || sheetDate || fileDate || defaultDonationDate || "",
         donorTypeRaw: String(getFirstMappedValue(row, FIELD_ALIASES.donorType) || "").trim(),
         donorCategory: normalizeDonorCategory(getFirstMappedValue(row, FIELD_ALIASES.donorCategory) || ""),
         mbdDetails: String(getFirstMappedValue(row, FIELD_ALIASES.mbdDetails) || defaultMbdGroup || "").trim(),
@@ -766,15 +698,64 @@ function mapRowToRecord(row, fileName, sheetName, sourceRowNumber) {
     return raw;
 }
 
-function processPreviewRows(rows) {
-    const batchSeen = new Set();
+function computeImportedFinalCounts(rows) {
+    const donorGroups = {};
 
+    rows.forEach(row => {
+        if (!donorGroups[row._donorKey]) donorGroups[row._donorKey] = [];
+        donorGroups[row._donorKey].push(row);
+    });
+
+    Object.keys(donorGroups).forEach(key => {
+        const donorRows = donorGroups[key];
+
+        donorRows.sort((a, b) => {
+            const dateCompare = (a.entryDate || "").localeCompare(b.entryDate || "");
+            if (dateCompare !== 0) return dateCompare;
+            const sheetCompare = (a.sourceSheet || "").localeCompare(b.sourceSheet || "");
+            if (sheetCompare !== 0) return sheetCompare;
+            return (a.serialNumber || "").localeCompare(b.serialNumber || "");
+        });
+
+        let baseline = computeExistingMaxDonationCount(key);
+
+        donorRows.forEach(row => {
+            const importedCount = parseIntSafe(row.numberOfDonationsImported);
+            if (importedCount > baseline) {
+                baseline = importedCount;
+            } else {
+                baseline += 1;
+            }
+            row.numberOfDonationsFinal = baseline;
+        });
+    });
+}
+
+function processPreviewRows(rows) {
     computeImportedFinalCounts(rows);
 
-    const sequenceMap = computeSequenceMap(rows);
+    const grouped = {};
+    rows.forEach(row => {
+        const groupKey = buildSequenceGroupKey(row);
+        if (!grouped[groupKey]) grouped[groupKey] = [];
+        grouped[groupKey].push(row);
+    });
 
-    previewRows = rows.map((row, index) => {
-        row.previewId = `preview-${index + 1}`;
+    Object.keys(grouped).forEach(groupKey => {
+        grouped[groupKey].sort((a, b) => {
+            const serialCompare = (a.serialNumber || "").localeCompare(b.serialNumber || "");
+            if (serialCompare !== 0) return serialCompare;
+            return (a.firstName || "").localeCompare(b.firstName || "");
+        });
+        grouped[groupKey].forEach((row, index) => {
+            row.sequenceNumber = index + 1;
+            row.categoryDisplay = getCategoryDisplay(row, row.sequenceNumber);
+        });
+    });
+
+    const batchSeen = new Set();
+
+    previewRows = rows.map((row) => {
         const dKey = donorKey(row);
 
         let importStatus = "NEW";
@@ -801,9 +782,6 @@ function processPreviewRows(rows) {
 
         row.importStatus = importStatus;
         row.reason = reason;
-        row.sequenceNumber = sequenceMap[row.previewId] || "";
-        row.categoryDisplay = getCategoryDisplay(row, row.sequenceNumber);
-
         return row;
     });
 }
@@ -955,6 +933,7 @@ async function importSelectedRows() {
 
     try {
         const batchSize = 350;
+
         for (let i = 0; i < rowsToImport.length; i += batchSize) {
             const chunk = rowsToImport.slice(i, i + batchSize);
             const batch = db.batch();
@@ -997,8 +976,7 @@ async function importSelectedRows() {
                         importedFrom: "donor-import.html",
                         sourceFile: row.sourceFile || "",
                         sourceSheet: row.sourceSheet || "",
-                        sourceRowNumber: row.sourceRowNumber || "",
-                        monthlyFallbackUsed: !getFirstMappedValue({ temp: row.entryDate }, ["unused"])
+                        sourceRowNumber: row.sourceRowNumber || ""
                     }
                 });
             });
