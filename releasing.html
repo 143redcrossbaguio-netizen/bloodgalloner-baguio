@@ -6,6 +6,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
 
 <style>
 body{
@@ -71,6 +72,7 @@ font-size:15px;
 var firebaseConfig = {
     apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
     authDomain: "galloners-club.firebaseapp.com",
+    databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "galloners-club",
     storageBucket: "galloners-club.appspot.com",
     messagingSenderId: "213049860421",
@@ -83,11 +85,29 @@ if (!firebase.apps.length) {
 }
 
 var auth = firebase.auth();
+var db = firebase.database();
 
 auth.onAuthStateChanged(function(user){
     if(!user){
         window.location.href = "index.html";
+        return;
     }
+
+    db.ref("userRoles/" + user.uid + "/role").once("value")
+        .then(function(snapshot){
+            var role = snapshot.exists() ? snapshot.val() : "limitedEncoder";
+
+            if(role === "limitedEncoder"){
+                alert("Access denied.");
+                window.location.href = "dashboard.html";
+                return;
+            }
+        })
+        .catch(function(error){
+            console.error("Role check error:", error);
+            alert("Access denied.");
+            window.location.href = "dashboard.html";
+        });
 });
 
 function goEntry(){
