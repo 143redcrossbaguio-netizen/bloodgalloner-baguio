@@ -236,6 +236,10 @@
             background: white;
         }
 
+        .hidden-role{
+            display: none !important;
+        }
+
         @media (max-width: 900px){
             .layout{
                 grid-template-columns: 1fr;
@@ -282,7 +286,7 @@
                 <div class="sub">Philippine Red Cross - Baguio City Chapter</div>
             </div>
         </div>
-        <div class="topbar-right">
+        <div class="topbar-right" id="topbarRoleText">
             Laboratory Panel
         </div>
     </div>
@@ -339,8 +343,8 @@
                     <span>▼</span>
                 </button>
                 <div id="section-backup" class="submenu">
-                    <button class="sub-btn green" onclick="downloadBackupFile()">Monthly Backup</button>
-                    <button class="sub-btn green" onclick="saveBackupToSystem()">Save Backup</button>
+                    <button id="btn-backup-download" class="sub-btn green" onclick="downloadBackupFile()">Monthly Backup</button>
+                    <button id="btn-backup-save" class="sub-btn green" onclick="saveBackupToSystem()">Save Backup</button>
                     <button id="btn-backup-viewer" class="sub-btn blue" onclick="openModule('backup-viewer.html','Backup Viewer','Backup review panel')">Backup Viewer</button>
                 </div>
             </div>
@@ -395,11 +399,32 @@
     const frame = document.getElementById("moduleFrame");
     const workspaceTitle = document.getElementById("workspaceTitle");
     const workspaceSubtitle = document.getElementById("workspaceSubtitle");
+    const topbarRoleText = document.getElementById("topbarRoleText");
 
-    onAuthStateChanged(auth, (user) => {
+    let currentUserRole = "full";
+
+    onAuthStateChanged(auth, async (user) => {
         if (!user) {
             window.location.href = "index.html";
             return;
+        }
+
+        try {
+            const roleSnapshot = await get(ref(db, "userRoles/" + user.uid + "/role"));
+            currentUserRole = roleSnapshot.exists() ? roleSnapshot.val() : "full";
+
+            applyRoleAccess(currentUserRole);
+
+            if (currentUserRole === "limitedEncoder") {
+                openDefaultLimitedModule();
+            } else {
+                openDefaultFullModule();
+            }
+        } catch (error) {
+            console.error("Role loading error:", error);
+            currentUserRole = "full";
+            applyRoleAccess(currentUserRole);
+            openDefaultFullModule();
         }
     });
 
@@ -419,7 +444,92 @@
         return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
     }
 
+    function hideElement(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.add("hidden-role");
+    }
+
+    function showElement(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove("hidden-role");
+    }
+
+    function closeSection(name) {
+        const section = document.getElementById("section-" + name);
+        const nav = document.getElementById("nav-" + name);
+        if (section) section.classList.remove("open");
+        if (nav) nav.classList.remove("active");
+    }
+
+    function openSection(name) {
+        const section = document.getElementById("section-" + name);
+        const nav = document.getElementById("nav-" + name);
+        if (section) section.classList.add("open");
+        if (nav) nav.classList.add("active");
+    }
+
+    function applyRoleAccess(role) {
+        showElement("nav-donor-database");
+        showElement("section-donor-database");
+        showElement("nav-galloner");
+        showElement("section-galloner");
+        showElement("nav-partner");
+        showElement("nav-releasing");
+        showElement("section-releasing");
+        showElement("nav-admin");
+        showElement("nav-backup");
+        showElement("section-backup");
+        showElement("btn-donor-db-entry");
+        showElement("btn-donor-db-tracking");
+        showElement("btn-donor-db-stat");
+        showElement("btn-donor-db-import");
+        showElement("btn-donor-entry");
+        showElement("btn-tracking");
+        showElement("btn-awardees");
+        showElement("btn-backup-download");
+        showElement("btn-backup-save");
+        showElement("btn-backup-viewer");
+
+        if (role === "limitedEncoder") {
+            topbarRoleText.textContent = "Limited Encoder Access";
+
+            hideElement("btn-donor-db-stat");
+            hideElement("btn-donor-db-import");
+            hideElement("nav-partner");
+            hideElement("nav-releasing");
+            hideElement("section-releasing");
+            hideElement("nav-admin");
+            hideElement("nav-backup");
+            hideElement("section-backup");
+
+            closeSection("releasing");
+            closeSection("backup");
+            openSection("donor-database");
+        } else {
+            topbarRoleText.textContent = "Laboratory Panel";
+            openSection("donor-database");
+        }
+    }
+
+    function openDefaultFullModule() {
+        clearActiveNavs();
+        openSection("donor-database");
+        document.getElementById("nav-donor-database")?.classList.add("active");
+        openModule("donor-database-entry.html", "Donor Database - Data Input", "Donor database data input panel");
+    }
+
+    function openDefaultLimitedModule() {
+        clearActiveNavs();
+        openSection("donor-database");
+        document.getElementById("nav-donor-database")?.classList.add("active");
+        openModule("donor-database-entry.html", "Donor Database - Data Input", "Donor database data input panel");
+    }
+
     window.toggleSection = function(name) {
+        if (currentUserRole === "limitedEncoder" && !["donor-database", "galloner"].includes(name)) {
+            return;
+        }
+
         const clickedNav = document.getElementById("nav-" + name);
 
         sections.forEach(sectionName => {
@@ -441,12 +551,27 @@
             }
         });
 
-        if (clickedNav && document.getElementById("section-" + name).classList.contains("open")) {
+        if (clickedNav && document.getElementById("section-" + name)?.classList.contains("open")) {
             clickedNav.classList.add("active");
         }
     };
 
     window.openModule = function(url, title, subtitle) {
+        if (currentUserRole === "limitedEncoder") {
+            const allowedModules = [
+                "donor-database-entry.html",
+                "donor-database-tracking.html",
+                "donor-entry.html",
+                "tracking.html",
+                "awardees.html"
+            ];
+
+            if (!allowedModules.includes(url)) {
+                alert("You do not have access to this module.");
+                return;
+            }
+        }
+
         frame.src = buildFreshUrl(url);
         workspaceTitle.textContent = title;
         workspaceSubtitle.textContent = subtitle;
@@ -463,6 +588,11 @@
     };
 
     window.openSingleModule = function(navButton, url, title, subtitle) {
+        if (currentUserRole === "limitedEncoder") {
+            alert("You do not have access to this module.");
+            return;
+        }
+
         clearActiveNavs();
         navButton.classList.add("active");
         clearActiveSubs();
@@ -523,6 +653,11 @@
     }
 
     window.downloadBackupFile = async function() {
+        if (currentUserRole === "limitedEncoder") {
+            alert("You do not have access to backup functions.");
+            return;
+        }
+
         try {
             if (!auth.currentUser) {
                 alert("You are not logged in.");
@@ -555,6 +690,11 @@
     };
 
     window.saveBackupToSystem = async function() {
+        if (currentUserRole === "limitedEncoder") {
+            alert("You do not have access to backup functions.");
+            return;
+        }
+
         try {
             if (!auth.currentUser) {
                 alert("You are not logged in.");
