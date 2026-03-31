@@ -256,6 +256,7 @@
         color: #374151;
         line-height: 1.5;
         margin-bottom: 12px;
+        white-space: pre-line;
     }
 
     .modal-actions {
@@ -309,7 +310,7 @@
             • <b>Batch imports</b> = newer imports with <b>importMeta.batchId</b><br>
             • <b>Legacy imports</b> = older imports with <b>sourceFile/sourceSheet</b> but <b>no batchId</b><br>
             • Manual donor entries without import metadata are <b>not included</b><br>
-            • Large deletes are done in repeated query loops until no records remain
+            • Large deletes now use the exact scanned donor document IDs in small chunks
         </div>
 
         <div class="danger-note" style="margin-top:10px;">
@@ -351,9 +352,7 @@
 <div id="passwordModal" class="modal-backdrop">
     <div class="modal-card">
         <div class="modal-title">Confirm Delete</div>
-        <div class="modal-text" id="modalMessage">
-            Please re-enter your password to continue.
-        </div>
+        <div class="modal-text" id="modalMessage">Please re-enter your password to continue.</div>
 
         <div class="row" style="margin-bottom:0;">
             <label style="min-width:100px;">Email</label>
@@ -482,8 +481,8 @@ function renderStats(groups) {
 function renderGroups() {
     const container = document.getElementById("groupsContainer");
     const keyword = document.getElementById("searchInput").value.trim();
-
     const filtered = allImportGroups.filter(group => recordMatchesSearch(group, keyword));
+
     renderStats(filtered);
 
     if (!filtered.length) {
@@ -624,6 +623,7 @@ async function scanImportedRecords() {
 
         importedRows.forEach(row => {
             const key = makeGroupKey(row);
+
             if (!grouped[key]) {
                 const meta = row.importMeta || {};
                 grouped[key] = {
@@ -726,87 +726,22 @@ async function confirmPasswordAndRun() {
     }
 }
 
-async function deleteBatchByQuery(batchId) {
+async function deleteDocIdsInChunks(docIds, label) {
+    const uniqueIds = [...new Set(docIds.filter(Boolean))];
+    const chunkSize = 100;
     let totalDeleted = 0;
 
-    while (true) {
-        const snap = await db.collection("donorDatabase")
-            .where("importMeta.batchId", "==", batchId)
-            .limit(200)
-            .get();
-
-        if (snap.empty) break;
-
+    for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+        const chunk = uniqueIds.slice(i, i + chunkSize);
         const batch = db.batch();
-        snap.forEach(doc => {
-            batch.delete(doc.ref);
-            totalDeleted++;
+
+        chunk.forEach(id => {
+            batch.delete(db.collection("donorDatabase").doc(id));
         });
 
+        setStatus(`Deleting ${label}... ${Math.min(i + chunk.length, uniqueIds.length)} / ${uniqueIds.length}`);
         await batch.commit();
-    }
-
-    return totalDeleted;
-}
-
-async function deleteLegacyByQuery(sourceFile, sourceSheet) {
-    let totalDeleted = 0;
-
-    while (true) {
-        const snap = await db.collection("donorDatabase")
-            .where("importMeta.sourceFile", "==", sourceFile)
-            .where("importMeta.sourceSheet", "==", sourceSheet)
-            .limit(200)
-            .get();
-
-        if (snap.empty) break;
-
-        const docsToDelete = snap.docs.filter(doc => {
-            const data = doc.data() || {};
-            const meta = data.importMeta || {};
-            return !meta.batchId;
-        });
-
-        if (!docsToDelete.length) break;
-
-        const batch = db.batch();
-        docsToDelete.forEach(doc => {
-            batch.delete(doc.ref);
-            totalDeleted++;
-        });
-
-        await batch.commit();
-    }
-
-    return totalDeleted;
-}
-
-async function deleteLegacyWithoutBatchIdByImportedFrom() {
-    let totalDeleted = 0;
-
-    while (true) {
-        const snap = await db.collection("donorDatabase")
-            .where("importMeta.importedFrom", "==", "donor-import.html")
-            .limit(200)
-            .get();
-
-        if (snap.empty) break;
-
-        const docsToDelete = snap.docs.filter(doc => {
-            const data = doc.data() || {};
-            const meta = data.importMeta || {};
-            return !meta.batchId;
-        });
-
-        if (!docsToDelete.length) break;
-
-        const batch = db.batch();
-        docsToDelete.forEach(doc => {
-            batch.delete(doc.ref);
-            totalDeleted++;
-        });
-
-        await batch.commit();
+        totalDeleted += chunk.length;
     }
 
     return totalDeleted;
@@ -833,8 +768,8 @@ async function deleteBatchGroup(batchId) {
         `Re-enter your password to delete batch ${batchId} containing ${group.count} donor record(s).`,
         async () => {
             try {
-                setStatus(`Deleting batch ${batchId}...`);
-                const deletedCount = await deleteBatchByQuery(batchId);
+                const ids = group.records.map(r => r.id);
+                const deletedCount = await deleteDocIdsInChunks(ids, `batch ${batchId}`);
 
                 try {
                     await db.collection("donorImportBatches").doc(batchId).update({
@@ -874,8 +809,8 @@ async function deleteLegacyGroupByKey(groupKey) {
         `Re-enter your password to delete legacy import:\n${group.sourceFile || "-"} / ${group.sourceSheet || "-"}\n(${group.count} record(s)).`,
         async () => {
             try {
-                setStatus(`Deleting legacy import ${group.sourceFile} / ${group.sourceSheet} ...`);
-                const deletedCount = await deleteLegacyByQuery(group.sourceFile, group.sourceSheet);
+                const ids = group.records.map(r => r.id);
+                const deletedCount = await deleteDocIdsInChunks(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
 
                 await scanImportedRecords();
                 alert(`Legacy import deleted successfully. Removed ${deletedCount} record(s).`);
@@ -904,21 +839,8 @@ async function deleteAllLegacyImports() {
         `Re-enter your password to delete ALL legacy imports with no batch ID.\nGroups: ${legacyGroups.length}\nRows: ${totalRows}`,
         async () => {
             try {
-                setStatus(`Deleting all legacy imports...`);
-
-                let deletedCount = 0;
-                const processedKeys = new Set();
-
-                for (const group of legacyGroups) {
-                    const dedupeKey = `${group.sourceFile}|||${group.sourceSheet}`;
-                    if (processedKeys.has(dedupeKey)) continue;
-                    processedKeys.add(dedupeKey);
-
-                    deletedCount += await deleteLegacyByQuery(group.sourceFile, group.sourceSheet);
-                }
-
-                const extraDeleted = await deleteLegacyWithoutBatchIdByImportedFrom();
-                deletedCount += extraDeleted;
+                const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
+                const deletedCount = await deleteDocIdsInChunks(ids, "all legacy imports");
 
                 await scanImportedRecords();
                 alert(`Deleted all legacy imports successfully. Removed ${deletedCount} record(s).`);
