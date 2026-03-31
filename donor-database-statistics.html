@@ -280,6 +280,8 @@
         .title-f{ background:linear-gradient(90deg,#fae8ff,#fdf4ff); }
         .title-g{ background:linear-gradient(90deg,#fef9c3,#fefce8); }
         .title-h{ background:linear-gradient(90deg,#cffafe,#ecfeff); }
+        .title-i{ background:linear-gradient(90deg,#fef3c7,#fef9c3); }
+        .title-j{ background:linear-gradient(90deg,#e9d5ff,#f5f3ff); }
 
         .table-wrap{
             overflow-x:auto;
@@ -787,6 +789,19 @@ function emptyStats(){
             "60-65":0,
             "66 & above":0,
             "Total":0
+        },
+        agePicture: {
+            "Under 18":0,
+            "18-24":0,
+            "25-44":0,
+            "45-64":0,
+            "65 & above":0,
+            "Total donations":0
+        },
+        youth1625Sex: {
+            "Male":0,
+            "Female":0,
+            "Total":0
         }
     };
 }
@@ -872,6 +887,16 @@ function applyDonor(s, r){
     const ageGroup = getAgeGroup(age);
     s.age[ageGroup]++;
     s.age["Total"]++;
+
+    const pictureAgeGroup = getAgeGroupPicture(age);
+    s.agePicture[pictureAgeGroup]++;
+    s.agePicture["Total donations"]++;
+
+    if (age != null && age >= 16 && age <= 25) {
+        if (sex === "Male") s.youth1625Sex["Male"]++;
+        if (sex === "Female") s.youth1625Sex["Female"]++;
+        s.youth1625Sex["Total"]++;
+    }
 }
 
 function applyRequestedOnly(s, r){
@@ -997,6 +1022,8 @@ function renderReport(grouped){
                                     ${renderSexBlock(s)}
                                     ${renderFrequencyBlock(s)}
                                     ${renderAgeBlock(s)}
+                                    ${renderAgePictureBlock(s)}
+                                    ${renderYouth1625Block(s)}
                                 </div>
                             </div>
                         `;
@@ -1299,6 +1326,70 @@ function renderAgeBlock(s){
     `;
 }
 
+function renderAgePictureBlock(s){
+    return `
+        <div class="sheet-block">
+            <div class="sheet-title title-i">VIII. Donor Statistics by Age Range</div>
+            <div class="table-wrap">
+                <table class="sheet">
+                    <tr>
+                        <th>Category</th>
+                        <th>Count</th>
+                    </tr>
+                    <tr>
+                        <td>Donors under 18 years</td>
+                        <td>${num(s.agePicture["Under 18"])}</td>
+                    </tr>
+                    <tr>
+                        <td>Donors aged 18 to 24 years</td>
+                        <td>${num(s.agePicture["18-24"])}</td>
+                    </tr>
+                    <tr>
+                        <td>Donors aged 25 to 44 years</td>
+                        <td>${num(s.agePicture["25-44"])}</td>
+                    </tr>
+                    <tr>
+                        <td>Donors aged 45 to 64 years</td>
+                        <td>${num(s.agePicture["45-64"])}</td>
+                    </tr>
+                    <tr>
+                        <td>Donors aged 65 years or older</td>
+                        <td>${num(s.agePicture["65 & above"])}</td>
+                    </tr>
+                    <tr class="subheader">
+                        <td>Total number of donations</td>
+                        <td>${num(s.agePicture["Total donations"])}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function renderYouth1625Block(s){
+    return `
+        <div class="sheet-block">
+            <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
+            <div class="table-wrap">
+                <table class="sheet">
+                    <tr>
+                        <th></th>
+                        <th>Male</th>
+                        <th>Female</th>
+                        <th>Total</th>
+                    </tr>
+                    <tr>
+                        <td>16-25 Years Old</td>
+                        <td>${num(s.youth1625Sex["Male"])}</td>
+                        <td>${num(s.youth1625Sex["Female"])}</td>
+                        <td>${num(s.youth1625Sex["Total"])}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
 function toggleNext(el){
     const next = el.nextElementSibling;
     if (next) next.classList.toggle("open");
@@ -1435,7 +1526,9 @@ function exportCSV(){
         "Prepared 450 cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO",
         "Requested 450 cc","Requested PRBC","Requested FFP","Requested PC","Requested CRYO",
         "Male","Female","Frequency First-time","Frequency Repeat non-regular","Frequency Repeat regular","Frequency Total",
-        "16-17","18-20","21-30","31-40","41-50","51-60","60-65","66 & above","Age Total"
+        "16-17","18-20","21-30","31-40","41-50","51-60","60-65","66 & above","Age Total",
+        "Under 18","18-24","25-44","45-64","65 & above","Total Donations",
+        "16-25 Male","16-25 Female","16-25 Total"
     ]];
 
     Object.keys(groupedCache).sort((a,b)=>b-a).forEach(year => {
@@ -1484,7 +1577,16 @@ function exportCSV(){
                 s.age["51-60"],
                 s.age["60-65"],
                 s.age["66 & above"],
-                s.age["Total"]
+                s.age["Total"],
+                s.agePicture["Under 18"],
+                s.agePicture["18-24"],
+                s.agePicture["25-44"],
+                s.agePicture["45-64"],
+                s.agePicture["65 & above"],
+                s.agePicture["Total donations"],
+                s.youth1625Sex["Male"],
+                s.youth1625Sex["Female"],
+                s.youth1625Sex["Total"]
             ]);
         });
     });
@@ -1630,6 +1732,15 @@ function getAgeGroup(age){
     if (age >= 60 && age <= 65) return "60-65";
     if (age >= 66) return "66 & above";
     return "Total";
+}
+
+function getAgeGroupPicture(age){
+    if (age == null) return "Under 18";
+    if (age < 18) return "Under 18";
+    if (age >= 18 && age <= 24) return "18-24";
+    if (age >= 25 && age <= 44) return "25-44";
+    if (age >= 45 && age <= 64) return "45-64";
+    return "65 & above";
 }
 
 function sumVals(obj){
