@@ -259,12 +259,11 @@
             <div class="note">
                 <b>Updated importer rules:</b><br>
                 • Reads all selected Excel files and all tabs/sheets inside each file<br>
-                • Supports <b>blank cells inheriting the last valid date/group block above</b><br>
+                • Supports <b>blank date cells inheriting the last valid date above</b><br>
+                • Donor-database style sheets with separate <b>MBD / WALK-IN / PD</b> columns do <b>not</b> carry forward group blocks<br>
                 • Required donor identity: <b>Surname + First Name + Birthday</b><br>
-                • Donation date fallback order: <b>row date → inherited previous row date → sheet name → file name → default donation date</b><br>
                 • Existing donor records are <b>never overwritten</b><br>
-                • Donation count continues from the donor’s highest saved count<br>
-                • Each import is saved as a <b>batch</b> so you can <b>retract/rollback</b> old uploads safely
+                • Each import is saved as a <b>batch</b> so you can <b>retract / rollback</b> uploads safely
             </div>
 
             <div style="margin-top:12px;">
@@ -410,22 +409,22 @@ const FIELD_ALIASES = {
     birthday: ["birthday","birth date","birthdate","date of birth","dob","bday"],
     donationDate: ["donation date","date donated","date of donation","date bled","bleeding date","date","collection date","entry date"],
     donorType: ["donor type","type of donor","type","donor"],
-    donorCategory: ["donor category","type of donor category","category","regular/new donor","new/repeat/lapse"],
+    donorCategory: ["donor category","type of donor category","category","regular/new donor","new/repeat/lapse","new repeat lapse"],
     mbdDetails: ["mbd","mbd details","organization","group","group name","company","school","office","site","venue","mobile blood donation"],
     patientDirectedDetails: ["patient directed","patient directed details","patient name","patient","patient directed donor","pd","p.d."],
     walkIn: ["walk in","walk-in","walkin"],
-    sex: ["sex","gender"],
+    sex: ["sex","gender","gENDER"],
     contactNumber: ["contact","contact number","mobile","mobile number","phone","phone number","cellphone","cp no","contact no"],
     address: ["address","home address","house number/purok/street name","house number","street","purok"],
     cityProvince: ["barangay/city","barangay city","city","city/province","barangay","city or province","town/city","municipality/city"],
     bloodType: ["blood type","blood group","abo rh","abo/rh","blood","blood type/rh","abo"],
     amount: ["amount","collection amount","volume","ml"],
-    bloodBagBrand: ["blood bag brand","blood bag used","brand","bag brand"],
-    bloodBagType: ["blood bag type","type of blood bag","bag type"],
+    bloodBagBrand: ["blood bag brand","blood bag used","brand","bag brand","bb used"],
+    bloodBagType: ["blood bag type","type of blood bag","bag type","type of bb"],
     timeStarted: ["time started","start time","bleeding time start","time start"],
     timeEnded: ["time ended","end time","bleeding time end","time end"],
     age: ["age"],
-    remarks: ["remarks","remark","notes","comment"],
+    remarks: ["remarks","remark","notes","comment","donor rxn","results"],
     numberOfDonations: ["# of donations","number of donations","donation count","count","no of donations","donations"]
 };
 
@@ -626,7 +625,6 @@ function looksLikePdValue(value) {
 
 function inferDonorType(raw) {
     const donorTypeRaw = normalizeText(raw.donorTypeRaw || "");
-    const donorCategory = normalizeText(raw.donorCategory || "");
     const mbd = String(raw.mbdDetails || "").trim();
     const pd = String(raw.patientDirectedDetails || "").trim();
     const walkInRaw = String(raw.walkInRaw || "").trim();
@@ -635,14 +633,9 @@ function inferDonorType(raw) {
     if (donorTypeRaw.includes("walk")) return "Walk-in";
     if (donorTypeRaw.includes("mbd")) return "MBD";
 
-    if (looksLikePdValue(pd)) return "Patient Directed";
-    if (pd) return "Patient Directed";
-    if (looksLikeWalkInValue(walkInRaw)) return "Walk-in";
+    if (mbd) return "MBD";
     if (walkInRaw) return "Walk-in";
-
-    if (mbd && !looksLikeWalkInValue(mbd) && !looksLikePdValue(mbd)) return "MBD";
-
-    if (donorCategory.includes("patient")) return "Patient Directed";
+    if (pd) return "Patient Directed";
 
     return "";
 }
@@ -780,6 +773,35 @@ function aoaToObjectRows(aoa) {
     return { rows, headers };
 }
 
+function sheetLooksLikeDonorDatabase(headers) {
+    const normalized = headers.map(h => standardizeHeader(h));
+    return (
+        normalized.includes("mbd") &&
+        normalized.includes("walk in") &&
+        normalized.includes("pd") &&
+        normalized.includes("surname") &&
+        (normalized.includes("given name") || normalized.includes("first name")) &&
+        normalized.includes("birthday")
+    );
+}
+
+function hasAnchorIdentityOrDonorData(raw) {
+    return !!(
+        String(raw.serialNumber || "").trim() ||
+        String(raw.surname || "").trim() ||
+        String(raw.firstName || "").trim() ||
+        String(raw.middleName || "").trim() ||
+        String(raw.birthday || "").trim() ||
+        String(raw.entryDate || "").trim() ||
+        String(raw.contactNumber || "").trim() ||
+        String(raw.bloodType || "").trim() ||
+        String(raw.mbdDetails || "").trim() ||
+        String(raw.patientDirectedDetails || "").trim() ||
+        String(raw.walkInRaw || "").trim() ||
+        String(raw.donorTypeRaw || "").trim()
+    );
+}
+
 function getFirstMappedValue(row, aliases) {
     for (const [key, value] of Object.entries(row)) {
         if (aliases.includes(standardizeHeader(key))) {
@@ -787,14 +809,6 @@ function getFirstMappedValue(row, aliases) {
                 return value;
             }
         }
-    }
-    return "";
-}
-
-function getColumnValueByExactHeader(row, exactHeaderText) {
-    const normalizedTarget = standardizeHeader(exactHeaderText);
-    for (const [key, value] of Object.entries(row)) {
-        if (standardizeHeader(key) === normalizedTarget) return value;
     }
     return "";
 }
@@ -820,7 +834,7 @@ function extractFromSpecialColumns(row) {
     return { mbdColumn, walkInColumn, patientDirectedColumn };
 }
 
-function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context) {
+function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context, options = {}) {
     const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
     const defaultMbdGroup = document.getElementById("defaultMbdGroup").value.trim();
 
@@ -846,29 +860,48 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         pdDirect = specialColumns.patientDirectedColumn;
     }
 
+    const inheritGroupBlocks = !!options.inheritGroupBlocks;
+
     const inheritedDateUsed = !directDonationDate && !!context.lastDate;
-    const inheritedGroupUsed =
+    const inheritedGroupUsed = inheritGroupBlocks && (
         (!donorTypeRawDirect && !!context.lastDonorTypeRaw) ||
         (!mbdDirect && !!context.lastMbdDetails) ||
         (!pdDirect && !!context.lastPatientDirectedDetails) ||
         (!walkInDirect && !!context.lastWalkInRaw) ||
-        (!donorCategoryDirect && !!context.lastDonorCategory);
+        (!donorCategoryDirect && !!context.lastDonorCategory)
+    );
 
     const entryDate = directDonationDate || context.lastDate || sheetDate || fileDate || defaultDonationDate || "";
-    const donorTypeRaw = donorTypeRawDirect || context.lastDonorTypeRaw || "";
-    const donorCategory = donorCategoryDirect || context.lastDonorCategory || "";
-    const mbdDetails = mbdDirect || context.lastMbdDetails || defaultMbdGroup || "";
-    const patientDirectedDetails = pdDirect || context.lastPatientDirectedDetails || "";
-    const walkInRaw = walkInDirect || context.lastWalkInRaw || "";
+    const donorTypeRaw = donorTypeRawDirect || (inheritGroupBlocks ? context.lastDonorTypeRaw : "") || "";
+    const donorCategory = donorCategoryDirect || (inheritGroupBlocks ? context.lastDonorCategory : "") || "";
+
+    let mbdDetails = mbdDirect || (inheritGroupBlocks ? context.lastMbdDetails : "") || defaultMbdGroup || "";
+    let patientDirectedDetails = pdDirect || (inheritGroupBlocks ? context.lastPatientDirectedDetails : "") || "";
+    let walkInRaw = walkInDirect || (inheritGroupBlocks ? context.lastWalkInRaw : "") || "";
 
     if (directDonationDate) context.lastDate = directDonationDate;
     else if (!context.lastDate && entryDate) context.lastDate = entryDate;
 
-    if (donorTypeRawDirect) context.lastDonorTypeRaw = donorTypeRawDirect;
-    if (donorCategoryDirect) context.lastDonorCategory = donorCategoryDirect;
-    if (mbdDirect) context.lastMbdDetails = mbdDirect;
-    if (pdDirect) context.lastPatientDirectedDetails = pdDirect;
-    if (walkInDirect) context.lastWalkInRaw = walkInDirect;
+    if (inheritGroupBlocks) {
+        if (donorTypeRawDirect) context.lastDonorTypeRaw = donorTypeRawDirect;
+        if (donorCategoryDirect) context.lastDonorCategory = donorCategoryDirect;
+
+        if (mbdDirect) {
+            context.lastMbdDetails = mbdDirect;
+            context.lastPatientDirectedDetails = "";
+            context.lastWalkInRaw = "";
+        }
+        if (pdDirect) {
+            context.lastPatientDirectedDetails = pdDirect;
+            context.lastMbdDetails = "";
+            context.lastWalkInRaw = "";
+        }
+        if (walkInDirect) {
+            context.lastWalkInRaw = walkInDirect;
+            context.lastMbdDetails = "";
+            context.lastPatientDirectedDetails = "";
+        }
+    }
 
     const raw = {
         serialNumber: String(getFirstMappedValue(row, FIELD_ALIASES.serialNumber) || "").trim(),
@@ -904,22 +937,15 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
 
     raw.donorType = inferDonorType(raw);
 
-    if (!raw.donorType) {
-        if (raw.walkInRaw && looksLikeWalkInValue(raw.walkInRaw)) raw.donorType = "Walk-in";
-        else if (raw.patientDirectedDetails) raw.donorType = "Patient Directed";
-        else if (raw.mbdDetails) raw.donorType = "MBD";
-    }
-
-    if (raw.donorType === "Walk-in") {
+    if (raw.donorType === "MBD") {
+        raw.walkInRaw = "";
+        raw.patientDirectedDetails = "";
+    } else if (raw.donorType === "Walk-in") {
+        raw.mbdDetails = "";
         raw.patientDirectedDetails = "";
         if (!raw.walkInRaw) raw.walkInRaw = "WALK-IN";
-    }
-
-    if (raw.donorType === "Patient Directed") {
-        raw.walkInRaw = "";
-    }
-
-    if (raw.donorType === "MBD") {
+    } else if (raw.donorType === "Patient Directed") {
+        raw.mbdDetails = "";
         raw.walkInRaw = "";
     }
 
@@ -931,6 +957,10 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
 }
 
 function isTrulyBlankMappedRow(raw) {
+    if (!hasAnchorIdentityOrDonorData(raw)) {
+        return true;
+    }
+
     return [
         raw.serialNumber,
         raw.surname,
@@ -967,8 +997,11 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
         blankrows: false
     });
 
-    const { rows: objectRows } = aoaToObjectRows(aoa);
+    const { rows: objectRows, headers } = aoaToObjectRows(aoa);
     const parsed = [];
+
+    const donorDatabaseStyleSheet = sheetLooksLikeDonorDatabase(headers);
+
     const context = {
         lastDate: "",
         lastDonorTypeRaw: "",
@@ -979,7 +1012,17 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
     };
 
     objectRows.forEach(item => {
-        const raw = buildMappedRawFromRow(item.row, fileName, sheetName, item.sourceRowNumber, context);
+        const raw = buildMappedRawFromRow(
+            item.row,
+            fileName,
+            sheetName,
+            item.sourceRowNumber,
+            context,
+            {
+                inheritGroupBlocks: !donorDatabaseStyleSheet
+            }
+        );
+
         if (!isTrulyBlankMappedRow(raw)) {
             parsed.push(raw);
         }
