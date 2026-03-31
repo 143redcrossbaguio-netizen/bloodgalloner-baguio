@@ -179,7 +179,7 @@
 
         .mapping-form{
             display:grid;
-            grid-template-columns: 1.4fr .9fr auto;
+            grid-template-columns: 1.1fr .9fr 1.1fr auto;
             gap:10px;
             margin-bottom:12px;
         }
@@ -192,7 +192,7 @@
 
         .mapping-row{
             display:grid;
-            grid-template-columns:1.4fr .9fr auto;
+            grid-template-columns:1.1fr .8fr 1.1fr auto;
             gap:10px;
             align-items:center;
             padding:10px 12px;
@@ -411,7 +411,7 @@
             <div class="mapping-form">
                 <div class="field">
                     <label for="mapPartnerName">Partner / Alias / Group Name</label>
-                    <input type="text" id="mapPartnerName" placeholder="Example: SESSION IN BLOOM">
+                    <input type="text" id="mapPartnerName" placeholder="Example: LOCAL BLOOD COUNCIL">
                 </div>
 
                 <div class="field">
@@ -421,6 +421,11 @@
                         <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
                         <option value="Pledge 25">Pledge 25</option>
                     </select>
+                </div>
+
+                <div class="field">
+                    <label for="mapPlace">Place Override</label>
+                    <input type="text" id="mapPlace" placeholder="Example: 0891 ADIWANG ROAD, DONTONGAN">
                 </div>
 
                 <div class="field">
@@ -622,10 +627,11 @@ function getFilteredDonors(){
         const p = getDateParts(d);
         const partner = String(getPartnerName(r) || "").toLowerCase();
         const donorType = String(getDonorType(r) || "").toLowerCase();
+        const smartGroup = smartGroupDisplayName(getPartnerName(r) || "").toLowerCase();
 
         if (y !== "ALL" && String(p.year) !== y) return false;
         if (m !== "ALL" && String(p.month) !== m) return false;
-        if (q && !partner.includes(q) && !donorType.includes(q)) return false;
+        if (q && !partner.includes(q) && !donorType.includes(q) && !smartGroup.includes(q)) return false;
         return true;
     });
 }
@@ -736,15 +742,15 @@ function emptyStats(){
     return {
         totalDonors: 0,
         officeBleeding: {
-            "Walk-in": 0,
-            "Patient Directed": 0
+            "Walk-in": { S:0, D:0, T:0, Q:0 },
+            "Patient Directed": { S:0, D:0, T:0, Q:0 }
         },
         fieldDonation: {
-            "Total MBD": 0,
-            "Group": 0,
-            "RC143 / BRGY Base": 0,
-            "Pledge 25": 0,
-            "Unmapped": 0
+            "Total MBD": { S:0, D:0, T:0, Q:0 },
+            "Group": { S:0, D:0, T:0, Q:0 },
+            "RC143 / BRGY Base": { S:0, D:0, T:0, Q:0 },
+            "Pledge 25": { S:0, D:0, T:0, Q:0 },
+            "Unmapped": { S:0, D:0, T:0, Q:0 }
         },
         fieldDetails: {
             group: [],
@@ -819,58 +825,46 @@ function applyDonor(s, r){
 
     const donorType = normalizeDonorType(getDonorType(r));
     const partnerName = getPartnerName(r);
+    const mapping = getBestMapping(partnerName);
+    const smartName = mapping ? (mapping.partnerName || partnerName || "Unspecified") : smartGroupDisplayName(partnerName || "Unspecified");
+    const smartPlace = mapping && mapping.place ? mapping.place : getPartnerPlace(r);
+
     const bt = normalizeBloodType(r.bloodType || r.bloodtype || r.aboRh || r.group || "");
+    const bagCode = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+    const bagCounts = bagCodeToColumnObject(bagCode);
 
     if (donorType === "MBD") {
-        s.fieldDonation["Total MBD"]++;
-        const category = getMappedGroupCategory(partnerName);
-        s.fieldDonation[category] = (s.fieldDonation[category] || 0) + 1;
+        addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
+        const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
+        if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
+        addBagCounts(s.fieldDonation[category], bagCounts);
 
         const detail = {
-            name: smartGroupDisplayName(partnerName || "Unspecified"),
-            place: getPartnerPlace(r),
+            name: smartName,
+            place: smartPlace || "",
             date: formatDateForDisplay(getDonorDate(r)),
-            "450 cc S": getSingleCount(r),
-            "450 cc D": getDoubleCount(r),
-            "450 cc T": getTripleCount(r),
-            "450 cc Q": getQuadCount(r)
+            "450 cc S": bagCounts.S,
+            "450 cc D": bagCounts.D,
+            "450 cc T": bagCounts.T,
+            "450 cc Q": bagCounts.Q
         };
 
         if (category === "Group") s.fieldDetails.group.push(detail);
         else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
         else if (category === "Pledge 25") s.fieldDetails.pledge25.push(detail);
     } else if (donorType === "Walk-in") {
-        s.officeBleeding["Walk-in"] += 1;
+        addBagCounts(s.officeBleeding["Walk-in"], bagCounts);
     } else if (donorType === "Patient Directed") {
-        s.officeBleeding["Patient Directed"] += 1;
+        addBagCounts(s.officeBleeding["Patient Directed"], bagCounts);
     }
 
     s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
 
-    const bag = normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "");
-    if (bag === "Single" || bag === "Double") {
-        s.components["450 cc"]++;
-        s.componentBloodType["450 cc"][bt]++;
-    } else if (bag === "Triple") {
-        s.components["PRBC"]++;
-        s.components["FFP"]++;
-        s.components["PC"]++;
-        s.componentBloodType["PRBC"][bt]++;
-        s.componentBloodType["FFP"][bt]++;
-        s.componentBloodType["PC"][bt]++;
-    } else if (bag === "Quadruple") {
-        s.components["450 cc"]++;
-        s.components["PRBC"]++;
-        s.components["FFP"]++;
-        s.components["PC"]++;
-        s.componentBloodType["450 cc"][bt]++;
-        s.componentBloodType["PRBC"][bt]++;
-        s.componentBloodType["FFP"][bt]++;
-        s.componentBloodType["PC"][bt]++;
-    } else {
-        s.components["450 cc"]++;
-        s.componentBloodType["450 cc"][bt]++;
-    }
+    const prep = getPreparedComponentsFromBag(r);
+    Object.keys(prep).forEach(component => {
+        s.components[component] += prep[component];
+        if (prep[component] > 0) s.componentBloodType[component][bt] += prep[component];
+    });
 
     const sex = normalizeSex(r.sex || r.gender || "");
     if (sex === "Male" || sex === "Female") {
@@ -897,6 +891,37 @@ function applyDonor(s, r){
         if (sex === "Female") s.youth1625Sex["Female"]++;
         s.youth1625Sex["Total"]++;
     }
+}
+
+function addBagCounts(target, source){
+    target.S += source.S;
+    target.D += source.D;
+    target.T += source.T;
+    target.Q += source.Q;
+}
+
+function bagCodeToColumnObject(code){
+    return {
+        S: code === "S" ? 1 : 0,
+        D: code === "D" ? 1 : 0,
+        T: code === "T" ? 1 : 0,
+        Q: code === "Q" ? 1 : 0
+    };
+}
+
+function getPreparedComponentsFromBag(r){
+    const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+
+    if (code === "Q") {
+        return { "450 cc":1, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
+    }
+    if (code === "T") {
+        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
+    }
+    if (code === "D") {
+        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":0, "CRYO":0 };
+    }
+    return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
 }
 
 function applyRequestedOnly(s, r){
@@ -956,8 +981,8 @@ function pushPanelItems(items, p){
 function renderSummary(s){
     const cards = [
         ["Total Donor Entries", s.totalDonors],
-        ["Office Bleeding", sumVals(s.officeBleeding)],
-        ["Field Donation", s.fieldDonation["Total MBD"]],
+        ["Office Bleeding", sumBagGroup(s.officeBleeding["Walk-in"]) + sumBagGroup(s.officeBleeding["Patient Directed"])],
+        ["Field Donation", sumBagGroup(s.fieldDonation["Total MBD"])],
         ["Prepared Components", sumVals(s.components)],
         ["Requested Blood", sumVals(s.requests)],
         ["Male + Female", s.sex["Male"] + s.sex["Female"]]
@@ -1024,6 +1049,9 @@ function renderReport(grouped){
 }
 
 function renderOfficeBleedingBlock(s){
+    const walk = s.officeBleeding["Walk-in"];
+    const pd = s.officeBleeding["Patient Directed"];
+
     return `
         <div class="sheet-block">
             <div class="sheet-title title-a">A. Office Bleeding</div>
@@ -1038,24 +1066,24 @@ function renderOfficeBleedingBlock(s){
                     </tr>
                     <tr>
                         <td>1. Walk-in</td>
-                        <td>${num(s.officeBleeding["Walk-in"])}</td>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>${num(walk.S)}</td>
+                        <td>${num(walk.D)}</td>
+                        <td>${num(walk.T)}</td>
+                        <td>${num(walk.Q)}</td>
                     </tr>
                     <tr>
                         <td>2. Patient-directed</td>
-                        <td>${num(s.officeBleeding["Patient Directed"])}</td>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>${num(pd.S)}</td>
+                        <td>${num(pd.D)}</td>
+                        <td>${num(pd.T)}</td>
+                        <td>${num(pd.Q)}</td>
                     </tr>
                     <tr class="subheader">
                         <td>Total</td>
-                        <td>${num(s.officeBleeding["Walk-in"] + s.officeBleeding["Patient Directed"])}</td>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>0</td>
+                        <td>${num(walk.S + pd.S)}</td>
+                        <td>${num(walk.D + pd.D)}</td>
+                        <td>${num(walk.T + pd.T)}</td>
+                        <td>${num(walk.Q + pd.Q)}</td>
                     </tr>
                 </table>
             </div>
@@ -1146,18 +1174,18 @@ function renderBloodTypeBlock(s){
                     ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
                         <tr>
                             <td>${bt}</td>
-                            <td>${num(s.componentBloodType["450 cc"][bt])}</td>
-                            <td>0</td>
-                            <td>${num(s.componentBloodType["PRBC"][bt])}</td>
-                            <td>0</td>
+                            <td>${num(sumBagTypeForBloodType(s, bt, "S"))}</td>
+                            <td>${num(sumBagTypeForBloodType(s, bt, "D"))}</td>
+                            <td>${num(sumBagTypeForBloodType(s, bt, "T"))}</td>
+                            <td>${num(sumBagTypeForBloodType(s, bt, "Q"))}</td>
                         </tr>
                     `).join("")}
                     <tr class="subheader">
                         <td>Total</td>
-                        <td>${num(s.components["450 cc"])}</td>
-                        <td>0</td>
-                        <td>${num(s.components["PRBC"])}</td>
-                        <td>0</td>
+                        <td>${num(sumBagTypeColumn(s, "S"))}</td>
+                        <td>${num(sumBagTypeColumn(s, "D"))}</td>
+                        <td>${num(sumBagTypeColumn(s, "T"))}</td>
+                        <td>${num(sumBagTypeColumn(s, "Q"))}</td>
                     </tr>
                 </table>
             </div>
@@ -1396,6 +1424,7 @@ function toggleSectionBody(bodyId, badgeId){
 async function saveGroupCategory(){
     const partner = (document.getElementById("mapPartnerName").value || "").trim();
     const category = document.getElementById("mapCategory").value;
+    const place = (document.getElementById("mapPlace").value || "").trim();
 
     if (!partner) {
         alert("Please enter a partner / group name.");
@@ -1408,15 +1437,17 @@ async function saveGroupCategory(){
 
         if (existing) {
             await fs.collection("donorGroupCategories").doc(existing.id).update({
-                partnerName: partner,
+                partnerName: smartGroupDisplayName(partner),
                 category,
+                place,
                 normalizedKey: normalized,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         } else {
             await fs.collection("donorGroupCategories").add({
-                partnerName: partner,
+                partnerName: smartGroupDisplayName(partner),
                 category,
+                place,
                 normalizedKey: normalized,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1424,6 +1455,7 @@ async function saveGroupCategory(){
         }
 
         document.getElementById("mapPartnerName").value = "";
+        document.getElementById("mapPlace").value = "";
         await loadCategoryMappings();
         renderMappings();
         buildStatistics();
@@ -1466,17 +1498,19 @@ function renderMappings(){
         <div class="mapping-row">
             <div class="mapping-name">${escapeHtml(item.partnerName || item.name || "")}</div>
             <div class="mapping-cat">${escapeHtml(item.category || "Unmapped")}</div>
+            <div>${escapeHtml(item.place || "")}</div>
             <div class="mapping-actions">
-                <button class="btn-blue" onclick="fillMappingForEdit('${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}')">Edit</button>
+                <button class="btn-blue" onclick="fillMappingForEdit('${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}','${escapeJs(item.place || "")}')">Edit</button>
                 <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
             </div>
         </div>
     `).join("");
 }
 
-function fillMappingForEdit(name, category){
+function fillMappingForEdit(name, category, place){
     document.getElementById("mapPartnerName").value = name;
     document.getElementById("mapCategory").value = category;
+    document.getElementById("mapPlace").value = place || "";
     const body = document.getElementById("mappingBody");
     const badge = document.getElementById("mappingBadge");
     if (!body.classList.contains("open")) {
@@ -1485,20 +1519,20 @@ function fillMappingForEdit(name, category){
     }
 }
 
-function getMappedGroupCategory(partnerName){
+function getBestMapping(partnerName){
     const norm = normalizeAliasKey(partnerName || "");
-    if (!norm) return "Unmapped";
+    if (!norm) return null;
 
     const exact = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === norm);
-    if (exact) return exact.category || "Unmapped";
+    if (exact) return exact;
 
     const partial = categoryMappings.find(x => {
         const target = normalizeAliasKey(x.partnerName || x.name || "");
         return target && (target.includes(norm) || norm.includes(target));
     });
-    if (partial) return partial.category || "Unmapped";
+    if (partial) return partial;
 
-    return "Unmapped";
+    return null;
 }
 
 function normalizeAliasKey(value){
@@ -1507,7 +1541,7 @@ function normalizeAliasKey(value){
     s = s.replace(/\(.*?\)/g, " ");
     s = s.replace(/[_.,/\\]+/g, " ");
     s = s.replace(/\s*-\s*\d+\s*$/g, " ");
-    s = s.replace(/\s+\d+\s*$/g, " ");
+    s = s.replace(/\d+\s*$/g, " ");
     s = s.replace(/\bNO\.?\s*\d+\b/g, " ");
     s = s.replace(/\b#\s*\d+\b/g, " ");
     s = s.replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g, " ");
@@ -1562,7 +1596,13 @@ function exportCSV(){
     }
 
     const rows = [[
-        "Year","Month","Walk-in","Patient Directed","Total MBD","Group","RC143 / BRGY Base","Pledge 25","Unmapped",
+        "Year","Month","Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
+        "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
+        "Total MBD S","Total MBD D","Total MBD T","Total MBD Q",
+        "Group S","Group D","Group T","Group Q",
+        "RC143 S","RC143 D","RC143 T","RC143 Q",
+        "Pledge25 S","Pledge25 D","Pledge25 T","Pledge25 Q",
+        "Unmapped S","Unmapped D","Unmapped T","Unmapped Q",
         "O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown",
         "Prepared 450 cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO",
         "Requested 450 cc","Requested PRBC","Requested FFP","Requested PC","Requested CRYO",
@@ -1578,13 +1618,34 @@ function exportCSV(){
             rows.push([
                 year,
                 MONTHS[(s._meta.month || 1)-1],
-                s.officeBleeding["Walk-in"],
-                s.officeBleeding["Patient Directed"],
-                s.fieldDonation["Total MBD"],
-                s.fieldDonation["Group"],
-                s.fieldDonation["RC143 / BRGY Base"],
-                s.fieldDonation["Pledge 25"],
-                s.fieldDonation["Unmapped"],
+                s.officeBleeding["Walk-in"].S,
+                s.officeBleeding["Walk-in"].D,
+                s.officeBleeding["Walk-in"].T,
+                s.officeBleeding["Walk-in"].Q,
+                s.officeBleeding["Patient Directed"].S,
+                s.officeBleeding["Patient Directed"].D,
+                s.officeBleeding["Patient Directed"].T,
+                s.officeBleeding["Patient Directed"].Q,
+                s.fieldDonation["Total MBD"].S,
+                s.fieldDonation["Total MBD"].D,
+                s.fieldDonation["Total MBD"].T,
+                s.fieldDonation["Total MBD"].Q,
+                s.fieldDonation["Group"].S,
+                s.fieldDonation["Group"].D,
+                s.fieldDonation["Group"].T,
+                s.fieldDonation["Group"].Q,
+                s.fieldDonation["RC143 / BRGY Base"].S,
+                s.fieldDonation["RC143 / BRGY Base"].D,
+                s.fieldDonation["RC143 / BRGY Base"].T,
+                s.fieldDonation["RC143 / BRGY Base"].Q,
+                s.fieldDonation["Pledge 25"].S,
+                s.fieldDonation["Pledge 25"].D,
+                s.fieldDonation["Pledge 25"].T,
+                s.fieldDonation["Pledge 25"].Q,
+                s.fieldDonation["Unmapped"].S,
+                s.fieldDonation["Unmapped"].D,
+                s.fieldDonation["Unmapped"].T,
+                s.fieldDonation["Unmapped"].Q,
                 s.bloodType["O+"],
                 s.bloodType["A+"],
                 s.bloodType["B+"],
@@ -1694,19 +1755,6 @@ function formatDateForDisplay(raw){
     return `${mm}/${dd}/${yy}`;
 }
 
-function getSingleCount(r){
-    return normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "") === "Single" ? 1 : 0;
-}
-function getDoubleCount(r){
-    return normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "") === "Double" ? 1 : 0;
-}
-function getTripleCount(r){
-    return normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "") === "Triple" ? 1 : 0;
-}
-function getQuadCount(r){
-    return normalizeBagType(r.bagType || r.bag || r.bagConfiguration || "") === "Quadruple" ? 1 : 0;
-}
-
 function parseDate(raw){
     if (!raw) return null;
     if (raw instanceof Date) return isNaN(raw) ? null : raw;
@@ -1739,39 +1787,6 @@ function parseDate(raw){
     return isNaN(d) ? null : d;
 }
 
-function parseDateFromText(text){
-    const name = String(text || "").toLowerCase();
-
-    const ymd = name.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
-    if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2,"0")}-${String(ymd[3]).padStart(2,"0")}`;
-
-    const mdy = name.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
-    if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2,"0")}-${String(mdy[2]).padStart(2,"0")}`;
-
-    const monthMap = {
-        jan:"01", january:"01",
-        feb:"02", february:"02",
-        mar:"03", march:"03",
-        apr:"04", april:"04",
-        may:"05",
-        jun:"06", june:"06",
-        jul:"07", july:"07",
-        aug:"08", august:"08",
-        sep:"09", sept:"09", september:"09",
-        oct:"10", october:"10",
-        nov:"11", november:"11",
-        dec:"12", december:"12"
-    };
-
-    const monthYear = name.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
-    if (monthYear) return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
-
-    const yearMonth = name.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
-    if (yearMonth) return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
-
-    return "";
-}
-
 function getDateParts(d){
     if (!d || isNaN(d)) return {year:null, month:null, day:null};
     return { year:d.getFullYear(), month:d.getMonth()+1, day:d.getDate() };
@@ -1791,12 +1806,27 @@ function normalizeBloodType(v){
     return order.includes(s) ? s : "Unknown";
 }
 
-function normalizeBagType(v){
-    const s = String(v || "").toLowerCase();
-    if (s.includes("quad")) return "Quadruple";
-    if (s.includes("triple")) return "Triple";
-    if (s.includes("double")) return "Double";
-    return "Single";
+function normalizeBagCode(v){
+    const s = String(v || "").toLowerCase().trim();
+
+    if (!s) return "S";
+
+    if (s.includes("quad")) return "Q";
+    if (s.includes("triple")) return "T";
+    if (s.includes("double")) return "D";
+    if (s.includes("single")) return "S";
+
+    if (s === "q" || s === "4") return "Q";
+    if (s === "t" || s === "3") return "T";
+    if (s === "d" || s === "2") return "D";
+    if (s === "s" || s === "1") return "S";
+
+    if (s.includes("450 cc q") || s.includes("450cc q")) return "Q";
+    if (s.includes("450 cc t") || s.includes("450cc t")) return "T";
+    if (s.includes("450 cc d") || s.includes("450cc d")) return "D";
+    if (s.includes("450 cc s") || s.includes("450cc s")) return "S";
+
+    return "S";
 }
 
 function normalizeSex(v){
@@ -1820,7 +1850,7 @@ function normalizeRequestComponent(v){
     if (s === "PRBC") return "PRBC";
     if (s === "FFP") return "FFP";
     if (s === "PC" || s === "PLATELET CONCENTRATE") return "PC";
-    if (s === "CRYO" || s === "CRYO") return "CRYO";
+    if (s === "CRYO") return "CRYO";
     return "";
 }
 
@@ -1861,6 +1891,40 @@ function getAgeGroupPicture(age){
 
 function sumVals(obj){
     return Object.values(obj).reduce((a,b)=>a + (Number(b)||0), 0);
+}
+
+function sumBagGroup(obj){
+    return Number(obj.S||0) + Number(obj.D||0) + Number(obj.T||0) + Number(obj.Q||0);
+}
+
+function sumBagTypeColumn(s, code){
+    return Number(s.officeBleeding["Walk-in"][code] || 0) +
+           Number(s.officeBleeding["Patient Directed"][code] || 0) +
+           Number(s.fieldDonation["Total MBD"][code] || 0);
+}
+
+function sumBagTypeForBloodType(s, bt, code){
+    let total = 0;
+    donorRecords.forEach(r => {
+        const d = parseDate(getDonorDate(r));
+        const p = getDateParts(d);
+        const fy = document.getElementById("filterYear").value;
+        const fm = document.getElementById("filterMonth").value;
+        const fq = String(document.getElementById("searchText").value || "").trim().toLowerCase();
+
+        const partner = String(getPartnerName(r) || "").toLowerCase();
+        const donorType = String(getDonorType(r) || "").toLowerCase();
+        const smartGroup = smartGroupDisplayName(getPartnerName(r) || "").toLowerCase();
+
+        if (fy !== "ALL" && String(p.year) !== fy) return;
+        if (fm !== "ALL" && String(p.month) !== fm) return;
+        if (fq && !partner.includes(fq) && !donorType.includes(fq) && !smartGroup.includes(fq)) return;
+
+        const rowBt = normalizeBloodType(r.bloodType || r.bloodtype || r.aboRh || r.group || "");
+        const rowCode = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+        if (rowBt === bt && rowCode === code) total++;
+    });
+    return total;
 }
 
 function sumDetailField(rows, field){
