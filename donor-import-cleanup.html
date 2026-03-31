@@ -310,7 +310,7 @@
             • <b>Batch imports</b> = newer imports with <b>importMeta.batchId</b><br>
             • <b>Legacy imports</b> = older imports with <b>sourceFile/sourceSheet</b> but <b>no batchId</b><br>
             • Manual donor entries without import metadata are <b>not included</b><br>
-            • Large deletes now use the exact scanned donor document IDs in small chunks
+            • Deletion is verified against the <b>Firestore server</b> before success is shown
         </div>
 
         <div class="danger-note" style="margin-top:10px;">
@@ -586,11 +586,11 @@ function renderGroups() {
 }
 
 async function scanImportedRecords() {
-    setStatus("Scanning donorDatabase imported records...");
+    setStatus("Scanning donorDatabase imported records from server...");
     document.getElementById("groupsContainer").innerHTML = "";
 
     try {
-        const snap = await db.collection("donorDatabase").get();
+        const snap = await db.collection("donorDatabase").get({ source: "server" });
         const importedRows = [];
 
         snap.forEach(doc => {
@@ -614,7 +614,7 @@ async function scanImportedRecords() {
         if (!importedRows.length) {
             allImportGroups = [];
             renderStats([]);
-            setStatus("No imported donor records found.");
+            setStatus("No imported donor records found on server.");
             renderGroups();
             return;
         }
@@ -658,12 +658,13 @@ async function scanImportedRecords() {
                 return b.count - a.count;
             });
 
-        setStatus(`Scan complete. Found ${importedRows.length} imported record(s) in ${allImportGroups.length} group(s).`);
+        setStatus(`Server scan complete. Found ${importedRows.length} imported record(s) in ${allImportGroups.length} group(s).`);
         renderGroups();
 
     } catch (error) {
         console.error(error);
-        setStatus("Error scanning imported records: " + error.message, true);
+        setStatus("Error scanning imported records from server: " + error.message, true);
+        alert("Server scan failed: " + error.message);
     }
 }
 
@@ -747,6 +748,20 @@ async function deleteDocIdsInChunks(docIds, label) {
     return totalDeleted;
 }
 
+async function verifyDeletedFromServer(docIds) {
+    const uniqueIds = [...new Set(docIds.filter(Boolean))];
+    let remaining = 0;
+
+    for (let i = 0; i < uniqueIds.length; i++) {
+        const id = uniqueIds[i];
+        setStatus(`Verifying deletion on server... ${i + 1} / ${uniqueIds.length}`);
+        const snap = await db.collection("donorDatabase").doc(id).get({ source: "server" });
+        if (snap.exists) remaining++;
+    }
+
+    return remaining;
+}
+
 async function deleteBatchGroup(batchId) {
     if (!batchId) {
         alert("Missing batch ID.");
@@ -770,6 +785,13 @@ async function deleteBatchGroup(batchId) {
             try {
                 const ids = group.records.map(r => r.id);
                 const deletedCount = await deleteDocIdsInChunks(ids, `batch ${batchId}`);
+                const remaining = await verifyDeletedFromServer(ids);
+
+                if (remaining > 0) {
+                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+                    await scanImportedRecords();
+                    return;
+                }
 
                 try {
                     await db.collection("donorImportBatches").doc(batchId).update({
@@ -784,7 +806,7 @@ async function deleteBatchGroup(batchId) {
                 }
 
                 await scanImportedRecords();
-                alert(`Batch deleted successfully. Removed ${deletedCount} record(s).`);
+                alert(`Batch deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
             } catch (error) {
                 console.error(error);
                 alert("Delete failed: " + error.message);
@@ -810,10 +832,20 @@ async function deleteLegacyGroupByKey(groupKey) {
         async () => {
             try {
                 const ids = group.records.map(r => r.id);
-                const deletedCount = await deleteDocIdsInChunks(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
+                const deletedCount = await deleteDocIdsInChunks(
+                    ids,
+                    `legacy import ${group.sourceFile} / ${group.sourceSheet}`
+                );
+                const remaining = await verifyDeletedFromServer(ids);
+
+                if (remaining > 0) {
+                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+                    await scanImportedRecords();
+                    return;
+                }
 
                 await scanImportedRecords();
-                alert(`Legacy import deleted successfully. Removed ${deletedCount} record(s).`);
+                alert(`Legacy import deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
             } catch (error) {
                 console.error(error);
                 alert("Delete failed: " + error.message);
@@ -841,9 +873,16 @@ async function deleteAllLegacyImports() {
             try {
                 const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
                 const deletedCount = await deleteDocIdsInChunks(ids, "all legacy imports");
+                const remaining = await verifyDeletedFromServer(ids);
+
+                if (remaining > 0) {
+                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+                    await scanImportedRecords();
+                    return;
+                }
 
                 await scanImportedRecords();
-                alert(`Deleted all legacy imports successfully. Removed ${deletedCount} record(s).`);
+                alert(`Deleted all legacy imports successfully and confirmed on server. Removed ${deletedCount} record(s).`);
             } catch (error) {
                 console.error(error);
                 alert("Delete failed: " + error.message);
