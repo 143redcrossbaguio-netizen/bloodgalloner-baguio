@@ -1,291 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Galloners Club - Import Cleanup</title>
+<title>Import Cleanup (FAST DELETE)</title>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
 <style>
-    * { box-sizing: border-box; }
+body { font-family: Arial; margin:0; background:#f4f6f9; }
+header { background:#b30000; color:white; padding:15px; text-align:center; font-size:22px; }
+.container { max-width:1000px; margin:20px auto; padding:20px; background:white; border-radius:10px; }
 
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #eef3f7;
-        color: #1f2937;
-    }
+button {
+    padding:10px 15px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-weight:bold;
+}
+.btn-red { background:#b30000; color:white; }
+.btn-blue { background:#1565c0; color:white; }
 
-    header {
-        background: linear-gradient(90deg, #8b0000, #b30000);
-        color: white;
-        padding: 16px;
-        text-align: center;
-        font-size: 24px;
-        font-weight: bold;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    }
-
-    .container {
-        max-width: 1600px;
-        margin: 16px auto;
-        padding: 0 14px 24px;
-    }
-
-    .card {
-        background: white;
-        border: 1px solid #dbe3ec;
-        border-radius: 14px;
-        padding: 16px;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.08);
-        margin-bottom: 16px;
-    }
-
-    h2, h3 {
-        margin-top: 0;
-        color: #8b0000;
-    }
-
-    .row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-        margin-bottom: 10px;
-    }
-
-    .row label {
-        min-width: 140px;
-        font-weight: bold;
-        color: #334155;
-    }
-
-    input[type="text"] {
-        flex: 1;
-        min-width: 220px;
-        padding: 10px 12px;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        font-size: 14px;
-    }
-
-    button {
-        border: none;
-        border-radius: 8px;
-        padding: 10px 14px;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    .btn-blue { background: #1565c0; color: white; }
-    .btn-gray { background: #64748b; color: white; }
-    .btn-orange { background: #ef6c00; color: white; }
-    .btn-danger { background: #8b0000; color: white; }
-
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 12px;
-        margin: 12px 0;
-    }
-
-    .stat-box {
-        background: white;
-        border: 1px solid #dbe3ec;
-        border-radius: 12px;
-        padding: 14px;
-        text-align: center;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.06);
-    }
-
-    .stat-num {
-        font-size: 28px;
-        font-weight: bold;
-        color: #b30000;
-    }
-
-    .stat-label {
-        margin-top: 6px;
-        color: #64748b;
-        font-size: 13px;
-        font-weight: bold;
-    }
-
-    .note {
-        background: #fff8e1;
-        border: 1px solid #f0d98a;
-        color: #6d4c41;
-        border-radius: 10px;
-        padding: 12px;
-        font-size: 13px;
-        line-height: 1.45;
-    }
-
-    .danger-note {
-        background: #fdeaea;
-        border: 1px solid #efb7b7;
-        color: #8a1c1c;
-        border-radius: 10px;
-        padding: 12px;
-        font-size: 13px;
-        line-height: 1.45;
-    }
-
-    .group-box {
-        border: 1px solid #dbe3ec;
-        border-radius: 12px;
-        margin-bottom: 14px;
-        overflow: hidden;
-        background: #fff;
-    }
-
-    .group-header {
-        background: #f8fafc;
-        padding: 14px 16px;
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        border-bottom: 1px solid #e5e7eb;
-    }
-
-    .group-title {
-        font-size: 16px;
-        font-weight: bold;
-        color: #8b0000;
-        margin-bottom: 6px;
-    }
-
-    .group-meta {
-        font-size: 12px;
-        color: #64748b;
-        line-height: 1.45;
-    }
-
-    .group-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-
-    .pill {
-        display: inline-block;
-        padding: 4px 9px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: bold;
-    }
-
-    .pill-batch { background: #e8f5e9; color: #1b5e20; }
-    .pill-legacy { background: #fff3e0; color: #e65100; }
-    .pill-source { background: #e3f2fd; color: #0d47a1; }
-
-    .sample-wrap {
-        overflow: auto;
-    }
-
-    table {
-        width: 100%;
-        min-width: 1300px;
-        border-collapse: collapse;
-        font-size: 12px;
-    }
-
-    th, td {
-        border-bottom: 1px solid #e5e7eb;
-        padding: 8px;
-        text-align: left;
-        white-space: nowrap;
-        vertical-align: top;
-    }
-
-    th {
-        background: #fafafa;
-        position: sticky;
-        top: 0;
-    }
-
-    .muted { color: #64748b; }
-    .danger { color: #b71c1c; font-weight: bold; }
-    .hidden { display: none; }
-
-    @media (max-width: 1200px) {
-        .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-        .group-header {
-            flex-direction: column;
-        }
-    }
+.status { margin-top:15px; font-weight:bold; }
 </style>
 </head>
+
 <body>
 
-<header>Donor Database - Import Cleanup</header>
+<header>🔥 FAST IMPORT CLEANUP</header>
 
 <div class="container">
 
-    <div class="card">
-        <h3>Cleanup Imported Donor Records</h3>
+    <button class="btn-blue" onclick="scan()">Scan Imports</button>
+    <div id="list"></div>
 
-        <div class="row">
-            <button class="btn-blue" id="scanBtn">Scan Imported Records</button>
-            <button class="btn-gray" id="expandAllBtn">Expand All</button>
-            <button class="btn-gray" id="collapseAllBtn">Collapse All</button>
-            <button class="btn-orange" id="deleteLegacyOnlyBtn">Delete All Legacy Imports (No Batch ID)</button>
-        </div>
-
-        <div class="row">
-            <label>Search Group</label>
-            <input type="text" id="searchInput" placeholder="Search file name, sheet name, batch id">
-        </div>
-
-        <div class="note">
-            <b>Delete mode:</b><br>
-            • Reads imported rows from <b>server</b><br>
-            • Deletes by exact scanned document IDs<br>
-            • Uses <b>slow throttled REST delete</b><br>
-            • Retries automatically on <b>429 quota exceeded</b><br>
-            • Verifies from <b>server</b> before showing success
-        </div>
-
-        <div class="danger-note" style="margin-top:10px;">
-            <b>Warning:</b> deleting a group will permanently remove those donorDatabase records. You will be asked to re-enter your password before deletion.
-        </div>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-box">
-            <div class="stat-num" id="statAllImported">0</div>
-            <div class="stat-label">Imported Records Found</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-num" id="statBatchGroups">0</div>
-            <div class="stat-label">Batch Groups</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-num" id="statLegacyGroups">0</div>
-            <div class="stat-label">Legacy Groups</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-num" id="statBatchRows">0</div>
-            <div class="stat-label">Rows With Batch ID</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-num" id="statLegacyRows">0</div>
-            <div class="stat-label">Legacy Rows</div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>Detected Import Groups</h3>
-        <div id="statusBox" class="muted">Click "Scan Imported Records" to load groups.</div>
-        <div id="groupsContainer"></div>
-    </div>
+    <div class="status" id="status"></div>
 
 </div>
 
@@ -293,562 +44,107 @@
 const firebaseConfig = {
     apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
     authDomain: "galloners-club.firebaseapp.com",
-    databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "galloners-club",
-    storageBucket: "galloners-club.firebasestorage.app",
-    messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
+    projectId: "galloners-club"
 };
 
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-
+firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
-const PROJECT_ID = firebaseConfig.projectId;
 
-let allImportGroups = [];
-let collapsedMap = {};
-let deleteInProgress = false;
+let groups = {};
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+function setStatus(msg){
+    document.getElementById("status").innerText = msg;
 }
 
-function formatTimestamp(ts) {
-    if (!ts) return "";
-    try {
-        if (ts.toDate) return ts.toDate().toLocaleString();
-        return String(ts);
-    } catch {
-        return String(ts);
-    }
+async function scan(){
+    setStatus("Scanning...");
+    groups = {};
+    document.getElementById("list").innerHTML = "";
+
+    const snap = await db.collection("donorDatabase").get();
+
+    snap.forEach(doc=>{
+        const data = doc.data();
+        const meta = data.importMeta || {};
+        const key = meta.sourceFile + " | " + meta.sourceSheet;
+
+        if(!groups[key]) groups[key] = [];
+        groups[key].push(doc.id);
+    });
+
+    render();
+    setStatus("Scan complete");
 }
 
-function setStatus(message, isError = false) {
-    const box = document.getElementById("statusBox");
-    box.className = isError ? "danger" : "muted";
-    box.textContent = message;
-}
+function render(){
+    let html = "";
 
-function makeGroupKey(record) {
-    const meta = record.importMeta || {};
-    const batchId = meta.batchId || "";
-
-    if (batchId) return `batch::${batchId}`;
-
-    const sourceFile = meta.sourceFile || "UNKNOWN FILE";
-    const sourceSheet = meta.sourceSheet || "UNKNOWN SHEET";
-    return `legacy::${sourceFile}::${sourceSheet}`;
-}
-
-function buildGroupLabel(group) {
-    if (group.type === "batch") return `Batch Import - ${group.batchId}`;
-    return `Legacy Import - ${group.sourceFile} / ${group.sourceSheet}`;
-}
-
-function recordMatchesSearch(group, keyword) {
-    if (!keyword) return true;
-    const haystack = [
-        group.type,
-        group.batchId,
-        group.sourceFile,
-        group.sourceSheet,
-        group.importedFrom,
-        group.label
-    ].join(" ").toLowerCase();
-
-    return haystack.includes(keyword.toLowerCase());
-}
-
-function summarizeSampleRows(records, limit = 8) {
-    return records.slice(0, limit);
-}
-
-function renderStats(groups) {
-    const allRows = groups.reduce((sum, g) => sum + g.count, 0);
-    const batchGroups = groups.filter(g => g.type === "batch").length;
-    const legacyGroups = groups.filter(g => g.type === "legacy").length;
-    const batchRows = groups.filter(g => g.type === "batch").reduce((sum, g) => sum + g.count, 0);
-    const legacyRows = groups.filter(g => g.type === "legacy").reduce((sum, g) => sum + g.count, 0);
-
-    document.getElementById("statAllImported").textContent = allRows;
-    document.getElementById("statBatchGroups").textContent = batchGroups;
-    document.getElementById("statLegacyGroups").textContent = legacyGroups;
-    document.getElementById("statBatchRows").textContent = batchRows;
-    document.getElementById("statLegacyRows").textContent = legacyRows;
-}
-
-function renderGroups() {
-    const container = document.getElementById("groupsContainer");
-    const keyword = document.getElementById("searchInput").value.trim();
-    const filtered = allImportGroups.filter(group => recordMatchesSearch(group, keyword));
-
-    renderStats(filtered);
-
-    if (!filtered.length) {
-        container.innerHTML = `<div class="muted">No matching import groups found.</div>`;
-        return;
-    }
-
-    container.innerHTML = filtered.map((group, index) => {
-        const collapseKey = group.key;
-        const isCollapsed = collapsedMap[collapseKey] === true;
-        const samples = summarizeSampleRows(group.records);
-
-        return `
-            <div class="group-box">
-                <div class="group-header">
-                    <div>
-                        <div class="group-title">
-                            ${escapeHtml(group.label)}
-                            ${group.type === "batch"
-                                ? '<span class="pill pill-batch">BATCH</span>'
-                                : '<span class="pill pill-legacy">LEGACY</span>'
-                            }
-                            <span class="pill pill-source">${group.count} row(s)</span>
-                        </div>
-                        <div class="group-meta">
-                            <div><b>Imported From:</b> ${escapeHtml(group.importedFrom || "Unknown")}</div>
-                            <div><b>Source File:</b> ${escapeHtml(group.sourceFile || "-")}</div>
-                            <div><b>Source Sheet:</b> ${escapeHtml(group.sourceSheet || "-")}</div>
-                            <div><b>Batch ID:</b> ${escapeHtml(group.batchId || "-")}</div>
-                            <div><b>Latest Import Time Found:</b> ${escapeHtml(group.latestImportedAt || "-")}</div>
-                        </div>
-                    </div>
-
-                    <div class="group-actions">
-                        <button class="btn-gray" onclick="toggleGroup('${escapeHtml(collapseKey)}')" ${deleteInProgress ? "disabled" : ""}>
-                            ${isCollapsed ? 'Show Rows' : 'Hide Rows'}
-                        </button>
-
-                        ${
-                            group.type === "batch"
-                            ? `<button class="btn-danger" onclick="deleteBatchGroup('${escapeHtml(group.batchId)}')" ${deleteInProgress ? "disabled" : ""}>Delete This Batch</button>`
-                            : `<button class="btn-danger" onclick="deleteLegacyGroupByKey('${escapeHtml(group.key)}')" ${deleteInProgress ? "disabled" : ""}>Delete This Legacy Import</button>`
-                        }
-                    </div>
-                </div>
-
-                <div class="${isCollapsed ? 'hidden' : ''}" id="group-body-${index}">
-                    <div class="sample-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Doc ID</th>
-                                    <th>Date</th>
-                                    <th>Serial</th>
-                                    <th>Surname</th>
-                                    <th>First Name</th>
-                                    <th>Birthday</th>
-                                    <th>Donor Type</th>
-                                    <th>MBD</th>
-                                    <th>Patient Directed</th>
-                                    <th>File</th>
-                                    <th>Sheet</th>
-                                    <th>Source Row</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${samples.map(row => `
-                                    <tr>
-                                        <td>${escapeHtml(row.id)}</td>
-                                        <td>${escapeHtml(row.entryDate || "")}</td>
-                                        <td>${escapeHtml(row.serialNumber || "")}</td>
-                                        <td>${escapeHtml(row.surname || "")}</td>
-                                        <td>${escapeHtml(row.firstName || "")}</td>
-                                        <td>${escapeHtml(row.birthday || "")}</td>
-                                        <td>${escapeHtml(row.donorType || "")}</td>
-                                        <td>${escapeHtml(row.mbdDetails || "")}</td>
-                                        <td>${escapeHtml(row.patientDirectedDetails || "")}</td>
-                                        <td>${escapeHtml(row.importMeta?.sourceFile || "")}</td>
-                                        <td>${escapeHtml(row.importMeta?.sourceSheet || "")}</td>
-                                        <td>${escapeHtml(row.importMeta?.sourceRowNumber || "")}</td>
-                                    </tr>
-                                `).join("")}
-                            </tbody>
-                        </table>
-                    </div>
-                    ${group.count > samples.length ? `<div style="padding:10px 16px;" class="muted">Showing ${samples.length} sample rows out of ${group.count}.</div>` : ""}
-                </div>
+    Object.keys(groups).forEach(key=>{
+        html += `
+            <div style="margin-top:10px; padding:10px; border:1px solid #ccc;">
+                <b>${key}</b> (${groups[key].length} rows)
+                <br><br>
+                <button class="btn-red" onclick="deleteGroup('${key}')">DELETE</button>
             </div>
         `;
-    }).join("");
+    });
+
+    document.getElementById("list").innerHTML = html;
 }
 
-async function scanImportedRecords() {
-    setStatus("Scanning donorDatabase imported records from server...");
-    document.getElementById("groupsContainer").innerHTML = "";
-
-    try {
-        const snap = await db.collection("donorDatabase").get({ source: "server" });
-        const importedRows = [];
-
-        snap.forEach(doc => {
-            const data = doc.data() || {};
-            const meta = data.importMeta || {};
-            const isImported = !!meta.importedFrom || !!meta.sourceFile || !!meta.sourceSheet || !!meta.batchId;
-            if (!isImported) return;
-
-            importedRows.push({
-                id: doc.id,
-                ...data
-            });
-        });
-
-        if (!importedRows.length) {
-            allImportGroups = [];
-            renderStats([]);
-            setStatus("No imported donor records found on server.");
-            renderGroups();
-            return;
-        }
-
-        const grouped = {};
-
-        importedRows.forEach(row => {
-            const key = makeGroupKey(row);
-
-            if (!grouped[key]) {
-                const meta = row.importMeta || {};
-                grouped[key] = {
-                    key,
-                    type: meta.batchId ? "batch" : "legacy",
-                    batchId: meta.batchId || "",
-                    sourceFile: meta.sourceFile || "",
-                    sourceSheet: meta.sourceSheet || "",
-                    importedFrom: meta.importedFrom || "",
-                    latestImportedAt: meta.importedAt || "",
-                    records: []
-                };
-            }
-
-            const meta = row.importMeta || {};
-            if (meta.importedAt) grouped[key].latestImportedAt = meta.importedAt;
-            grouped[key].records.push(row);
-        });
-
-        allImportGroups = Object.values(grouped)
-            .map(group => ({
-                ...group,
-                count: group.records.length,
-                label: buildGroupLabel(group),
-                latestImportedAt: formatTimestamp(group.latestImportedAt)
-            }))
-            .sort((a, b) => {
-                if (a.type !== b.type) return a.type === "batch" ? -1 : 1;
-                return b.count - a.count;
-            });
-
-        setStatus(`Server scan complete. Found ${importedRows.length} imported record(s) in ${allImportGroups.length} group(s).`);
-        renderGroups();
-
-    } catch (error) {
-        console.error(error);
-        setStatus("Error scanning imported records from server: " + error.message, true);
-        alert("Server scan failed: " + error.message);
-    }
-}
-
-async function requestPasswordConfirmation(actionLabel) {
+async function confirmPassword(){
     const user = auth.currentUser;
+    const pass = prompt("Enter password to confirm delete:");
 
-    if (!user) {
-        alert("You must be logged in first.");
-        window.location.href = "index.html";
-        return null;
-    }
-
-    if (!user.email) {
-        alert("This account has no email available for password confirmation.");
-        return null;
-    }
-
-    const password = prompt(`Please re-enter your password to continue:\n\n${actionLabel}`);
-    if (password === null) return null;
-
-    if (!password.trim()) {
-        alert("Password is required.");
-        return null;
-    }
-
-    try {
-        const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
-        await user.reauthenticateWithCredential(credential);
-        return true;
-    } catch (error) {
-        console.error("Re-authentication failed:", error);
-        alert("Password confirmation failed. Please check your password.");
-        return null;
-    }
+    const cred = firebase.auth.EmailAuthProvider.credential(user.email, pass);
+    await user.reauthenticateWithCredential(cred);
 }
 
-async function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
+async function deleteGroup(key){
+    try{
+        if(!confirm("DELETE THIS IMPORT?")) return;
 
-async function getFreshIdToken() {
-    const user = auth.currentUser;
-    if (!user) throw new Error("No logged-in user found.");
-    return await user.getIdToken(true);
-}
+        await confirmPassword();
 
-function buildFirestoreDeleteUrl(docId) {
-    return `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/donorDatabase/${encodeURIComponent(docId)}`;
-}
+        const ids = groups[key];
 
-async function deleteOneDocViaRest(docId, idToken) {
-    const url = buildFirestoreDeleteUrl(docId);
+        setStatus("Deleting " + ids.length + " records...");
 
-    const response = await fetch(url, {
-        method: "DELETE",
-        headers: {
-            "Authorization": `Bearer ${idToken}`
-        }
-    });
+        let batchSize = 500;
+        let totalDeleted = 0;
 
-    if (response.ok) return { ok: true };
+        for(let i=0;i<ids.length;i+=batchSize){
+            const batch = db.batch();
+            const chunk = ids.slice(i, i + batchSize);
 
-    const text = await response.text().catch(() => "");
-    let parsed = null;
-    try {
-        parsed = JSON.parse(text);
-    } catch {}
-
-    const status = response.status;
-    const message =
-        parsed?.error?.message ||
-        text ||
-        response.statusText ||
-        "Unknown error";
-
-    return {
-        ok: false,
-        status,
-        message
-    };
-}
-
-async function deleteDocIdsViaRestSlow(docIds, label) {
-    const uniqueIds = [...new Set(docIds.filter(Boolean))];
-    let deleted = 0;
-    let idToken = await getFreshIdToken();
-
-    for (let i = 0; i < uniqueIds.length; i++) {
-        const id = uniqueIds[i];
-        let retries = 0;
-
-        while (true) {
-            setStatus(`Deleting ${label}... ${i + 1} / ${uniqueIds.length}`);
-
-            if (i > 0 && i % 10 === 0 && retries === 0) {
-                idToken = await getFreshIdToken();
-            }
-
-            const result = await deleteOneDocViaRest(id, idToken);
-
-            if (result.ok) {
-                deleted++;
-                break;
-            }
-
-            if (result.status === 429 && retries < 8) {
-                retries++;
-                const waitMs = 3000 * retries;
-                setStatus(`Quota limit reached. Waiting ${Math.ceil(waitMs / 1000)} second(s) before retry ${retries}...`);
-                await sleep(waitMs);
-                idToken = await getFreshIdToken();
-                continue;
-            }
-
-            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}.\nDoc ID: ${id}\nHTTP ${result.status}: ${result.message}`);
-        }
-
-        await sleep(1200);
-    }
-
-    return deleted;
-}
-
-async function verifyDeletedFromServer(docIds) {
-    const uniqueIds = [...new Set(docIds.filter(Boolean))];
-    let remaining = 0;
-
-    for (let i = 0; i < uniqueIds.length; i++) {
-        const id = uniqueIds[i];
-        setStatus(`Verifying deletion on server... ${i + 1} / ${uniqueIds.length}`);
-        const snap = await db.collection("donorDatabase").doc(id).get({ source: "server" });
-        if (snap.exists) remaining++;
-        await sleep(120);
-    }
-
-    return remaining;
-}
-
-async function runDeleteFlow(ids, label) {
-    deleteInProgress = true;
-    renderGroups();
-
-    try {
-        const deletedCount = await deleteDocIdsViaRestSlow(ids, label);
-        const remaining = await verifyDeletedFromServer(ids);
-
-        if (remaining > 0) {
-            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-            await scanImportedRecords();
-            return;
-        }
-
-        await scanImportedRecords();
-        alert(`Delete completed successfully and was confirmed on server.\n\nRemoved ${deletedCount} record(s).`);
-    } finally {
-        deleteInProgress = false;
-        renderGroups();
-    }
-}
-
-async function deleteBatchGroup(batchId) {
-    if (!batchId) {
-        alert("Missing batch ID.");
-        return;
-    }
-
-    const group = allImportGroups.find(g => g.type === "batch" && g.batchId === batchId);
-    if (!group) {
-        alert("Batch group not found.");
-        return;
-    }
-
-    const ok = confirm(
-        `Delete batch ${batchId}?\n\nThis will remove ${group.count} donorDatabase record(s) from this imported batch.`
-    );
-    if (!ok) return;
-
-    const confirmed = await requestPasswordConfirmation(
-        `Delete batch ${batchId} containing ${group.count} donor record(s)`
-    );
-    if (!confirmed) return;
-
-    try {
-        await runDeleteFlow(group.records.map(r => r.id), `batch ${batchId}`);
-
-        try {
-            await db.collection("donorImportBatches").doc(batchId).update({
-                status: "retracted",
-                retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                retractedByUid: auth.currentUser ? auth.currentUser.uid : "",
-                retractedByEmail: auth.currentUser ? (auth.currentUser.email || "") : "",
-                retractedDeletedCount: group.records.length
+            chunk.forEach(id=>{
+                batch.delete(db.collection("donorDatabase").doc(id));
             });
-        } catch (e) {
-            console.warn("Batch history update skipped:", e);
+
+            await batch.commit();
+            totalDeleted += chunk.length;
+
+            setStatus(`Deleted ${totalDeleted}/${ids.length}`);
         }
 
-    } catch (error) {
-        console.error(error);
-        alert("Delete failed: " + error.message);
-        await scanImportedRecords();
-        deleteInProgress = false;
-        renderGroups();
+        setStatus("✅ DELETE COMPLETE");
+        alert("SUCCESS: Deleted " + totalDeleted + " records");
+
+        scan();
+
+    }catch(e){
+        console.error(e);
+        alert("ERROR: " + e.message);
+        setStatus("ERROR");
     }
 }
 
-async function deleteLegacyGroupByKey(groupKey) {
-    const group = allImportGroups.find(g => g.key === groupKey && g.type === "legacy");
-    if (!group) {
-        alert("Legacy group not found.");
-        return;
+auth.onAuthStateChanged(user=>{
+    if(!user){
+        alert("Login required");
+        location.href="index.html";
     }
-
-    const ok = confirm(
-        `Delete this legacy import?\n\nFile: ${group.sourceFile || "-"}\nSheet: ${group.sourceSheet || "-"}\nRows: ${group.count}\n\nThis will permanently remove these old imported donor records.`
-    );
-    if (!ok) return;
-
-    const confirmed = await requestPasswordConfirmation(
-        `Delete legacy import ${group.sourceFile || "-"} / ${group.sourceSheet || "-"} (${group.count} record(s))`
-    );
-    if (!confirmed) return;
-
-    try {
-        await runDeleteFlow(group.records.map(r => r.id), `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
-    } catch (error) {
-        console.error(error);
-        alert("Delete failed: " + error.message);
-        await scanImportedRecords();
-        deleteInProgress = false;
-        renderGroups();
-    }
-}
-
-async function deleteAllLegacyImports() {
-    const legacyGroups = allImportGroups.filter(g => g.type === "legacy");
-    if (!legacyGroups.length) {
-        alert("No legacy imports found.");
-        return;
-    }
-
-    const totalRows = legacyGroups.reduce((sum, g) => sum + g.count, 0);
-    const ok = confirm(
-        `Delete ALL legacy imports with no batch ID?\n\nGroups: ${legacyGroups.length}\nRows: ${totalRows}\n\nThis is useful if the old import logic made your tracking messy.`
-    );
-    if (!ok) return;
-
-    const confirmed = await requestPasswordConfirmation(
-        `Delete ALL legacy imports with no batch ID (${totalRows} record(s))`
-    );
-    if (!confirmed) return;
-
-    try {
-        const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
-        await runDeleteFlow(ids, "all legacy imports");
-    } catch (error) {
-        console.error(error);
-        alert("Delete failed: " + error.message);
-        await scanImportedRecords();
-        deleteInProgress = false;
-        renderGroups();
-    }
-}
-
-function toggleGroup(groupKey) {
-    collapsedMap[groupKey] = !collapsedMap[groupKey];
-    renderGroups();
-}
-
-function setAllCollapsed(value) {
-    allImportGroups.forEach(group => {
-        collapsedMap[group.key] = value;
-    });
-    renderGroups();
-}
-
-document.getElementById("scanBtn").addEventListener("click", scanImportedRecords);
-document.getElementById("expandAllBtn").addEventListener("click", () => setAllCollapsed(false));
-document.getElementById("collapseAllBtn").addEventListener("click", () => setAllCollapsed(true));
-document.getElementById("deleteLegacyOnlyBtn").addEventListener("click", deleteAllLegacyImports);
-document.getElementById("searchInput").addEventListener("input", renderGroups);
-
-window.toggleGroup = toggleGroup;
-window.deleteBatchGroup = deleteBatchGroup;
-window.deleteLegacyGroupByKey = deleteLegacyGroupByKey;
-
-window.addEventListener("load", async () => {
-    auth.onAuthStateChanged(async user => {
-        if (!user) {
-            alert("You must be logged in first.");
-            window.location.href = "index.html";
-            return;
-        }
-        await scanImportedRecords();
-    });
 });
 </script>
 
