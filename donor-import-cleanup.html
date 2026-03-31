@@ -63,7 +63,7 @@
         color: #334155;
     }
 
-    input[type="text"], input[type="password"], select {
+    input[type="text"], select {
         flex: 1;
         min-width: 220px;
         padding: 10px 12px;
@@ -219,61 +219,6 @@
         display: none;
     }
 
-    .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.45);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        padding: 16px;
-    }
-
-    .modal-backdrop.show {
-        display: flex;
-    }
-
-    .modal-card {
-        width: 100%;
-        max-width: 480px;
-        background: white;
-        border-radius: 14px;
-        border: 1px solid #dbe3ec;
-        box-shadow: 0 10px 35px rgba(0,0,0,0.25);
-        padding: 18px;
-    }
-
-    .modal-title {
-        font-size: 20px;
-        font-weight: bold;
-        color: #8b0000;
-        margin-bottom: 10px;
-    }
-
-    .modal-text {
-        font-size: 14px;
-        color: #374151;
-        line-height: 1.5;
-        margin-bottom: 12px;
-        white-space: pre-line;
-    }
-
-    .modal-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-        margin-top: 14px;
-        flex-wrap: wrap;
-    }
-
-    .modal-error {
-        color: #b71c1c;
-        font-size: 13px;
-        margin-top: 8px;
-        min-height: 18px;
-    }
-
     @media (max-width: 1200px) {
         .stats-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -349,30 +294,6 @@
 
 </div>
 
-<div id="passwordModal" class="modal-backdrop">
-    <div class="modal-card">
-        <div class="modal-title">Confirm Delete</div>
-        <div class="modal-text" id="modalMessage">Please re-enter your password to continue.</div>
-
-        <div class="row" style="margin-bottom:0;">
-            <label style="min-width:100px;">Email</label>
-            <input type="text" id="confirmEmail" readonly>
-        </div>
-
-        <div class="row" style="margin-bottom:0;">
-            <label style="min-width:100px;">Password</label>
-            <input type="password" id="confirmPassword" placeholder="Re-enter your password">
-        </div>
-
-        <div id="modalError" class="modal-error"></div>
-
-        <div class="modal-actions">
-            <button class="btn-gray" id="cancelPasswordBtn" type="button">Cancel</button>
-            <button class="btn-danger" id="confirmPasswordBtn" type="button">Confirm Delete</button>
-        </div>
-    </div>
-</div>
-
 <script>
 const firebaseConfig = {
     apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -394,7 +315,6 @@ const auth = firebase.auth();
 
 let allImportGroups = [];
 let collapsedMap = {};
-let pendingDeleteAction = null;
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -668,68 +588,42 @@ async function scanImportedRecords() {
     }
 }
 
-function openPasswordModal(message, actionFn) {
+async function requestPasswordConfirmation(actionLabel) {
     const user = auth.currentUser;
+
     if (!user) {
         alert("You must be logged in first.");
         window.location.href = "index.html";
-        return;
-    }
-
-    document.getElementById("modalMessage").textContent = message;
-    document.getElementById("confirmEmail").value = user.email || "";
-    document.getElementById("confirmPassword").value = "";
-    document.getElementById("modalError").textContent = "";
-    document.getElementById("passwordModal").classList.add("show");
-    pendingDeleteAction = actionFn;
-}
-
-function closePasswordModal() {
-    document.getElementById("passwordModal").classList.remove("show");
-    document.getElementById("confirmPassword").value = "";
-    document.getElementById("modalError").textContent = "";
-    pendingDeleteAction = null;
-}
-
-async function confirmPasswordAndRun() {
-    const user = auth.currentUser;
-    const password = document.getElementById("confirmPassword").value;
-    const errorBox = document.getElementById("modalError");
-
-    if (!user) {
-        errorBox.textContent = "No logged-in user found.";
-        return;
+        return null;
     }
 
     if (!user.email) {
-        errorBox.textContent = "This account has no email available for password re-entry.";
-        return;
+        alert("This account has no email available for password confirmation.");
+        return null;
     }
 
-    if (!password) {
-        errorBox.textContent = "Please enter your password.";
-        return;
+    const password = prompt(`Please re-enter your password to continue:\n\n${actionLabel}`);
+    if (password === null) return null;
+
+    if (!password.trim()) {
+        alert("Password is required.");
+        return null;
     }
 
     try {
         const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
         await user.reauthenticateWithCredential(credential);
-
-        const actionToRun = pendingDeleteAction;
-        closePasswordModal();
-
-        if (typeof actionToRun === "function") {
-            await actionToRun();
-        }
+        return true;
     } catch (error) {
         console.error("Re-authentication failed:", error);
-        errorBox.textContent = "Password confirmation failed. Please check your password and try again.";
+        alert("Password confirmation failed. Please check your password.");
+        return null;
     }
 }
 
 async function deleteDocIdsInChunks(docIds, label) {
     const uniqueIds = [...new Set(docIds.filter(Boolean))];
-    const chunkSize = 100;
+    const chunkSize = 50;
     let totalDeleted = 0;
 
     for (let i = 0; i < uniqueIds.length; i += chunkSize) {
@@ -779,40 +673,40 @@ async function deleteBatchGroup(batchId) {
     );
     if (!ok) return;
 
-    openPasswordModal(
-        `Re-enter your password to delete batch ${batchId} containing ${group.count} donor record(s).`,
-        async () => {
-            try {
-                const ids = group.records.map(r => r.id);
-                const deletedCount = await deleteDocIdsInChunks(ids, `batch ${batchId}`);
-                const remaining = await verifyDeletedFromServer(ids);
-
-                if (remaining > 0) {
-                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-                    await scanImportedRecords();
-                    return;
-                }
-
-                try {
-                    await db.collection("donorImportBatches").doc(batchId).update({
-                        status: "retracted",
-                        retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        retractedByUid: auth.currentUser ? auth.currentUser.uid : "",
-                        retractedByEmail: auth.currentUser ? (auth.currentUser.email || "") : "",
-                        retractedDeletedCount: deletedCount
-                    });
-                } catch (e) {
-                    console.warn("Batch history update skipped:", e);
-                }
-
-                await scanImportedRecords();
-                alert(`Batch deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
-            } catch (error) {
-                console.error(error);
-                alert("Delete failed: " + error.message);
-            }
-        }
+    const confirmed = await requestPasswordConfirmation(
+        `Delete batch ${batchId} containing ${group.count} donor record(s)`
     );
+    if (!confirmed) return;
+
+    try {
+        const ids = group.records.map(r => r.id);
+        const deletedCount = await deleteDocIdsInChunks(ids, `batch ${batchId}`);
+        const remaining = await verifyDeletedFromServer(ids);
+
+        if (remaining > 0) {
+            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+            await scanImportedRecords();
+            return;
+        }
+
+        try {
+            await db.collection("donorImportBatches").doc(batchId).update({
+                status: "retracted",
+                retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                retractedByUid: auth.currentUser ? auth.currentUser.uid : "",
+                retractedByEmail: auth.currentUser ? (auth.currentUser.email || "") : "",
+                retractedDeletedCount: deletedCount
+            });
+        } catch (e) {
+            console.warn("Batch history update skipped:", e);
+        }
+
+        await scanImportedRecords();
+        alert(`Batch deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
+    } catch (error) {
+        console.error(error);
+        alert("Delete failed: " + error.message);
+    }
 }
 
 async function deleteLegacyGroupByKey(groupKey) {
@@ -827,31 +721,28 @@ async function deleteLegacyGroupByKey(groupKey) {
     );
     if (!ok) return;
 
-    openPasswordModal(
-        `Re-enter your password to delete legacy import:\n${group.sourceFile || "-"} / ${group.sourceSheet || "-"}\n(${group.count} record(s)).`,
-        async () => {
-            try {
-                const ids = group.records.map(r => r.id);
-                const deletedCount = await deleteDocIdsInChunks(
-                    ids,
-                    `legacy import ${group.sourceFile} / ${group.sourceSheet}`
-                );
-                const remaining = await verifyDeletedFromServer(ids);
-
-                if (remaining > 0) {
-                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-                    await scanImportedRecords();
-                    return;
-                }
-
-                await scanImportedRecords();
-                alert(`Legacy import deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
-            } catch (error) {
-                console.error(error);
-                alert("Delete failed: " + error.message);
-            }
-        }
+    const confirmed = await requestPasswordConfirmation(
+        `Delete legacy import ${group.sourceFile || "-"} / ${group.sourceSheet || "-"} (${group.count} record(s))`
     );
+    if (!confirmed) return;
+
+    try {
+        const ids = group.records.map(r => r.id);
+        const deletedCount = await deleteDocIdsInChunks(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
+        const remaining = await verifyDeletedFromServer(ids);
+
+        if (remaining > 0) {
+            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+            await scanImportedRecords();
+            return;
+        }
+
+        await scanImportedRecords();
+        alert(`Legacy import deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
+    } catch (error) {
+        console.error(error);
+        alert("Delete failed: " + error.message);
+    }
 }
 
 async function deleteAllLegacyImports() {
@@ -867,28 +758,28 @@ async function deleteAllLegacyImports() {
     );
     if (!ok) return;
 
-    openPasswordModal(
-        `Re-enter your password to delete ALL legacy imports with no batch ID.\nGroups: ${legacyGroups.length}\nRows: ${totalRows}`,
-        async () => {
-            try {
-                const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
-                const deletedCount = await deleteDocIdsInChunks(ids, "all legacy imports");
-                const remaining = await verifyDeletedFromServer(ids);
-
-                if (remaining > 0) {
-                    alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-                    await scanImportedRecords();
-                    return;
-                }
-
-                await scanImportedRecords();
-                alert(`Deleted all legacy imports successfully and confirmed on server. Removed ${deletedCount} record(s).`);
-            } catch (error) {
-                console.error(error);
-                alert("Delete failed: " + error.message);
-            }
-        }
+    const confirmed = await requestPasswordConfirmation(
+        `Delete ALL legacy imports with no batch ID (${totalRows} record(s))`
     );
+    if (!confirmed) return;
+
+    try {
+        const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
+        const deletedCount = await deleteDocIdsInChunks(ids, "all legacy imports");
+        const remaining = await verifyDeletedFromServer(ids);
+
+        if (remaining > 0) {
+            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+            await scanImportedRecords();
+            return;
+        }
+
+        await scanImportedRecords();
+        alert(`Deleted all legacy imports successfully and confirmed on server. Removed ${deletedCount} record(s).`);
+    } catch (error) {
+        console.error(error);
+        alert("Delete failed: " + error.message);
+    }
 }
 
 function toggleGroup(groupKey) {
@@ -908,14 +799,6 @@ document.getElementById("expandAllBtn").addEventListener("click", () => setAllCo
 document.getElementById("collapseAllBtn").addEventListener("click", () => setAllCollapsed(true));
 document.getElementById("deleteLegacyOnlyBtn").addEventListener("click", deleteAllLegacyImports);
 document.getElementById("searchInput").addEventListener("input", renderGroups);
-
-document.getElementById("cancelPasswordBtn").addEventListener("click", closePasswordModal);
-document.getElementById("confirmPasswordBtn").addEventListener("click", confirmPasswordAndRun);
-document.getElementById("confirmPassword").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        confirmPasswordAndRun();
-    }
-});
 
 window.toggleGroup = toggleGroup;
 window.deleteBatchGroup = deleteBatchGroup;
