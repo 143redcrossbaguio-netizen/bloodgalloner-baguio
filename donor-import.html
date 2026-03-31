@@ -1288,67 +1288,70 @@ async function importSelectedRows() {
             importedFrom: "donor-import.html"
         });
 
-        const batchSize = 200;
         let committedCount = 0;
 
-        for (let i = 0; i < rowsToImport.length; i += batchSize) {
-            const chunk = rowsToImport.slice(i, i + batchSize);
-            const batch = db.batch();
+        for (let i = 0; i < rowsToImport.length; i++) {
+            const row = rowsToImport[i];
 
-            chunk.forEach(row => {
-                const ref = db.collection("donorDatabase").doc();
-                batch.set(ref, {
-                    mbdDetails: row.mbdDetails || "",
-                    patientDirectedDetails: row.patientDirectedDetails || "",
-                    donorType: row.donorType || "",
-                    donorCategory: row.donorCategory || "",
-                    surname: row.surname || "",
-                    firstName: row.firstName || "",
-                    middleName: row.middleName || "",
-                    birthday: row.birthday || "",
-                    age: row.age || 0,
-                    sex: row.sex || "",
-                    contactNumber: row.contactNumber || "",
-                    address: row.address || "",
-                    cityProvince: row.cityProvince || "",
-                    numberOfDonations: row.numberOfDonationsFinal || 0,
-                    numberOfDonationsImported: row.numberOfDonationsImported || 0,
-                    bloodType: row.bloodType || "",
-                    serialNumber: row.serialNumber || "",
-                    amount: row.amount || "",
-                    bloodBagBrand: row.bloodBagBrand || "",
-                    bloodBagType: row.bloodBagType || "",
-                    timeStarted: row.timeStarted || "",
-                    timeEnded: row.timeEnded || "",
-                    entryDate: row.entryDate || "",
-                    remarks: row.remarks || "",
-                    categoryDisplay: row.categoryDisplay || "",
-                    walkInRaw: row.walkInRaw || "",
+            await db.collection("donorDatabase").add({
+                mbdDetails: row.mbdDetails || "",
+                patientDirectedDetails: row.patientDirectedDetails || "",
+                donorType: row.donorType || "",
+                donorCategory: row.donorCategory || "",
+                surname: row.surname || "",
+                firstName: row.firstName || "",
+                middleName: row.middleName || "",
+                birthday: row.birthday || "",
+                age: row.age || 0,
+                sex: row.sex || "",
+                contactNumber: row.contactNumber || "",
+                address: row.address || "",
+                cityProvince: row.cityProvince || "",
+                numberOfDonations: row.numberOfDonationsFinal || 0,
+                numberOfDonationsImported: row.numberOfDonationsImported || 0,
+                bloodType: row.bloodType || "",
+                serialNumber: row.serialNumber || "",
+                amount: row.amount || "",
+                bloodBagBrand: row.bloodBagBrand || "",
+                bloodBagType: row.bloodBagType || "",
+                timeStarted: row.timeStarted || "",
+                timeEnded: row.timeEnded || "",
+                entryDate: row.entryDate || "",
+                remarks: row.remarks || "",
+                categoryDisplay: row.categoryDisplay || "",
+                walkInRaw: row.walkInRaw || "",
 
-                    donorMatchKey: row._donorKey,
-                    donationStrongKey: row._strongKey,
-                    donationLooseKey: row._looseKey,
+                donorMatchKey: row._donorKey,
+                donationStrongKey: row._strongKey,
+                donationLooseKey: row._looseKey,
 
-                    importMeta: {
-                        batchId,
-                        importedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        importedFrom: "donor-import.html",
-                        sourceFile: row.sourceFile || "",
-                        sourceSheet: row.sourceSheet || "",
-                        sourceRowNumber: row.sourceRowNumber || "",
-                        inheritedDateUsed: !!row.inheritedDateUsed,
-                        inheritedGroupUsed: !!row.inheritedGroupUsed
-                    }
+                importMeta: {
+                    batchId,
+                    importedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    importedFrom: "donor-import.html",
+                    sourceFile: row.sourceFile || "",
+                    sourceSheet: row.sourceSheet || "",
+                    sourceRowNumber: row.sourceRowNumber || "",
+                    inheritedDateUsed: !!row.inheritedDateUsed,
+                    inheritedGroupUsed: !!row.inheritedGroupUsed
+                }
+            });
+
+            committedCount++;
+
+            if (committedCount % 10 === 0 || committedCount === rowsToImport.length) {
+                document.getElementById("importBtn").textContent = `Importing... ${committedCount}/${rowsToImport.length}`;
+
+                await batchRef.update({
+                    importedRowCount: committedCount
                 });
-            });
-
-            await batch.commit();
-            committedCount += chunk.length;
-
-            await batchRef.update({
-                importedRowCount: committedCount
-            });
+            }
         }
+
+        await batchRef.update({
+            status: "completed",
+            importedRowCount: committedCount
+        });
 
         alert(`Import completed successfully. ${committedCount} row(s) committed.`);
         await loadExistingRecords();
