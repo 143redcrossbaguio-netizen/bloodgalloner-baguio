@@ -248,7 +248,8 @@
             <b>Delete mode:</b><br>
             • Reads imported rows from <b>server</b><br>
             • Deletes by exact scanned document IDs<br>
-            • Uses <b>Firestore REST API</b> for reliable server deletes<br>
+            • Uses <b>slow throttled REST delete</b><br>
+            • Retries automatically on <b>429 quota exceeded</b><br>
             • Verifies from <b>server</b> before showing success
         </div>
 
@@ -310,6 +311,7 @@ const PROJECT_ID = firebaseConfig.projectId;
 
 let allImportGroups = [];
 let collapsedMap = {};
+let deleteInProgress = false;
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -423,14 +425,14 @@ function renderGroups() {
                     </div>
 
                     <div class="group-actions">
-                        <button class="btn-gray" onclick="toggleGroup('${escapeHtml(collapseKey)}')">
+                        <button class="btn-gray" onclick="toggleGroup('${escapeHtml(collapseKey)}')" ${deleteInProgress ? "disabled" : ""}>
                             ${isCollapsed ? 'Show Rows' : 'Hide Rows'}
                         </button>
 
                         ${
                             group.type === "batch"
-                            ? `<button class="btn-danger" onclick="deleteBatchGroup('${escapeHtml(group.batchId)}')">Delete This Batch</button>`
-                            : `<button class="btn-danger" onclick="deleteLegacyGroupByKey('${escapeHtml(group.key)}')">Delete This Legacy Import</button>`
+                            ? `<button class="btn-danger" onclick="deleteBatchGroup('${escapeHtml(group.batchId)}')" ${deleteInProgress ? "disabled" : ""}>Delete This Batch</button>`
+                            : `<button class="btn-danger" onclick="deleteLegacyGroupByKey('${escapeHtml(group.key)}')" ${deleteInProgress ? "disabled" : ""}>Delete This Legacy Import</button>`
                         }
                     </div>
                 </div>
@@ -479,16 +481,6 @@ function renderGroups() {
             </div>
         `;
     }).join("");
-
-    filtered.forEach((group, index) => {
-        const collapseKey = group.key;
-        const isCollapsed = collapsedMap[collapseKey] === true;
-        const el = document.getElementById(`group-body-${index}`);
-        if (el) {
-            if (isCollapsed) el.classList.add("hidden");
-            else el.classList.remove("hidden");
-        }
-    });
 }
 
 async function scanImportedRecords() {
@@ -622,36 +614,64 @@ async function deleteOneDocViaRest(docId, idToken) {
         }
     });
 
-    if (response.ok) return;
+    if (response.ok) return { ok: true };
 
     const text = await response.text().catch(() => "");
-    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
+    let parsed = null;
+    try {
+        parsed = JSON.parse(text);
+    } catch {}
+
+    const status = response.status;
+    const message =
+        parsed?.error?.message ||
+        text ||
+        response.statusText ||
+        "Unknown error";
+
+    return {
+        ok: false,
+        status,
+        message
+    };
 }
 
-async function deleteDocIdsViaRest(docIds, label) {
+async function deleteDocIdsViaRestSlow(docIds, label) {
     const uniqueIds = [...new Set(docIds.filter(Boolean))];
     let deleted = 0;
     let idToken = await getFreshIdToken();
 
     for (let i = 0; i < uniqueIds.length; i++) {
         const id = uniqueIds[i];
-        setStatus(`Deleting ${label}... ${i + 1} / ${uniqueIds.length}`);
+        let retries = 0;
 
-        try {
-            if (i > 0 && i % 25 === 0) {
+        while (true) {
+            setStatus(`Deleting ${label}... ${i + 1} / ${uniqueIds.length}`);
+
+            if (i > 0 && i % 10 === 0 && retries === 0) {
                 idToken = await getFreshIdToken();
             }
 
-            await deleteOneDocViaRest(id, idToken);
-            deleted++;
-        } catch (error) {
-            console.error("REST delete failed for doc:", id, error);
-            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}.\nDoc ID: ${id}\n${error.message}`);
+            const result = await deleteOneDocViaRest(id, idToken);
+
+            if (result.ok) {
+                deleted++;
+                break;
+            }
+
+            if (result.status === 429 && retries < 8) {
+                retries++;
+                const waitMs = 3000 * retries;
+                setStatus(`Quota limit reached. Waiting ${Math.ceil(waitMs / 1000)} second(s) before retry ${retries}...`);
+                await sleep(waitMs);
+                idToken = await getFreshIdToken();
+                continue;
+            }
+
+            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}.\nDoc ID: ${id}\nHTTP ${result.status}: ${result.message}`);
         }
 
-        if ((i + 1) % 10 === 0) {
-            await sleep(120);
-        }
+        await sleep(1200);
     }
 
     return deleted;
@@ -666,9 +686,32 @@ async function verifyDeletedFromServer(docIds) {
         setStatus(`Verifying deletion on server... ${i + 1} / ${uniqueIds.length}`);
         const snap = await db.collection("donorDatabase").doc(id).get({ source: "server" });
         if (snap.exists) remaining++;
+        await sleep(120);
     }
 
     return remaining;
+}
+
+async function runDeleteFlow(ids, label) {
+    deleteInProgress = true;
+    renderGroups();
+
+    try {
+        const deletedCount = await deleteDocIdsViaRestSlow(ids, label);
+        const remaining = await verifyDeletedFromServer(ids);
+
+        if (remaining > 0) {
+            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
+            await scanImportedRecords();
+            return;
+        }
+
+        await scanImportedRecords();
+        alert(`Delete completed successfully and was confirmed on server.\n\nRemoved ${deletedCount} record(s).`);
+    } finally {
+        deleteInProgress = false;
+        renderGroups();
+    }
 }
 
 async function deleteBatchGroup(batchId) {
@@ -694,15 +737,7 @@ async function deleteBatchGroup(batchId) {
     if (!confirmed) return;
 
     try {
-        const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsViaRest(ids, `batch ${batchId}`);
-        const remaining = await verifyDeletedFromServer(ids);
-
-        if (remaining > 0) {
-            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-            await scanImportedRecords();
-            return;
-        }
+        await runDeleteFlow(group.records.map(r => r.id), `batch ${batchId}`);
 
         try {
             await db.collection("donorImportBatches").doc(batchId).update({
@@ -710,18 +745,18 @@ async function deleteBatchGroup(batchId) {
                 retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 retractedByUid: auth.currentUser ? auth.currentUser.uid : "",
                 retractedByEmail: auth.currentUser ? (auth.currentUser.email || "") : "",
-                retractedDeletedCount: deletedCount
+                retractedDeletedCount: group.records.length
             });
         } catch (e) {
             console.warn("Batch history update skipped:", e);
         }
 
-        await scanImportedRecords();
-        alert(`Batch deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
         await scanImportedRecords();
+        deleteInProgress = false;
+        renderGroups();
     }
 }
 
@@ -743,22 +778,13 @@ async function deleteLegacyGroupByKey(groupKey) {
     if (!confirmed) return;
 
     try {
-        const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsViaRest(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
-        const remaining = await verifyDeletedFromServer(ids);
-
-        if (remaining > 0) {
-            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-            await scanImportedRecords();
-            return;
-        }
-
-        await scanImportedRecords();
-        alert(`Legacy import deleted successfully and confirmed on server. Removed ${deletedCount} record(s).`);
+        await runDeleteFlow(group.records.map(r => r.id), `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
         await scanImportedRecords();
+        deleteInProgress = false;
+        renderGroups();
     }
 }
 
@@ -782,21 +808,13 @@ async function deleteAllLegacyImports() {
 
     try {
         const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
-        const deletedCount = await deleteDocIdsViaRest(ids, "all legacy imports");
-        const remaining = await verifyDeletedFromServer(ids);
-
-        if (remaining > 0) {
-            alert(`Delete was NOT fully saved to Firestore server.\n\n${remaining} record(s) are still present on the server.`);
-            await scanImportedRecords();
-            return;
-        }
-
-        await scanImportedRecords();
-        alert(`Deleted all legacy imports successfully and confirmed on server. Removed ${deletedCount} record(s).`);
+        await runDeleteFlow(ids, "all legacy imports");
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
         await scanImportedRecords();
+        deleteInProgress = false;
+        renderGroups();
     }
 }
 
