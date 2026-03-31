@@ -248,7 +248,7 @@
             <b>Delete mode:</b><br>
             • Reads imported rows from <b>server</b><br>
             • Deletes by exact scanned document IDs<br>
-            • Uses <b>one-by-one deletion</b> for reliability<br>
+            • Uses <b>Firestore REST API</b> for reliable server deletes<br>
             • Verifies from <b>server</b> before showing success
         </div>
 
@@ -306,6 +306,7 @@ if (!firebase.apps.length) {
 
 const db = firebase.firestore();
 const auth = firebase.auth();
+const PROJECT_ID = firebaseConfig.projectId;
 
 let allImportGroups = [];
 let collapsedMap = {};
@@ -601,24 +602,55 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function deleteDocIdsOneByOne(docIds, label) {
+async function getFreshIdToken() {
+    const user = auth.currentUser;
+    if (!user) throw new Error("No logged-in user found.");
+    return await user.getIdToken(true);
+}
+
+function buildFirestoreDeleteUrl(docId) {
+    return `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/donorDatabase/${encodeURIComponent(docId)}`;
+}
+
+async function deleteOneDocViaRest(docId, idToken) {
+    const url = buildFirestoreDeleteUrl(docId);
+
+    const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+            "Authorization": `Bearer ${idToken}`
+        }
+    });
+
+    if (response.ok) return;
+
+    const text = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
+}
+
+async function deleteDocIdsViaRest(docIds, label) {
     const uniqueIds = [...new Set(docIds.filter(Boolean))];
     let deleted = 0;
+    let idToken = await getFreshIdToken();
 
     for (let i = 0; i < uniqueIds.length; i++) {
         const id = uniqueIds[i];
         setStatus(`Deleting ${label}... ${i + 1} / ${uniqueIds.length}`);
 
         try {
-            await db.collection("donorDatabase").doc(id).delete();
+            if (i > 0 && i % 25 === 0) {
+                idToken = await getFreshIdToken();
+            }
+
+            await deleteOneDocViaRest(id, idToken);
             deleted++;
         } catch (error) {
-            console.error("Delete failed for doc:", id, error);
-            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}. Firestore said: ${error.message}`);
+            console.error("REST delete failed for doc:", id, error);
+            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}.\nDoc ID: ${id}\n${error.message}`);
         }
 
         if ((i + 1) % 10 === 0) {
-            await sleep(150);
+            await sleep(120);
         }
     }
 
@@ -663,7 +695,7 @@ async function deleteBatchGroup(batchId) {
 
     try {
         const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsOneByOne(ids, `batch ${batchId}`);
+        const deletedCount = await deleteDocIdsViaRest(ids, `batch ${batchId}`);
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
@@ -712,7 +744,7 @@ async function deleteLegacyGroupByKey(groupKey) {
 
     try {
         const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsOneByOne(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
+        const deletedCount = await deleteDocIdsViaRest(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
@@ -750,7 +782,7 @@ async function deleteAllLegacyImports() {
 
     try {
         const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
-        const deletedCount = await deleteDocIdsOneByOne(ids, "all legacy imports");
+        const deletedCount = await deleteDocIdsViaRest(ids, "all legacy imports");
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
