@@ -260,10 +260,9 @@
                 <b>Updated importer rules:</b><br>
                 • Reads all selected Excel files and all tabs/sheets inside each file<br>
                 • Supports <b>blank date cells inheriting the last valid date above</b><br>
-                • Donor-database style sheets with separate <b>MBD / WALK-IN / PD</b> columns do <b>not</b> carry forward group blocks<br>
-                • Required donor identity: <b>Surname + First Name + Birthday</b><br>
+                • For donor-database style sheets with separate <b>MBD / WALK-IN / PD</b> columns, donor type is read from the <b>current row only</b><br>
                 • Existing donor records are <b>never overwritten</b><br>
-                • Each import is saved as a <b>batch</b> so you can <b>retract / rollback</b> uploads safely
+                • Each import is saved as a <b>batch</b> so you can retract/rollback uploads safely
             </div>
 
             <div style="margin-top:12px;">
@@ -624,18 +623,18 @@ function looksLikePdValue(value) {
 }
 
 function inferDonorType(raw) {
-    const donorTypeRaw = normalizeText(raw.donorTypeRaw || "");
     const mbd = String(raw.mbdDetails || "").trim();
-    const pd = String(raw.patientDirectedDetails || "").trim();
     const walkInRaw = String(raw.walkInRaw || "").trim();
-
-    if (donorTypeRaw.includes("patient")) return "Patient Directed";
-    if (donorTypeRaw.includes("walk")) return "Walk-in";
-    if (donorTypeRaw.includes("mbd")) return "MBD";
+    const pd = String(raw.patientDirectedDetails || "").trim();
+    const donorTypeRaw = normalizeText(raw.donorTypeRaw || "");
 
     if (mbd) return "MBD";
     if (walkInRaw) return "Walk-in";
     if (pd) return "Patient Directed";
+
+    if (donorTypeRaw.includes("mbd")) return "MBD";
+    if (donorTypeRaw.includes("walk")) return "Walk-in";
+    if (donorTypeRaw.includes("patient")) return "Patient Directed";
 
     return "";
 }
@@ -773,35 +772,6 @@ function aoaToObjectRows(aoa) {
     return { rows, headers };
 }
 
-function sheetLooksLikeDonorDatabase(headers) {
-    const normalized = headers.map(h => standardizeHeader(h));
-    return (
-        normalized.includes("mbd") &&
-        normalized.includes("walk in") &&
-        normalized.includes("pd") &&
-        normalized.includes("surname") &&
-        (normalized.includes("given name") || normalized.includes("first name")) &&
-        normalized.includes("birthday")
-    );
-}
-
-function hasAnchorIdentityOrDonorData(raw) {
-    return !!(
-        String(raw.serialNumber || "").trim() ||
-        String(raw.surname || "").trim() ||
-        String(raw.firstName || "").trim() ||
-        String(raw.middleName || "").trim() ||
-        String(raw.birthday || "").trim() ||
-        String(raw.entryDate || "").trim() ||
-        String(raw.contactNumber || "").trim() ||
-        String(raw.bloodType || "").trim() ||
-        String(raw.mbdDetails || "").trim() ||
-        String(raw.patientDirectedDetails || "").trim() ||
-        String(raw.walkInRaw || "").trim() ||
-        String(raw.donorTypeRaw || "").trim()
-    );
-}
-
 function getFirstMappedValue(row, aliases) {
     for (const [key, value] of Object.entries(row)) {
         if (aliases.includes(standardizeHeader(key))) {
@@ -834,7 +804,24 @@ function extractFromSpecialColumns(row) {
     return { mbdColumn, walkInColumn, patientDirectedColumn };
 }
 
-function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context, options = {}) {
+function hasAnchorIdentityOrDonorData(raw) {
+    return !!(
+        String(raw.serialNumber || "").trim() ||
+        String(raw.surname || "").trim() ||
+        String(raw.firstName || "").trim() ||
+        String(raw.middleName || "").trim() ||
+        String(raw.birthday || "").trim() ||
+        String(raw.entryDate || "").trim() ||
+        String(raw.contactNumber || "").trim() ||
+        String(raw.bloodType || "").trim() ||
+        String(raw.mbdDetails || "").trim() ||
+        String(raw.patientDirectedDetails || "").trim() ||
+        String(raw.walkInRaw || "").trim() ||
+        String(raw.donorTypeRaw || "").trim()
+    );
+}
+
+function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context) {
     const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
     const defaultMbdGroup = document.getElementById("defaultMbdGroup").value.trim();
 
@@ -860,48 +847,11 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         pdDirect = specialColumns.patientDirectedColumn;
     }
 
-    const inheritGroupBlocks = !!options.inheritGroupBlocks;
-
     const inheritedDateUsed = !directDonationDate && !!context.lastDate;
-    const inheritedGroupUsed = inheritGroupBlocks && (
-        (!donorTypeRawDirect && !!context.lastDonorTypeRaw) ||
-        (!mbdDirect && !!context.lastMbdDetails) ||
-        (!pdDirect && !!context.lastPatientDirectedDetails) ||
-        (!walkInDirect && !!context.lastWalkInRaw) ||
-        (!donorCategoryDirect && !!context.lastDonorCategory)
-    );
-
     const entryDate = directDonationDate || context.lastDate || sheetDate || fileDate || defaultDonationDate || "";
-    const donorTypeRaw = donorTypeRawDirect || (inheritGroupBlocks ? context.lastDonorTypeRaw : "") || "";
-    const donorCategory = donorCategoryDirect || (inheritGroupBlocks ? context.lastDonorCategory : "") || "";
-
-    let mbdDetails = mbdDirect || (inheritGroupBlocks ? context.lastMbdDetails : "") || defaultMbdGroup || "";
-    let patientDirectedDetails = pdDirect || (inheritGroupBlocks ? context.lastPatientDirectedDetails : "") || "";
-    let walkInRaw = walkInDirect || (inheritGroupBlocks ? context.lastWalkInRaw : "") || "";
 
     if (directDonationDate) context.lastDate = directDonationDate;
     else if (!context.lastDate && entryDate) context.lastDate = entryDate;
-
-    if (inheritGroupBlocks) {
-        if (donorTypeRawDirect) context.lastDonorTypeRaw = donorTypeRawDirect;
-        if (donorCategoryDirect) context.lastDonorCategory = donorCategoryDirect;
-
-        if (mbdDirect) {
-            context.lastMbdDetails = mbdDirect;
-            context.lastPatientDirectedDetails = "";
-            context.lastWalkInRaw = "";
-        }
-        if (pdDirect) {
-            context.lastPatientDirectedDetails = pdDirect;
-            context.lastMbdDetails = "";
-            context.lastWalkInRaw = "";
-        }
-        if (walkInDirect) {
-            context.lastWalkInRaw = walkInDirect;
-            context.lastMbdDetails = "";
-            context.lastPatientDirectedDetails = "";
-        }
-    }
 
     const raw = {
         serialNumber: String(getFirstMappedValue(row, FIELD_ALIASES.serialNumber) || "").trim(),
@@ -910,11 +860,11 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         middleName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.middleName) || ""),
         birthday: parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.birthday) || ""),
         entryDate,
-        donorTypeRaw,
-        donorCategory,
-        mbdDetails,
-        patientDirectedDetails,
-        walkInRaw,
+        donorTypeRaw: donorTypeRawDirect,
+        donorCategory: donorCategoryDirect,
+        mbdDetails: mbdDirect || defaultMbdGroup || "",
+        patientDirectedDetails: pdDirect || "",
+        walkInRaw: walkInDirect || "",
         sex: String(getFirstMappedValue(row, FIELD_ALIASES.sex) || "").trim().toUpperCase(),
         contactNumber: String(getFirstMappedValue(row, FIELD_ALIASES.contactNumber) || "").trim(),
         address: String(getFirstMappedValue(row, FIELD_ALIASES.address) || "").trim(),
@@ -932,21 +882,26 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         sourceSheet: sheetName,
         sourceRowNumber,
         inheritedDateUsed,
-        inheritedGroupUsed
+        inheritedGroupUsed: false
     };
 
-    raw.donorType = inferDonorType(raw);
-
-    if (raw.donorType === "MBD") {
+    if (mbdDirect) {
+        raw.donorType = "MBD";
+        raw.mbdDetails = mbdDirect;
         raw.walkInRaw = "";
         raw.patientDirectedDetails = "";
-    } else if (raw.donorType === "Walk-in") {
+    } else if (walkInDirect) {
+        raw.donorType = "Walk-in";
+        raw.walkInRaw = walkInDirect || "WALK-IN";
         raw.mbdDetails = "";
         raw.patientDirectedDetails = "";
-        if (!raw.walkInRaw) raw.walkInRaw = "WALK-IN";
-    } else if (raw.donorType === "Patient Directed") {
+    } else if (pdDirect) {
+        raw.donorType = "Patient Directed";
+        raw.patientDirectedDetails = pdDirect;
         raw.mbdDetails = "";
         raw.walkInRaw = "";
+    } else {
+        raw.donorType = inferDonorType(raw);
     }
 
     raw._donorKey = donorKey(raw);
@@ -997,18 +952,11 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
         blankrows: false
     });
 
-    const { rows: objectRows, headers } = aoaToObjectRows(aoa);
+    const { rows: objectRows } = aoaToObjectRows(aoa);
     const parsed = [];
 
-    const donorDatabaseStyleSheet = sheetLooksLikeDonorDatabase(headers);
-
     const context = {
-        lastDate: "",
-        lastDonorTypeRaw: "",
-        lastDonorCategory: "",
-        lastMbdDetails: "",
-        lastPatientDirectedDetails: "",
-        lastWalkInRaw: ""
+        lastDate: ""
     };
 
     objectRows.forEach(item => {
@@ -1017,10 +965,7 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
             fileName,
             sheetName,
             item.sourceRowNumber,
-            context,
-            {
-                inheritGroupBlocks: !donorDatabaseStyleSheet
-            }
+            context
         );
 
         if (!isTrulyBlankMappedRow(raw)) {
@@ -1250,6 +1195,7 @@ async function loadImportHistory() {
                     <div><b>Batch ID:</b> ${escapeHtml(batch.id)}</div>
                     <div><b>Status:</b> ${escapeHtml(status.toUpperCase())}</div>
                     <div><b>Imported Rows:</b> ${escapeHtml(batch.importedRowCount || 0)}</div>
+                    <div><b>Requested Rows:</b> ${escapeHtml(batch.requestedRowCount || 0)}</div>
                     <div><b>Files:</b> ${files.length ? escapeHtml(files.join(", ")) : "-"}</div>
                     <div><b>Created:</b> ${escapeHtml(formatTimestamp(batch.createdAt))}</div>
                     <div><b>Created By:</b> ${escapeHtml(batch.createdByEmail || "Unknown")}</div>
@@ -1336,12 +1282,14 @@ async function importSelectedRows() {
             createdByEmail: user ? (user.email || "") : "",
             fileNames,
             sheetNames,
-            importedRowCount: rowsToImport.length,
+            importedRowCount: 0,
+            requestedRowCount: rowsToImport.length,
             status: "active",
             importedFrom: "donor-import.html"
         });
 
-        const batchSize = 350;
+        const batchSize = 200;
+        let committedCount = 0;
 
         for (let i = 0; i < rowsToImport.length; i += batchSize) {
             const chunk = rowsToImport.slice(i, i + batchSize);
@@ -1395,9 +1343,14 @@ async function importSelectedRows() {
             });
 
             await batch.commit();
+            committedCount += chunk.length;
+
+            await batchRef.update({
+                importedRowCount: committedCount
+            });
         }
 
-        alert("Import completed successfully.");
+        alert(`Import completed successfully. ${committedCount} row(s) committed.`);
         await loadExistingRecords();
         await loadImportHistory();
         processPreviewRows(previewRows);
