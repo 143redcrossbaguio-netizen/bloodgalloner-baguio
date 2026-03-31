@@ -63,8 +63,7 @@
     }
     input[type="file"],
     input[type="text"],
-    input[type="date"],
-    select {
+    input[type="date"] {
         flex: 1;
         min-width: 220px;
         padding: 10px 12px;
@@ -149,9 +148,6 @@
         position: sticky;
         top: 0;
         z-index: 2;
-    }
-    tr:hover td {
-        background: #fcfcfc;
     }
 
     .pill {
@@ -257,12 +253,12 @@
             </div>
 
             <div class="note">
-                <b>Updated importer rules:</b><br>
-                • Reads all selected Excel files and all tabs/sheets inside each file<br>
-                • Supports <b>blank date cells inheriting the last valid date above</b><br>
-                • For donor-database style sheets with separate <b>MBD / WALK-IN / PD</b> columns, donor type is read from the <b>current row only</b><br>
-                • Existing donor records are <b>never overwritten</b><br>
-                • Each import is saved as a <b>batch</b> so you can retract/rollback uploads safely
+                <b>Importer rules:</b><br>
+                • Reads all selected Excel files and all sheets<br>
+                • Blank <b>date</b> cells can inherit from the last valid date above<br>
+                • <b>MBD / WALK-IN / PD</b> are read from the <b>current row only</b><br>
+                • Existing donor records are <b>not overwritten</b><br>
+                • Retracting a batch deletes the imported donor rows and also deletes the batch history record
             </div>
 
             <div style="margin-top:12px;">
@@ -366,7 +362,7 @@
     <div class="card">
         <h3>Uploaded Import History / Retract Past Uploads</h3>
         <div class="small-text muted" style="margin-bottom:10px;">
-            Every import is saved as a batch. Click <b>Retract This Upload</b> to remove only the donor records that were inserted by that batch.
+            Only active batches are shown here. When you retract, the donor rows are deleted and the batch history document is also deleted.
         </div>
         <div class="import-log-box" id="importHistoryBox">
             <div class="muted">No upload history loaded yet.</div>
@@ -398,7 +394,6 @@ let existingRecords = [];
 let existingDonationKeySet = new Set();
 let existingLooseKeySet = new Set();
 let donorHistoryMap = new Map();
-let importHistory = [];
 
 const FIELD_ALIASES = {
     serialNumber: ["serial number","serial no","serial","donor no","donor number","control no","control number","sn","serial #"],
@@ -504,17 +499,6 @@ function parsePossibleDate(value) {
         return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     }
 
-    if (/^\d{1,2}-\d{1,2}-\d{2}$/.test(raw)) {
-        const [m, d, y] = raw.split("-");
-        const yyyy = Number(y) < 50 ? `20${y}` : `19${y}`;
-        return `${yyyy}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    }
-
-    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(raw)) {
-        const [m, d, y] = raw.split("-");
-        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    }
-
     const d = new Date(raw);
     if (!isNaN(d.getTime())) return toISODate(d);
 
@@ -561,13 +545,6 @@ function parseDateFromText(text) {
     if (monthYearMatch) {
         const monthText = monthYearMatch[1];
         const year = monthYearMatch[2];
-        return `${year}-${monthMap[monthText]}-01`;
-    }
-
-    const yearMonthMatch = name.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
-    if (yearMonthMatch) {
-        const year = yearMonthMatch[1];
-        const monthText = yearMonthMatch[2];
         return `${year}-${monthMap[monthText]}-01`;
     }
 
@@ -648,7 +625,7 @@ function normalizeDonorCategory(value) {
 }
 
 function buildSequenceGroupKey(record) {
-    const date = record.entryDate || record.donationDate || "";
+    const date = record.entryDate || "";
     const donorType = record.donorType || "";
     let typeGroupKey = `${date}|${donorType}`;
 
@@ -696,8 +673,7 @@ async function loadExistingRecords() {
             firstName: data.firstName || "",
             middleName: data.middleName || "",
             birthday: parsePossibleDate(data.birthday || ""),
-            entryDate: parsePossibleDate(data.entryDate || data.donationDate || ""),
-            donationDate: parsePossibleDate(data.donationDate || data.entryDate || ""),
+            entryDate: parsePossibleDate(data.entryDate || ""),
             donorType: data.donorType || "",
             mbdDetails: data.mbdDetails || "",
             patientDirectedDetails: data.patientDirectedDetails || "",
@@ -1173,34 +1149,32 @@ async function loadImportHistory() {
             .limit(40)
             .get();
 
-        importHistory = [];
+        const batches = [];
         snap.forEach(doc => {
-            importHistory.push({
+            batches.push({
                 id: doc.id,
                 ...doc.data()
             });
         });
 
-        if (!importHistory.length) {
+        if (!batches.length) {
             box.innerHTML = `<div class="muted">No upload history found.</div>`;
             return;
         }
 
-        box.innerHTML = importHistory.map(batch => {
+        box.innerHTML = batches.map(batch => {
             const files = Array.isArray(batch.fileNames) ? batch.fileNames : [];
-            const status = batch.status || "unknown";
 
             return `
                 <div class="batch-item">
                     <div><b>Batch ID:</b> ${escapeHtml(batch.id)}</div>
-                    <div><b>Status:</b> ${escapeHtml(status.toUpperCase())}</div>
                     <div><b>Imported Rows:</b> ${escapeHtml(batch.importedRowCount || 0)}</div>
                     <div><b>Requested Rows:</b> ${escapeHtml(batch.requestedRowCount || 0)}</div>
                     <div><b>Files:</b> ${files.length ? escapeHtml(files.join(", ")) : "-"}</div>
                     <div><b>Created:</b> ${escapeHtml(formatTimestamp(batch.createdAt))}</div>
                     <div><b>Created By:</b> ${escapeHtml(batch.createdByEmail || "Unknown")}</div>
                     <div class="batch-actions">
-                        <button class="btn-danger" onclick="retractBatch('${batch.id}')" ${status === "retracted" ? "disabled" : ""}>Retract This Upload</button>
+                        <button class="btn-danger" onclick="retractBatch('${batch.id}')">Retract This Upload</button>
                     </div>
                 </div>
             `;
@@ -1276,19 +1250,23 @@ async function importSelectedRows() {
         const fileNames = [...new Set(rowsToImport.map(r => r.sourceFile).filter(Boolean))];
         const sheetNames = [...new Set(rowsToImport.map(r => r.sourceSheet).filter(Boolean))];
 
-        await batchRef.set({
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            createdByUid: user ? user.uid : "",
-            createdByEmail: user ? (user.email || "") : "",
-            fileNames,
-            sheetNames,
-            importedRowCount: 0,
-            requestedRowCount: rowsToImport.length,
-            status: "active",
-            importedFrom: "donor-import.html"
-        });
+        try {
+            await batchRef.set({
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdByUid: user ? user.uid : "",
+                createdByEmail: user ? (user.email || "") : "",
+                fileNames,
+                sheetNames,
+                importedRowCount: 0,
+                requestedRowCount: rowsToImport.length,
+                importedFrom: "donor-import.html"
+            });
+        } catch (historyCreateError) {
+            console.warn("Batch history create failed, continuing import anyway:", historyCreateError);
+        }
 
         let committedCount = 0;
+        let historyUpdateFailed = false;
 
         for (let i = 0; i < rowsToImport.length; i++) {
             const row = rowsToImport[i];
@@ -1338,26 +1316,43 @@ async function importSelectedRows() {
             });
 
             committedCount++;
+            document.getElementById("importBtn").textContent = `Importing... ${committedCount}/${rowsToImport.length}`;
 
-            if (committedCount % 10 === 0 || committedCount === rowsToImport.length) {
-                document.getElementById("importBtn").textContent = `Importing... ${committedCount}/${rowsToImport.length}`;
-
-                await batchRef.update({
-                    importedRowCount: committedCount
-                });
+            if (committedCount % 50 === 0 || committedCount === rowsToImport.length) {
+                try {
+                    await batchRef.set({
+                        importedRowCount: committedCount,
+                        requestedRowCount: rowsToImport.length,
+                        lastProgressAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (historyProgressError) {
+                    console.warn("Batch history progress update failed:", historyProgressError);
+                    historyUpdateFailed = true;
+                }
             }
         }
 
-        await batchRef.update({
-            status: "completed",
-            importedRowCount: committedCount
-        });
+        try {
+            await batchRef.set({
+                importedRowCount: committedCount,
+                requestedRowCount: rowsToImport.length,
+                completedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        } catch (historyCompleteError) {
+            console.warn("Batch history final update failed:", historyCompleteError);
+            historyUpdateFailed = true;
+        }
 
-        alert(`Import completed successfully. ${committedCount} row(s) committed.`);
         await loadExistingRecords();
         await loadImportHistory();
         processPreviewRows(previewRows);
         renderPreviewTable();
+
+        if (historyUpdateFailed) {
+            alert(`Import finished. ${committedCount} row(s) were saved to donorDatabase.\n\nBatch history updates had an error, but donor rows were still imported.`);
+        } else {
+            alert(`Import completed successfully. ${committedCount} row(s) committed.`);
+        }
 
     } catch (error) {
         console.error(error);
@@ -1372,13 +1367,12 @@ async function retractBatch(batchId) {
     if (!batchId) return;
 
     const ok = confirm(
-        `Are you sure you want to retract batch ${batchId}?\n\nThis will delete only donorDatabase records that were inserted by this upload batch.`
+        `Are you sure you want to retract batch ${batchId}?\n\nThis will delete the imported donor records and remove the batch history record too.`
     );
     if (!ok) return;
 
     try {
         const batchDocRef = db.collection("donorImportBatches").doc(batchId);
-
         let deletedCount = 0;
 
         while (true) {
@@ -1397,15 +1391,9 @@ async function retractBatch(batchId) {
             await batch.commit();
         }
 
-        await batchDocRef.update({
-            status: "retracted",
-            retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            retractedByUid: auth.currentUser ? auth.currentUser.uid : "",
-            retractedByEmail: auth.currentUser ? (auth.currentUser.email || "") : "",
-            retractedDeletedCount: deletedCount
-        });
+        await batchDocRef.delete();
 
-        alert(`Batch retracted successfully. Deleted ${deletedCount} imported donor record(s).`);
+        alert(`Batch retracted successfully. Deleted ${deletedCount} imported donor record(s), and removed the batch history record.`);
         await loadExistingRecords();
         await loadImportHistory();
 
@@ -1450,7 +1438,6 @@ async function searchHistory() {
             <div><b>Type:</b> ${escapeHtml(item.donorType || "")}</div>
             <div><b>MBD:</b> ${escapeHtml(item.mbdDetails || "")}</div>
             <div><b>Patient Directed:</b> ${escapeHtml(item.patientDirectedDetails || "")}</div>
-            <div><b>Walk-in:</b> ${escapeHtml(item.walkInRaw || "")}</div>
             <div><b>Serial:</b> ${escapeHtml(item.serialNumber || "")}</div>
             <div><b># of Donations:</b> ${escapeHtml(item.numberOfDonations || "")}</div>
         </div>
