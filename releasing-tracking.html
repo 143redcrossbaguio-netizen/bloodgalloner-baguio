@@ -52,6 +52,7 @@ display:flex;
 gap:10px;
 flex-wrap:wrap;
 margin-bottom:20px;
+align-items:center;
 }
 
 .controls input,
@@ -72,6 +73,56 @@ color:white;
 .exportBtn{background:#2e7d32;}
 .backBtn{background:#444;}
 .uncheckBtn{background:#8e24aa;}
+
+.duplicateBtn{
+background:#6d4c41;
+color:white;
+}
+
+.duplicateBtn.hasDup{
+background:#c62828;
+}
+
+.duplicatePanel{
+display:none;
+margin-bottom:20px;
+border:2px solid #d7ccc8;
+border-radius:10px;
+padding:15px;
+background:#fff8f6;
+}
+
+.duplicatePanel.show{
+display:block;
+}
+
+.duplicateTitle{
+font-size:16px;
+font-weight:bold;
+color:#8d1f1f;
+margin-bottom:10px;
+}
+
+.duplicateGroup{
+border:1px solid #d7ccc8;
+border-radius:8px;
+background:white;
+padding:12px;
+margin-bottom:14px;
+}
+
+.duplicateGroupTitle{
+font-weight:bold;
+color:#6d4c41;
+margin-bottom:10px;
+}
+
+.duplicateHint{
+font-size:12px;
+color:#666;
+margin-top:4px;
+margin-bottom:10px;
+}
 
 table{
 width:100%;
@@ -118,6 +169,8 @@ margin:2px;
 
 .editBtn{background:#1565c0;}
 .deleteBtn{background:#c62828;}
+.paidYesBtn{background:#2e7d32;}
+.paidNoBtn{background:#c62828;}
 
 .monthHeader{
 background:#f0f0f0;
@@ -320,11 +373,13 @@ flex-direction:column;
 <option value="">ALL FACILITIES</option>
 </select>
 
+<button class="duplicateBtn" id="duplicateBtn">DUPLICATES: 0</button>
 <button class="exportBtn" id="exportBtn">EXPORT CSV</button>
 <button class="uncheckBtn" id="uncheckAllBtn">UNCHECK ALL</button>
 <button class="backBtn" id="backBtn">BACK</button>
 </div>
 
+<div id="duplicatePanel" class="duplicatePanel"></div>
 <div id="tableContainer"></div>
 
 </div>
@@ -381,6 +436,8 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 
 const container = document.getElementById("tableContainer");
+const duplicatePanel = document.getElementById("duplicatePanel");
+const duplicateBtn = document.getElementById("duplicateBtn");
 const searchBox = document.getElementById("searchBox");
 const filterDate = document.getElementById("filterDate");
 const filterFacility = document.getElementById("filterFacility");
@@ -397,6 +454,7 @@ let currentAugmentationEditId = null;
 let currentAugmentationPriceSnapshot = null;
 let authReady = false;
 let checkedReleaseRows = new Set();
+let duplicatePanelOpen = false;
 
 let currentPrices = {
   WB: 0,
@@ -559,6 +617,168 @@ function getOrSortValue(orValue){
   };
 }
 
+function safeUpper(v){
+  return String(v || "").trim().toUpperCase();
+}
+
+function getReleasingDuplicateKey(entry){
+  return [
+    safeUpper(entry.date),
+    safeUpper(entry.facility),
+    safeUpper(entry.surname),
+    safeUpper(entry.firstname),
+    safeUpper(entry.age),
+    safeUpper(entry.sex),
+    safeUpper(entry.bloodtype),
+    safeUpper(entry.or),
+    safeUpper(JSON.stringify(entry.requests || [])),
+    safeUpper(JSON.stringify(entry.issued || [])),
+    safeUpper(entry.amountPaid),
+    safeUpper(entry.discount)
+  ].join("||");
+}
+
+function getAugmentationDuplicateKey(entry){
+  return [
+    safeUpper(entry.date),
+    safeUpper(entry.facility),
+    safeUpper(entry.boxContainerQty),
+    safeUpper(JSON.stringify(entry.bloodTypes || [])),
+    safeUpper(entry.amountPaid),
+    safeUpper(entry.discount)
+  ].join("||");
+}
+
+function getDuplicateGroups(){
+  const source = currentView === "releasing" ? getFilteredReleasingEntries() : getFilteredAugmentationEntries();
+  const map = {};
+
+  source.forEach(entry => {
+    const key = currentView === "releasing" ? getReleasingDuplicateKey(entry) : getAugmentationDuplicateKey(entry);
+    if(!map[key]) map[key] = [];
+    map[key].push(entry);
+  });
+
+  return Object.values(map).filter(group => group.length > 1);
+}
+
+function refreshDuplicateBox(){
+  const groups = getDuplicateGroups();
+  const totalDuplicates = groups.reduce((sum, group) => sum + group.length, 0);
+
+  duplicateBtn.textContent = `DUPLICATES: ${totalDuplicates}`;
+  duplicateBtn.classList.toggle("hasDup", totalDuplicates > 0);
+
+  if(!duplicatePanelOpen){
+    duplicatePanel.classList.remove("show");
+    duplicatePanel.innerHTML = "";
+    return;
+  }
+
+  if(groups.length === 0){
+    duplicatePanel.classList.add("show");
+    duplicatePanel.innerHTML = `<div class="duplicateTitle">Duplicate Entries</div><div class="emptyMessage">No duplicate entries found.</div>`;
+    return;
+  }
+
+  duplicatePanel.classList.add("show");
+  duplicatePanel.innerHTML = `
+    <div class="duplicateTitle">Duplicate Entries Details</div>
+    <div class="duplicateHint">These are grouped duplicate records based on matching main fields. You can edit or delete directly here.</div>
+    ${groups.map((group, index) => `
+      <div class="duplicateGroup">
+        <div class="duplicateGroupTitle">Duplicate Group ${index + 1} (${group.length} entries)</div>
+        ${currentView === "releasing" ? renderDuplicateReleasingGroup(group) : renderDuplicateAugmentationGroup(group)}
+      </div>
+    `).join("")}
+  `;
+}
+
+function renderDuplicateReleasingGroup(group){
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>FACILITY</th>
+          <th>SURNAME</th>
+          <th>FIRST NAME</th>
+          <th>AGE</th>
+          <th>SEX</th>
+          <th>BLOOD</th>
+          <th>OR</th>
+          <th>REQUESTED</th>
+          <th>ISSUED</th>
+          <th>AMOUNT PAID</th>
+          <th>DISCOUNT</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${group.map(entry => `
+          <tr>
+            <td>${entry.date || ""}</td>
+            <td>${entry.facility || ""}</td>
+            <td>${entry.surname || ""}</td>
+            <td>${entry.firstname || ""}</td>
+            <td>${entry.age || ""}</td>
+            <td>${entry.sex || ""}</td>
+            <td>${entry.bloodtype || ""}</td>
+            <td>${entry.or || ""}</td>
+            <td class="componentBox">${formatComponents(entry.requests)}</td>
+            <td class="componentBox">${formatComponents(entry.issued)}</td>
+            <td>${entry.amountPaid || ""}</td>
+            <td>${entry.discount || ""}</td>
+            <td>
+              <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+              <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderDuplicateAugmentationGroup(group){
+  return `
+    <table class="augTable">
+      <thead>
+        <tr>
+          <th>DATE</th>
+          <th>FACILITY</th>
+          <th>BOX</th>
+          <th>AUGMENTATION DETAILS</th>
+          <th>AMOUNT PAID</th>
+          <th>DISCOUNT</th>
+          <th>PAID</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${group.map(entry => `
+          <tr>
+            <td>${entry.date || ""}</td>
+            <td>${entry.facility || ""}</td>
+            <td>${entry.boxContainerQty || 0}</td>
+            <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
+            <td>${entry.amountPaid || ""}</td>
+            <td>${entry.discount || ""}</td>
+            <td>${String(entry.augmentationPaid || "NO").toUpperCase()}</td>
+            <td>
+              <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+              <button class="actionBtn ${String(entry.augmentationPaid || "NO").toUpperCase() === "YES" ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
+                PAID ${String(entry.augmentationPaid || "NO").toUpperCase() === "YES" ? 'YES' : 'NO'}
+              </button>
+              <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 /* LOAD RELEASING */
 function loadReleasingData(){
   onValue(ref(db,"releasing"), snapshot => {
@@ -574,6 +794,8 @@ function loadReleasingData(){
     if(currentView === "releasing"){
       populateFacilityFilter();
       renderCurrentView();
+    }else{
+      refreshDuplicateBox();
     }
   }, error => {
     console.error("Load releasing error:", error);
@@ -596,6 +818,8 @@ function loadAugmentationData(){
     if(currentView === "augmentation"){
       populateFacilityFilter();
       renderCurrentView();
+    }else{
+      refreshDuplicateBox();
     }
   }, error => {
     console.error("Load augmentation error:", error);
@@ -605,6 +829,9 @@ function loadAugmentationData(){
 
 function setView(view){
   currentView = view;
+  duplicatePanelOpen = false;
+  duplicatePanel.classList.remove("show");
+  duplicatePanel.innerHTML = "";
 
   if(view === "releasing"){
     showReleaseBtn.classList.add("activeBtn");
@@ -731,6 +958,7 @@ function renderCurrentView(){
   }else{
     renderAugmentationTable();
   }
+  refreshDuplicateBox();
 }
 
 function renderReleasingTable(){
@@ -873,6 +1101,7 @@ function renderAugmentationTable(){
 
     grouped[month].forEach(entry => {
       const computedTotal = computeAugEntryTotal(entry);
+      const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
 
       const row = document.createElement("tr");
       row.innerHTML = `
@@ -885,6 +1114,9 @@ function renderAugmentationTable(){
         <td>${entry.discount || ""}</td>
         <td>
           <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+          <button class="actionBtn ${isPaid ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
+            PAID ${isPaid ? 'YES' : 'NO'}
+          </button>
           <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
         </td>
       `;
@@ -1114,6 +1346,8 @@ window.saveAugmentationEdit = async function(){
     }
   });
 
+  const existing = allAugmentationEntries.find(x => x.id === currentAugmentationEditId) || {};
+
   const payload = {
     date: document.getElementById("editAugDate").value,
     facility: document.getElementById("editAugFacility").value.toUpperCase(),
@@ -1121,7 +1355,8 @@ window.saveAugmentationEdit = async function(){
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
     discount: document.getElementById("editAugDiscount").value,
-    priceSnapshot: currentAugmentationPriceSnapshot
+    priceSnapshot: currentAugmentationPriceSnapshot,
+    augmentationPaid: existing.augmentationPaid || "NO"
   };
 
   try{
@@ -1133,6 +1368,30 @@ window.saveAugmentationEdit = async function(){
     alert("Failed to save changes.");
   }
 };
+
+async function toggleAugmentationPaid(id){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  try{
+    const current = allAugmentationEntries.find(item => item.id === id);
+    if(!current){
+      alert("Record not found.");
+      return;
+    }
+
+    const nextValue = String(current.augmentationPaid || "NO").toUpperCase() === "YES" ? "NO" : "YES";
+    await update(ref(db, "bloodAugmentation/" + id), {
+      augmentationPaid: nextValue
+    });
+  }catch(error){
+    console.error(error);
+    alert("Failed to update augmentation paid status.");
+  }
+}
 
 /* ACTIONS */
 container.addEventListener("click", async (event) => {
@@ -1172,6 +1431,70 @@ container.addEventListener("click", async (event) => {
 
   if(action === "edit-augmentation"){
     await openEditAugmentation(id);
+    return;
+  }
+
+  if(action === "toggle-augmentation-paid"){
+    await toggleAugmentationPaid(id);
+    return;
+  }
+
+  if(action === "delete-augmentation"){
+    const confirmed = confirm("Delete this blood augmentation record?");
+    if(!confirmed) return;
+
+    try{
+      await remove(ref(db, "bloodAugmentation/" + id));
+      alert("Deleted successfully!");
+    }catch(error){
+      console.error(error);
+      alert("Failed to delete blood augmentation record");
+    }
+  }
+});
+
+duplicatePanel.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if(!button) return;
+
+  const action = button.dataset.action;
+  const id = button.dataset.id;
+
+  if(!action || !id) return;
+
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  if(action === "edit-release"){
+    window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
+    return;
+  }
+
+  if(action === "delete-release"){
+    const confirmed = confirm("Delete this releasing record?");
+    if(!confirmed) return;
+
+    try{
+      await remove(ref(db, "releasing/" + id));
+      checkedReleaseRows.delete(id);
+      alert("Deleted successfully!");
+    }catch(error){
+      console.error(error);
+      alert("Failed to delete record");
+    }
+    return;
+  }
+
+  if(action === "edit-augmentation"){
+    await openEditAugmentation(id);
+    return;
+  }
+
+  if(action === "toggle-augmentation-paid"){
+    await toggleAugmentationPaid(id);
     return;
   }
 
@@ -1257,7 +1580,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","PAID"]
   ];
 
   filtered.forEach(e => {
@@ -1282,7 +1605,8 @@ function exportAugmentationCSV(){
       details,
       computeAugEntryTotal(e),
       e.amountPaid || "",
-      e.discount || ""
+      e.discount || "",
+      String(e.augmentationPaid || "NO").toUpperCase()
     ]);
   });
 
@@ -1322,6 +1646,11 @@ showReleaseBtn.addEventListener("click", () => setView("releasing"));
 showAugmentationBtn.addEventListener("click", () => setView("augmentation"));
 
 exportBtn.addEventListener("click", exportCurrentCSV);
+
+duplicateBtn.addEventListener("click", () => {
+  duplicatePanelOpen = !duplicatePanelOpen;
+  refreshDuplicateBox();
+});
 
 uncheckAllBtn.addEventListener("click", () => {
   checkedReleaseRows.clear();
