@@ -16,10 +16,10 @@
         :root{
             --red:#b30000;
             --red-dark:#8b0000;
-            --amber:#fff7ed;
             --green:#ecfdf5;
             --blue:#eff6ff;
-            --line:#cfd4dc;
+            --amber:#fff7ed;
+            --line:#d6dde6;
             --text:#1f2937;
             --muted:#6b7280;
             --shadow:0 8px 20px rgba(0,0,0,0.08);
@@ -483,7 +483,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function initializePage(){
     try{
-        setStatus("Loading donor statistics...", "info");
+        setStatus("Loading statistics...", "info");
 
         await Promise.allSettled([
             loadDonorDatabase(),
@@ -523,16 +523,19 @@ async function loadCategoryMappings(){
 
 async function loadReleasingSafe(){
     releasingRecords = [];
+    try{
+        const timeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Realtime Database timeout after 8 seconds")), 8000);
+        });
 
-    const timeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Realtime Database timeout after 8 seconds")), 8000);
-    });
-
-    const req = rtdb.ref("releasing").once("value");
-    const snap = await Promise.race([req, timeout]);
-
-    const raw = snap.val();
-    releasingRecords = flattenRealtime(raw);
+        const req = rtdb.ref("releasing").once("value");
+        const snap = await Promise.race([req, timeout]);
+        const raw = snap.val();
+        releasingRecords = flattenRealtime(raw);
+    }catch(error){
+        console.warn("Releasing data skipped:", error.message || error);
+        releasingRecords = [];
+    }
 }
 
 function flattenRealtime(node){
@@ -591,145 +594,246 @@ function attachEventsOnce(){
     document.getElementById("searchText").addEventListener("input", buildStatistics);
 }
 
-function populateFilters(){
-    const yearEl = document.getElementById("filterYear");
-    const monthEl = document.getElementById("filterMonth");
+function parseDateFromText(text){
+    const value = String(text || "").trim().toLowerCase();
+    if (!value) return "";
 
-    const keepYear = yearEl.value || "ALL";
-    const keepMonth = monthEl.value || "ALL";
-
-    const years = [...new Set(
-        donorRecords.map(r => getDateParts(parseDate(getDonorDate(r))).year).filter(Boolean)
-    )].sort((a,b)=>b-a);
-
-    yearEl.innerHTML = `<option value="ALL">All Years</option>`;
-    years.forEach(y => yearEl.innerHTML += `<option value="${y}">${y}</option>`);
-    if ([...yearEl.options].some(o => o.value === keepYear)) yearEl.value = keepYear;
-
-    monthEl.innerHTML = `<option value="ALL">All Months</option>`;
-    MONTHS.forEach((m, i) => monthEl.innerHTML += `<option value="${i+1}">${m}</option>`);
-    if ([...monthEl.options].some(o => o.value === keepMonth)) monthEl.value = keepMonth;
-}
-
-function getFilteredDonors(){
-    const y = document.getElementById("filterYear").value;
-    const m = document.getElementById("filterMonth").value;
-    const q = String(document.getElementById("searchText").value || "").trim().toLowerCase();
-
-    return donorRecords.filter(r => {
-        const d = parseDate(getDonorDate(r));
-        const p = getDateParts(d);
-        const partner = String(getPartnerName(r) || "").toLowerCase();
-        const donorType = String(getDonorType(r) || "").toLowerCase();
-        const smartGroup = smartGroupDisplayName(getPartnerName(r) || "").toLowerCase();
-
-        if (y !== "ALL" && String(p.year) !== y) return false;
-        if (m !== "ALL" && String(p.month) !== m) return false;
-        if (q && !partner.includes(q) && !donorType.includes(q) && !smartGroup.includes(q)) return false;
-        return true;
-    });
-}
-
-function getFilteredReleasing(){
-    const y = document.getElementById("filterYear").value;
-    const m = document.getElementById("filterMonth").value;
-
-    return releasingRecords.filter(r => {
-        const d = parseDate(getReleaseDate(r));
-        const p = getDateParts(d);
-        if (y !== "ALL" && String(p.year) !== y) return false;
-        if (m !== "ALL" && String(p.month) !== m) return false;
-        return true;
-    });
-}
-
-function buildStatistics(){
-    try{
-        const donors = getFilteredDonors();
-        const releases = getFilteredReleasing();
-
-        const grouped = {};
-        const summary = emptyStats();
-
-        donors.forEach(r => {
-            const d = parseDate(getDonorDate(r));
-            const p = getDateParts(d);
-            if (!p.year || !p.month) return;
-
-            const y = String(p.year);
-            const k = `${p.year}-${String(p.month).padStart(2,"0")}`;
-
-            if (!grouped[y]) grouped[y] = {};
-            if (!grouped[y][k]) grouped[y][k] = emptyStats();
-            grouped[y][k]._meta = { year:p.year, month:p.month };
-
-            applyDonor(grouped[y][k], r);
-            applyDonor(summary, r);
-        });
-
-        releases.forEach(r => {
-            const d = parseDate(getReleaseDate(r));
-            const p = getDateParts(d);
-            if (!p.year || !p.month) return;
-
-            const y = String(p.year);
-            const k = `${p.year}-${String(p.month).padStart(2,"0")}`;
-
-            if (!grouped[y]) grouped[y] = {};
-            if (!grouped[y][k]) grouped[y][k] = emptyStats();
-            grouped[y][k]._meta = { year:p.year, month:p.month };
-
-            applyRequestedOnly(grouped[y][k], r);
-            applyRequestedOnly(summary, r);
-        });
-
-        groupedCache = grouped;
-        renderSummary(summary);
-        renderReport(grouped);
-    }catch(error){
-        console.error(error);
-        document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
-        setStatus("Failed to build statistics.", "error");
+    const ymd = value.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
+    if (ymd) {
+        return `${ymd[1]}-${String(ymd[2]).padStart(2,"0")}-${String(ymd[3]).padStart(2,"0")}`;
     }
+
+    const mdy = value.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
+    if (mdy) {
+        return `${mdy[3]}-${String(mdy[1]).padStart(2,"0")}-${String(mdy[2]).padStart(2,"0")}`;
+    }
+
+    const monthMap = {
+        jan:"01", january:"01",
+        feb:"02", february:"02",
+        mar:"03", march:"03",
+        apr:"04", april:"04",
+        may:"05",
+        jun:"06", june:"06",
+        jul:"07", july:"07",
+        aug:"08", august:"08",
+        sep:"09", sept:"09", september:"09",
+        oct:"10", october:"10",
+        nov:"11", november:"11",
+        dec:"12", december:"12"
+    };
+
+    const monthYear = value.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
+    if (monthYear) {
+        return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
+    }
+
+    const yearMonth = value.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
+    if (yearMonth) {
+        return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
+    }
+
+    return "";
 }
 
-function printFilteredStatistics(){
-    try{
-        buildStatistics();
+function parseDate(raw){
+    if (!raw) return null;
+    if (raw instanceof Date) return isNaN(raw) ? null : raw;
+    if (typeof raw?.toDate === "function") return raw.toDate();
+    if (typeof raw === "object" && raw.seconds) return new Date(raw.seconds * 1000);
 
-        const originalTitle = document.title;
-        const headerEl = document.getElementById("pageHeader");
-        const originalHeader = headerEl ? headerEl.textContent : "Donor Database Statistics";
+    if (typeof raw === "string") {
+        const trimmed = raw.trim();
 
-        const year = document.getElementById("filterYear").value;
-        const month = document.getElementById("filterMonth").value;
-
-        let printTitle = "Donor Database Statistics";
-
-        if (year !== "ALL" && month !== "ALL"){
-            printTitle += " - " + MONTHS[Number(month)-1] + " " + year;
-        } else if (year !== "ALL"){
-            printTitle += " - Year " + year;
-        } else if (month !== "ALL"){
-            printTitle += " - " + MONTHS[Number(month)-1] + " (All Years)";
-        } else {
-            printTitle += " - All Records";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            const [y,m,d] = trimmed.split("-").map(Number);
+            return new Date(y, m - 1, d);
         }
 
-        document.title = printTitle;
-        if (headerEl) headerEl.textContent = printTitle;
+        if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) {
+            const [m,d,yRaw] = trimmed.split("/");
+            let y = Number(yRaw);
+            if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
+            return new Date(y, Number(m) - 1, Number(d));
+        }
 
-        setTimeout(() => {
-            window.print();
-            setTimeout(() => {
-                document.title = originalTitle;
-                if (headerEl) headerEl.textContent = originalHeader;
-            }, 300);
-        }, 150);
-    }catch(error){
-        console.error(error);
-        alert("Failed to print filtered statistics.");
+        const parsedText = parseDateFromText(trimmed);
+        if (parsedText) {
+            const [y,m,d] = parsedText.split("-").map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        const fallback = new Date(trimmed);
+        if (!isNaN(fallback.getTime())) return fallback;
     }
+
+    return null;
+}
+
+function getDateParts(d){
+    if (!d || isNaN(d)) return { year:null, month:null, day:null };
+    return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        day: d.getDate()
+    };
+}
+
+function parseDateFromImportMeta(r){
+    const sheet = r?.importMeta?.sourceSheet || "";
+    const file = r?.importMeta?.sourceFile || "";
+
+    const sheetDate = parseDateFromText(sheet);
+    if (sheetDate) return sheetDate;
+
+    const fileDate = parseDateFromText(file);
+    if (fileDate) return fileDate;
+
+    return null;
+}
+
+function getDonorDate(r){
+    return (
+        r.entryDate ||
+        r.donationDate ||
+        r.date ||
+        r.bleedingDate ||
+        parseDateFromImportMeta(r) ||
+        r.createdAt ||
+        null
+    );
+}
+
+function getReleaseDate(r){
+    return r.date || r.requestDate || r.releasedDate || r.entryDate || null;
+}
+
+function getDonorType(r){
+    return r.donorType || r.typeOfDonation || r.type || r.donationType || "";
+}
+
+function getPartnerName(r){
+    return r.mbdDetails || r.groupName || r.partnerName || r.partnerOrganization || r.organization || r.company || r.office || r.school || r.barangay || "";
+}
+
+function getPartnerPlace(r){
+    return r.place || r.location || r.address || r.barangay || r.municipality || r.city || r.province || "";
+}
+
+function normalizeAliasKey(value){
+    let s = String(value || "").toUpperCase().trim();
+    s = s.replace(/\(.*?\)/g, " ");
+    s = s.replace(/[_.,/\\]+/g, " ");
+    s = s.replace(/\s*-\s*\d+\s*$/g, " ");
+    s = s.replace(/\d+\s*$/g, " ");
+    s = s.replace(/\bNO\.?\s*\d+\b/g, " ");
+    s = s.replace(/\b#\s*\d+\b/g, " ");
+    s = s.replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g, " ");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+}
+
+function smartGroupDisplayName(value){
+    return normalizeAliasKey(value || "");
+}
+
+function getBestMapping(partnerName){
+    const norm = normalizeAliasKey(partnerName || "");
+    if (!norm) return null;
+
+    const exact = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === norm);
+    if (exact) return exact;
+
+    const partial = categoryMappings.find(x => {
+        const target = normalizeAliasKey(x.partnerName || x.name || "");
+        return target && (target.includes(norm) || norm.includes(target));
+    });
+    return partial || null;
+}
+
+function normalizeDonorType(v){
+    const s = String(v || "").toLowerCase();
+    if (s.includes("mbd")) return "MBD";
+    if (s.includes("walk")) return "Walk-in";
+    if (s.includes("patient")) return "Patient Directed";
+    return "Other";
+}
+
+function normalizeBloodType(v){
+    const s = String(v || "").toUpperCase().replace(/\s+/g, "");
+    const valid = ["O+","A+","B+","AB+","O-","A-","B-","AB-"];
+    return valid.includes(s) ? s : "Unknown";
+}
+
+function normalizeSex(v){
+    const s = String(v || "").toLowerCase();
+    if (s === "male" || s === "m") return "Male";
+    if (s === "female" || s === "f") return "Female";
+    return "";
+}
+
+function normalizeDonorCategory(v){
+    const s = String(v || "").toLowerCase();
+    if (s.includes("new")) return "New";
+    if (s.includes("repeat")) return "Repeat";
+    if (s.includes("lapse")) return "Lapse";
+    return "";
+}
+
+function normalizeBagCode(v){
+    const s = String(v || "").toLowerCase().trim();
+    if (!s) return "S";
+
+    if (s.includes("quad")) return "Q";
+    if (s.includes("triple")) return "T";
+    if (s.includes("double")) return "D";
+    if (s.includes("single")) return "S";
+
+    if (s === "q" || s === "4") return "Q";
+    if (s === "t" || s === "3") return "T";
+    if (s === "d" || s === "2") return "D";
+    if (s === "s" || s === "1") return "S";
+
+    if (s.includes("450 cc q") || s.includes("450cc q")) return "Q";
+    if (s.includes("450 cc t") || s.includes("450cc t")) return "T";
+    if (s.includes("450 cc d") || s.includes("450cc d")) return "D";
+    return "S";
+}
+
+function bagCodeToColumnObject(code){
+    return {
+        S: code === "S" ? 1 : 0,
+        D: code === "D" ? 1 : 0,
+        T: code === "T" ? 1 : 0,
+        Q: code === "Q" ? 1 : 0
+    };
+}
+
+function addBagCounts(target, source){
+    target.S += source.S;
+    target.D += source.D;
+    target.T += source.T;
+    target.Q += source.Q;
+}
+
+function sumBagGroup(obj){
+    return Number(obj.S || 0) + Number(obj.D || 0) + Number(obj.T || 0) + Number(obj.Q || 0);
+}
+
+function getPreparedComponentsFromBag(r){
+    const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+    if (code === "Q") return { "450 cc":1, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
+    if (code === "T") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
+    if (code === "D") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":0, "CRYO":0 };
+    return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
+}
+
+function createBloodTypeCounter(){
+    return {
+        "O+":0,"A+":0,"B+":0,"AB+":0,
+        "O-":0,"A-":0,"B-":0,"AB-":0,
+        "Unknown":0
+    };
 }
 
 function emptyStats(){
@@ -806,12 +910,48 @@ function emptyStats(){
     };
 }
 
-function createBloodTypeCounter(){
-    return {
-        "O+":0,"A+":0,"B+":0,"AB+":0,
-        "O-":0,"A-":0,"B-":0,"AB-":0,
-        "Unknown":0
-    };
+function getAge(r){
+    let age = Number(r.age);
+    if (Number.isFinite(age) && age > 0) return age;
+
+    const bday = parseDate(r.birthday);
+    const donation = parseDate(getDonorDate(r));
+    if (!bday || !donation) return null;
+
+    let years = donation.getFullYear() - bday.getFullYear();
+    const m = donation.getMonth() - bday.getMonth();
+    if (m < 0 || (m === 0 && donation.getDate() < bday.getDate())) years--;
+    return years >= 0 ? years : null;
+}
+
+function getAgeGroup(age){
+    if (age == null) return "66 & above";
+    if (age <= 17) return "16-17";
+    if (age <= 20) return "18-20";
+    if (age <= 30) return "21-30";
+    if (age <= 40) return "31-40";
+    if (age <= 50) return "41-50";
+    if (age <= 60) return "51-60";
+    if (age <= 65) return "60-65";
+    return "66 & above";
+}
+
+function getAgeGroupPicture(age){
+    if (age == null) return "65 & above";
+    if (age < 18) return "Under 18";
+    if (age <= 24) return "18-24";
+    if (age <= 44) return "25-44";
+    if (age <= 64) return "45-64";
+    return "65 & above";
+}
+
+function formatDateForDisplay(raw){
+    const d = parseDate(raw);
+    if (!d || isNaN(d)) return "";
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${dd}/${yy}`;
 }
 
 function applyDonor(s, r){
@@ -829,6 +969,7 @@ function applyDonor(s, r){
 
     if (donorType === "MBD") {
         addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
+
         const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
         if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
         addBagCounts(s.fieldDonation[category], bagCounts);
@@ -861,9 +1002,7 @@ function applyDonor(s, r){
     });
 
     const sex = normalizeSex(r.sex || r.gender || "");
-    if (sex === "Male" || sex === "Female") {
-        s.sex[sex]++;
-    }
+    if (sex === "Male" || sex === "Female") s.sex[sex]++;
 
     const donorCategory = normalizeDonorCategory(r.donorCategory || r.typeOfDonor || r.donorStatus || "");
     if (donorCategory === "New") s.frequency["First-time donors"]++;
@@ -887,45 +1026,27 @@ function applyDonor(s, r){
     }
 }
 
-function addBagCounts(target, source){
-    target.S += source.S;
-    target.D += source.D;
-    target.T += source.T;
-    target.Q += source.Q;
+function normalizeRequestComponent(v){
+    const s = String(v || "").toUpperCase().trim();
+    if (s === "WB" || s === "WHOLE BLOOD" || s === "450CC" || s === "450 CC" || s === "450S" || s === "450 S") return "450 cc";
+    if (s === "PRBC") return "PRBC";
+    if (s === "FFP") return "FFP";
+    if (s === "PC" || s === "PLATELET CONCENTRATE") return "PC";
+    if (s === "CRYO") return "CRYO";
+    return "";
 }
 
-function bagCodeToColumnObject(code){
-    return {
-        S: code === "S" ? 1 : 0,
-        D: code === "D" ? 1 : 0,
-        T: code === "T" ? 1 : 0,
-        Q: code === "Q" ? 1 : 0
-    };
-}
-
-function getPreparedComponentsFromBag(r){
-    const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
-
-    if (code === "Q") {
-        return { "450 cc":1, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
-    }
-    if (code === "T") {
-        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
-    }
-    if (code === "D") {
-        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":0, "CRYO":0 };
-    }
-    return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-}
-
-function applyRequestedOnly(s, r){
-    const items = getRequestedItemsOnly(r);
-    items.forEach(item => {
-        const key = normalizeRequestComponent(item.component);
-        const qty = Number(item.quantity) || 0;
-        if (!key || !qty) return;
-        s.requests[key] += qty;
-    });
+function pushPanelItems(items, p){
+    if (p.WB != null) items.push({ component:"WB", quantity:p.WB });
+    if (p.wb != null) items.push({ component:"WB", quantity:p.wb });
+    if (p.PRBC != null) items.push({ component:"PRBC", quantity:p.PRBC });
+    if (p.prbc != null) items.push({ component:"PRBC", quantity:p.prbc });
+    if (p.FFP != null) items.push({ component:"FFP", quantity:p.FFP });
+    if (p.ffp != null) items.push({ component:"FFP", quantity:p.ffp });
+    if (p.PC != null) items.push({ component:"PC", quantity:p.PC });
+    if (p.pc != null) items.push({ component:"PC", quantity:p.pc });
+    if (p.CRYO != null) items.push({ component:"CRYO", quantity:p.CRYO });
+    if (p.cryo != null) items.push({ component:"CRYO", quantity:p.cryo });
 }
 
 function getRequestedItemsOnly(r){
@@ -959,17 +1080,103 @@ function getRequestedItemsOnly(r){
     return items;
 }
 
-function pushPanelItems(items, p){
-    if (p.WB != null) items.push({ component:"WB", quantity:p.WB });
-    if (p.wb != null) items.push({ component:"WB", quantity:p.wb });
-    if (p.PRBC != null) items.push({ component:"PRBC", quantity:p.PRBC });
-    if (p.prbc != null) items.push({ component:"PRBC", quantity:p.prbc });
-    if (p.FFP != null) items.push({ component:"FFP", quantity:p.FFP });
-    if (p.ffp != null) items.push({ component:"FFP", quantity:p.ffp });
-    if (p.PC != null) items.push({ component:"PC", quantity:p.PC });
-    if (p.pc != null) items.push({ component:"PC", quantity:p.pc });
-    if (p.CRYO != null) items.push({ component:"CRYO", quantity:p.CRYO });
-    if (p.cryo != null) items.push({ component:"CRYO", quantity:p.cryo });
+function applyRequestedOnly(s, r){
+    const items = getRequestedItemsOnly(r);
+    items.forEach(item => {
+        const key = normalizeRequestComponent(item.component);
+        const qty = Number(item.quantity) || 0;
+        if (!key || !qty) return;
+        s.requests[key] += qty;
+    });
+}
+
+function getFilteredDonors(){
+    const y = document.getElementById("filterYear").value;
+    const m = document.getElementById("filterMonth").value;
+    const q = String(document.getElementById("searchText").value || "").trim().toLowerCase();
+
+    return donorRecords.filter(r => {
+        const d = parseDate(getDonorDate(r));
+        const p = getDateParts(d);
+        const partner = String(getPartnerName(r) || "").toLowerCase();
+        const donorType = String(getDonorType(r) || "").toLowerCase();
+        const smartGroup = smartGroupDisplayName(getPartnerName(r) || "").toLowerCase();
+
+        if (y !== "ALL" && String(p.year) !== y) return false;
+        if (m !== "ALL" && String(p.month) !== m) return false;
+        if (q && !partner.includes(q) && !donorType.includes(q) && !smartGroup.includes(q)) return false;
+        return true;
+    });
+}
+
+function getFilteredReleasing(){
+    const y = document.getElementById("filterYear").value;
+    const m = document.getElementById("filterMonth").value;
+
+    return releasingRecords.filter(r => {
+        const d = parseDate(getReleaseDate(r));
+        const p = getDateParts(d);
+        if (y !== "ALL" && String(p.year) !== y) return false;
+        if (m !== "ALL" && String(p.month) !== m) return false;
+        return true;
+    });
+}
+
+function sumVals(obj){
+    return Object.values(obj).reduce((a,b)=>a + (Number(b)||0), 0);
+}
+
+function sumDetailField(rows, field){
+    return (rows || []).reduce((a,b)=>a + (Number(b[field])||0), 0);
+}
+
+function sumBagTypeColumn(s, code){
+    return Number(s.officeBleeding["Walk-in"][code] || 0) +
+           Number(s.officeBleeding["Patient Directed"][code] || 0) +
+           Number(s.fieldDonation["Total MBD"][code] || 0);
+}
+
+function sumBagTypeForBloodType(s, bt, code){
+    let total = 0;
+    const filtered = getFilteredDonors();
+
+    filtered.forEach(r => {
+        const rowBt = normalizeBloodType(r.bloodType || r.bloodtype || r.aboRh || r.group || "");
+        const rowCode = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+        if (rowBt === bt && rowCode === code) total++;
+    });
+
+    return total;
+}
+
+function num(v){
+    return Number(v || 0).toLocaleString();
+}
+
+function csvEscape(v){
+    const s = String(v ?? "");
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+}
+
+function escapeJs(str){
+    return String(str ?? "")
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "");
+}
+
+function escapeHtml(str){
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 function renderSummary(s){
@@ -990,56 +1197,80 @@ function renderSummary(s){
     `).join("");
 }
 
-function renderReport(grouped){
-    const years = Object.keys(grouped).map(Number).sort((a,b)=>b-a);
-    const container = document.getElementById("reportContainer");
+function combineSmartGroupRows(rows){
+    const map = {};
 
-    if (!years.length) {
-        container.innerHTML = `<div class="empty">No statistics found for the selected filter.</div>`;
-        return;
-    }
+    rows.forEach(r => {
+        const key = normalizeAliasKey(r.name || "");
+        const display = key || (r.name || "");
 
-    container.innerHTML = years.map((year, yi) => {
-        const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
+        if (!map[key || display]) {
+            map[key || display] = {
+                name: display,
+                place: r.place || "",
+                date: r.date || "",
+                "450 cc S": 0,
+                "450 cc D": 0,
+                "450 cc T": 0,
+                "450 cc Q": 0
+            };
+        }
 
-        return `
-            <div class="year-block">
-                <div class="year-head" onclick="toggleNext(this)">
-                    <span>${year}</span>
-                    <span>${monthKeys.length} month group(s)</span>
-                </div>
+        map[key || display]["450 cc S"] += Number(r["450 cc S"] || 0);
+        map[key || display]["450 cc D"] += Number(r["450 cc D"] || 0);
+        map[key || display]["450 cc T"] += Number(r["450 cc T"] || 0);
+        map[key || display]["450 cc Q"] += Number(r["450 cc Q"] || 0);
 
-                <div class="year-content ${yi===0 ? 'open' : ''}">
-                    ${monthKeys.map((key, mi) => {
-                        const s = grouped[year][key];
-                        const monthName = MONTHS[(s._meta.month || 1)-1];
+        if (!map[key || display].place && r.place) map[key || display].place = r.place;
+        if (!map[key || display].date && r.date) map[key || display].date = r.date;
+    });
 
-                        return `
-                            <div class="month-block">
-                                <div class="month-head" onclick="toggleNext(this)">
-                                    <span>${monthName}</span>
-                                    <span>${num(s.totalDonors)} donor entries</span>
-                                </div>
+    return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+}
 
-                                <div class="month-content ${yi===0 && mi===0 ? 'open' : ''}">
-                                    ${renderOfficeBleedingBlock(s)}
-                                    ${renderFieldDonationBlock(s)}
-                                    ${renderBloodTypeBlock(s)}
-                                    ${renderComponentPreparationBlock(s)}
-                                    ${renderBloodRequestBlock(s)}
-                                    ${renderSexBlock(s)}
-                                    ${renderFrequencyBlock(s)}
-                                    ${renderAgeBlock(s)}
-                                    ${renderAgePictureBlock(s)}
-                                    ${renderYouth1625Block(s)}
-                                </div>
-                            </div>
-                        `;
-                    }).join("")}
-                </div>
-            </div>
-        `;
-    }).join("");
+function renderFieldCategoryTable(title, label, rows){
+    const head2 = label === "Group"
+        ? ["Group", "Place", "Date"]
+        : ["Municipality", label === "Pledge 25" ? "School or Barangay street (location)" : "Barangay Street (location)", "Date"];
+
+    const safeRows = rows.length ? rows : [{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+
+    return `
+        <div class="table-wrap" style="margin-bottom:10px;">
+            <table class="sheet">
+                <tr class="subheader">
+                    <td colspan="7">${title}</td>
+                </tr>
+                <tr>
+                    <th>${head2[0]}</th>
+                    <th>${head2[1]}</th>
+                    <th>${head2[2]}</th>
+                    <th>450 cc S</th>
+                    <th>450 cc D</th>
+                    <th>450 cc T</th>
+                    <th>450 cc Q</th>
+                </tr>
+                ${safeRows.map(r => `
+                    <tr>
+                        <td>${escapeHtml(r.name || "")}</td>
+                        <td>${escapeHtml(r.place || "")}</td>
+                        <td>${escapeHtml(r.date || "")}</td>
+                        <td>${num(r["450 cc S"])}</td>
+                        <td>${num(r["450 cc D"])}</td>
+                        <td>${num(r["450 cc T"])}</td>
+                        <td>${num(r["450 cc Q"])}</td>
+                    </tr>
+                `).join("")}
+                <tr class="subheader">
+                    <td colspan="3">Sub total</td>
+                    <td>${num(sumDetailField(safeRows, "450 cc S"))}</td>
+                    <td>${num(sumDetailField(safeRows, "450 cc D"))}</td>
+                    <td>${num(sumDetailField(safeRows, "450 cc T"))}</td>
+                    <td>${num(sumDetailField(safeRows, "450 cc Q"))}</td>
+                </tr>
+            </table>
+        </div>
+    `;
 }
 
 function renderOfficeBleedingBlock(s){
@@ -1103,51 +1334,6 @@ function renderFieldDonationBlock(s){
                     </tr>
                 </table>
             </div>
-        </div>
-    `;
-}
-
-function renderFieldCategoryTable(title, label, rows){
-    const head2 = label === "Group"
-        ? ["Group", "Place", "Date"]
-        : ["Municipality", label === "Pledge 25" ? "School or Barangay street (location)" : "Barangay Street (location)", "Date"];
-
-    const safeRows = rows.length ? rows : [{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
-
-    return `
-        <div class="table-wrap" style="margin-bottom:10px;">
-            <table class="sheet">
-                <tr class="subheader">
-                    <td colspan="7">${title}</td>
-                </tr>
-                <tr>
-                    <th>${head2[0]}</th>
-                    <th>${head2[1]}</th>
-                    <th>${head2[2]}</th>
-                    <th>450 cc S</th>
-                    <th>450 cc D</th>
-                    <th>450 cc T</th>
-                    <th>450 cc Q</th>
-                </tr>
-                ${safeRows.map(r => `
-                    <tr>
-                        <td>${escapeHtml(r.name || "")}</td>
-                        <td>${escapeHtml(r.place || "")}</td>
-                        <td>${escapeHtml(r.date || "")}</td>
-                        <td>${num(r["450 cc S"])}</td>
-                        <td>${num(r["450 cc D"])}</td>
-                        <td>${num(r["450 cc T"])}</td>
-                        <td>${num(r["450 cc Q"])}</td>
-                    </tr>
-                `).join("")}
-                <tr class="subheader">
-                    <td colspan="3">Sub total</td>
-                    <td>${num(sumDetailField(safeRows, "450 cc S"))}</td>
-                    <td>${num(sumDetailField(safeRows, "450 cc D"))}</td>
-                    <td>${num(sumDetailField(safeRows, "450 cc T"))}</td>
-                    <td>${num(sumDetailField(safeRows, "450 cc Q"))}</td>
-                </tr>
-            </table>
         </div>
     `;
 }
@@ -1349,30 +1535,12 @@ function renderAgePictureBlock(s){
                         <th>Category</th>
                         <th>Count</th>
                     </tr>
-                    <tr>
-                        <td>Donors under 18 years</td>
-                        <td>${num(s.agePicture["Under 18"])}</td>
-                    </tr>
-                    <tr>
-                        <td>Donors aged 18 to 24 years</td>
-                        <td>${num(s.agePicture["18-24"])}</td>
-                    </tr>
-                    <tr>
-                        <td>Donors aged 25 to 44 years</td>
-                        <td>${num(s.agePicture["25-44"])}</td>
-                    </tr>
-                    <tr>
-                        <td>Donors aged 45 to 64 years</td>
-                        <td>${num(s.agePicture["45-64"])}</td>
-                    </tr>
-                    <tr>
-                        <td>Donors aged 65 years or older</td>
-                        <td>${num(s.agePicture["65 & above"])}</td>
-                    </tr>
-                    <tr class="subheader">
-                        <td>Total number of donations</td>
-                        <td>${num(s.agePicture["Total donations"])}</td>
-                    </tr>
+                    <tr><td>Donors under 18 years</td><td>${num(s.agePicture["Under 18"])}</td></tr>
+                    <tr><td>Donors aged 18 to 24 years</td><td>${num(s.agePicture["18-24"])}</td></tr>
+                    <tr><td>Donors aged 25 to 44 years</td><td>${num(s.agePicture["25-44"])}</td></tr>
+                    <tr><td>Donors aged 45 to 64 years</td><td>${num(s.agePicture["45-64"])}</td></tr>
+                    <tr><td>Donors aged 65 years or older</td><td>${num(s.agePicture["65 & above"])}</td></tr>
+                    <tr class="subheader"><td>Total number of donations</td><td>${num(s.agePicture["Total donations"])}</td></tr>
                 </table>
             </div>
         </div>
@@ -1401,6 +1569,107 @@ function renderYouth1625Block(s){
             </div>
         </div>
     `;
+}
+
+function renderReport(grouped){
+    const years = Object.keys(grouped).map(Number).sort((a,b)=>b-a);
+    const container = document.getElementById("reportContainer");
+
+    if (!years.length) {
+        container.innerHTML = `<div class="empty">No statistics found for the selected filter.</div>`;
+        return;
+    }
+
+    container.innerHTML = years.map((year, yi) => {
+        const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
+
+        return `
+            <div class="year-block">
+                <div class="year-head" onclick="toggleNext(this)">
+                    <span>${year}</span>
+                    <span>${monthKeys.length} month group(s)</span>
+                </div>
+
+                <div class="year-content ${yi === 0 ? "open" : ""}">
+                    ${monthKeys.map((key, mi) => {
+                        const s = grouped[year][key];
+                        const monthName = MONTHS[(s._meta.month || 1) - 1];
+
+                        return `
+                            <div class="month-block">
+                                <div class="month-head" onclick="toggleNext(this)">
+                                    <span>${monthName}</span>
+                                    <span>${num(s.totalDonors)} donor entries</span>
+                                </div>
+
+                                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
+                                    ${renderOfficeBleedingBlock(s)}
+                                    ${renderFieldDonationBlock(s)}
+                                    ${renderBloodTypeBlock(s)}
+                                    ${renderComponentPreparationBlock(s)}
+                                    ${renderBloodRequestBlock(s)}
+                                    ${renderSexBlock(s)}
+                                    ${renderFrequencyBlock(s)}
+                                    ${renderAgeBlock(s)}
+                                    ${renderAgePictureBlock(s)}
+                                    ${renderYouth1625Block(s)}
+                                </div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function buildStatistics(){
+    try{
+        const donors = getFilteredDonors();
+        const releases = getFilteredReleasing();
+        const grouped = {};
+        const summary = emptyStats();
+
+        donors.forEach(r => {
+            const d = parseDate(getDonorDate(r));
+            const p = getDateParts(d);
+            if (!p.year || !p.month) return;
+
+            const y = String(p.year);
+            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
+
+            if (!grouped[y]) grouped[y] = {};
+            if (!grouped[y][k]) grouped[y][k] = emptyStats();
+            grouped[y][k]._meta = { year:p.year, month:p.month };
+
+            applyDonor(grouped[y][k], r);
+            applyDonor(summary, r);
+        });
+
+        releases.forEach(r => {
+            const d = parseDate(getReleaseDate(r));
+            const p = getDateParts(d);
+            if (!p.year || !p.month) return;
+
+            const y = String(p.year);
+            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
+
+            if (!grouped[y]) grouped[y] = {};
+            if (!grouped[y][k]) grouped[y][k] = emptyStats();
+            grouped[y][k]._meta = { year:p.year, month:p.month };
+
+            applyRequestedOnly(grouped[y][k], r);
+            applyRequestedOnly(summary, r);
+        });
+
+        groupedCache = grouped;
+        renderSummary(summary);
+        renderReport(grouped);
+    }catch(error){
+        console.error(error);
+        document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
+        setStatus("Failed to build statistics.", "error");
+    }
 }
 
 function toggleNext(el){
@@ -1474,6 +1743,19 @@ async function deleteGroupCategory(id){
     }
 }
 
+function fillMappingForEdit(name, category, place){
+    document.getElementById("mapPartnerName").value = name;
+    document.getElementById("mapCategory").value = category;
+    document.getElementById("mapPlace").value = place || "";
+
+    const body = document.getElementById("mappingBody");
+    const badge = document.getElementById("mappingBadge");
+    if (!body.classList.contains("open")) {
+        body.classList.add("open");
+        badge.textContent = "Expanded";
+    }
+}
+
 function renderMappings(){
     const list = document.getElementById("mappingList");
 
@@ -1501,84 +1783,67 @@ function renderMappings(){
     `).join("");
 }
 
-function fillMappingForEdit(name, category, place){
-    document.getElementById("mapPartnerName").value = name;
-    document.getElementById("mapCategory").value = category;
-    document.getElementById("mapPlace").value = place || "";
-    const body = document.getElementById("mappingBody");
-    const badge = document.getElementById("mappingBadge");
-    if (!body.classList.contains("open")) {
-        body.classList.add("open");
-        badge.textContent = "Expanded";
-    }
-}
+function populateFilters(){
+    const yearEl = document.getElementById("filterYear");
+    const monthEl = document.getElementById("filterMonth");
 
-function getBestMapping(partnerName){
-    const norm = normalizeAliasKey(partnerName || "");
-    if (!norm) return null;
+    const keepYear = yearEl.value || "ALL";
+    const keepMonth = monthEl.value || "ALL";
 
-    const exact = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === norm);
-    if (exact) return exact;
+    const years = [...new Set(
+        donorRecords.map(r => getDateParts(parseDate(getDonorDate(r))).year).filter(Boolean)
+    )].sort((a,b)=>b-a);
 
-    const partial = categoryMappings.find(x => {
-        const target = normalizeAliasKey(x.partnerName || x.name || "");
-        return target && (target.includes(norm) || norm.includes(target));
-    });
-    if (partial) return partial;
+    yearEl.innerHTML = `<option value="ALL">All Years</option>`;
+    years.forEach(y => yearEl.innerHTML += `<option value="${y}">${y}</option>`);
+    if ([...yearEl.options].some(o => o.value === keepYear)) yearEl.value = keepYear;
 
-    return null;
-}
-
-function normalizeAliasKey(value){
-    let s = String(value || "").toUpperCase().trim();
-    s = s.replace(/\(.*?\)/g, " ");
-    s = s.replace(/[_.,/\\]+/g, " ");
-    s = s.replace(/\s*-\s*\d+\s*$/g, " ");
-    s = s.replace(/\d+\s*$/g, " ");
-    s = s.replace(/\bNO\.?\s*\d+\b/g, " ");
-    s = s.replace(/\b#\s*\d+\b/g, " ");
-    s = s.replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g, " ");
-    s = s.replace(/\s+/g, " ").trim();
-    return s;
-}
-
-function smartGroupDisplayName(value){
-    return normalizeAliasKey(value || "");
-}
-
-function combineSmartGroupRows(rows){
-    const map = {};
-
-    rows.forEach(r => {
-        const key = normalizeAliasKey(r.name || "");
-        const display = key || (r.name || "");
-
-        if (!map[key || display]) {
-            map[key || display] = {
-                name: display,
-                place: r.place || "",
-                date: r.date || "",
-                "450 cc S": 0,
-                "450 cc D": 0,
-                "450 cc T": 0,
-                "450 cc Q": 0
-            };
-        }
-
-        map[key || display]["450 cc S"] += Number(r["450 cc S"] || 0);
-        map[key || display]["450 cc D"] += Number(r["450 cc D"] || 0);
-        map[key || display]["450 cc T"] += Number(r["450 cc T"] || 0);
-        map[key || display]["450 cc Q"] += Number(r["450 cc Q"] || 0);
-
-        if (!map[key || display].place && r.place) map[key || display].place = r.place;
-        if (!map[key || display].date && r.date) map[key || display].date = r.date;
-    });
-
-    return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+    monthEl.innerHTML = `<option value="ALL">All Months</option>`;
+    MONTHS.forEach((m, i) => monthEl.innerHTML += `<option value="${i+1}">${m}</option>`);
+    if ([...monthEl.options].some(o => o.value === keepMonth)) monthEl.value = keepMonth;
 }
 
 async function reloadStatistics(){
     await initializePage();
+}
+
+function printFilteredStatistics(){
+    try{
+        buildStatistics();
+
+        const originalTitle = document.title;
+        const headerEl = document.getElementById("pageHeader");
+        const originalHeader = headerEl ? headerEl.textContent : "Donor Database Statistics";
+
+        const year = document.getElementById("filterYear").value;
+        const month = document.getElementById("filterMonth").value;
+
+        let printTitle = "Donor Database Statistics";
+
+        if (year !== "ALL" && month !== "ALL"){
+            printTitle += " - " + MONTHS[Number(month)-1] + " " + year;
+        } else if (year !== "ALL"){
+            printTitle += " - Year " + year;
+        } else if (month !== "ALL"){
+            printTitle += " - " + MONTHS[Number(month)-1] + " (All Years)";
+        } else {
+            printTitle += " - All Records";
+        }
+
+        document.title = printTitle;
+        if (headerEl) headerEl.textContent = printTitle;
+
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                document.title = originalTitle;
+                if (headerEl) headerEl.textContent = originalHeader;
+            }, 300);
+        }, 150);
+    }catch(error){
+        console.error(error);
+        alert("Failed to print filtered statistics.");
+    }
 }
 
 function exportCSV(){
@@ -1588,7 +1853,8 @@ function exportCSV(){
     }
 
     const rows = [[
-        "Year","Month","Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
+        "Year","Month",
+        "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
         "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
         "Total MBD S","Total MBD D","Total MBD T","Total MBD Q"
     ]];
@@ -1626,21 +1892,6 @@ function exportCSV(){
     a.remove();
     URL.revokeObjectURL(url);
 }
-
-function getDonorDate(r){
-    return (
-        r.entryDate ||
-        r.donationDate ||
-        r.date ||
-        r.bleedingDate ||
-        parseDateFromImportMeta(r) ||
-        r.createdAt ||
-        null
-    );
-}
-
-function parseDateFromImportMeta(r){
-    const sheet = r?.importMeta?.sourceSheet || "";
-    const file = r?.importMeta?.sourceFile || "";
-
-   
+</script>
+</body>
+</html>
