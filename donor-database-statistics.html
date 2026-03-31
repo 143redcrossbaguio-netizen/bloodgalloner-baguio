@@ -11,15 +11,15 @@
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
 
   <style>
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Arial,sans-serif;background:#f3f4f6;color:#1f2937}
-    header{background:linear-gradient(135deg,#b30000,#8b0000);color:#fff;text-align:center;padding:20px;font-size:24px;font-weight:700}
-    .page{width:min(1450px,96%);margin:18px auto}
-    .card{background:#fff;border-radius:14px;box-shadow:0 8px 20px rgba(0,0,0,.08);padding:16px;margin-bottom:16px}
-    .toolbar{display:grid;grid-template-columns:1fr 1fr 1fr auto auto auto;gap:12px;align-items:end}
-    .field label{display:block;margin-bottom:6px;font-size:13px;color:#6b7280;font-weight:700}
-    .field input,.field select{width:100%;padding:10px 12px;border:1px solid #d6dde6;border-radius:10px;font-size:14px}
-    button{border:none;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:Arial,sans-serif; background:#f3f4f6; color:#1f2937; }
+    header { background:linear-gradient(135deg,#b30000,#8b0000); color:#fff; text-align:center; padding:20px; font-size:24px; font-weight:700; }
+    .page { width:min(1450px,96%); margin:18px auto; }
+    .card { background:#fff; border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,.08); padding:16px; margin-bottom:16px; }
+    .toolbar { display:grid; grid-template-columns:1fr 1fr 1fr auto auto auto; gap:12px; align-items:end; }
+    .field label { display:block; margin-bottom:6px; font-size:13px; color:#6b7280; font-weight:700; }
+    .field input,.field select { width:100%; padding:10px 12px; border:1px solid #d6dde6; border-radius:10px; font-size:14px; }
+    button { border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
     .btn-red{background:#b30000;color:#fff}.btn-blue{background:#2563eb;color:#fff}.btn-green{background:#15803d;color:#fff}.btn-gray{background:#374151;color:#fff}
     .status{padding:12px 14px;border-radius:12px;font-weight:700;margin-bottom:12px}
     .info{background:#eff6ff;color:#1d4ed8}.ok{background:#ecfdf5;color:#15803d}.error{background:#fef2f2;color:#b91c1c}
@@ -47,6 +47,9 @@
     .title-c{background:linear-gradient(90deg,#dcfce7,#ecfdf5)}
     .title-d{background:linear-gradient(90deg,#dbeafe,#eff6ff)}
     .title-e{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
+    .title-f{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
+    .title-g{background:linear-gradient(90deg,#fef9c3,#fefce8)}
+    .title-h{background:linear-gradient(90deg,#cffafe,#ecfeff)}
     .table-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;min-width:760px}
     th,td{border:1px solid #d6dde6;padding:8px 10px;font-size:14px;text-align:center;vertical-align:middle}
@@ -467,9 +470,7 @@ function emptyStats(){
     requests: { "450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0 },
     sex: { "Male":0,"Female":0 },
     frequency: { "First-time donors":0,"Repeat non-regular":0,"Repeat regular":0,"Total":0 },
-    age: { "16-17":0,"18-20":0,"21-30":0,"31-40":0,"41-50":0,"51-60":0,"60-65":0,"66 & above":0,"Total":0 },
-    agePicture: { "Under 18":0,"18-24":0,"25-44":0,"45-64":0,"65 & above":0,"Total donations":0 },
-    youth1625Sex: { "Male":0,"Female":0,"Total":0 }
+    age: { "16-17":0,"18-20":0,"21-30":0,"31-40":0,"41-50":0,"51-60":0,"60-65":0,"66 & above":0,"Total":0 }
   };
 }
 
@@ -483,27 +484,6 @@ function getAge(r){
   const m = donation.getMonth() - bday.getMonth();
   if (m < 0 || (m === 0 && donation.getDate() < bday.getDate())) years--;
   return years >= 0 ? years : null;
-}
-
-function getAgeGroup(age){
-  if (age == null) return "66 & above";
-  if (age <= 17) return "16-17";
-  if (age <= 20) return "18-20";
-  if (age <= 30) return "21-30";
-  if (age <= 40) return "31-40";
-  if (age <= 50) return "41-50";
-  if (age <= 60) return "51-60";
-  if (age <= 65) return "60-65";
-  return "66 & above";
-}
-
-function getAgeGroupPicture(age){
-  if (age == null) return "65 & above";
-  if (age < 18) return "Under 18";
-  if (age <= 24) return "18-24";
-  if (age <= 44) return "25-44";
-  if (age <= 64) return "45-64";
-  return "65 & above";
 }
 
 function formatDateForDisplay(raw){
@@ -570,21 +550,6 @@ function applyDonor(s, r){
   else if (donorCategory === "Lapse") s.frequency["Repeat non-regular"]++;
   else if (donorCategory === "Repeat") s.frequency["Repeat regular"]++;
   s.frequency["Total"]++;
-
-  const age = getAge(r);
-  const ageGroup = getAgeGroup(age);
-  s.age[ageGroup]++;
-  s.age["Total"]++;
-
-  const pictureAgeGroup = getAgeGroupPicture(age);
-  s.agePicture[pictureAgeGroup]++;
-  s.agePicture["Total donations"]++;
-
-  if (age != null && age >= 16 && age <= 25) {
-    if (sex === "Male") s.youth1625Sex["Male"]++;
-    if (sex === "Female") s.youth1625Sex["Female"]++;
-    s.youth1625Sex["Total"]++;
-  }
 }
 
 function normalizeRequestComponent(v){
@@ -624,16 +589,6 @@ function getRequestedItemsOnly(r){
   if (r.requestedBlood && typeof r.requestedBlood === "object") pushPanelItems(items, r.requestedBlood);
   if (r.bloodRequest && typeof r.bloodRequest === "object") pushPanelItems(items, r.bloodRequest);
   if (r.request && typeof r.request === "object") pushPanelItems(items, r.request);
-  if (r.WB != null) items.push({ component:"WB", quantity:r.WB });
-  if (r.wb != null) items.push({ component:"WB", quantity:r.wb });
-  if (r.PRBC != null) items.push({ component:"PRBC", quantity:r.PRBC });
-  if (r.prbc != null) items.push({ component:"PRBC", quantity:r.prbc });
-  if (r.FFP != null) items.push({ component:"FFP", quantity:r.FFP });
-  if (r.ffp != null) items.push({ component:"FFP", quantity:r.ffp });
-  if (r.PC != null) items.push({ component:"PC", quantity:r.PC });
-  if (r.pc != null) items.push({ component:"PC", quantity:r.pc });
-  if (r.CRYO != null) items.push({ component:"CRYO", quantity:r.CRYO });
-  if (r.cryo != null) items.push({ component:"CRYO", quantity:r.cryo });
   return items;
 }
 
@@ -669,7 +624,6 @@ function getFilteredDonors(){
 function getFilteredReleasing(){
   const y = document.getElementById("filterYear").value;
   const m = document.getElementById("filterMonth").value;
-
   return releasingRecords.filter(r => {
     const d = parseDate(getReleaseDate(r));
     const p = getDateParts(d);
@@ -693,7 +647,7 @@ function sumBagTypeColumn(s, code){
          Number(s.fieldDonation["Total MBD"][code] || 0);
 }
 
-function sumBagTypeForBloodType(s, bt, code){
+function sumBagTypeForBloodType(bt, code){
   let total = 0;
   const filtered = getFilteredDonors();
   filtered.forEach(r => {
@@ -758,6 +712,175 @@ function combineSmartGroupRows(rows){
   return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
 }
 
+function renderSummary(s){
+  const cards = [
+    ["Total Donor Entries", s.totalDonors],
+    ["Office Bleeding", sumBagGroup(s.officeBleeding["Walk-in"]) + sumBagGroup(s.officeBleeding["Patient Directed"])],
+    ["Field Donation", sumBagGroup(s.fieldDonation["Total MBD"])],
+    ["Prepared Components", sumVals(s.components)],
+    ["Requested Blood", sumVals(s.requests)],
+    ["Male + Female", s.sex["Male"] + s.sex["Female"]]
+  ];
+
+  document.getElementById("summaryGrid").innerHTML = cards.map(([label, value]) => `
+    <div class="summary-box">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="value">${num(value)}</div>
+    </div>
+  `).join("");
+}
+
+function renderFieldCategoryTable(title, label, rows){
+  const safeRows = rows.length ? rows : [{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+  return `
+    <div class="table-wrap" style="margin-bottom:10px;">
+      <table>
+        <tr class="subheader"><td colspan="7">${title}</td></tr>
+        <tr>
+          <th>${label === "Group" ? "Group" : "Municipality"}</th>
+          <th>${label === "Pledge 25" ? "School or Barangay street (location)" : "Place"}</th>
+          <th>Date</th>
+          <th>450 cc S</th>
+          <th>450 cc D</th>
+          <th>450 cc T</th>
+          <th>450 cc Q</th>
+        </tr>
+        ${safeRows.map(r => `
+          <tr>
+            <td>${escapeHtml(r.name || "")}</td>
+            <td>${escapeHtml(r.place || "")}</td>
+            <td>${escapeHtml(r.date || "")}</td>
+            <td>${num(r["450 cc S"])}</td>
+            <td>${num(r["450 cc D"])}</td>
+            <td>${num(r["450 cc T"])}</td>
+            <td>${num(r["450 cc Q"])}</td>
+          </tr>
+        `).join("")}
+        <tr class="subheader">
+          <td colspan="3">Sub total</td>
+          <td>${num(sumDetailField(safeRows, "450 cc S"))}</td>
+          <td>${num(sumDetailField(safeRows, "450 cc D"))}</td>
+          <td>${num(sumDetailField(safeRows, "450 cc T"))}</td>
+          <td>${num(sumDetailField(safeRows, "450 cc Q"))}</td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+function renderReport(grouped){
+  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
+  const container = document.getElementById("reportContainer");
+
+  if (!years.length) {
+    container.innerHTML = `<div class="empty">No statistics found for the selected filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = years.map((year, yi) => {
+    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
+    return `
+      <div class="year-block">
+        <div class="year-head" onclick="toggleNext(this)">
+          <span>${year}</span>
+          <span>${monthKeys.length} month group(s)</span>
+        </div>
+        <div class="year-content ${yi === 0 ? "open" : ""}">
+          ${monthKeys.map((key, mi) => {
+            const s = grouped[year][key];
+            const monthName = MONTHS[(s._meta.month || 1) - 1];
+            return `
+              <div class="month-block">
+                <div class="month-head" onclick="toggleNext(this)">
+                  <span>${monthName}</span>
+                  <span>${num(s.totalDonors)} donor entries</span>
+                </div>
+                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-a">A. Office Bleeding</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+                        <tr><td>1. Walk-in</td><td>${num(s.officeBleeding["Walk-in"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q)}</td></tr>
+                        <tr><td>2. Patient-directed</td><td>${num(s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Patient Directed"].Q)}</td></tr>
+                        <tr class="subheader"><td>Total</td><td>${num(s.officeBleeding["Walk-in"].S + s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D + s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T + s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q)}</td></tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-b">B. Field Donation</div>
+                    ${renderFieldCategoryTable("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
+                    ${renderFieldCategoryTable("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
+                    ${renderFieldCategoryTable("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-c">II. Blood Type Distribution of Blood Collection</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
+                          <tr>
+                            <td>${bt}</td>
+                            <td>${num(sumBagTypeForBloodType(bt, "S"))}</td>
+                            <td>${num(sumBagTypeForBloodType(bt, "D"))}</td>
+                            <td>${num(sumBagTypeForBloodType(bt, "T"))}</td>
+                            <td>${num(sumBagTypeForBloodType(bt, "Q"))}</td>
+                          </tr>
+                        `).join("")}
+                        <tr class="subheader">
+                          <td>Total</td>
+                          <td>${num(sumBagTypeColumn(s, "S"))}</td>
+                          <td>${num(sumBagTypeColumn(s, "D"))}</td>
+                          <td>${num(sumBagTypeColumn(s, "T"))}</td>
+                          <td>${num(sumBagTypeColumn(s, "Q"))}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-d">III. Component Preparation</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
+                        <tr class="subheader"><td>No. of components prepared</td><td>${num(s.components["450 cc"])}</td><td>${num(s.components["PRBC"])}</td><td>${num(s.components["FFP"])}</td><td>${num(s.components["PC"])}</td><td>${num(s.components["CRYO"])}</td></tr>
+                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
+                          <tr>
+                            <td>${bt}</td>
+                            <td>${num(s.componentBloodType["450 cc"][bt])}</td>
+                            <td>${num(s.componentBloodType["PRBC"][bt])}</td>
+                            <td>${num(s.componentBloodType["FFP"][bt])}</td>
+                            <td>${num(s.componentBloodType["PC"][bt])}</td>
+                            <td>${num(s.componentBloodType["CRYO"][bt])}</td>
+                          </tr>
+                        `).join("")}
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-e">IV. Blood Requests Received</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
+                        <tr><td>Requested Only</td><td>${num(s.requests["450 cc"])}</td><td>${num(s.requests["PRBC"])}</td><td>${num(s.requests["FFP"])}</td><td>${num(s.requests["PC"])}</td><td>${num(s.requests["CRYO"])}</td></tr>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function buildStatistics(){
   try{
     const donors = getFilteredDonors();
@@ -769,14 +892,11 @@ function buildStatistics(){
       const d = parseDate(getDonorDate(r));
       const p = getDateParts(d);
       if (!p.year || !p.month) return;
-
       const y = String(p.year);
       const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
       if (!grouped[y]) grouped[y] = {};
       if (!grouped[y][k]) grouped[y][k] = emptyStats();
       grouped[y][k]._meta = { year:p.year, month:p.month };
-
       applyDonor(grouped[y][k], r);
       applyDonor(summary, r);
     });
@@ -785,14 +905,11 @@ function buildStatistics(){
       const d = parseDate(getReleaseDate(r));
       const p = getDateParts(d);
       if (!p.year || !p.month) return;
-
       const y = String(p.year);
       const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
       if (!grouped[y]) grouped[y] = {};
       if (!grouped[y][k]) grouped[y][k] = emptyStats();
       grouped[y][k]._meta = { year:p.year, month:p.month };
-
       applyRequestedOnly(grouped[y][k], r);
       applyRequestedOnly(summary, r);
     });
@@ -936,10 +1053,6 @@ function populateFilters(){
 
 async function reloadStatistics(){
   await initializePage();
-}
-
-function printFilteredStatistics(){
-  window.print();
 }
 
 function exportCSV(){
