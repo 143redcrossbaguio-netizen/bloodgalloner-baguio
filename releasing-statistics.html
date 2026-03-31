@@ -152,26 +152,6 @@ font-weight:bold;
 background:#f0f0f0;
 }
 
-.augSection{
-margin-top:35px;
-padding-top:10px;
-border-top:3px solid #ddd;
-}
-
-.augHeader{
-background:#dbeafe;
-padding:12px;
-font-weight:bold;
-border-radius:6px;
-margin-top:20px;
-font-size:18px;
-color:#0f3d91;
-}
-
-.augTable th{
-background:#1565c0;
-}
-
 .smallTable th,
 .smallTable td{
 padding:10px;
@@ -218,6 +198,93 @@ color:#000;
 }
 
 .patientServedLeft{
+font-weight:bold;
+}
+
+.clickableRow{
+cursor:pointer;
+transition:0.2s;
+}
+
+.clickableRow:hover td{
+filter:brightness(0.97);
+}
+
+.expanderNote{
+font-size:12px;
+font-weight:bold;
+color:#555;
+margin-left:8px;
+}
+
+.patientDetailWrap{
+background:#f8fffe;
+border:1px solid #b2dfdb;
+border-top:none;
+padding:12px;
+}
+
+.patientDetailTitle{
+font-weight:bold;
+color:#00695c;
+margin-bottom:8px;
+}
+
+.detailTable{
+width:100%;
+border-collapse:collapse;
+margin-top:8px;
+}
+
+.detailTable th,
+.detailTable td{
+border:1px solid #9fd4cd;
+padding:7px;
+font-size:13px;
+text-align:center;
+}
+
+.detailTable th{
+background:#dff4f1;
+color:#004d40;
+}
+
+.detailTable td{
+background:#ffffff;
+}
+
+.hospitalRow{
+cursor:pointer;
+transition:0.2s;
+}
+
+.hospitalRow:hover td{
+background:#f1fbf9;
+}
+
+.hospitalDetailRow td{
+background:#f8fffe;
+padding:12px;
+}
+
+.hospitalDetailBox{
+border:1px solid #b2dfdb;
+border-radius:8px;
+padding:10px;
+background:#f8fffe;
+}
+
+.hospitalDetailTitle{
+font-size:14px;
+font-weight:bold;
+color:#00695c;
+margin-bottom:8px;
+text-align:left;
+}
+
+.muted{
+color:#666;
+font-size:12px;
 font-weight:bold;
 }
 
@@ -315,6 +382,9 @@ let currentPrices = {
     CRYO: 0,
     BOX: 0
 };
+
+let expandedPatientSections = new Set();
+let expandedHospitalRows = new Set();
 
 async function loadPrices(){
     try{
@@ -426,6 +496,14 @@ function formatComponentsText(list){
         .join("<br>");
 }
 
+function formatComponentsPlain(list){
+    if(!Array.isArray(list) || list.length === 0) return "";
+    return list
+        .filter(item => Number(item.qty || 0) > 0)
+        .map(item => `${item.type || ""} - ${item.qty || 0}`)
+        .join(" | ");
+}
+
 function populateMonthFilter(){
     const monthSet = new Set();
 
@@ -470,9 +548,9 @@ function buildReleasingStats(){
     };
 
     const patientServed = {
-        pay:{ male:0, female:0 },
-        discounted:{ male:0, female:0 },
-        noCharge:{ male:0, female:0 }
+        pay:{ male:0, female:0, entries:[] },
+        discounted:{ male:0, female:0, entries:[] },
+        noCharge:{ male:0, female:0, entries:[] }
     };
 
     allEntries.forEach(entry => {
@@ -509,7 +587,8 @@ function buildReleasingStats(){
                 requested:emptyComponent(),
                 issued:emptyComponent(),
                 boxContainers:0,
-                computedTotal:0
+                computedTotal:0,
+                patients:[]
             };
         }
 
@@ -558,15 +637,38 @@ function buildReleasingStats(){
         h.boxContainers += boxCount;
         grand.boxContainers += boxCount;
 
+        const patientDetail = {
+            date: entry.date || "",
+            facility: entry.facility || "",
+            surname: entry.surname || "",
+            firstname: entry.firstname || "",
+            age: entry.age || "",
+            sex: entry.sex || "",
+            bloodtype: entry.bloodtype || "",
+            or: entry.or || "",
+            requestedText: formatComponentsPlain(entry.requests),
+            issuedText: formatComponentsPlain(entry.issued),
+            amountPaid: amountPaid,
+            discount: discount,
+            netAmount: actualIncome,
+            boxContainerQty: boxCount,
+            computedTotal: computedTotal
+        };
+
+        h.patients.push(patientDetail);
+
         if(actualIncome <= 0){
             if(sex === "MALE") patientServed.noCharge.male++;
             if(sex === "FEMALE") patientServed.noCharge.female++;
+            patientServed.noCharge.entries.push(patientDetail);
         }else if(discount > 0){
             if(sex === "MALE") patientServed.discounted.male++;
             if(sex === "FEMALE") patientServed.discounted.female++;
+            patientServed.discounted.entries.push(patientDetail);
         }else{
             if(sex === "MALE") patientServed.pay.male++;
             if(sex === "FEMALE") patientServed.pay.female++;
+            patientServed.pay.entries.push(patientDetail);
         }
     });
 
@@ -637,7 +739,57 @@ function renderDashboard(grand){
     `;
 }
 
+function renderPatientDetailsTable(entries){
+    if(!entries.length){
+        return `<div class="muted">No patient records found.</div>`;
+    }
+
+    return `
+        <table class="detailTable">
+            <tr>
+                <th>DATE</th>
+                <th>HOSPITAL</th>
+                <th>SURNAME</th>
+                <th>FIRST NAME</th>
+                <th>AGE</th>
+                <th>SEX</th>
+                <th>BLOOD TYPE</th>
+                <th>OR</th>
+                <th>BOX</th>
+                <th>REQUESTED</th>
+                <th>ISSUED</th>
+                <th>COMPUTED TOTAL</th>
+                <th>AMOUNT PAID</th>
+                <th>DISCOUNT</th>
+                <th>NET AMOUNT</th>
+            </tr>
+            ${entries.map(item => `
+                <tr>
+                    <td>${item.date || ""}</td>
+                    <td>${item.facility || ""}</td>
+                    <td>${item.surname || ""}</td>
+                    <td>${item.firstname || ""}</td>
+                    <td>${item.age || ""}</td>
+                    <td>${item.sex || ""}</td>
+                    <td>${item.bloodtype || ""}</td>
+                    <td>${item.or || ""}</td>
+                    <td>${item.boxContainerQty || 0}</td>
+                    <td class="left">${item.requestedText || ""}</td>
+                    <td class="left">${item.issuedText || ""}</td>
+                    <td>${Number(item.computedTotal || 0).toFixed(2)}</td>
+                    <td>${Number(item.amountPaid || 0).toFixed(2)}</td>
+                    <td>${Number(item.discount || 0).toFixed(2)}</td>
+                    <td>${Number(item.netAmount || 0).toFixed(2)}</td>
+                </tr>
+            `).join("")}
+        </table>
+    `;
+}
+
 function renderPatientServedTable(patientServed){
+    const discountedOpen = expandedPatientSections.has("discounted");
+    const noChargeOpen = expandedPatientSections.has("noCharge");
+
     patientServedSection.innerHTML = `
         <div class="patientServedWrap">
             <div class="patientServedTitle">PATIENT SERVED</div>
@@ -655,16 +807,36 @@ function renderPatientServedTable(patientServed){
                     <td>${patientServed.pay.male}</td>
                     <td>${patientServed.pay.female}</td>
                 </tr>
-                <tr>
-                    <td class="patientServedLeft">DISCOUNTED</td>
+                <tr class="clickableRow" data-patient-section="discounted">
+                    <td class="patientServedLeft">DISCOUNTED <span class="expanderNote">${discountedOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
                     <td>${patientServed.discounted.male}</td>
                     <td>${patientServed.discounted.female}</td>
                 </tr>
+                ${discountedOpen ? `
                 <tr>
-                    <td class="patientServedLeft">NO CHARGE<br>(Indigent)</td>
+                    <td colspan="3" style="padding:0;">
+                        <div class="patientDetailWrap">
+                            <div class="patientDetailTitle">DISCOUNTED PATIENT DETAILS</div>
+                            ${renderPatientDetailsTable(patientServed.discounted.entries)}
+                        </div>
+                    </td>
+                </tr>
+                ` : ""}
+                <tr class="clickableRow" data-patient-section="noCharge">
+                    <td class="patientServedLeft">NO CHARGE<br>(Indigent) <span class="expanderNote">${noChargeOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
                     <td>${patientServed.noCharge.male}</td>
                     <td>${patientServed.noCharge.female}</td>
                 </tr>
+                ${noChargeOpen ? `
+                <tr>
+                    <td colspan="3" style="padding:0;">
+                        <div class="patientDetailWrap">
+                            <div class="patientDetailTitle">NO CHARGE / INDIGENT PATIENT DETAILS</div>
+                            ${renderPatientDetailsTable(patientServed.noCharge.entries)}
+                        </div>
+                    </td>
+                </tr>
+                ` : ""}
             </table>
         </div>
     `;
@@ -741,10 +913,14 @@ function renderStatistics(){
 
         Object.keys(m.hospitals).sort().forEach(hospital => {
             const s = m.hospitals[hospital];
+            const rowKey = `${month}__${hospital}`;
+            const isOpen = expandedHospitalRows.has(rowKey);
 
             const row = document.createElement("tr");
+            row.className = "hospitalRow";
+            row.dataset.hospitalKey = rowKey;
             row.innerHTML = `
-                <td class="left">${hospital}</td>
+                <td class="left">${hospital} <span class="expanderNote">${isOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
                 <td>${s.entries}</td>
                 <td>${s.male}</td>
                 <td>${s.female}</td>
@@ -764,6 +940,20 @@ function renderStatistics(){
                 <td>${s.issued.CRYO}</td>
             `;
             table.appendChild(row);
+
+            if(isOpen){
+                const detailRow = document.createElement("tr");
+                detailRow.className = "hospitalDetailRow";
+                detailRow.innerHTML = `
+                    <td colspan="16">
+                        <div class="hospitalDetailBox">
+                            <div class="hospitalDetailTitle">${hospital} PATIENT LIST AND FULL DETAILS</div>
+                            ${renderPatientDetailsTable(s.patients)}
+                        </div>
+                    </td>
+                `;
+                table.appendChild(detailRow);
+            }
         });
 
         const totalRow = document.createElement("tr");
@@ -793,6 +983,34 @@ function renderStatistics(){
         statisticsContainer.appendChild(header);
         statisticsContainer.appendChild(summary);
         statisticsContainer.appendChild(table);
+    });
+
+    attachExpandableEvents();
+}
+
+function attachExpandableEvents(){
+    document.querySelectorAll("[data-patient-section]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.patientSection;
+            if(expandedPatientSections.has(key)){
+                expandedPatientSections.delete(key);
+            }else{
+                expandedPatientSections.add(key);
+            }
+            renderStatistics();
+        };
+    });
+
+    document.querySelectorAll("[data-hospital-key]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.hospitalKey;
+            if(expandedHospitalRows.has(key)){
+                expandedHospitalRows.delete(key);
+            }else{
+                expandedHospitalRows.add(key);
+            }
+            renderStatistics();
+        };
     });
 }
 
