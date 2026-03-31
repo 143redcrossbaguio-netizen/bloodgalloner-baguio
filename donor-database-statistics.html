@@ -806,10 +806,6 @@ function sumBagGroup(obj){
     return Number(obj.S || 0) + Number(obj.D || 0) + Number(obj.T || 0) + Number(obj.Q || 0);
 }
 
-/* IMPORTANT FIX YOU REQUESTED:
-   DOUBLE BAG stays listed as D in bag-type sections,
-   but in COMPONENT PREPARATION it is treated as WHOLE BLOOD / SINGLE
-*/
 function getPreparedComponentsFromBag(r){
     const code = normalizeBagCode(
         r.bloodBagType ||
@@ -820,42 +816,18 @@ function getPreparedComponentsFromBag(r){
     );
 
     if (code === "Q") {
-        return {
-            "450 cc": 0,
-            "PRBC": 1,
-            "FFP": 1,
-            "PC": 1,
-            "CRYO": 1
-        };
+        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
     }
 
     if (code === "T") {
-        return {
-            "450 cc": 0,
-            "PRBC": 1,
-            "FFP": 1,
-            "PC": 1,
-            "CRYO": 0
-        };
+        return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
     }
 
     if (code === "D") {
-        return {
-            "450 cc": 1,
-            "PRBC": 0,
-            "FFP": 0,
-            "PC": 0,
-            "CRYO": 0
-        };
+        return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
     }
 
-    return {
-        "450 cc": 1,
-        "PRBC": 0,
-        "FFP": 0,
-        "PC": 0,
-        "CRYO": 0
-    };
+    return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
 }
 
 function createBloodTypeCounter(){
@@ -1183,36 +1155,6 @@ function sumBagTypeForBloodType(s, bt, code){
     return total;
 }
 
-function num(v){
-    return Number(v || 0).toLocaleString();
-}
-
-function csvEscape(v){
-    const s = String(v ?? "");
-    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-        return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-}
-
-function escapeJs(str){
-    return String(str ?? "")
-        .replace(/\\/g, "\\\\")
-        .replace(/'/g, "\\'")
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, "\\n")
-        .replace(/\r/g, "");
-}
-
-function escapeHtml(str){
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 function renderSummary(s){
     const cards = [
         ["Total Donor Entries", s.totalDonors],
@@ -1229,37 +1171,6 @@ function renderSummary(s){
             <div class="value">${num(value)}</div>
         </div>
     `).join("");
-}
-
-function combineSmartGroupRows(rows){
-    const map = {};
-
-    rows.forEach(r => {
-        const key = normalizeAliasKey(r.name || "");
-        const display = key || (r.name || "");
-
-        if (!map[key || display]) {
-            map[key || display] = {
-                name: display,
-                place: r.place || "",
-                date: r.date || "",
-                "450 cc S": 0,
-                "450 cc D": 0,
-                "450 cc T": 0,
-                "450 cc Q": 0
-            };
-        }
-
-        map[key || display]["450 cc S"] += Number(r["450 cc S"] || 0);
-        map[key || display]["450 cc D"] += Number(r["450 cc D"] || 0);
-        map[key || display]["450 cc T"] += Number(r["450 cc T"] || 0);
-        map[key || display]["450 cc Q"] += Number(r["450 cc Q"] || 0);
-
-        if (!map[key || display].place && r.place) map[key || display].place = r.place;
-        if (!map[key || display].date && r.date) map[key || display].date = r.date;
-    });
-
-    return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
 }
 
 function renderFieldCategoryTable(title, label, rows){
@@ -1647,6 +1558,56 @@ function renderReport(grouped){
             </div>
         `;
     }).join("");
+}
+
+/* THIS IS THE MISSING FUNCTION THAT FIXES YOUR ERROR */
+function buildStatistics(){
+    try{
+        const donors = getFilteredDonors();
+        const releases = getFilteredReleasing();
+        const grouped = {};
+        const summary = emptyStats();
+
+        donors.forEach(r => {
+            const d = parseDate(getDonorDate(r));
+            const p = getDateParts(d);
+            if (!p.year || !p.month) return;
+
+            const y = String(p.year);
+            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
+
+            if (!grouped[y]) grouped[y] = {};
+            if (!grouped[y][k]) grouped[y][k] = emptyStats();
+            grouped[y][k]._meta = { year:p.year, month:p.month };
+
+            applyDonor(grouped[y][k], r);
+            applyDonor(summary, r);
+        });
+
+        releases.forEach(r => {
+            const d = parseDate(getReleaseDate(r));
+            const p = getDateParts(d);
+            if (!p.year || !p.month) return;
+
+            const y = String(p.year);
+            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
+
+            if (!grouped[y]) grouped[y] = {};
+            if (!grouped[y][k]) grouped[y][k] = emptyStats();
+            grouped[y][k]._meta = { year:p.year, month:p.month };
+
+            applyRequestedOnly(grouped[y][k], r);
+            applyRequestedOnly(summary, r);
+        });
+
+        groupedCache = grouped;
+        renderSummary(summary);
+        renderReport(grouped);
+    }catch(error){
+        console.error(error);
+        document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
+        setStatus("Failed to build statistics.", "error");
+    }
 }
 
 function toggleNext(el){
