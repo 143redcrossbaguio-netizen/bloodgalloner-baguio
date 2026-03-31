@@ -63,7 +63,7 @@
         color: #334155;
     }
 
-    input[type="text"], select {
+    input[type="text"] {
         flex: 1;
         min-width: 220px;
         padding: 10px 12px;
@@ -80,8 +80,6 @@
         cursor: pointer;
     }
 
-    .btn-red { background: #b30000; color: white; }
-    .btn-green { background: #2e7d32; color: white; }
     .btn-blue { background: #1565c0; color: white; }
     .btn-gray { background: #64748b; color: white; }
     .btn-orange { background: #ef6c00; color: white; }
@@ -213,11 +211,7 @@
 
     .muted { color: #64748b; }
     .danger { color: #b71c1c; font-weight: bold; }
-    .success { color: #1b5e20; font-weight: bold; }
-
-    .hidden {
-        display: none;
-    }
+    .hidden { display: none; }
 
     @media (max-width: 1200px) {
         .stats-grid {
@@ -251,11 +245,11 @@
         </div>
 
         <div class="note">
-            <b>Safe cleanup logic:</b><br>
-            • <b>Batch imports</b> = newer imports with <b>importMeta.batchId</b><br>
-            • <b>Legacy imports</b> = older imports with <b>sourceFile/sourceSheet</b> but <b>no batchId</b><br>
-            • Manual donor entries without import metadata are <b>not included</b><br>
-            • Deletion is verified against the <b>Firestore server</b> before success is shown
+            <b>Delete mode:</b><br>
+            • Reads imported rows from <b>server</b><br>
+            • Deletes by exact scanned document IDs<br>
+            • Uses <b>one-by-one deletion</b> for reliability<br>
+            • Verifies from <b>server</b> before showing success
         </div>
 
         <div class="danger-note" style="margin-top:10px;">
@@ -325,10 +319,6 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-function normalizeText(value) {
-    return String(value ?? "").trim().toLowerCase();
-}
-
 function formatTimestamp(ts) {
     if (!ts) return "";
     try {
@@ -349,9 +339,7 @@ function makeGroupKey(record) {
     const meta = record.importMeta || {};
     const batchId = meta.batchId || "";
 
-    if (batchId) {
-        return `batch::${batchId}`;
-    }
+    if (batchId) return `batch::${batchId}`;
 
     const sourceFile = meta.sourceFile || "UNKNOWN FILE";
     const sourceSheet = meta.sourceSheet || "UNKNOWN SHEET";
@@ -359,15 +347,12 @@ function makeGroupKey(record) {
 }
 
 function buildGroupLabel(group) {
-    if (group.type === "batch") {
-        return `Batch Import - ${group.batchId}`;
-    }
+    if (group.type === "batch") return `Batch Import - ${group.batchId}`;
     return `Legacy Import - ${group.sourceFile} / ${group.sourceSheet}`;
 }
 
 function recordMatchesSearch(group, keyword) {
     if (!keyword) return true;
-
     const haystack = [
         group.type,
         group.batchId,
@@ -516,13 +501,7 @@ async function scanImportedRecords() {
         snap.forEach(doc => {
             const data = doc.data() || {};
             const meta = data.importMeta || {};
-
-            const isImported =
-                !!meta.importedFrom ||
-                !!meta.sourceFile ||
-                !!meta.sourceSheet ||
-                !!meta.batchId;
-
+            const isImported = !!meta.importedFrom || !!meta.sourceFile || !!meta.sourceSheet || !!meta.batchId;
             if (!isImported) return;
 
             importedRows.push({
@@ -559,10 +538,7 @@ async function scanImportedRecords() {
             }
 
             const meta = row.importMeta || {};
-            if (meta.importedAt) {
-                grouped[key].latestImportedAt = meta.importedAt;
-            }
-
+            if (meta.importedAt) grouped[key].latestImportedAt = meta.importedAt;
             grouped[key].records.push(row);
         });
 
@@ -621,25 +597,32 @@ async function requestPasswordConfirmation(actionLabel) {
     }
 }
 
-async function deleteDocIdsInChunks(docIds, label) {
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function deleteDocIdsOneByOne(docIds, label) {
     const uniqueIds = [...new Set(docIds.filter(Boolean))];
-    const chunkSize = 50;
-    let totalDeleted = 0;
+    let deleted = 0;
 
-    for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-        const chunk = uniqueIds.slice(i, i + chunkSize);
-        const batch = db.batch();
+    for (let i = 0; i < uniqueIds.length; i++) {
+        const id = uniqueIds[i];
+        setStatus(`Deleting ${label}... ${i + 1} / ${uniqueIds.length}`);
 
-        chunk.forEach(id => {
-            batch.delete(db.collection("donorDatabase").doc(id));
-        });
+        try {
+            await db.collection("donorDatabase").doc(id).delete();
+            deleted++;
+        } catch (error) {
+            console.error("Delete failed for doc:", id, error);
+            throw new Error(`Delete stopped at record ${i + 1} of ${uniqueIds.length}. Firestore said: ${error.message}`);
+        }
 
-        setStatus(`Deleting ${label}... ${Math.min(i + chunk.length, uniqueIds.length)} / ${uniqueIds.length}`);
-        await batch.commit();
-        totalDeleted += chunk.length;
+        if ((i + 1) % 10 === 0) {
+            await sleep(150);
+        }
     }
 
-    return totalDeleted;
+    return deleted;
 }
 
 async function verifyDeletedFromServer(docIds) {
@@ -680,7 +663,7 @@ async function deleteBatchGroup(batchId) {
 
     try {
         const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsInChunks(ids, `batch ${batchId}`);
+        const deletedCount = await deleteDocIdsOneByOne(ids, `batch ${batchId}`);
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
@@ -706,6 +689,7 @@ async function deleteBatchGroup(batchId) {
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
+        await scanImportedRecords();
     }
 }
 
@@ -728,7 +712,7 @@ async function deleteLegacyGroupByKey(groupKey) {
 
     try {
         const ids = group.records.map(r => r.id);
-        const deletedCount = await deleteDocIdsInChunks(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
+        const deletedCount = await deleteDocIdsOneByOne(ids, `legacy import ${group.sourceFile} / ${group.sourceSheet}`);
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
@@ -742,6 +726,7 @@ async function deleteLegacyGroupByKey(groupKey) {
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
+        await scanImportedRecords();
     }
 }
 
@@ -765,7 +750,7 @@ async function deleteAllLegacyImports() {
 
     try {
         const ids = legacyGroups.flatMap(g => g.records.map(r => r.id));
-        const deletedCount = await deleteDocIdsInChunks(ids, "all legacy imports");
+        const deletedCount = await deleteDocIdsOneByOne(ids, "all legacy imports");
         const remaining = await verifyDeletedFromServer(ids);
 
         if (remaining > 0) {
@@ -779,6 +764,7 @@ async function deleteAllLegacyImports() {
     } catch (error) {
         console.error(error);
         alert("Delete failed: " + error.message);
+        await scanImportedRecords();
     }
 }
 
