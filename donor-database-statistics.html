@@ -599,14 +599,10 @@ function parseDateFromText(text){
     if (!value) return "";
 
     const ymd = value.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
-    if (ymd) {
-        return `${ymd[1]}-${String(ymd[2]).padStart(2,"0")}-${String(ymd[3]).padStart(2,"0")}`;
-    }
+    if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2,"0")}-${String(ymd[3]).padStart(2,"0")}`;
 
     const mdy = value.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
-    if (mdy) {
-        return `${mdy[3]}-${String(mdy[1]).padStart(2,"0")}-${String(mdy[2]).padStart(2,"0")}`;
-    }
+    if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2,"0")}-${String(mdy[2]).padStart(2,"0")}`;
 
     const monthMap = {
         jan:"01", january:"01",
@@ -624,14 +620,10 @@ function parseDateFromText(text){
     };
 
     const monthYear = value.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
-    if (monthYear) {
-        return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
-    }
+    if (monthYear) return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
 
     const yearMonth = value.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
-    if (yearMonth) {
-        return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
-    }
+    if (yearMonth) return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
 
     return "";
 }
@@ -672,11 +664,7 @@ function parseDate(raw){
 
 function getDateParts(d){
     if (!d || isNaN(d)) return { year:null, month:null, day:null };
-    return {
-        year: d.getFullYear(),
-        month: d.getMonth() + 1,
-        day: d.getDate()
-    };
+    return { year:d.getFullYear(), month:d.getMonth() + 1, day:d.getDate() };
 }
 
 function parseDateFromImportMeta(r){
@@ -748,6 +736,7 @@ function getBestMapping(partnerName){
         const target = normalizeAliasKey(x.partnerName || x.name || "");
         return target && (target.includes(norm) || norm.includes(target));
     });
+
     return partial || null;
 }
 
@@ -782,21 +771,18 @@ function normalizeDonorCategory(v){
 
 function normalizeBagCode(v){
     const s = String(v || "").toLowerCase().trim();
-    if (!s) return "S";
 
+    if (!s) return "S";
     if (s.includes("quad")) return "Q";
     if (s.includes("triple")) return "T";
     if (s.includes("double")) return "D";
     if (s.includes("single")) return "S";
 
-    if (s === "q" || s === "4") return "Q";
-    if (s === "t" || s === "3") return "T";
-    if (s === "d" || s === "2") return "D";
-    if (s === "s" || s === "1") return "S";
+    if (s === "4" || s === "q") return "Q";
+    if (s === "3" || s === "t") return "T";
+    if (s === "2" || s === "d") return "D";
+    if (s === "1" || s === "s") return "S";
 
-    if (s.includes("450 cc q") || s.includes("450cc q")) return "Q";
-    if (s.includes("450 cc t") || s.includes("450cc t")) return "T";
-    if (s.includes("450 cc d") || s.includes("450cc d")) return "D";
     return "S";
 }
 
@@ -820,12 +806,56 @@ function sumBagGroup(obj){
     return Number(obj.S || 0) + Number(obj.D || 0) + Number(obj.T || 0) + Number(obj.Q || 0);
 }
 
+/* IMPORTANT FIX YOU REQUESTED:
+   DOUBLE BAG stays listed as D in bag-type sections,
+   but in COMPONENT PREPARATION it is treated as WHOLE BLOOD / SINGLE
+*/
 function getPreparedComponentsFromBag(r){
-    const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
-    if (code === "Q") return { "450 cc":1, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
-    if (code === "T") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
-    if (code === "D") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":0, "CRYO":0 };
-    return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
+    const code = normalizeBagCode(
+        r.bloodBagType ||
+        r.bagType ||
+        r.bag ||
+        r.bagConfiguration ||
+        ""
+    );
+
+    if (code === "Q") {
+        return {
+            "450 cc": 0,
+            "PRBC": 1,
+            "FFP": 1,
+            "PC": 1,
+            "CRYO": 1
+        };
+    }
+
+    if (code === "T") {
+        return {
+            "450 cc": 0,
+            "PRBC": 1,
+            "FFP": 1,
+            "PC": 1,
+            "CRYO": 0
+        };
+    }
+
+    if (code === "D") {
+        return {
+            "450 cc": 1,
+            "PRBC": 0,
+            "FFP": 0,
+            "PC": 0,
+            "CRYO": 0
+        };
+    }
+
+    return {
+        "450 cc": 1,
+        "PRBC": 0,
+        "FFP": 0,
+        "PC": 0,
+        "CRYO": 0
+    };
 }
 
 function createBloodTypeCounter(){
@@ -997,8 +1027,12 @@ function applyDonor(s, r){
 
     const prep = getPreparedComponentsFromBag(r);
     Object.keys(prep).forEach(component => {
-        s.components[component] += prep[component];
-        if (prep[component] > 0) s.componentBloodType[component][bt] += prep[component];
+        const value = prep[component];
+        s.components[component] += value;
+        if (value > 0) {
+            s.componentBloodType[component][bt] =
+                (s.componentBloodType[component][bt] || 0) + value;
+        }
     });
 
     const sex = normalizeSex(r.sex || r.gender || "");
@@ -1531,10 +1565,7 @@ function renderAgePictureBlock(s){
             <div class="sheet-title title-i">VIII. Donor Statistics by Age Range</div>
             <div class="table-wrap">
                 <table class="sheet">
-                    <tr>
-                        <th>Category</th>
-                        <th>Count</th>
-                    </tr>
+                    <tr><th>Category</th><th>Count</th></tr>
                     <tr><td>Donors under 18 years</td><td>${num(s.agePicture["Under 18"])}</td></tr>
                     <tr><td>Donors aged 18 to 24 years</td><td>${num(s.agePicture["18-24"])}</td></tr>
                     <tr><td>Donors aged 25 to 44 years</td><td>${num(s.agePicture["25-44"])}</td></tr>
@@ -1553,12 +1584,7 @@ function renderYouth1625Block(s){
             <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
             <div class="table-wrap">
                 <table class="sheet">
-                    <tr>
-                        <th></th>
-                        <th>Male</th>
-                        <th>Female</th>
-                        <th>Total</th>
-                    </tr>
+                    <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
                     <tr>
                         <td>16-25 Years Old</td>
                         <td>${num(s.youth1625Sex["Male"])}</td>
@@ -1621,55 +1647,6 @@ function renderReport(grouped){
             </div>
         `;
     }).join("");
-}
-
-function buildStatistics(){
-    try{
-        const donors = getFilteredDonors();
-        const releases = getFilteredReleasing();
-        const grouped = {};
-        const summary = emptyStats();
-
-        donors.forEach(r => {
-            const d = parseDate(getDonorDate(r));
-            const p = getDateParts(d);
-            if (!p.year || !p.month) return;
-
-            const y = String(p.year);
-            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
-            if (!grouped[y]) grouped[y] = {};
-            if (!grouped[y][k]) grouped[y][k] = emptyStats();
-            grouped[y][k]._meta = { year:p.year, month:p.month };
-
-            applyDonor(grouped[y][k], r);
-            applyDonor(summary, r);
-        });
-
-        releases.forEach(r => {
-            const d = parseDate(getReleaseDate(r));
-            const p = getDateParts(d);
-            if (!p.year || !p.month) return;
-
-            const y = String(p.year);
-            const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
-            if (!grouped[y]) grouped[y] = {};
-            if (!grouped[y][k]) grouped[y][k] = emptyStats();
-            grouped[y][k]._meta = { year:p.year, month:p.month };
-
-            applyRequestedOnly(grouped[y][k], r);
-            applyRequestedOnly(summary, r);
-        });
-
-        groupedCache = grouped;
-        renderSummary(summary);
-        renderReport(grouped);
-    }catch(error){
-        console.error(error);
-        document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
-        setStatus("Failed to build statistics.", "error");
-    }
 }
 
 function toggleNext(el){
@@ -1819,16 +1796,10 @@ function printFilteredStatistics(){
         const month = document.getElementById("filterMonth").value;
 
         let printTitle = "Donor Database Statistics";
-
-        if (year !== "ALL" && month !== "ALL"){
-            printTitle += " - " + MONTHS[Number(month)-1] + " " + year;
-        } else if (year !== "ALL"){
-            printTitle += " - Year " + year;
-        } else if (month !== "ALL"){
-            printTitle += " - " + MONTHS[Number(month)-1] + " (All Years)";
-        } else {
-            printTitle += " - All Records";
-        }
+        if (year !== "ALL" && month !== "ALL") printTitle += " - " + MONTHS[Number(month)-1] + " " + year;
+        else if (year !== "ALL") printTitle += " - Year " + year;
+        else if (month !== "ALL") printTitle += " - " + MONTHS[Number(month)-1] + " (All Years)";
+        else printTitle += " - All Records";
 
         document.title = printTitle;
         if (headerEl) headerEl.textContent = printTitle;
@@ -1856,7 +1827,8 @@ function exportCSV(){
         "Year","Month",
         "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
         "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
-        "Total MBD S","Total MBD D","Total MBD T","Total MBD Q"
+        "Total MBD S","Total MBD D","Total MBD T","Total MBD Q",
+        "Prepared 450cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO"
     ]];
 
     Object.keys(groupedCache).sort((a,b)=>b-a).forEach(year => {
@@ -1876,7 +1848,12 @@ function exportCSV(){
                 s.fieldDonation["Total MBD"].S,
                 s.fieldDonation["Total MBD"].D,
                 s.fieldDonation["Total MBD"].T,
-                s.fieldDonation["Total MBD"].Q
+                s.fieldDonation["Total MBD"].Q,
+                s.components["450 cc"],
+                s.components["PRBC"],
+                s.components["FFP"],
+                s.components["PC"],
+                s.components["CRYO"]
             ]);
         });
     });
