@@ -235,7 +235,7 @@
 
         table {
             width: 100%;
-            min-width: 2450px;
+            min-width: 2550px;
             border-collapse: collapse;
             font-size: 12px;
         }
@@ -378,7 +378,7 @@
     <main class="content-panel">
         <div class="toolbar">
             <h3>Grouped by Year and Month</h3>
-            <div>MBD, Walk-in, and Patient-Directed now show donor sequence number for that date and category. Printing excludes Remarks.</div>
+            <div>MBD, Walk-in, and Patient-Directed now show donor sequence number for that date and category. Imported rows use fallback date/time logic from source file metadata when needed.</div>
             <div id="statusMessage" class="status-message"></div>
         </div>
 
@@ -452,7 +452,7 @@
             normalizeText(record.surname),
             normalizeText(record.firstName),
             normalizeText(record.middleName),
-            normalizeText(record.birthday),
+            normalizeText(resolveBirthday(record)),
             normalizeText(record.contactNumber)
         ].join("|");
     }
@@ -463,6 +463,138 @@
             "July", "August", "September", "October", "November", "December"
         ];
         return names[monthNumber - 1] || "Unknown Month";
+    }
+
+    function parseDateFromText(text) {
+        const name = String(text || "").toLowerCase().trim();
+
+        const ymd = name.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
+        if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2, "0")}-${String(ymd[3]).padStart(2, "0")}`;
+
+        const mdy = name.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
+        if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2, "0")}-${String(mdy[2]).padStart(2, "0")}`;
+
+        const monthMap = {
+            jan:"01", january:"01",
+            feb:"02", february:"02",
+            mar:"03", march:"03",
+            apr:"04", april:"04",
+            may:"05",
+            jun:"06", june:"06",
+            jul:"07", july:"07",
+            aug:"08", august:"08",
+            sep:"09", sept:"09", september:"09",
+            oct:"10", october:"10",
+            nov:"11", november:"11",
+            dec:"12", december:"12"
+        };
+
+        const monthYear = name.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
+        if (monthYear) return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
+
+        const yearMonth = name.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
+        if (yearMonth) return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
+
+        return "";
+    }
+
+    function parseDateFlexible(raw) {
+        if (!raw) return "";
+        if (typeof raw === "string") {
+            const trimmed = raw.trim();
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+            if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) {
+                const [m, d, yRaw] = trimmed.split("/");
+                let y = Number(yRaw);
+                if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
+                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            }
+
+            const parsedText = parseDateFromText(trimmed);
+            if (parsedText) return parsedText;
+
+            const d = new Date(trimmed);
+            if (!isNaN(d.getTime())) {
+                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
+            return "";
+        }
+
+        if (typeof raw?.toDate === "function") {
+            const d = raw.toDate();
+            if (!isNaN(d.getTime())) {
+                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
+        }
+
+        if (typeof raw === "object" && raw.seconds) {
+            const d = new Date(raw.seconds * 1000);
+            if (!isNaN(d.getTime())) {
+                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
+        }
+
+        if (raw instanceof Date && !isNaN(raw.getTime())) {
+            return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2, "0")}-${String(raw.getDate()).padStart(2, "0")}`;
+        }
+
+        return "";
+    }
+
+    function parseCreatedAtDate(raw) {
+        if (!raw) return "";
+        if (typeof raw?.toDate === "function") return parseDateFlexible(raw.toDate());
+        if (typeof raw === "object" && raw.seconds) return parseDateFlexible(new Date(raw.seconds * 1000));
+        return "";
+    }
+
+    function resolveEntryDate(record) {
+        return (
+            parseDateFlexible(record.entryDate) ||
+            parseDateFlexible(record.donationDate) ||
+            parseDateFlexible(record.date) ||
+            parseDateFlexible(record.bleedingDate) ||
+            parseDateFromText(record?.importMeta?.sourceSheet || "") ||
+            parseDateFromText(record?.importMeta?.sourceFile || "") ||
+            parseCreatedAtDate(record.createdAt) ||
+            ""
+        );
+    }
+
+    function resolveBirthday(record) {
+        return parseDateFlexible(record.birthday) || String(record.birthday || "");
+    }
+
+    function resolveTimeStarted(record) {
+        return (
+            String(record.timeStarted || "").trim() ||
+            String(record.startedTime || "").trim() ||
+            String(record.startTime || "").trim() ||
+            String(record.timeStart || "").trim() ||
+            ""
+        );
+    }
+
+    function resolveTimeEnded(record) {
+        return (
+            String(record.timeEnded || "").trim() ||
+            String(record.endedTime || "").trim() ||
+            String(record.endTime || "").trim() ||
+            String(record.timeEnd || "").trim() ||
+            ""
+        );
+    }
+
+    function attachResolvedFields(record) {
+        return {
+            ...record,
+            _resolvedEntryDate: resolveEntryDate(record),
+            _resolvedBirthday: resolveBirthday(record),
+            _resolvedTimeStarted: resolveTimeStarted(record),
+            _resolvedTimeEnded: resolveTimeEnded(record)
+        };
     }
 
     function getYearMonth(entryDate) {
@@ -491,7 +623,7 @@
         if (!keyword) return true;
 
         const text = [
-            record.entryDate,
+            record._resolvedEntryDate,
             record.serialNumber,
             record.donorType,
             record.donorCategory,
@@ -500,7 +632,7 @@
             record.surname,
             record.firstName,
             record.middleName,
-            record.birthday,
+            record._resolvedBirthday,
             record.age,
             record.sex,
             record.contactNumber,
@@ -511,8 +643,8 @@
             record.amount,
             record.bloodBagBrand,
             record.bloodBagType,
-            record.timeStarted,
-            record.timeEnded,
+            record._resolvedTimeStarted,
+            record._resolvedTimeEnded,
             record.remarks
         ].join(" ").toLowerCase();
 
@@ -531,14 +663,10 @@
         return records.filter(r => r.donorType === type).length;
     }
 
-    function countBloodType(records, bloodType) {
-        return records.filter(r => r.bloodType === bloodType).length;
-    }
-
     function computeCurrentDonationTotals(records) {
         const totals = {};
         const sorted = [...records].sort((a, b) => {
-            const dateCompare = (b.entryDate || "").localeCompare(a.entryDate || "");
+            const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
             if (dateCompare !== 0) return dateCompare;
             return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
         });
@@ -558,7 +686,7 @@
         const grouped = {};
 
         records.forEach(record => {
-            const date = record.entryDate || "";
+            const date = record._resolvedEntryDate || "";
             const donorType = record.donorType || "";
             let typeGroupKey = `${date}|${donorType}`;
 
@@ -612,7 +740,7 @@
         const grouped = {};
 
         records.forEach(record => {
-            const { year, month, monthName } = getYearMonth(record.entryDate);
+            const { year, month, monthName } = getYearMonth(record._resolvedEntryDate);
 
             if (!grouped[year]) grouped[year] = {};
             if (!grouped[year][month]) {
@@ -632,7 +760,7 @@
         const monthMap = {};
 
         records.forEach(record => {
-            const { year, month, monthName, monthKey } = getYearMonth(record.entryDate);
+            const { monthKey, monthName, year } = getYearMonth(record._resolvedEntryDate);
             if (!monthMap[monthKey]) {
                 monthMap[monthKey] = `${monthName} ${year}`;
             }
@@ -770,7 +898,7 @@
                             <td>${escapeHtml(record.surname)}</td>
                             <td>${escapeHtml(record.firstName)}</td>
                             <td>${escapeHtml(record.middleName)}</td>
-                            <td>${escapeHtml(record.birthday)}</td>
+                            <td>${escapeHtml(record._resolvedBirthday)}</td>
                             <td>${escapeHtml(record.age)}</td>
                             <td>${escapeHtml(record.sex)}</td>
                             <td>${escapeHtml(record.contactNumber)}</td>
@@ -786,9 +914,9 @@
                             <td>${escapeHtml(record.amount)}</td>
                             <td>${escapeHtml(record.bloodBagBrand)}</td>
                             <td>${escapeHtml(record.bloodBagType)}</td>
-                            <td>${escapeHtml(record.timeStarted)}</td>
-                            <td>${escapeHtml(record.timeEnded)}</td>
-                            <td>${escapeHtml(record.entryDate)}</td>
+                            <td>${escapeHtml(record._resolvedTimeStarted)}</td>
+                            <td>${escapeHtml(record._resolvedTimeEnded)}</td>
+                            <td>${escapeHtml(record._resolvedEntryDate)}</td>
                             <td>${escapeHtml(record.remarks)}</td>
                             <td class="actions-cell">
                                 <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
@@ -851,7 +979,7 @@
             <td>${buildEditInput(record.surname || "")}</td>
             <td>${buildEditInput(record.firstName || "")}</td>
             <td>${buildEditInput(record.middleName || "")}</td>
-            <td>${buildEditInput(record.birthday || "", "date")}</td>
+            <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
             <td>${buildEditInput(record.age || "", "number")}</td>
             <td>${buildEditSelect(["Male", "Female"], record.sex || "")}</td>
             <td>${buildEditInput(record.contactNumber || "")}</td>
@@ -864,9 +992,9 @@
             <td>${buildEditSelect(["450 ml", "QNS", "UB"], record.amount || "")}</td>
             <td>${buildEditSelect(["KARMI", "TERUMO"], record.bloodBagBrand || "")}</td>
             <td>${buildEditSelect(["Single", "Double", "Triple", "Quadruple"], record.bloodBagType || "")}</td>
-            <td>${buildEditInput(record.timeStarted || "", "time")}</td>
-            <td>${buildEditInput(record.timeEnded || "", "time")}</td>
-            <td>${buildEditInput(record.entryDate || "", "date")}</td>
+            <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
+            <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
+            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
             <td>${buildEditInput(record.remarks || "")}</td>
             <td class="actions-cell">
                 <button class="small-btn save-btn" onclick="saveEdit('${id}')">Save</button>
@@ -959,7 +1087,7 @@
 
     function getRecordsForMonth(monthValue) {
         return filteredDonors.filter(record => {
-            const { monthKey } = getYearMonth(record.entryDate);
+            const { monthKey } = getYearMonth(record._resolvedEntryDate);
             return monthKey === monthValue;
         });
     }
@@ -977,7 +1105,7 @@
                     <td>${escapeHtml(record.surname)}</td>
                     <td>${escapeHtml(record.firstName)}</td>
                     <td>${escapeHtml(record.middleName)}</td>
-                    <td>${escapeHtml(record.birthday)}</td>
+                    <td>${escapeHtml(record._resolvedBirthday)}</td>
                     <td>${escapeHtml(record.age)}</td>
                     <td>${escapeHtml(record.sex)}</td>
                     <td>${escapeHtml(record.contactNumber)}</td>
@@ -990,9 +1118,9 @@
                     <td>${escapeHtml(record.amount)}</td>
                     <td>${escapeHtml(record.bloodBagBrand)}</td>
                     <td>${escapeHtml(record.bloodBagType)}</td>
-                    <td>${escapeHtml(record.timeStarted)}</td>
-                    <td>${escapeHtml(record.timeEnded)}</td>
-                    <td>${escapeHtml(record.entryDate)}</td>
+                    <td>${escapeHtml(record._resolvedTimeStarted)}</td>
+                    <td>${escapeHtml(record._resolvedTimeEnded)}</td>
+                    <td>${escapeHtml(record._resolvedEntryDate)}</td>
                 </tr>
             `;
         }).join("");
@@ -1095,7 +1223,7 @@
                 record.surname || "",
                 record.firstName || "",
                 record.middleName || "",
-                record.birthday || "",
+                record._resolvedBirthday || "",
                 record.age || "",
                 record.sex || "",
                 record.contactNumber || "",
@@ -1108,9 +1236,9 @@
                 record.amount || "",
                 record.bloodBagBrand || "",
                 record.bloodBagType || "",
-                record.timeStarted || "",
-                record.timeEnded || "",
-                record.entryDate || "",
+                record._resolvedTimeStarted || "",
+                record._resolvedTimeEnded || "",
+                record._resolvedEntryDate || "",
                 record.remarks || ""
             ];
         });
@@ -1168,15 +1296,15 @@
                 return;
             }
 
-            const snapshot = await db.collection("donorDatabase").orderBy("entryDate", "desc").get();
+            const snapshot = await db.collection("donorDatabase").get();
 
-            allDonors = snapshot.docs.map(doc => ({
+            allDonors = snapshot.docs.map(doc => attachResolvedFields({
                 id: doc.id,
                 ...doc.data()
             }));
 
             allDonors.sort((a, b) => {
-                const dateCompare = (b.entryDate || "").localeCompare(a.entryDate || "");
+                const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
                 if (dateCompare !== 0) return dateCompare;
                 return (a.serialNumber || "").localeCompare(b.serialNumber || "");
             });
