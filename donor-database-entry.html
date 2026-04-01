@@ -618,7 +618,7 @@
                 </div>
 
                 <div class="btn-row">
-                    <button type="submit" class="main-btn green-btn">Save Donor Entry</button>
+                    <button type="submit" id="saveDonorBtn" class="main-btn green-btn">Save Donor Entry</button>
                     <button type="reset" class="main-btn gray-btn">Clear Form</button>
                     <button type="button" id="clearLoadedDonorBtn" class="main-btn blue-btn">Clear Loaded Donor</button>
                     <button type="button" id="endGroupBtn" class="main-btn red-btn">End Active Group</button>
@@ -658,6 +658,7 @@
     const typeHelperBox = document.getElementById("typeHelperBox");
     const statusMessage = document.getElementById("statusMessage");
     const authIndicator = document.getElementById("authIndicator");
+    const saveDonorBtn = document.getElementById("saveDonorBtn");
 
     const donorTypeRadios = document.querySelectorAll('input[name="donorType"]');
     const patientDirectedBox = document.getElementById("patientDirectedBox");
@@ -696,6 +697,7 @@
     let donorLookupResults = [];
     let autoTypeSuggestion = "";
     let autoTypeReason = "";
+    let isSaving = false;
 
     function setTodayDate() {
         entryDate.value = new Date().toISOString().split("T")[0];
@@ -725,11 +727,22 @@
         statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
     }
 
+    function clearMessage() {
+        statusMessage.textContent = "";
+        statusMessage.className = "status-message";
+    }
+
     function setAuthIndicator(text, ok) {
         authIndicator.textContent = text;
         authIndicator.style.background = ok ? "#e8f7e8" : "#f5f5f5";
         authIndicator.style.borderColor = ok ? "#b7dfb9" : "#ddd";
         authIndicator.style.color = ok ? "#1b5e20" : "#444";
+    }
+
+    function setSavingState(saving) {
+        isSaving = saving;
+        saveDonorBtn.disabled = saving;
+        saveDonorBtn.textContent = saving ? "Saving..." : "Save Donor Entry";
     }
 
     function getSelectedDonorType() {
@@ -775,22 +788,6 @@
             .replace(/'/g, "&#039;");
     }
 
-    function getMiddleInitial(value) {
-        const cleaned = String(value || "").trim();
-        if (!cleaned) return "";
-        return cleaned.charAt(0).toLowerCase();
-    }
-
-    function middleNameCompatible(a, b) {
-        const aa = normalizeText(a);
-        const bb = normalizeText(b);
-
-        if (!aa || !bb) return true;
-        if (aa === bb) return true;
-        if (getMiddleInitial(aa) && getMiddleInitial(aa) === getMiddleInitial(bb)) return true;
-        return false;
-    }
-
     function getStrongIdentityKey(record) {
         return [
             normalizeAlpha(record.surname),
@@ -803,8 +800,7 @@
         if (!lastEntryDate || !entryDate.value) {
             return {
                 value: "New",
-                reason: "No previous donation date found, so Auto defaults to New.",
-                enoughData: false
+                reason: "No previous donation date found, so Auto defaults to New."
             };
         }
 
@@ -814,8 +810,7 @@
         if (isNaN(newDate) || isNaN(lastDate)) {
             return {
                 value: "New",
-                reason: "Date comparison is incomplete, so Auto defaults to New.",
-                enoughData: false
+                reason: "Date comparison is incomplete, so Auto defaults to New."
             };
         }
 
@@ -825,23 +820,20 @@
         if (diffDays < 0) {
             return {
                 value: "New",
-                reason: "Entry date is earlier than last donation date, so Auto is not reliable.",
-                enoughData: false
+                reason: "Entry date is earlier than last donation date, so Auto is not reliable."
             };
         }
 
         if (diffDays <= 365) {
             return {
                 value: "Repeat",
-                reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`,
-                enoughData: true
+                reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
             };
         }
 
         return {
             value: "Lapse",
-            reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`,
-            enoughData: true
+            reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
         };
     }
 
@@ -895,14 +887,8 @@
         const raw = serialNumberInput.value.trim();
         if (!raw) return "";
 
-        if (!useSerialPrefix.checked) {
-            return raw;
-        }
-
-        if (raw.toUpperCase().startsWith("PRC2600-")) {
-            return raw;
-        }
-
+        if (!useSerialPrefix.checked) return raw;
+        if (raw.toUpperCase().startsWith("PRC2600-")) return raw;
         return "PRC2600-" + raw;
     }
 
@@ -970,7 +956,10 @@
 
     donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
     birthday.addEventListener("change", computeAge);
-    entryDate.addEventListener("change", updateAutoTypeSuggestion);
+    entryDate.addEventListener("change", async () => {
+        updateAutoTypeSuggestion();
+        await renderActiveGroup();
+    });
     donorCategory.addEventListener("change", refreshTypeHelper);
     useSerialPrefix.addEventListener("change", updateSerialModeUI);
     timeStartedInput.addEventListener("change", validateAndDescribeTimes);
@@ -979,7 +968,7 @@
     async function getActiveGroup() {
         const doc = await db.collection("donorEntryGroups").doc("active").get();
         if (!doc.exists) return null;
-        return doc.data();
+        return { id: doc.id, ...doc.data() };
     }
 
     async function setActiveGroup(data) {
@@ -999,17 +988,24 @@
             return;
         }
 
+        const originalCount = Number(activeGroup.originalCount || activeGroup.remaining || 0);
+        const remaining = Number(activeGroup.remaining || 0);
+        const currentNumber = originalCount - remaining + 1;
+        const progressText = originalCount > 0
+            ? `Current donor in group: ${currentNumber} of ${originalCount} | Remaining donors after this entry: ${remaining}`
+            : `Remaining donors: ${remaining}`;
+
         if (activeGroup.entryDate !== entryDate.value) {
-            groupInfoBox.textContent = `Saved active group found for ${activeGroup.entryDate}. Change the entry date to continue that group, or end the group manually. Remaining donors: ${activeGroup.remaining}`;
+            groupInfoBox.textContent = `Saved active group found for ${activeGroup.entryDate}. ${progressText}`;
             groupInfoBox.classList.remove("hidden");
             return;
         }
 
         if (activeGroup.donorType === "Walk-in") {
-            groupInfoBox.textContent = `Active Group: Walk-in | Date: ${activeGroup.entryDate} | Remaining donors: ${activeGroup.remaining}`;
+            groupInfoBox.textContent = `Active Group: Walk-in | Date: ${activeGroup.entryDate} | ${progressText}`;
             setSelectedDonorType("Walk-in");
         } else if (activeGroup.donorType === "MBD") {
-            groupInfoBox.textContent = `Active Group: MBD - ${activeGroup.organization} | Date: ${activeGroup.entryDate} | Remaining donors: ${activeGroup.remaining}`;
+            groupInfoBox.textContent = `Active Group: MBD - ${activeGroup.organization} | Date: ${activeGroup.entryDate} | ${progressText}`;
             setSelectedDonorType("MBD");
             mbdDetails.value = activeGroup.organization || "";
         }
@@ -1068,6 +1064,8 @@
 
     async function searchExistingDonors() {
         try {
+            clearMessage();
+
             const keyword = normalizeText(lookupSearch.value);
             const birthdayValue = lookupBirthday.value;
             const contactValue = normalizeText(lookupContact.value);
@@ -1111,8 +1109,8 @@
             });
 
             uniqueRecords.sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
-
             renderLookupResults(uniqueRecords);
+
             if (uniqueRecords.length) {
                 showMessage(`${uniqueRecords.length} donor match(es) found.`, "success");
             }
@@ -1185,6 +1183,12 @@
         document.getElementById("timeStarted").value = "";
         document.getElementById("timeEnded").value = "";
         document.getElementById("remarks").value = "";
+        document.getElementById("bloodBagBrand").selectedIndex = 0;
+        document.getElementById("bloodBagType").selectedIndex = 0;
+        document.getElementById("amount").selectedIndex = 0;
+        document.getElementById("bloodType").selectedIndex = 0;
+        document.getElementById("civilStatus").selectedIndex = 0;
+        document.getElementById("sex").selectedIndex = 0;
         timeHelperBox.classList.add("hidden");
         timeHelperBox.textContent = "";
         donorCategory.value = "Auto";
@@ -1195,185 +1199,204 @@
     clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
 
     startWalkInGroupBtn.addEventListener("click", async function() {
-        if (!authReady || !currentUser) {
-            showMessage("You must be logged in first.", "error");
-            return;
+        try {
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first.", "error");
+                return;
+            }
+
+            const count = parseInt(walkInCount.value || "0");
+            if (count <= 0) {
+                showMessage("Please enter a valid number of walk-in donors.", "error");
+                return;
+            }
+
+            await setActiveGroup({
+                entryDate: entryDate.value,
+                donorType: "Walk-in",
+                organization: "",
+                remaining: count,
+                originalCount: count,
+                createdBy: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            setSelectedDonorType("Walk-in");
+            await renderActiveGroup();
+            showMessage(`Walk-in group started for ${count} donors.`, "success");
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to start Walk-in group: " + error.message, "error");
         }
-
-        const count = parseInt(walkInCount.value || "0");
-        if (count <= 0) {
-            showMessage("Please enter a valid number of walk-in donors.", "error");
-            return;
-        }
-
-        await setActiveGroup({
-            entryDate: entryDate.value,
-            donorType: "Walk-in",
-            organization: "",
-            remaining: count,
-            originalCount: count,
-            createdBy: currentUser.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        setSelectedDonorType("Walk-in");
-        await renderActiveGroup();
-        showMessage(`Walk-in group started for ${count} donors. The counter will decrease every successful save.`, "success");
     });
 
     startMbdGroupBtn.addEventListener("click", async function() {
-        if (!authReady || !currentUser) {
-            showMessage("You must be logged in first.", "error");
-            return;
+        try {
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first.", "error");
+                return;
+            }
+
+            const organization = mbdDetails.value.trim();
+            const count = parseInt(mbdCount.value || "0");
+
+            if (!organization) {
+                showMessage("Please enter the MBD site or organization.", "error");
+                return;
+            }
+
+            if (count <= 0) {
+                showMessage("Please enter a valid number of MBD donors.", "error");
+                return;
+            }
+
+            await setActiveGroup({
+                entryDate: entryDate.value,
+                donorType: "MBD",
+                organization: organization,
+                remaining: count,
+                originalCount: count,
+                createdBy: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            setSelectedDonorType("MBD");
+            await renderActiveGroup();
+            showMessage(`MBD group started for ${count} donors under ${organization}.`, "success");
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to start MBD group: " + error.message, "error");
         }
-
-        const organization = mbdDetails.value.trim();
-        const count = parseInt(mbdCount.value || "0");
-
-        if (!organization) {
-            showMessage("Please enter the MBD site or organization.", "error");
-            return;
-        }
-        if (count <= 0) {
-            showMessage("Please enter a valid number of MBD donors.", "error");
-            return;
-        }
-
-        await setActiveGroup({
-            entryDate: entryDate.value,
-            donorType: "MBD",
-            organization: organization,
-            remaining: count,
-            originalCount: count,
-            createdBy: currentUser.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        setSelectedDonorType("MBD");
-        await renderActiveGroup();
-        showMessage(`MBD group started for ${count} donors under ${organization}. The counter will decrease every successful save.`, "success");
     });
 
     endGroupBtn.addEventListener("click", async function() {
-        if (!authReady || !currentUser) {
-            showMessage("You must be logged in first.", "error");
-            return;
-        }
+        try {
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first.", "error");
+                return;
+            }
 
-        await clearActiveGroup();
-        await renderActiveGroup();
-        walkInCount.value = "";
-        mbdCount.value = "";
-        showMessage("Active donor group ended.", "success");
+            await clearActiveGroup();
+            await renderActiveGroup();
+            walkInCount.value = "";
+            mbdCount.value = "";
+            showMessage("Active donor group ended.", "success");
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to end active group: " + error.message, "error");
+        }
     });
 
     donorForm.addEventListener("submit", async function(e) {
         e.preventDefault();
+        e.stopPropagation();
 
-        if (!authReady) {
-            showMessage("Authentication is still loading. Please wait a moment.", "error");
-            return;
-        }
-
-        if (!currentUser) {
-            showMessage("No logged in user detected. Please log in again from dashboard.", "error");
-            return;
-        }
-
-        const timeValidation = validateAndDescribeTimes();
-        if (!timeValidation.valid) {
-            showMessage("Please fix the time started / time ended fields.", "error");
-            return;
-        }
-
-        let donorTypeValue = getSelectedDonorType();
-        let patientDirectedValue = patientDirectedDetails.value.trim();
-        let mbdValue = mbdDetails.value.trim();
-
-        const activeGroup = await getActiveGroup();
-        const hasMatchingActiveGroup = activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value;
-
-        if (hasMatchingActiveGroup) {
-            donorTypeValue = activeGroup.donorType;
-            if (activeGroup.donorType === "MBD") {
-                mbdValue = activeGroup.organization || "";
-                mbdDetails.value = mbdValue;
-            }
-            if (activeGroup.donorType === "Walk-in") {
-                setSelectedDonorType("Walk-in");
-            }
-            if (activeGroup.donorType === "MBD") {
-                setSelectedDonorType("MBD");
-            }
-        }
-
-        if (!donorTypeValue) {
-            showMessage("Please select donor type.", "error");
-            return;
-        }
-
-        if (donorTypeValue === "Patient Directed" && !patientDirectedValue) {
-            showMessage("Please enter patient directed details.", "error");
-            return;
-        }
-
-        if (donorTypeValue === "MBD" && !mbdValue) {
-            showMessage("Please enter MBD site or organization.", "error");
-            return;
-        }
-
-        const finalSerialNumber = getFinalSerialNumber();
-        if (!finalSerialNumber) {
-            showMessage("Please enter serial number.", "error");
-            return;
-        }
-
-        updateAutoTypeSuggestion();
-
-        const donorData = {
-            entryDate: entryDate.value,
-            serialNumber: finalSerialNumber,
-            serialPrefixEnabled: useSerialPrefix.checked,
-            donorType: donorTypeValue,
-            patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
-            mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
-            surname: document.getElementById("surname").value.trim(),
-            firstName: document.getElementById("firstName").value.trim(),
-            middleName: document.getElementById("middleName").value.trim(),
-            birthday: document.getElementById("birthday").value,
-            age: parseInt(document.getElementById("age").value || "0"),
-            civilStatus: document.getElementById("civilStatus").value,
-            sex: document.getElementById("sex").value,
-            address: document.getElementById("address").value.trim(),
-            cityProvince: document.getElementById("cityProvince").value.trim(),
-            occupation: document.getElementById("occupation").value.trim(),
-            contactNumber: document.getElementById("contactNumber").value.trim(),
-            donorCategoryMode: donorCategory.value,
-            donorCategory: getFinalDonorCategoryToSave(),
-            donorCategoryAutoSuggestion: autoTypeSuggestion || "",
-            donorCategoryAutoReason: autoTypeReason || "",
-            numberOfDonations: parseInt(numberOfDonations.value || "0"),
-            bloodType: document.getElementById("bloodType").value,
-            bloodBagBrand: document.getElementById("bloodBagBrand").value,
-            bloodBagType: document.getElementById("bloodBagType").value,
-            amount: document.getElementById("amount").value,
-            timeStarted: document.getElementById("timeStarted").value,
-            timeEnded: document.getElementById("timeEnded").value,
-            timeDurationMinutes: timeValidation.durationMinutes,
-            timeCrossedMidnight: timeValidation.overnight,
-            remarks: document.getElementById("remarks").value.trim(),
-            loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
-            lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
-            groupedEntryApplied: hasMatchingActiveGroup,
-            groupedEntryType: hasMatchingActiveGroup ? activeGroup.donorType : "",
-            groupedEntryOrganization: hasMatchingActiveGroup ? (activeGroup.organization || "") : "",
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            createdBy: currentUser.uid
-        };
+        if (isSaving) return false;
 
         try {
+            clearMessage();
+
+            if (!authReady) {
+                showMessage("Authentication is still loading. Please wait a moment.", "error");
+                return false;
+            }
+
+            if (!currentUser) {
+                showMessage("No logged in user detected. Please log in again from dashboard.", "error");
+                return false;
+            }
+
+            const timeValidation = validateAndDescribeTimes();
+            if (!timeValidation.valid) {
+                showMessage("Please fix the time started / time ended fields.", "error");
+                return false;
+            }
+
+            let donorTypeValue = getSelectedDonorType();
+            let patientDirectedValue = patientDirectedDetails.value.trim();
+            let mbdValue = mbdDetails.value.trim();
+
+            const activeGroup = await getActiveGroup();
+            const hasMatchingActiveGroup = activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value;
+
+            if (hasMatchingActiveGroup) {
+                donorTypeValue = activeGroup.donorType;
+                if (activeGroup.donorType === "MBD") {
+                    mbdValue = activeGroup.organization || "";
+                    mbdDetails.value = mbdValue;
+                    setSelectedDonorType("MBD");
+                } else if (activeGroup.donorType === "Walk-in") {
+                    setSelectedDonorType("Walk-in");
+                }
+            }
+
+            if (!donorTypeValue) {
+                showMessage("Please select donor type.", "error");
+                return false;
+            }
+
+            if (donorTypeValue === "Patient Directed" && !patientDirectedValue) {
+                showMessage("Please enter patient directed details.", "error");
+                return false;
+            }
+
+            if (donorTypeValue === "MBD" && !mbdValue) {
+                showMessage("Please enter MBD site or organization.", "error");
+                return false;
+            }
+
+            const finalSerialNumber = getFinalSerialNumber();
+            if (!finalSerialNumber) {
+                showMessage("Please enter serial number.", "error");
+                return false;
+            }
+
+            updateAutoTypeSuggestion();
+            setSavingState(true);
+
+            const donorData = {
+                entryDate: entryDate.value,
+                serialNumber: finalSerialNumber,
+                serialPrefixEnabled: useSerialPrefix.checked,
+                donorType: donorTypeValue,
+                patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
+                mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
+                surname: document.getElementById("surname").value.trim(),
+                firstName: document.getElementById("firstName").value.trim(),
+                middleName: document.getElementById("middleName").value.trim(),
+                birthday: document.getElementById("birthday").value,
+                age: parseInt(document.getElementById("age").value || "0"),
+                civilStatus: document.getElementById("civilStatus").value,
+                sex: document.getElementById("sex").value,
+                address: document.getElementById("address").value.trim(),
+                cityProvince: document.getElementById("cityProvince").value.trim(),
+                occupation: document.getElementById("occupation").value.trim(),
+                contactNumber: document.getElementById("contactNumber").value.trim(),
+                donorCategoryMode: donorCategory.value,
+                donorCategory: getFinalDonorCategoryToSave(),
+                donorCategoryAutoSuggestion: autoTypeSuggestion || "",
+                donorCategoryAutoReason: autoTypeReason || "",
+                numberOfDonations: parseInt(numberOfDonations.value || "0"),
+                bloodType: document.getElementById("bloodType").value,
+                bloodBagBrand: document.getElementById("bloodBagBrand").value,
+                bloodBagType: document.getElementById("bloodBagType").value,
+                amount: document.getElementById("amount").value,
+                timeStarted: document.getElementById("timeStarted").value,
+                timeEnded: document.getElementById("timeEnded").value,
+                timeDurationMinutes: timeValidation.durationMinutes,
+                timeCrossedMidnight: timeValidation.overnight,
+                remarks: document.getElementById("remarks").value.trim(),
+                loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
+                lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
+                groupedEntryApplied: hasMatchingActiveGroup,
+                groupedEntryType: hasMatchingActiveGroup ? activeGroup.donorType : "",
+                groupedEntryOrganization: hasMatchingActiveGroup ? (activeGroup.organization || "") : "",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: currentUser.uid
+            };
+
             await db.collection("donorDatabase").add(donorData);
 
             if (hasMatchingActiveGroup) {
@@ -1383,29 +1406,37 @@
             clearLoadedDonor();
             clearEntryOnlyFieldsAfterSave();
 
-            if (hasMatchingActiveGroup) {
-                if (activeGroup.donorType === "Walk-in") {
+            const refreshedGroup = await getActiveGroup();
+
+            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
+                if (refreshedGroup.donorType === "Walk-in") {
                     setSelectedDonorType("Walk-in");
-                } else if (activeGroup.donorType === "MBD") {
+                } else if (refreshedGroup.donorType === "MBD") {
                     setSelectedDonorType("MBD");
-                    mbdDetails.value = activeGroup.organization || "";
+                    mbdDetails.value = refreshedGroup.organization || "";
                 }
             }
 
             await renderActiveGroup();
             updateAutoTypeSuggestion();
 
-            const refreshedGroup = await getActiveGroup();
+            serialNumberInput.focus();
+
             if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
                 showMessage(`Donor record saved successfully. Active ${refreshedGroup.donorType} group remaining: ${refreshedGroup.remaining}.`, "success");
             } else {
-                showMessage("Donor record saved successfully.", "success");
                 walkInCount.value = "";
                 mbdCount.value = "";
+                showMessage("Donor record saved successfully. Form is ready for next entry.", "success");
             }
+
+            return false;
         } catch (error) {
             console.error(error);
             showMessage("Failed to save donor record: " + error.message, "error");
+            return false;
+        } finally {
+            setSavingState(false);
         }
     });
 
@@ -1419,8 +1450,7 @@
             patientDirectedBox.classList.add("hidden");
             walkInBox.classList.add("hidden");
             mbdBox.classList.add("hidden");
-            statusMessage.className = "status-message";
-            statusMessage.textContent = "";
+            clearMessage();
             timeHelperBox.classList.add("hidden");
             timeHelperBox.textContent = "";
             updateSerialModeUI();
