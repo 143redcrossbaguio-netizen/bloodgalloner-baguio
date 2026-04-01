@@ -44,7 +44,7 @@
 
         .summary-grid {
             display: grid;
-            grid-template-columns: 180px 180px minmax(220px, 1fr) 220px auto auto auto auto;
+            grid-template-columns: 180px 180px minmax(220px, 1fr) minmax(220px, 1fr) 180px 220px auto auto auto auto;
             gap: 12px;
             align-items: end;
         }
@@ -360,13 +360,19 @@
             .group-body.hidden { display: block !important; }
         }
 
-        @media (max-width: 1400px) {
+        @media (max-width: 1600px) {
+            .summary-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 1100px) {
             .summary-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 700px) {
             .summary-grid {
                 grid-template-columns: 1fr;
             }
@@ -393,6 +399,18 @@
             <div class="field-group">
                 <label for="searchInput">Search</label>
                 <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact">
+            </div>
+
+            <div class="field-group">
+                <label for="groupSearchInput">Specific Group Search</label>
+                <input type="text" id="groupSearchInput" placeholder="Search group name like MBD / Walk-in / Patient Directed / organization">
+            </div>
+
+            <div class="field-group">
+                <label for="groupMonthFilter">Group Search Month Filter</label>
+                <select id="groupMonthFilter">
+                    <option value="">All Months</option>
+                </select>
             </div>
 
             <div class="field-group">
@@ -443,6 +461,8 @@
     const totalCountEl = document.getElementById("totalCount");
     const displayedCountEl = document.getElementById("displayedCount");
     const searchInput = document.getElementById("searchInput");
+    const groupSearchInput = document.getElementById("groupSearchInput");
+    const groupMonthFilter = document.getElementById("groupMonthFilter");
     const printMonthSelect = document.getElementById("printMonthSelect");
     const printSelectedMonthBtn = document.getElementById("printSelectedMonthBtn");
     const exportCsvBtn = document.getElementById("exportCsvBtn");
@@ -661,6 +681,19 @@
         };
     }
 
+    function getGroupLabel(record) {
+        if (record.donorType === "MBD") {
+            return String(record.mbdDetails || "MBD").trim();
+        }
+        if (record.donorType === "Walk-in") {
+            return "Walk-in";
+        }
+        if (record.donorType === "Patient Directed") {
+            return String(record.patientDirectedDetails || "Patient Directed").trim() || "Patient Directed";
+        }
+        return "";
+    }
+
     function matchesSearch(record, keyword) {
         if (!keyword) return true;
 
@@ -671,6 +704,7 @@
             record.donorCategory,
             record.patientDirectedDetails,
             record.mbdDetails,
+            getGroupLabel(record),
             record.surname,
             record.firstName,
             record.middleName,
@@ -691,6 +725,27 @@
         ].join(" ").toLowerCase();
 
         return text.includes(keyword.toLowerCase());
+    }
+
+    function matchesGroupSearch(record) {
+        const groupKeyword = groupSearchInput.value.trim().toLowerCase();
+        const selectedMonth = groupMonthFilter.value;
+
+        if (!groupKeyword && !selectedMonth) return true;
+
+        const groupText = [
+            record.donorType || "",
+            record.mbdDetails || "",
+            record.patientDirectedDetails || "",
+            getGroupLabel(record)
+        ].join(" ").toLowerCase();
+
+        const monthKey = getYearMonth(record._resolvedEntryDate).monthKey;
+
+        const groupMatch = !groupKeyword || groupText.includes(groupKeyword);
+        const monthMatch = !selectedMonth || monthKey === selectedMonth;
+
+        return groupMatch && monthMatch;
     }
 
     function matchesHeaderFilters(record) {
@@ -849,6 +904,27 @@
         }
     }
 
+    function populateGroupMonthOptions(records) {
+        const monthMap = {};
+
+        records.forEach(record => {
+            const { monthKey, monthName, year } = getYearMonth(record._resolvedEntryDate);
+            if (!monthMap[monthKey]) {
+                monthMap[monthKey] = `${monthName} ${year}`;
+            }
+        });
+
+        const sortedKeys = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
+        const currentValue = groupMonthFilter.value;
+
+        groupMonthFilter.innerHTML = `<option value="">All Months</option>` +
+            sortedKeys.map(key => `<option value="${key}">${monthMap[key]}</option>`).join("");
+
+        if (sortedKeys.includes(currentValue)) {
+            groupMonthFilter.value = currentValue;
+        }
+    }
+
     function renderHeaderFilterSelect(filterKey, options, selectedValue, placeholderLabel) {
         return `
             <div class="header-filter-wrap">
@@ -863,8 +939,10 @@
 
     function renderTracking() {
         const keyword = searchInput.value.trim();
+
         filteredDonors = allDonors
             .filter(record => matchesSearch(record, keyword))
+            .filter(record => matchesGroupSearch(record))
             .filter(record => matchesHeaderFilters(record));
 
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
@@ -872,7 +950,8 @@
 
         totalCountEl.textContent = allDonors.length;
         displayedCountEl.textContent = filteredDonors.length;
-        populatePrintMonthOptions(filteredDonors);
+        populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
+        populateGroupMonthOptions(allDonors);
 
         if (!filteredDonors.length) {
             trackingContainer.innerHTML = `<div class="empty-box">No donor records found.</div>`;
@@ -1413,6 +1492,7 @@
                 return (a.serialNumber || "").localeCompare(b.serialNumber || "", undefined, { numeric: true, sensitivity: "base" });
             });
 
+            populateGroupMonthOptions(allDonors);
             renderTracking();
         } catch (error) {
             console.error(error);
@@ -1422,6 +1502,8 @@
     }
 
     searchInput.addEventListener("input", renderTracking);
+    groupSearchInput.addEventListener("input", renderTracking);
+    groupMonthFilter.addEventListener("change", renderTracking);
 
     printSelectedMonthBtn.addEventListener("click", function() {
         const value = printMonthSelect.value;
