@@ -166,7 +166,9 @@
 
         .group-info,
         .loaded-donor-info,
-        .type-helper {
+        .type-helper,
+        .serial-helper,
+        .time-helper {
             margin-top: 10px;
             padding: 10px 12px;
             border-radius: 8px;
@@ -190,6 +192,18 @@
             background: #eff6ff;
             border: 1px solid #bfdbfe;
             color: #1d4ed8;
+        }
+
+        .serial-helper {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+
+        .time-helper {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            color: #9a3412;
         }
 
         .helper-text {
@@ -295,6 +309,23 @@
             margin-bottom: 12px;
         }
 
+        .inline-toggle {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .inline-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
         @media (max-width: 1000px) {
             .form-grid,
             .field-row,
@@ -390,8 +421,14 @@
                     <div class="field-group">
                         <label for="serialNumber">1. Serial Number</label>
                         <div class="serial-wrap">
-                            <span class="serial-prefix">PRC2600-</span>
-                            <input type="text" id="serialNumber" placeholder="Enter manual number" required>
+                            <span id="serialPrefix" class="serial-prefix">PRC2600-</span>
+                            <input type="text" id="serialNumber" placeholder="Enter manual number or scan barcode" required>
+                        </div>
+                        <div class="inline-toggle">
+                            <label><input type="checkbox" id="useSerialPrefix" checked> Enable PRC2600- prefix</label>
+                        </div>
+                        <div id="serialHelperBox" class="serial-helper">
+                            Prefix enabled. Saved serial will be PRC2600- + your typed/scanned value.
                         </div>
                     </div>
 
@@ -567,9 +604,11 @@
                     <div class="field-group">
                         <label>18. Time Started / Time Ended</label>
                         <div class="field-row">
-                            <input type="time" id="timeStarted">
-                            <input type="time" id="timeEnded">
+                            <input type="time" id="timeStarted" step="60">
+                            <input type="time" id="timeEnded" step="60">
                         </div>
+                        <div class="helper-text">Time fields now use 24-hour format.</div>
+                        <div id="timeHelperBox" class="time-helper hidden"></div>
                     </div>
 
                     <div class="field-group full-width">
@@ -641,6 +680,15 @@
     const lookupResultsBody = document.getElementById("lookupResultsBody");
     const loadedDonorInfo = document.getElementById("loadedDonorInfo");
     const clearLoadedDonorBtn = document.getElementById("clearLoadedDonorBtn");
+
+    const serialPrefix = document.getElementById("serialPrefix");
+    const serialNumberInput = document.getElementById("serialNumber");
+    const useSerialPrefix = document.getElementById("useSerialPrefix");
+    const serialHelperBox = document.getElementById("serialHelperBox");
+
+    const timeStartedInput = document.getElementById("timeStarted");
+    const timeEndedInput = document.getElementById("timeEnded");
+    const timeHelperBox = document.getElementById("timeHelperBox");
 
     let currentUser = null;
     let authReady = false;
@@ -835,10 +883,98 @@
         return autoTypeSuggestion || "New";
     }
 
+    function updateSerialModeUI() {
+        const enabled = useSerialPrefix.checked;
+        serialPrefix.style.display = enabled ? "inline-block" : "none";
+        serialHelperBox.textContent = enabled
+            ? "Prefix enabled. Saved serial will be PRC2600- + your typed/scanned value."
+            : "Prefix disabled. Saved serial will be exactly what you type or scan.";
+    }
+
+    function getFinalSerialNumber() {
+        const raw = serialNumberInput.value.trim();
+        if (!raw) return "";
+
+        if (!useSerialPrefix.checked) {
+            return raw;
+        }
+
+        if (raw.toUpperCase().startsWith("PRC2600-")) {
+            return raw;
+        }
+
+        return "PRC2600-" + raw;
+    }
+
+    function timeToMinutes(value) {
+        if (!value || !value.includes(":")) return null;
+        const [hours, minutes] = value.split(":").map(Number);
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+        return (hours * 60) + minutes;
+    }
+
+    function formatMinutesToHoursMinutes(totalMinutes) {
+        const hrs = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        if (hrs > 0 && mins > 0) return `${hrs} hr ${mins} min`;
+        if (hrs > 0) return `${hrs} hr`;
+        return `${mins} min`;
+    }
+
+    function validateAndDescribeTimes() {
+        const started = timeStartedInput.value;
+        const ended = timeEndedInput.value;
+
+        if (!started && !ended) {
+            timeHelperBox.classList.add("hidden");
+            timeHelperBox.textContent = "";
+            return { valid: true, durationMinutes: null, overnight: false };
+        }
+
+        if ((started && !ended) || (!started && ended)) {
+            timeHelperBox.textContent = "Please complete both Time Started and Time Ended.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false, durationMinutes: null, overnight: false };
+        }
+
+        const startMinutes = timeToMinutes(started);
+        const endMinutes = timeToMinutes(ended);
+
+        if (startMinutes === null || endMinutes === null) {
+            timeHelperBox.textContent = "Invalid time value.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false, durationMinutes: null, overnight: false };
+        }
+
+        let duration = endMinutes - startMinutes;
+        let overnight = false;
+
+        if (duration < 0) {
+            duration += 24 * 60;
+            overnight = true;
+        }
+
+        if (duration === 0) {
+            timeHelperBox.textContent = "Time Started and Time Ended cannot be exactly the same.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false, durationMinutes: 0, overnight: false };
+        }
+
+        timeHelperBox.textContent = overnight
+            ? `24-hour format detected. Duration: ${formatMinutesToHoursMinutes(duration)} (crossed midnight).`
+            : `24-hour format detected. Duration: ${formatMinutesToHoursMinutes(duration)}.`;
+        timeHelperBox.classList.remove("hidden");
+
+        return { valid: true, durationMinutes: duration, overnight };
+    }
+
     donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
     birthday.addEventListener("change", computeAge);
     entryDate.addEventListener("change", updateAutoTypeSuggestion);
     donorCategory.addEventListener("change", refreshTypeHelper);
+    useSerialPrefix.addEventListener("change", updateSerialModeUI);
+    timeStartedInput.addEventListener("change", validateAndDescribeTimes);
+    timeEndedInput.addEventListener("change", validateAndDescribeTimes);
 
     async function getActiveGroup() {
         const doc = await db.collection("donorEntryGroups").doc("active").get();
@@ -856,9 +992,16 @@
 
     async function renderActiveGroup() {
         const activeGroup = await getActiveGroup();
+
         if (!activeGroup || !activeGroup.remaining || activeGroup.remaining <= 0) {
             groupInfoBox.classList.add("hidden");
             groupInfoBox.textContent = "";
+            return;
+        }
+
+        if (activeGroup.entryDate !== entryDate.value) {
+            groupInfoBox.textContent = `Saved active group found for ${activeGroup.entryDate}. Change the entry date to continue that group, or end the group manually. Remaining donors: ${activeGroup.remaining}`;
+            groupInfoBox.classList.remove("hidden");
             return;
         }
 
@@ -876,6 +1019,7 @@
 
     async function consumeGroupEntry() {
         const ref = db.collection("donorEntryGroups").doc("active");
+
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(ref);
             if (!doc.exists) return;
@@ -984,7 +1128,6 @@
 
         loadedDonorRecord = donor;
 
-        // Identity / personal info only
         document.getElementById("surname").value = donor.surname || "";
         document.getElementById("firstName").value = donor.firstName || "";
         document.getElementById("middleName").value = donor.middleName || "";
@@ -997,10 +1140,6 @@
         document.getElementById("occupation").value = donor.occupation || "";
         document.getElementById("contactNumber").value = donor.contactNumber || "";
         document.getElementById("bloodType").value = donor.bloodType || "";
-
-        // Keep current/new donation-specific fields untouched:
-        // entryDate, serialNumber, donorType radio, patientDirectedDetails, mbdDetails,
-        // bag brand, bag type, amount, time started, time ended, remarks
 
         const previousCount = parseInt(donor.numberOfDonations || "0");
         numberOfDonations.value = previousCount;
@@ -1026,6 +1165,32 @@
         updateAutoTypeSuggestion();
     }
 
+    function clearEntryOnlyFieldsAfterSave() {
+        document.getElementById("serialNumber").value = "";
+        document.getElementById("surname").value = "";
+        document.getElementById("firstName").value = "";
+        document.getElementById("middleName").value = "";
+        document.getElementById("birthday").value = "";
+        document.getElementById("age").value = "";
+        document.getElementById("civilStatus").value = "";
+        document.getElementById("sex").value = "";
+        document.getElementById("address").value = "";
+        document.getElementById("cityProvince").value = "";
+        document.getElementById("occupation").value = "";
+        document.getElementById("contactNumber").value = "";
+        document.getElementById("bloodType").value = "";
+        document.getElementById("bloodBagBrand").value = "";
+        document.getElementById("bloodBagType").value = "";
+        document.getElementById("amount").value = "";
+        document.getElementById("timeStarted").value = "";
+        document.getElementById("timeEnded").value = "";
+        document.getElementById("remarks").value = "";
+        timeHelperBox.classList.add("hidden");
+        timeHelperBox.textContent = "";
+        donorCategory.value = "Auto";
+        numberOfDonations.value = "0";
+    }
+
     searchDonorBtn.addEventListener("click", searchExistingDonors);
     clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
 
@@ -1046,13 +1211,15 @@
             donorType: "Walk-in",
             organization: "",
             remaining: count,
+            originalCount: count,
             createdBy: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
+        setSelectedDonorType("Walk-in");
         await renderActiveGroup();
-        showMessage(`Walk-in group started for ${count} donors.`, "success");
+        showMessage(`Walk-in group started for ${count} donors. The counter will decrease every successful save.`, "success");
     });
 
     startMbdGroupBtn.addEventListener("click", async function() {
@@ -1078,13 +1245,15 @@
             donorType: "MBD",
             organization: organization,
             remaining: count,
+            originalCount: count,
             createdBy: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
+        setSelectedDonorType("MBD");
         await renderActiveGroup();
-        showMessage(`MBD group started for ${count} donors under ${organization}.`, "success");
+        showMessage(`MBD group started for ${count} donors under ${organization}. The counter will decrease every successful save.`, "success");
     });
 
     endGroupBtn.addEventListener("click", async function() {
@@ -1095,6 +1264,8 @@
 
         await clearActiveGroup();
         await renderActiveGroup();
+        walkInCount.value = "";
+        mbdCount.value = "";
         showMessage("Active donor group ended.", "success");
     });
 
@@ -1111,15 +1282,30 @@
             return;
         }
 
+        const timeValidation = validateAndDescribeTimes();
+        if (!timeValidation.valid) {
+            showMessage("Please fix the time started / time ended fields.", "error");
+            return;
+        }
+
         let donorTypeValue = getSelectedDonorType();
         let patientDirectedValue = patientDirectedDetails.value.trim();
         let mbdValue = mbdDetails.value.trim();
 
         const activeGroup = await getActiveGroup();
-        if (activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value) {
+        const hasMatchingActiveGroup = activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value;
+
+        if (hasMatchingActiveGroup) {
             donorTypeValue = activeGroup.donorType;
             if (activeGroup.donorType === "MBD") {
                 mbdValue = activeGroup.organization || "";
+                mbdDetails.value = mbdValue;
+            }
+            if (activeGroup.donorType === "Walk-in") {
+                setSelectedDonorType("Walk-in");
+            }
+            if (activeGroup.donorType === "MBD") {
+                setSelectedDonorType("MBD");
             }
         }
 
@@ -1138,8 +1324,8 @@
             return;
         }
 
-        const serialManual = document.getElementById("serialNumber").value.trim();
-        if (!serialManual) {
+        const finalSerialNumber = getFinalSerialNumber();
+        if (!finalSerialNumber) {
             showMessage("Please enter serial number.", "error");
             return;
         }
@@ -1148,7 +1334,8 @@
 
         const donorData = {
             entryDate: entryDate.value,
-            serialNumber: "PRC2600-" + serialManual,
+            serialNumber: finalSerialNumber,
+            serialPrefixEnabled: useSerialPrefix.checked,
             donorType: donorTypeValue,
             patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
             mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
@@ -1174,9 +1361,14 @@
             amount: document.getElementById("amount").value,
             timeStarted: document.getElementById("timeStarted").value,
             timeEnded: document.getElementById("timeEnded").value,
+            timeDurationMinutes: timeValidation.durationMinutes,
+            timeCrossedMidnight: timeValidation.overnight,
             remarks: document.getElementById("remarks").value.trim(),
             loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
             lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
+            groupedEntryApplied: hasMatchingActiveGroup,
+            groupedEntryType: hasMatchingActiveGroup ? activeGroup.donorType : "",
+            groupedEntryOrganization: hasMatchingActiveGroup ? (activeGroup.organization || "") : "",
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdBy: currentUser.uid
         };
@@ -1184,38 +1376,33 @@
         try {
             await db.collection("donorDatabase").add(donorData);
 
-            if (activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value) {
+            if (hasMatchingActiveGroup) {
                 await consumeGroupEntry();
             }
 
-            showMessage("Donor record saved successfully.", "success");
-
-            const preservedDate = entryDate.value;
-            const preservedDonorType = getSelectedDonorType();
-            const preservedPatientDirected = patientDirectedDetails.value;
-            const preservedMbd = mbdDetails.value;
-
-            donorForm.reset();
             clearLoadedDonor();
+            clearEntryOnlyFieldsAfterSave();
 
-            entryDate.value = preservedDate;
-            age.value = "";
-
-            if (preservedDonorType) {
-                setSelectedDonorType(preservedDonorType);
-            } else {
-                patientDirectedBox.classList.add("hidden");
-                walkInBox.classList.add("hidden");
-                mbdBox.classList.add("hidden");
+            if (hasMatchingActiveGroup) {
+                if (activeGroup.donorType === "Walk-in") {
+                    setSelectedDonorType("Walk-in");
+                } else if (activeGroup.donorType === "MBD") {
+                    setSelectedDonorType("MBD");
+                    mbdDetails.value = activeGroup.organization || "";
+                }
             }
 
-            patientDirectedDetails.value = preservedPatientDirected;
-            mbdDetails.value = preservedMbd;
-
             await renderActiveGroup();
-            donorCategory.value = "Auto";
-            numberOfDonations.value = "0";
             updateAutoTypeSuggestion();
+
+            const refreshedGroup = await getActiveGroup();
+            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
+                showMessage(`Donor record saved successfully. Active ${refreshedGroup.donorType} group remaining: ${refreshedGroup.remaining}.`, "success");
+            } else {
+                showMessage("Donor record saved successfully.", "success");
+                walkInCount.value = "";
+                mbdCount.value = "";
+            }
         } catch (error) {
             console.error(error);
             showMessage("Failed to save donor record: " + error.message, "error");
@@ -1234,6 +1421,9 @@
             mbdBox.classList.add("hidden");
             statusMessage.className = "status-message";
             statusMessage.textContent = "";
+            timeHelperBox.classList.add("hidden");
+            timeHelperBox.textContent = "";
+            updateSerialModeUI();
             await renderActiveGroup();
             updateAutoTypeSuggestion();
         }, 50);
@@ -1255,6 +1445,8 @@
     donorCategory.value = "Auto";
     numberOfDonations.value = "0";
     updateAutoTypeSuggestion();
+    updateSerialModeUI();
+    validateAndDescribeTimes();
 </script>
 
 </body>
