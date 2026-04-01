@@ -103,9 +103,9 @@ margin-bottom:10px;
 color:#00695c;
 }
 
-.monthHeader{
-background:#e0f2f1;
-padding:12px;
+.yearHeader{
+background:#c8e6e1;
+padding:13px 14px;
 font-weight:bold;
 border-radius:6px;
 margin-top:20px;
@@ -114,6 +114,37 @@ cursor:pointer;
 display:flex;
 justify-content:space-between;
 align-items:center;
+color:#004d40;
+border:1px solid #9fd4cd;
+}
+
+.yearBody{
+display:none;
+}
+
+.yearBody.open{
+display:block;
+}
+
+.monthHeader{
+background:#e0f2f1;
+padding:12px;
+font-weight:bold;
+border-radius:6px;
+margin-top:14px;
+font-size:17px;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.monthBody{
+display:none;
+}
+
+.monthBody.open{
+display:block;
 }
 
 .summaryBox{
@@ -161,20 +192,8 @@ background:#f0f0f0;
 padding:10px;
 }
 
-.componentCell{
-text-align:left;
-line-height:1.4;
-}
-
 .patientServedWrap{
 margin-bottom:25px;
-}
-
-.patientServedTitle{
-font-size:16px;
-font-weight:bold;
-margin-bottom:10px;
-color:#00695c;
 }
 
 .patientServedTable{
@@ -319,14 +338,6 @@ margin-top:12px;
 display:block;
 }
 
-.monthBody{
-display:none;
-}
-
-.monthBody.open{
-display:block;
-}
-
 @media (max-width: 1000px){
 .dashboardGrid{
 grid-template-columns:repeat(2,1fr);
@@ -355,6 +366,7 @@ margin:0;
 max-width:none;
 }
 .collapsibleBody,
+.yearBody,
 .monthBody{
 display:block !important;
 }
@@ -429,6 +441,7 @@ let currentPrices = {
 let expandedPatientSections = new Set();
 let expandedHospitalRows = new Set();
 let expandedMainSections = new Set(["dashboard","patientServed"]);
+let expandedYears = new Set();
 let expandedMonths = new Set();
 
 async function loadPrices(){
@@ -533,20 +546,21 @@ function countComponents(store, list){
     });
 }
 
-function formatComponentsText(list){
-    if(!Array.isArray(list) || list.length === 0) return "";
-    return list
-        .filter(item => Number(item.qty || 0) > 0)
-        .map(item => `${item.type || ""} - ${item.qty || 0}`)
-        .join("<br>");
-}
-
 function formatComponentsPlain(list){
     if(!Array.isArray(list) || list.length === 0) return "";
     return list
         .filter(item => Number(item.qty || 0) > 0)
         .map(item => `${item.type || ""} - ${item.qty || 0}`)
         .join(" | ");
+}
+
+function formatDateForExport(dateValue){
+    if(!dateValue) return "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dateValue)){
+        const [y,m,d] = dateValue.split("-");
+        return `${m}/${d}/${y.slice(-2)}`;
+    }
+    return dateValue;
 }
 
 function populateMonthFilter(){
@@ -922,144 +936,171 @@ function renderStatistics(){
         return;
     }
 
+    const yearsMap = {};
     months.forEach(month => {
-        const m = stats[month];
-        const monthOpen = expandedMonths.has(month);
+        const year = month.split("-")[0];
+        if(!yearsMap[year]) yearsMap[year] = [];
+        yearsMap[year].push(month);
+    });
 
-        const wrapper = document.createElement("div");
+    Object.keys(yearsMap).sort().reverse().forEach(year => {
+        const yearOpen = expandedYears.has(year);
 
-        const header = document.createElement("div");
-        header.className = "monthHeader";
-        header.dataset.monthKey = month;
-        header.innerHTML = `
-            <span>${monthName(month)}</span>
-            <span>${monthOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
+        const yearWrap = document.createElement("div");
+
+        const yearHeader = document.createElement("div");
+        yearHeader.className = "yearHeader";
+        yearHeader.dataset.yearKey = year;
+        yearHeader.innerHTML = `
+            <span>${year}</span>
+            <span>${yearOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
         `;
 
-        const body = document.createElement("div");
-        body.className = `monthBody ${monthOpen ? "open" : ""}`;
+        const yearBody = document.createElement("div");
+        yearBody.className = `yearBody ${yearOpen ? "open" : ""}`;
 
-        const summary = document.createElement("div");
-        summary.className = "summaryBox";
-        summary.innerHTML = `
-            <b>PATIENTS:</b> ${m.totals.entries}
-            <br>
-            <b>MALE:</b> ${m.totals.male}
-            <br>
-            <b>FEMALE:</b> ${m.totals.female}
-            <br>
-            <b>BOX CONTAINERS:</b> ${m.totals.boxContainers}
-            <br>
-            <b>ACTUAL INCOME:</b> ${m.totals.actualIncome.toFixed(2)}
-            <br>
-            <b>COMPUTED TOTAL:</b> ${m.totals.computedTotal.toFixed(2)}
-        `;
+        yearsMap[year].forEach(month => {
+            const m = stats[month];
+            const monthOpen = expandedMonths.has(month);
 
-        const table = document.createElement("table");
+            const wrapper = document.createElement("div");
 
-        table.innerHTML = `
-            <tr>
-                <th rowspan="2">HOSPITAL</th>
-                <th rowspan="2">PATIENTS</th>
-                <th rowspan="2">MALE</th>
-                <th rowspan="2">FEMALE</th>
-                <th rowspan="2">BOX</th>
-                <th rowspan="2">COMPUTED TOTAL</th>
-                <th colspan="5">REQUESTED</th>
-                <th colspan="5">ISSUED</th>
-            </tr>
-
-            <tr class="subHeader">
-                <th>WB</th>
-                <th>PRBC</th>
-                <th>PC</th>
-                <th>FFP</th>
-                <th>CRYO</th>
-
-                <th>WB</th>
-                <th>PRBC</th>
-                <th>PC</th>
-                <th>FFP</th>
-                <th>CRYO</th>
-            </tr>
-        `;
-
-        Object.keys(m.hospitals).sort().forEach(hospital => {
-            const s = m.hospitals[hospital];
-            const rowKey = `${month}__${hospital}`;
-            const isOpen = expandedHospitalRows.has(rowKey);
-
-            const row = document.createElement("tr");
-            row.className = "hospitalRow";
-            row.dataset.hospitalKey = rowKey;
-            row.innerHTML = `
-                <td class="left">${hospital} <span class="expanderNote">${isOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
-                <td>${s.entries}</td>
-                <td>${s.male}</td>
-                <td>${s.female}</td>
-                <td>${s.boxContainers}</td>
-                <td>${s.computedTotal.toFixed(2)}</td>
-
-                <td>${s.requested.WB}</td>
-                <td>${s.requested.PRBC}</td>
-                <td>${s.requested.PC}</td>
-                <td>${s.requested.FFP}</td>
-                <td>${s.requested.CRYO}</td>
-
-                <td>${s.issued.WB}</td>
-                <td>${s.issued.PRBC}</td>
-                <td>${s.issued.PC}</td>
-                <td>${s.issued.FFP}</td>
-                <td>${s.issued.CRYO}</td>
+            const header = document.createElement("div");
+            header.className = "monthHeader";
+            header.dataset.monthKey = month;
+            header.innerHTML = `
+                <span>${monthName(month)}</span>
+                <span>${monthOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
             `;
-            table.appendChild(row);
 
-            if(isOpen){
-                const detailRow = document.createElement("tr");
-                detailRow.className = "hospitalDetailRow";
-                detailRow.innerHTML = `
-                    <td colspan="16">
-                        <div class="hospitalDetailBox">
-                            <div class="hospitalDetailTitle">${hospital} PATIENT LIST AND FULL DETAILS</div>
-                            ${renderPatientDetailsTable(s.patients)}
-                        </div>
-                    </td>
+            const body = document.createElement("div");
+            body.className = `monthBody ${monthOpen ? "open" : ""}`;
+
+            const summary = document.createElement("div");
+            summary.className = "summaryBox";
+            summary.innerHTML = `
+                <b>PATIENTS:</b> ${m.totals.entries}
+                <br>
+                <b>MALE:</b> ${m.totals.male}
+                <br>
+                <b>FEMALE:</b> ${m.totals.female}
+                <br>
+                <b>BOX CONTAINERS:</b> ${m.totals.boxContainers}
+                <br>
+                <b>ACTUAL INCOME:</b> ${m.totals.actualIncome.toFixed(2)}
+                <br>
+                <b>COMPUTED TOTAL:</b> ${m.totals.computedTotal.toFixed(2)}
+            `;
+
+            const table = document.createElement("table");
+
+            table.innerHTML = `
+                <tr>
+                    <th rowspan="2">HOSPITAL</th>
+                    <th rowspan="2">PATIENTS</th>
+                    <th rowspan="2">MALE</th>
+                    <th rowspan="2">FEMALE</th>
+                    <th rowspan="2">BOX</th>
+                    <th rowspan="2">COMPUTED TOTAL</th>
+                    <th colspan="5">REQUESTED</th>
+                    <th colspan="5">ISSUED</th>
+                </tr>
+
+                <tr class="subHeader">
+                    <th>WB</th>
+                    <th>PRBC</th>
+                    <th>PC</th>
+                    <th>FFP</th>
+                    <th>CRYO</th>
+
+                    <th>WB</th>
+                    <th>PRBC</th>
+                    <th>PC</th>
+                    <th>FFP</th>
+                    <th>CRYO</th>
+                </tr>
+            `;
+
+            Object.keys(m.hospitals).sort().forEach(hospital => {
+                const s = m.hospitals[hospital];
+                const rowKey = `${month}__${hospital}`;
+                const isOpen = expandedHospitalRows.has(rowKey);
+
+                const row = document.createElement("tr");
+                row.className = "hospitalRow";
+                row.dataset.hospitalKey = rowKey;
+                row.innerHTML = `
+                    <td class="left">${hospital} <span class="expanderNote">${isOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
+                    <td>${s.entries}</td>
+                    <td>${s.male}</td>
+                    <td>${s.female}</td>
+                    <td>${s.boxContainers}</td>
+                    <td>${s.computedTotal.toFixed(2)}</td>
+
+                    <td>${s.requested.WB}</td>
+                    <td>${s.requested.PRBC}</td>
+                    <td>${s.requested.PC}</td>
+                    <td>${s.requested.FFP}</td>
+                    <td>${s.requested.CRYO}</td>
+
+                    <td>${s.issued.WB}</td>
+                    <td>${s.issued.PRBC}</td>
+                    <td>${s.issued.PC}</td>
+                    <td>${s.issued.FFP}</td>
+                    <td>${s.issued.CRYO}</td>
                 `;
-                table.appendChild(detailRow);
-            }
+                table.appendChild(row);
+
+                if(isOpen){
+                    const detailRow = document.createElement("tr");
+                    detailRow.className = "hospitalDetailRow";
+                    detailRow.innerHTML = `
+                        <td colspan="16">
+                            <div class="hospitalDetailBox">
+                                <div class="hospitalDetailTitle">${hospital} PATIENT LIST AND FULL DETAILS</div>
+                                ${renderPatientDetailsTable(s.patients)}
+                            </div>
+                        </td>
+                    `;
+                    table.appendChild(detailRow);
+                }
+            });
+
+            const totalRow = document.createElement("tr");
+            totalRow.className = "totalRow";
+            totalRow.innerHTML = `
+                <td class="left">TOTAL</td>
+                <td>${m.totals.entries}</td>
+                <td>${m.totals.male}</td>
+                <td>${m.totals.female}</td>
+                <td>${m.totals.boxContainers}</td>
+                <td>${m.totals.computedTotal.toFixed(2)}</td>
+
+                <td>${m.totals.requested.WB}</td>
+                <td>${m.totals.requested.PRBC}</td>
+                <td>${m.totals.requested.PC}</td>
+                <td>${m.totals.requested.FFP}</td>
+                <td>${m.totals.requested.CRYO}</td>
+
+                <td>${m.totals.issued.WB}</td>
+                <td>${m.totals.issued.PRBC}</td>
+                <td>${m.totals.issued.PC}</td>
+                <td>${m.totals.issued.FFP}</td>
+                <td>${m.totals.issued.CRYO}</td>
+            `;
+            table.appendChild(totalRow);
+
+            body.appendChild(summary);
+            body.appendChild(table);
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(body);
+            yearBody.appendChild(wrapper);
         });
 
-        const totalRow = document.createElement("tr");
-        totalRow.className = "totalRow";
-        totalRow.innerHTML = `
-            <td class="left">TOTAL</td>
-            <td>${m.totals.entries}</td>
-            <td>${m.totals.male}</td>
-            <td>${m.totals.female}</td>
-            <td>${m.totals.boxContainers}</td>
-            <td>${m.totals.computedTotal.toFixed(2)}</td>
-
-            <td>${m.totals.requested.WB}</td>
-            <td>${m.totals.requested.PRBC}</td>
-            <td>${m.totals.requested.PC}</td>
-            <td>${m.totals.requested.FFP}</td>
-            <td>${m.totals.requested.CRYO}</td>
-
-            <td>${m.totals.issued.WB}</td>
-            <td>${m.totals.issued.PRBC}</td>
-            <td>${m.totals.issued.PC}</td>
-            <td>${m.totals.issued.FFP}</td>
-            <td>${m.totals.issued.CRYO}</td>
-        `;
-        table.appendChild(totalRow);
-
-        body.appendChild(summary);
-        body.appendChild(table);
-
-        wrapper.appendChild(header);
-        wrapper.appendChild(body);
-
-        statisticsContainer.appendChild(wrapper);
+        yearWrap.appendChild(yearHeader);
+        yearWrap.appendChild(yearBody);
+        statisticsContainer.appendChild(yearWrap);
     });
 
     attachExpandableEvents();
@@ -1102,6 +1143,18 @@ function attachExpandableEvents(){
         };
     });
 
+    document.querySelectorAll("[data-year-key]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.yearKey;
+            if(expandedYears.has(key)){
+                expandedYears.delete(key);
+            }else{
+                expandedYears.add(key);
+            }
+            renderStatistics();
+        };
+    });
+
     document.querySelectorAll("[data-month-key]").forEach(row => {
         row.onclick = function(){
             const key = this.dataset.monthKey;
@@ -1117,41 +1170,84 @@ function attachExpandableEvents(){
 
 window.exportCSV = function(){
     const rel = buildReleasingStats();
+    const rows = [];
 
-    let rows = [[
-        "SECTION","MONTH","NAME","PATIENTS_OR_RECORDS","MALE","FEMALE","BLOOD_TYPE",
-        "BOX_CONTAINER","REQUESTED","ISSUED","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","NET_AMOUNT"
-    ]];
+    rows.push([
+        "MONTH",
+        "HOSPITAL",
+        "PATIENTS",
+        "MALE",
+        "FEMALE",
+        "BOX CONTAINERS",
+        "COMPUTED TOTAL",
+        "REQUESTED WB",
+        "REQUESTED PRBC",
+        "REQUESTED PC",
+        "REQUESTED FFP",
+        "REQUESTED CRYO",
+        "ISSUED WB",
+        "ISSUED PRBC",
+        "ISSUED PC",
+        "ISSUED FFP",
+        "ISSUED CRYO"
+    ]);
 
     Object.keys(rel.grouped).sort().reverse().forEach(month => {
+        const monthLabel = monthName(month);
         const hospitals = rel.grouped[month].hospitals;
 
         Object.keys(hospitals).sort().forEach(hospital => {
             const s = hospitals[hospital];
+
             rows.push([
-                "RELEASING",
-                monthName(month),
+                monthLabel,
                 hospital,
                 s.entries,
                 s.male,
                 s.female,
-                "",
                 s.boxContainers,
-                `WB:${s.requested.WB} PRBC:${s.requested.PRBC} PC:${s.requested.PC} FFP:${s.requested.FFP} CRYO:${s.requested.CRYO}`,
-                `WB:${s.issued.WB} PRBC:${s.issued.PRBC} PC:${s.issued.PC} FFP:${s.issued.FFP} CRYO:${s.issued.CRYO}`,
                 s.computedTotal.toFixed(2),
-                "",
-                "",
-                ""
+                s.requested.WB,
+                s.requested.PRBC,
+                s.requested.PC,
+                s.requested.FFP,
+                s.requested.CRYO,
+                s.issued.WB,
+                s.issued.PRBC,
+                s.issued.PC,
+                s.issued.FFP,
+                s.issued.CRYO
             ]);
         });
+
+        rows.push([
+            monthLabel,
+            "TOTAL",
+            rel.grouped[month].totals.entries,
+            rel.grouped[month].totals.male,
+            rel.grouped[month].totals.female,
+            rel.grouped[month].totals.boxContainers,
+            rel.grouped[month].totals.computedTotal.toFixed(2),
+            rel.grouped[month].totals.requested.WB,
+            rel.grouped[month].totals.requested.PRBC,
+            rel.grouped[month].totals.requested.PC,
+            rel.grouped[month].totals.requested.FFP,
+            rel.grouped[month].totals.requested.CRYO,
+            rel.grouped[month].totals.issued.WB,
+            rel.grouped[month].totals.issued.PRBC,
+            rel.grouped[month].totals.issued.PC,
+            rel.grouped[month].totals.issued.FFP,
+            rel.grouped[month].totals.issued.CRYO
+        ]);
+
+        rows.push([]);
     });
 
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "releasing_statistics.csv";
+    link.download = "releasing_statistics_summary_only.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
