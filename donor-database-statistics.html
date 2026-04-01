@@ -24,7 +24,6 @@
     .btn-blue{background:#2563eb;color:#fff}
     .btn-green{background:#15803d;color:#fff}
     .btn-gray{background:#374151;color:#fff}
-    .btn-orange{background:#ea580c;color:#fff}
     .status{padding:12px 14px;border-radius:12px;font-weight:700;margin-bottom:12px}
     .info{background:#eff6ff;color:#1d4ed8}
     .ok{background:#ecfdf5;color:#15803d}
@@ -56,6 +55,8 @@
     .title-f{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
     .title-g{background:linear-gradient(90deg,#fef9c3,#fefce8)}
     .title-h{background:linear-gradient(90deg,#cffafe,#ecfeff)}
+    .title-i{background:linear-gradient(90deg,#fef3c7,#fefce8)}
+    .title-j{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
     .table-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;min-width:760px}
     th,td{border:1px solid #d6dde6;padding:8px 10px;font-size:14px;text-align:center;vertical-align:middle}
@@ -301,26 +302,45 @@ function parseDate(raw){
   if (typeof raw?.toDate === "function") return raw.toDate();
   if (typeof raw === "object" && raw.seconds) return new Date(raw.seconds * 1000);
 
+  if (typeof raw === "number") {
+    const excelEpoch = new Date(1899, 11, 30);
+    const d = new Date(excelEpoch.getTime() + raw * 86400000);
+    if (!isNaN(d.getTime())) return d;
+  }
+
   if (typeof raw === "string") {
     const trimmed = raw.trim();
+    if (!trimmed) return null;
+
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       const [y,m,d] = trimmed.split("-").map(Number);
       return new Date(y, m - 1, d);
     }
+
     if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) {
       const [m,d,yRaw] = trimmed.split("/");
       let y = Number(yRaw);
       if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
       return new Date(y, Number(m) - 1, Number(d));
     }
+
+    if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(trimmed)) {
+      const [m,d,yRaw] = trimmed.split("-");
+      let y = Number(yRaw);
+      if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
+      return new Date(y, Number(m) - 1, Number(d));
+    }
+
     const parsedText = parseDateFromText(trimmed);
     if (parsedText) {
       const [y,m,d] = parsedText.split("-").map(Number);
       return new Date(y, m - 1, d);
     }
+
     const fallback = new Date(trimmed);
     if (!isNaN(fallback.getTime())) return fallback;
   }
+
   return null;
 }
 
@@ -336,7 +356,42 @@ function parseDateFromImportMeta(r){
 }
 
 function getDonorDate(r){
-  return r.entryDate || r.donationDate || r.date || r.bleedingDate || parseDateFromImportMeta(r) || r.createdAt || null;
+  return (
+    r.entryDate ||
+    r.donationDate ||
+    r.date ||
+    r.bleedingDate ||
+    r.collectionDate ||
+    r.dateOfDonation ||
+    r.donation_date ||
+    r.bleedDate ||
+    parseDateFromImportMeta(r) ||
+    r.createdAt ||
+    null
+  );
+}
+
+function getBirthdayValue(r){
+  return (
+    r.birthday ||
+    r.birthDate ||
+    r.birthdate ||
+    r.dateOfBirth ||
+    r.dob ||
+    r.birth_date ||
+    null
+  );
+}
+
+function getAgeValue(r){
+  return (
+    r.age ??
+    r.AGE ??
+    r.donorAge ??
+    r.ageYears ??
+    r.age_years ??
+    null
+  );
 }
 
 function getReleaseDate(r){
@@ -404,7 +459,6 @@ function normalizeBloodType(v){
   s = s.replace(/NEGATIVE/g, "NEG");
   s = s.replace(/RH/g, "");
   s = s.replace(/\s+/g, " ").trim();
-
   s = s.replace("POS", "+").replace("NEG", "-");
   s = s.replace(/\s+/g, "");
 
@@ -417,14 +471,14 @@ function normalizeBloodType(v){
   if (s === "B-") return "B-";
   if (s === "AB-") return "AB-";
 
-  if (s === "OPOS" || s === "O+") return "O+";
-  if (s === "APOS" || s === "A+") return "A+";
-  if (s === "BPOS" || s === "B+") return "B+";
-  if (s === "ABPOS" || s === "AB+") return "AB+";
-  if (s === "ONEG" || s === "O-") return "O-";
-  if (s === "ANEG" || s === "A-") return "A-";
-  if (s === "BNEG" || s === "B-") return "B-";
-  if (s === "ABNEG" || s === "AB-") return "AB-";
+  if (s === "OPOS") return "O+";
+  if (s === "APOS") return "A+";
+  if (s === "BPOS") return "B+";
+  if (s === "ABPOS") return "AB+";
+  if (s === "ONEG") return "O-";
+  if (s === "ANEG") return "A-";
+  if (s === "BNEG") return "B-";
+  if (s === "ABNEG") return "AB-";
 
   if (s.startsWith("O+")) return "O+";
   if (s.startsWith("A+")) return "A+";
@@ -492,14 +546,8 @@ function getPreparedComponentsFromBag(r){
 
 function createBloodTypeCounter(){
   return {
-    "O+":0,
-    "A+":0,
-    "B+":0,
-    "AB+":0,
-    "O-":0,
-    "A-":0,
-    "B-":0,
-    "AB-":0,
+    "O+":0,"A+":0,"B+":0,"AB+":0,
+    "O-":0,"A-":0,"B-":0,"AB-":0,
     "Unknown":0
   };
 }
@@ -536,8 +584,61 @@ function emptyStats(){
     },
     requests: { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 },
     sex: { "Male":0, "Female":0 },
-    frequency: { "First-time donors":0, "Repeat non-regular":0, "Repeat regular":0, "Total":0 }
+    frequency: { "First-time donors":0, "Repeat non-regular":0, "Repeat regular":0, "Total":0 },
+    age: {
+      "16-17":0, "18-20":0, "21-30":0, "31-40":0,
+      "41-50":0, "51-60":0, "60-65":0, "66 & above":0, "Total":0
+    },
+    agePicture: {
+      "Under 18":0, "18-24":0, "25-44":0, "45-64":0, "65 & above":0, "Total donations":0
+    },
+    youth1625Sex: { "Male":0, "Female":0, "Total":0 }
   };
+}
+
+function parseNumericAge(value){
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && isFinite(value)) return value;
+  const match = String(value).match(/(\d{1,3})/);
+  if (!match) return null;
+  const age = Number(match[1]);
+  return isFinite(age) ? age : null;
+}
+
+function getAge(r){
+  const directAge = parseNumericAge(getAgeValue(r));
+  if (directAge != null && directAge >= 0 && directAge <= 120) return directAge;
+
+  const birthday = parseDate(getBirthdayValue(r));
+  const donation = parseDate(getDonorDate(r));
+
+  if (!birthday || !donation) return null;
+
+  let years = donation.getFullYear() - birthday.getFullYear();
+  const m = donation.getMonth() - birthday.getMonth();
+  if (m < 0 || (m === 0 && donation.getDate() < birthday.getDate())) years--;
+  return (years >= 0 && years <= 120) ? years : null;
+}
+
+function getAgeGroup(age){
+  if (age == null) return null;
+  if (age <= 17) return "16-17";
+  if (age <= 20) return "18-20";
+  if (age <= 30) return "21-30";
+  if (age <= 40) return "31-40";
+  if (age <= 50) return "41-50";
+  if (age <= 60) return "51-60";
+  if (age <= 65) return "60-65";
+  return "66 & above";
+}
+
+function getAgeGroupPicture(age){
+  if (age == null) return null;
+  if (age < 18) return "Under 18";
+  if (age <= 24) return "18-24";
+  if (age <= 44) return "25-44";
+  if (age <= 64) return "45-64";
+  return "65 & above";
 }
 
 function formatDateForDisplay(raw){
@@ -579,14 +680,11 @@ function applyDonor(s, r){
   const bagCounts = bagCodeToColumnObject(bagCode);
 
   s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
-  if (!s.bagTypeBloodType[bagCode]) {
-    s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
-  }
+  if (!s.bagTypeBloodType[bagCode]) s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
   s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
 
   if (donorType === "MBD") {
     addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
-
     const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
     if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
     addBagCounts(s.fieldDonation[category], bagCounts);
@@ -614,10 +712,7 @@ function applyDonor(s, r){
   Object.keys(prep).forEach(component => {
     const qty = Number(prep[component] || 0);
     s.components[component] += qty;
-    if (qty > 0) {
-      s.componentBloodType[component][bt] =
-        (s.componentBloodType[component][bt] || 0) + qty;
-    }
+    if (qty > 0) s.componentBloodType[component][bt] = (s.componentBloodType[component][bt] || 0) + qty;
   });
 
   const sex = normalizeSex(r.sex || r.gender || "");
@@ -628,6 +723,25 @@ function applyDonor(s, r){
   else if (donorCategory === "Lapse") s.frequency["Repeat non-regular"]++;
   else if (donorCategory === "Repeat") s.frequency["Repeat regular"]++;
   s.frequency["Total"]++;
+
+  const age = getAge(r);
+  const ageGroup = getAgeGroup(age);
+  if (ageGroup) {
+    s.age[ageGroup] = (s.age[ageGroup] || 0) + 1;
+    s.age["Total"]++;
+  }
+
+  const agePictureGroup = getAgeGroupPicture(age);
+  if (agePictureGroup) {
+    s.agePicture[agePictureGroup] = (s.agePicture[agePictureGroup] || 0) + 1;
+    s.agePicture["Total donations"]++;
+  }
+
+  if (age != null && age >= 16 && age <= 25) {
+    if (sex === "Male") s.youth1625Sex["Male"]++;
+    if (sex === "Female") s.youth1625Sex["Female"]++;
+    s.youth1625Sex["Total"]++;
+  }
 }
 
 function normalizeRequestComponent(v){
@@ -953,6 +1067,99 @@ function renderReport(grouped){
                     </div>
                   </div>
 
+                  <div class="sheet-block">
+                    <div class="sheet-title title-f">V. Sex Distribution of Donors</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
+                        <tr>
+                          <td>Donors</td>
+                          <td>${num(s.sex["Male"])}</td>
+                          <td>${num(s.sex["Female"])}</td>
+                          <td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-g">VI. Distribution of Donors according to Frequency of Donation</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
+                        <tr>
+                          <td>Donors</td>
+                          <td>${num(s.frequency["First-time donors"])}</td>
+                          <td>${num(s.frequency["Repeat non-regular"])}</td>
+                          <td>${num(s.frequency["Repeat regular"])}</td>
+                          <td>${num(s.frequency["Total"])}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-h">VII. Distribution of Donors By Age Group</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr>
+                          <th></th>
+                          <th>16-17</th>
+                          <th>18-20</th>
+                          <th>21-30</th>
+                          <th>31-40</th>
+                          <th>41-50</th>
+                          <th>51-60</th>
+                          <th>60-65</th>
+                          <th>66 & above</th>
+                          <th>Total</th>
+                        </tr>
+                        <tr>
+                          <td>Donors</td>
+                          <td>${num(s.age["16-17"])}</td>
+                          <td>${num(s.age["18-20"])}</td>
+                          <td>${num(s.age["21-30"])}</td>
+                          <td>${num(s.age["31-40"])}</td>
+                          <td>${num(s.age["41-50"])}</td>
+                          <td>${num(s.age["51-60"])}</td>
+                          <td>${num(s.age["60-65"])}</td>
+                          <td>${num(s.age["66 & above"])}</td>
+                          <td>${num(s.age["Total"])}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-i">VIII. Donor Statistics by Age Range</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th>Category</th><th>Count</th></tr>
+                        <tr><td>Donors under 18 years</td><td>${num(s.agePicture["Under 18"])}</td></tr>
+                        <tr><td>Donors aged 18 to 24 years</td><td>${num(s.agePicture["18-24"])}</td></tr>
+                        <tr><td>Donors aged 25 to 44 years</td><td>${num(s.agePicture["25-44"])}</td></tr>
+                        <tr><td>Donors aged 45 to 64 years</td><td>${num(s.agePicture["45-64"])}</td></tr>
+                        <tr><td>Donors aged 65 years or older</td><td>${num(s.agePicture["65 & above"])}</td></tr>
+                        <tr class="subheader"><td>Total number of donations</td><td>${num(s.agePicture["Total donations"])}</td></tr>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
+                        <tr>
+                          <td>16-25 Years Old</td>
+                          <td>${num(s.youth1625Sex["Male"])}</td>
+                          <td>${num(s.youth1625Sex["Female"])}</td>
+                          <td>${num(s.youth1625Sex["Total"])}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             `;
@@ -999,6 +1206,9 @@ function buildStatistics(){
     groupedCache = grouped;
     renderSummary(summary);
     renderReport(grouped);
+    const totalAge = summary.age["Total"] || 0;
+    const ageMsg = totalAge > 0 ? `Statistics loaded successfully. Age records counted: ${totalAge}.` : "Statistics loaded successfully. Age records counted: 0.";
+    setStatus(ageMsg, "ok");
   }catch(error){
     console.error(error);
     document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build statistics: ${escapeHtml(error.message || String(error))}</div>`;
@@ -1172,7 +1382,8 @@ function exportCSV(){
     "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
     "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
     "Total MBD S","Total MBD D","Total MBD T","Total MBD Q",
-    "Prepared 450cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO"
+    "Prepared 450cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO",
+    "Age 16-17","Age 18-20","Age 21-30","Age 31-40","Age 41-50","Age 51-60","Age 60-65","Age 66+"
   ]];
 
   Object.keys(groupedCache).sort((a,b)=>b-a).forEach(year => {
@@ -1197,7 +1408,15 @@ function exportCSV(){
         s.components["PRBC"],
         s.components["FFP"],
         s.components["PC"],
-        s.components["CRYO"]
+        s.components["CRYO"],
+        s.age["16-17"],
+        s.age["18-20"],
+        s.age["21-30"],
+        s.age["31-40"],
+        s.age["41-50"],
+        s.age["51-60"],
+        s.age["60-65"],
+        s.age["66 & above"]
       ]);
     });
   });
