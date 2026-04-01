@@ -174,11 +174,47 @@ margin:2px;
 
 .monthHeader{
 background:#f0f0f0;
-padding:10px;
+padding:12px 14px;
 margin-top:20px;
 font-weight:bold;
 font-size:16px;
-border-radius:5px;
+border-radius:6px;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border:1px solid #ddd;
+}
+
+.dateHeader{
+background:#fafafa;
+padding:10px 14px;
+margin-top:12px;
+font-weight:bold;
+font-size:14px;
+border-radius:6px;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border:1px solid #ddd;
+}
+
+.collapsibleIcon{
+font-size:14px;
+font-weight:bold;
+min-width:24px;
+text-align:right;
+}
+
+.monthContent,
+.dateContent{
+display:none;
+}
+
+.monthContent.show,
+.dateContent.show{
+display:block;
 }
 
 .emptyMessage{
@@ -961,6 +997,25 @@ function renderCurrentView(){
   refreshDuplicateBox();
 }
 
+function createCollapsibleHeader(className, label, countText){
+  const header = document.createElement("div");
+  header.className = className;
+  header.innerHTML = `
+    <span>${label}${countText ? ` (${countText})` : ""}</span>
+    <span class="collapsibleIcon">+</span>
+  `;
+  return header;
+}
+
+function attachCollapseBehavior(header, content){
+  const icon = header.querySelector(".collapsibleIcon");
+  header.addEventListener("click", () => {
+    const isOpen = content.classList.contains("show");
+    content.classList.toggle("show", !isOpen);
+    icon.textContent = isOpen ? "+" : "−";
+  });
+}
+
 function renderReleasingTable(){
   const filtered = getFilteredReleasingEntries();
 
@@ -969,88 +1024,114 @@ function renderReleasingTable(){
     return;
   }
 
-  const grouped = {};
+  const groupedByMonth = {};
 
   filtered.forEach(entry => {
     const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
-    if(!grouped[month]) grouped[month] = [];
-    grouped[month].push(entry);
+    if(!groupedByMonth[month]) groupedByMonth[month] = [];
+    groupedByMonth[month].push(entry);
   });
 
   container.innerHTML = "";
 
-  Object.keys(grouped).sort().reverse().forEach(month => {
-    const monthHeader = document.createElement("div");
-    monthHeader.className = "monthHeader";
-    monthHeader.textContent = month;
-    container.appendChild(monthHeader);
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
 
-    const table = document.createElement("table");
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
 
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>DATE</th>
-          <th>FACILITY</th>
-          <th>SURNAME</th>
-          <th>FIRST NAME</th>
-          <th>AGE</th>
-          <th>SEX</th>
-          <th>BLOOD</th>
-          <th>OR</th>
-          <th>BOX CONTAINER</th>
-          <th>REQUESTED</th>
-          <th>ISSUED</th>
-          <th>COMPUTED TOTAL</th>
-          <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th>
-          <th>ACTION</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
+    const groupedByDate = {};
 
-    const tbody = table.querySelector("tbody");
-
-    grouped[month].forEach(entry => {
-      const computedTotal = computeReleasingTotal(entry);
-      const isChecked = checkedReleaseRows.has(entry.id);
-
-      const row = document.createElement("tr");
-      row.dataset.releaseId = entry.id;
-      if(isChecked){
-        row.classList.add("checkedHighlight");
-      }
-
-      row.innerHTML = `
-        <td>${entry.date || ""}</td>
-        <td>${entry.facility || ""}</td>
-        <td>${entry.surname || ""}</td>
-        <td>${entry.firstname || ""}</td>
-        <td>${entry.age || ""}</td>
-        <td>${entry.sex || ""}</td>
-        <td>${entry.bloodtype || ""}</td>
-        <td>${entry.or || ""}</td>
-        <td>${entry.boxContainerQty || 0}</td>
-        <td class="componentBox">${formatComponents(entry.requests)}</td>
-        <td class="componentBox">${formatComponents(entry.issued)}</td>
-        <td>${computedTotal}</td>
-        <td>${entry.amountPaid || ""}</td>
-        <td>
-          <div class="discountWrap">
-            <span>${entry.discount || ""}</span>
-            <input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${isChecked ? "checked" : ""}>
-          </div>
-        </td>
-        <td>
-          <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
-        </td>
-      `;
-      tbody.appendChild(row);
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
     });
 
-    container.appendChild(table);
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>SURNAME</th>
+            <th>FIRST NAME</th>
+            <th>AGE</th>
+            <th>SEX</th>
+            <th>BLOOD</th>
+            <th>OR</th>
+            <th>BOX CONTAINER</th>
+            <th>REQUESTED</th>
+            <th>ISSUED</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeReleasingTotal(entry);
+        const isChecked = checkedReleaseRows.has(entry.id);
+
+        const row = document.createElement("tr");
+        row.dataset.releaseId = entry.id;
+        if(isChecked){
+          row.classList.add("checkedHighlight");
+        }
+
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.surname || ""}</td>
+          <td>${entry.firstname || ""}</td>
+          <td>${entry.age || ""}</td>
+          <td>${entry.sex || ""}</td>
+          <td>${entry.bloodtype || ""}</td>
+          <td>${entry.or || ""}</td>
+          <td>${entry.boxContainerQty || 0}</td>
+          <td class="componentBox">${formatComponents(entry.requests)}</td>
+          <td class="componentBox">${formatComponents(entry.issued)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>
+            <div class="discountWrap">
+              <span>${entry.discount || ""}</span>
+              <input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${isChecked ? "checked" : ""}>
+            </div>
+          </td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
   });
 }
 
@@ -1062,68 +1143,94 @@ function renderAugmentationTable(){
     return;
   }
 
-  const grouped = {};
+  const groupedByMonth = {};
 
   filtered.forEach(entry => {
     const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
-    if(!grouped[month]) grouped[month] = [];
-    grouped[month].push(entry);
+    if(!groupedByMonth[month]) groupedByMonth[month] = [];
+    groupedByMonth[month].push(entry);
   });
 
   container.innerHTML = "";
 
-  Object.keys(grouped).sort().reverse().forEach(month => {
-    const monthHeader = document.createElement("div");
-    monthHeader.className = "monthHeader";
-    monthHeader.textContent = month;
-    container.appendChild(monthHeader);
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
 
-    const table = document.createElement("table");
-    table.className = "augTable";
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
 
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>DATE</th>
-          <th>FACILITY</th>
-          <th>BOX CONTAINER</th>
-          <th>AUGMENTATION DETAILS</th>
-          <th>COMPUTED TOTAL</th>
-          <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th>
-          <th>ACTION</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
+    const groupedByDate = {};
 
-    const tbody = table.querySelector("tbody");
-
-    grouped[month].forEach(entry => {
-      const computedTotal = computeAugEntryTotal(entry);
-      const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
-
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${entry.date || ""}</td>
-        <td>${entry.facility || ""}</td>
-        <td>${entry.boxContainerQty || 0}</td>
-        <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
-        <td>${computedTotal}</td>
-        <td>${entry.amountPaid || ""}</td>
-        <td>${entry.discount || ""}</td>
-        <td>
-          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn ${isPaid ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
-            PAID ${isPaid ? 'YES' : 'NO'}
-          </button>
-          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
-        </td>
-      `;
-      tbody.appendChild(row);
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
     });
 
-    container.appendChild(table);
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+      table.className = "augTable";
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>BOX CONTAINER</th>
+            <th>AUGMENTATION DETAILS</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeAugEntryTotal(entry);
+        const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.boxContainerQty || 0}</td>
+          <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>${entry.discount || ""}</td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn ${isPaid ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
+              PAID ${isPaid ? 'YES' : 'NO'}
+            </button>
+            <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
   });
 }
 
