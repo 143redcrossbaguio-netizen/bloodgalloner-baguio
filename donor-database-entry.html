@@ -410,7 +410,7 @@
         <div class="panel-body">
             <div class="section-note">Entry order is kept based on your original requested order.</div>
 
-            <form id="donorForm">
+            <form id="donorForm" novalidate>
                 <div class="form-grid">
 
                     <div class="field-group full-width">
@@ -699,6 +699,8 @@
     let autoTypeReason = "";
     let isSaving = false;
 
+    const ACTIVE_GROUP_STORAGE_KEY = "donorEntryActiveGroup";
+
     function setTodayDate() {
         entryDate.value = new Date().toISOString().split("T")[0];
     }
@@ -954,33 +956,50 @@
         return { valid: true, durationMinutes: duration, overnight };
     }
 
-    donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
-    birthday.addEventListener("change", computeAge);
-    entryDate.addEventListener("change", async () => {
-        updateAutoTypeSuggestion();
-        await renderActiveGroup();
-    });
-    donorCategory.addEventListener("change", refreshTypeHelper);
-    useSerialPrefix.addEventListener("change", updateSerialModeUI);
-    timeStartedInput.addEventListener("change", validateAndDescribeTimes);
-    timeEndedInput.addEventListener("change", validateAndDescribeTimes);
-
-    async function getActiveGroup() {
-        const doc = await db.collection("donorEntryGroups").doc("active").get();
-        if (!doc.exists) return null;
-        return { id: doc.id, ...doc.data() };
+    function getLocalActiveGroup() {
+        try {
+            const raw = localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            return parsed;
+        } catch (error) {
+            console.error("Failed to read active group from localStorage:", error);
+            return null;
+        }
     }
 
-    async function setActiveGroup(data) {
-        await db.collection("donorEntryGroups").doc("active").set(data, { merge: true });
+    function setLocalActiveGroup(data) {
+        try {
+            localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, JSON.stringify(data));
+        } catch (error) {
+            console.error("Failed to write active group to localStorage:", error);
+            throw new Error("Unable to save active group in this browser.");
+        }
     }
 
-    async function clearActiveGroup() {
-        await db.collection("donorEntryGroups").doc("active").delete();
+    function clearLocalActiveGroup() {
+        try {
+            localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY);
+        } catch (error) {
+            console.error("Failed to clear active group from localStorage:", error);
+        }
     }
 
-    async function renderActiveGroup() {
-        const activeGroup = await getActiveGroup();
+    function getActiveGroup() {
+        return getLocalActiveGroup();
+    }
+
+    function setActiveGroup(data) {
+        setLocalActiveGroup(data);
+    }
+
+    function clearActiveGroup() {
+        clearLocalActiveGroup();
+    }
+
+    function renderActiveGroup() {
+        const activeGroup = getActiveGroup();
 
         if (!activeGroup || !activeGroup.remaining || activeGroup.remaining <= 0) {
             groupInfoBox.classList.add("hidden");
@@ -990,7 +1009,7 @@
 
         const originalCount = Number(activeGroup.originalCount || activeGroup.remaining || 0);
         const remaining = Number(activeGroup.remaining || 0);
-        const currentNumber = originalCount - remaining + 1;
+        const currentNumber = Math.max(1, originalCount - remaining + 1);
         const progressText = originalCount > 0
             ? `Current donor in group: ${currentNumber} of ${originalCount} | Remaining donors after this entry: ${remaining}`
             : `Remaining donors: ${remaining}`;
@@ -1013,26 +1032,37 @@
         groupInfoBox.classList.remove("hidden");
     }
 
-    async function consumeGroupEntry() {
-        const ref = db.collection("donorEntryGroups").doc("active");
+    function consumeGroupEntry() {
+        const activeGroup = getActiveGroup();
+        if (!activeGroup) return null;
 
-        await db.runTransaction(async (transaction) => {
-            const doc = await transaction.get(ref);
-            if (!doc.exists) return;
+        const remaining = Number(activeGroup.remaining || 0) - 1;
 
-            const data = doc.data();
-            const remaining = Number(data.remaining || 0) - 1;
+        if (remaining <= 0) {
+            clearActiveGroup();
+            return null;
+        }
 
-            if (remaining <= 0) {
-                transaction.delete(ref);
-            } else {
-                transaction.update(ref, {
-                    remaining: remaining,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
-        });
+        const updatedGroup = {
+            ...activeGroup,
+            remaining: remaining,
+            updatedAtMs: Date.now()
+        };
+
+        setActiveGroup(updatedGroup);
+        return updatedGroup;
     }
+
+    donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
+    birthday.addEventListener("change", computeAge);
+    entryDate.addEventListener("change", () => {
+        updateAutoTypeSuggestion();
+        renderActiveGroup();
+    });
+    donorCategory.addEventListener("change", refreshTypeHelper);
+    useSerialPrefix.addEventListener("change", updateSerialModeUI);
+    timeStartedInput.addEventListener("change", validateAndDescribeTimes);
+    timeEndedInput.addEventListener("change", validateAndDescribeTimes);
 
     function renderLookupResults(results) {
         donorLookupResults = results;
@@ -1170,35 +1200,29 @@
         document.getElementById("middleName").value = "";
         document.getElementById("birthday").value = "";
         document.getElementById("age").value = "";
-        document.getElementById("civilStatus").value = "";
-        document.getElementById("sex").value = "";
+        document.getElementById("civilStatus").selectedIndex = 0;
+        document.getElementById("sex").selectedIndex = 0;
         document.getElementById("address").value = "";
         document.getElementById("cityProvince").value = "";
         document.getElementById("occupation").value = "";
         document.getElementById("contactNumber").value = "";
-        document.getElementById("bloodType").value = "";
-        document.getElementById("bloodBagBrand").value = "";
-        document.getElementById("bloodBagType").value = "";
-        document.getElementById("amount").value = "";
-        document.getElementById("timeStarted").value = "";
-        document.getElementById("timeEnded").value = "";
-        document.getElementById("remarks").value = "";
+        document.getElementById("bloodType").selectedIndex = 0;
         document.getElementById("bloodBagBrand").selectedIndex = 0;
         document.getElementById("bloodBagType").selectedIndex = 0;
         document.getElementById("amount").selectedIndex = 0;
-        document.getElementById("bloodType").selectedIndex = 0;
-        document.getElementById("civilStatus").selectedIndex = 0;
-        document.getElementById("sex").selectedIndex = 0;
-        timeHelperBox.classList.add("hidden");
-        timeHelperBox.textContent = "";
+        document.getElementById("timeStarted").value = "";
+        document.getElementById("timeEnded").value = "";
+        document.getElementById("remarks").value = "";
         donorCategory.value = "Auto";
         numberOfDonations.value = "0";
+        timeHelperBox.classList.add("hidden");
+        timeHelperBox.textContent = "";
     }
 
     searchDonorBtn.addEventListener("click", searchExistingDonors);
     clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
 
-    startWalkInGroupBtn.addEventListener("click", async function() {
+    startWalkInGroupBtn.addEventListener("click", function() {
         try {
             if (!authReady || !currentUser) {
                 showMessage("You must be logged in first.", "error");
@@ -1211,19 +1235,19 @@
                 return;
             }
 
-            await setActiveGroup({
+            setActiveGroup({
                 entryDate: entryDate.value,
                 donorType: "Walk-in",
                 organization: "",
                 remaining: count,
                 originalCount: count,
                 createdBy: currentUser.uid,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                createdAtMs: Date.now(),
+                updatedAtMs: Date.now()
             });
 
             setSelectedDonorType("Walk-in");
-            await renderActiveGroup();
+            renderActiveGroup();
             showMessage(`Walk-in group started for ${count} donors.`, "success");
         } catch (error) {
             console.error(error);
@@ -1231,7 +1255,7 @@
         }
     });
 
-    startMbdGroupBtn.addEventListener("click", async function() {
+    startMbdGroupBtn.addEventListener("click", function() {
         try {
             if (!authReady || !currentUser) {
                 showMessage("You must be logged in first.", "error");
@@ -1251,19 +1275,19 @@
                 return;
             }
 
-            await setActiveGroup({
+            setActiveGroup({
                 entryDate: entryDate.value,
                 donorType: "MBD",
                 organization: organization,
                 remaining: count,
                 originalCount: count,
                 createdBy: currentUser.uid,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                createdAtMs: Date.now(),
+                updatedAtMs: Date.now()
             });
 
             setSelectedDonorType("MBD");
-            await renderActiveGroup();
+            renderActiveGroup();
             showMessage(`MBD group started for ${count} donors under ${organization}.`, "success");
         } catch (error) {
             console.error(error);
@@ -1271,15 +1295,15 @@
         }
     });
 
-    endGroupBtn.addEventListener("click", async function() {
+    endGroupBtn.addEventListener("click", function() {
         try {
             if (!authReady || !currentUser) {
                 showMessage("You must be logged in first.", "error");
                 return;
             }
 
-            await clearActiveGroup();
-            await renderActiveGroup();
+            clearActiveGroup();
+            renderActiveGroup();
             walkInCount.value = "";
             mbdCount.value = "";
             showMessage("Active donor group ended.", "success");
@@ -1318,11 +1342,12 @@
             let patientDirectedValue = patientDirectedDetails.value.trim();
             let mbdValue = mbdDetails.value.trim();
 
-            const activeGroup = await getActiveGroup();
+            const activeGroup = getActiveGroup();
             const hasMatchingActiveGroup = activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value;
 
             if (hasMatchingActiveGroup) {
                 donorTypeValue = activeGroup.donorType;
+
                 if (activeGroup.donorType === "MBD") {
                     mbdValue = activeGroup.organization || "";
                     mbdDetails.value = mbdValue;
@@ -1330,6 +1355,17 @@
                 } else if (activeGroup.donorType === "Walk-in") {
                     setSelectedDonorType("Walk-in");
                 }
+            }
+
+            if (!entryDate.value) {
+                showMessage("Please select entry date.", "error");
+                return false;
+            }
+
+            const finalSerialNumber = getFinalSerialNumber();
+            if (!finalSerialNumber) {
+                showMessage("Please enter serial number.", "error");
+                return false;
             }
 
             if (!donorTypeValue) {
@@ -1347,9 +1383,58 @@
                 return false;
             }
 
-            const finalSerialNumber = getFinalSerialNumber();
-            if (!finalSerialNumber) {
-                showMessage("Please enter serial number.", "error");
+            if (!document.getElementById("surname").value.trim()) {
+                showMessage("Please enter surname.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("firstName").value.trim()) {
+                showMessage("Please enter first name.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("birthday").value) {
+                showMessage("Please enter birthday.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("civilStatus").value) {
+                showMessage("Please select civil status.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("sex").value) {
+                showMessage("Please select sex.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("address").value.trim()) {
+                showMessage("Please enter address.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("cityProvince").value.trim()) {
+                showMessage("Please enter city / province.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodType").value) {
+                showMessage("Please select blood type.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodBagBrand").value) {
+                showMessage("Please select blood bag brand.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodBagType").value) {
+                showMessage("Please select blood bag type.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("amount").value) {
+                showMessage("Please select amount.", "error");
                 return false;
             }
 
@@ -1400,13 +1485,13 @@
             await db.collection("donorDatabase").add(donorData);
 
             if (hasMatchingActiveGroup) {
-                await consumeGroupEntry();
+                consumeGroupEntry();
             }
 
             clearLoadedDonor();
             clearEntryOnlyFieldsAfterSave();
 
-            const refreshedGroup = await getActiveGroup();
+            const refreshedGroup = getActiveGroup();
 
             if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
                 if (refreshedGroup.donorType === "Walk-in") {
@@ -1417,9 +1502,8 @@
                 }
             }
 
-            await renderActiveGroup();
+            renderActiveGroup();
             updateAutoTypeSuggestion();
-
             serialNumberInput.focus();
 
             if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
@@ -1441,7 +1525,7 @@
     });
 
     donorForm.addEventListener("reset", function() {
-        setTimeout(async () => {
+        setTimeout(() => {
             clearLoadedDonor();
             setTodayDate();
             age.value = "";
@@ -1454,18 +1538,18 @@
             timeHelperBox.classList.add("hidden");
             timeHelperBox.textContent = "";
             updateSerialModeUI();
-            await renderActiveGroup();
+            renderActiveGroup();
             updateAutoTypeSuggestion();
         }, 50);
     });
 
-    auth.onAuthStateChanged(async (user) => {
+    auth.onAuthStateChanged((user) => {
         authReady = true;
         currentUser = user;
 
         if (user) {
             setAuthIndicator(`Logged in as: ${user.email || user.uid}`, true);
-            await renderActiveGroup();
+            renderActiveGroup();
         } else {
             setAuthIndicator("No logged in user detected on this page.", false);
         }
@@ -1477,6 +1561,7 @@
     updateAutoTypeSuggestion();
     updateSerialModeUI();
     validateAndDescribeTimes();
+    renderActiveGroup();
 </script>
 
 </body>
