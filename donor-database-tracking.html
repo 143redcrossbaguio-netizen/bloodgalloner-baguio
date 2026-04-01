@@ -235,7 +235,7 @@
 
         table {
             width: 100%;
-            min-width: 2550px;
+            min-width: 2700px;
             border-collapse: collapse;
             font-size: 12px;
         }
@@ -265,6 +265,40 @@
         th.col-serial { background: #f0f0f0; }
         th.col-amount { background: #c9d7ff; }
         th.col-actions { background: #ececec; }
+        th.col-entrydate { background: #f9e2e2; }
+
+        th.col-time-start,
+        td.col-time-start {
+            min-width: 90px;
+            width: 90px;
+            max-width: 90px;
+        }
+
+        th.col-time-end,
+        td.col-time-end {
+            min-width: 78px;
+            width: 78px;
+            max-width: 78px;
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .header-filter-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .header-filter-wrap select {
+            min-width: 78px;
+            max-width: 110px;
+            padding: 3px 5px;
+            font-size: 11px;
+            border: 1px solid #bfc7d4;
+            border-radius: 5px;
+            background: #fff;
+        }
 
         .donation-total {
             font-weight: bold;
@@ -421,6 +455,14 @@
     let collapsedGroups = {};
     let currentDonationTotals = {};
     let sequenceMap = {};
+    let headerFilters = {
+        sex: "",
+        bloodType: "",
+        donorCategory: "",
+        amount: "",
+        bloodBagType: "",
+        serialSort: ""
+    };
 
     function showMessage(message, type) {
         statusMessage.textContent = message;
@@ -651,6 +693,30 @@
         return text.includes(keyword.toLowerCase());
     }
 
+    function matchesHeaderFilters(record) {
+        if (headerFilters.sex && normalizeText(record.sex) !== normalizeText(headerFilters.sex)) return false;
+        if (headerFilters.bloodType && normalizeText(record.bloodType) !== normalizeText(headerFilters.bloodType)) return false;
+        if (headerFilters.donorCategory && normalizeText(record.donorCategory) !== normalizeText(headerFilters.donorCategory)) return false;
+        if (headerFilters.amount && normalizeText(record.amount) !== normalizeText(headerFilters.amount)) return false;
+        if (headerFilters.bloodBagType && normalizeText(record.bloodBagType) !== normalizeText(headerFilters.bloodBagType)) return false;
+        return true;
+    }
+
+    function compareSerialNumbers(a, b) {
+        const serialA = String(a.serialNumber || "");
+        const serialB = String(b.serialNumber || "");
+        return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
+    }
+
+    function applySerialSort(records) {
+        if (headerFilters.serialSort === "asc") {
+            records.sort((a, b) => compareSerialNumbers(a, b));
+        } else if (headerFilters.serialSort === "desc") {
+            records.sort((a, b) => compareSerialNumbers(b, a));
+        }
+        return records;
+    }
+
     function getGroupKey(type, a, b = "") {
         return `${type}-${a}-${b}`;
     }
@@ -706,7 +772,7 @@
             grouped[groupKey].sort((a, b) => {
                 const serialA = a.serialNumber || "";
                 const serialB = b.serialNumber || "";
-                return serialA.localeCompare(serialB);
+                return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
             });
 
             grouped[groupKey].forEach((record, index) => {
@@ -753,6 +819,12 @@
             grouped[year][month].records.push(record);
         });
 
+        Object.keys(grouped).forEach(year => {
+            Object.keys(grouped[year]).forEach(month => {
+                applySerialSort(grouped[year][month].records);
+            });
+        });
+
         return grouped;
     }
 
@@ -777,9 +849,24 @@
         }
     }
 
+    function renderHeaderFilterSelect(filterKey, options, selectedValue, placeholderLabel) {
+        return `
+            <div class="header-filter-wrap">
+                <span>${escapeHtml(placeholderLabel)}</span>
+                <select onchange="setHeaderFilter('${filterKey}', this.value)">
+                    <option value="">All</option>
+                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === selectedValue ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
+                </select>
+            </div>
+        `;
+    }
+
     function renderTracking() {
         const keyword = searchInput.value.trim();
-        filteredDonors = allDonors.filter(record => matchesSearch(record, keyword));
+        filteredDonors = allDonors
+            .filter(record => matchesSearch(record, keyword))
+            .filter(record => matchesHeaderFilters(record));
+
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
         sequenceMap = computeSequenceMap(filteredDonors);
 
@@ -856,6 +943,7 @@
                                 <table>
                                     <thead>
                                         <tr>
+                                            <th class="col-entrydate">Entry Date</th>
                                             <th class="col-mbd">MBD</th>
                                             <th class="col-walkin">Walk-in</th>
                                             <th class="col-patient">Patient-Directed</th>
@@ -864,20 +952,31 @@
                                             <th class="col-normal">Middle Name</th>
                                             <th class="col-normal">Birthday</th>
                                             <th class="col-normal">Age</th>
-                                            <th class="col-normal">Sex</th>
+                                            <th class="col-normal">
+                                                ${renderHeaderFilterSelect("sex", ["Male", "Female"], headerFilters.sex, "Sex")}
+                                            </th>
                                             <th class="col-normal">Contact Number</th>
                                             <th class="col-normal">House Number/Purok/Street Name</th>
                                             <th class="col-normal">Barangay/City</th>
-                                            <th class="col-donorcat">Type of Donor</th>
+                                            <th class="col-donorcat">
+                                                ${renderHeaderFilterSelect("donorCategory", ["New", "Repeat", "Lapse"], headerFilters.donorCategory, "Type of Donor")}
+                                            </th>
                                             <th class="col-normal"># of Donations</th>
-                                            <th class="col-bloodtype">Blood Type</th>
-                                            <th class="col-serial">Serial Number</th>
-                                            <th class="col-amount">Amount</th>
+                                            <th class="col-bloodtype">
+                                                ${renderHeaderFilterSelect("bloodType", ["A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], headerFilters.bloodType, "Blood Type")}
+                                            </th>
+                                            <th class="col-serial">
+                                                ${renderHeaderFilterSelect("serialSort", ["asc", "desc"], headerFilters.serialSort, "Serial Number")}
+                                            </th>
+                                            <th class="col-amount">
+                                                ${renderHeaderFilterSelect("amount", ["450 ml", "QNS", "UB"], headerFilters.amount, "Amount")}
+                                            </th>
                                             <th class="col-normal">Blood Bag Used</th>
-                                            <th class="col-normal">Type of Blood Bag</th>
-                                            <th class="col-normal">Time Started</th>
-                                            <th class="col-normal">Time Ended</th>
-                                            <th class="col-normal">Entry Date</th>
+                                            <th class="col-normal">
+                                                ${renderHeaderFilterSelect("bloodBagType", ["Single", "Double", "Triple", "Quadruple"], headerFilters.bloodBagType, "Type of Blood Bag")}
+                                            </th>
+                                            <th class="col-normal col-time-start">Time Started</th>
+                                            <th class="col-normal col-time-end">Time Ended</th>
                                             <th class="col-normal">Remarks</th>
                                             <th class="col-actions">Actions</th>
                                         </tr>
@@ -892,6 +991,7 @@
 
                     html += `
                         <tr id="row-${record.id}">
+                            <td>${escapeHtml(record._resolvedEntryDate)}</td>
                             <td>${escapeHtml(record.donorType === "MBD" ? getCategoryDisplay(record) : "")}</td>
                             <td>${escapeHtml(record.donorType === "Walk-in" ? getCategoryDisplay(record) : "")}</td>
                             <td>${escapeHtml(record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "")}</td>
@@ -914,9 +1014,8 @@
                             <td>${escapeHtml(record.amount)}</td>
                             <td>${escapeHtml(record.bloodBagBrand)}</td>
                             <td>${escapeHtml(record.bloodBagType)}</td>
-                            <td>${escapeHtml(record._resolvedTimeStarted)}</td>
-                            <td>${escapeHtml(record._resolvedTimeEnded)}</td>
-                            <td>${escapeHtml(record._resolvedEntryDate)}</td>
+                            <td class="col-time-start">${escapeHtml(record._resolvedTimeStarted)}</td>
+                            <td class="col-time-end">${escapeHtml(record._resolvedTimeEnded)}</td>
                             <td>${escapeHtml(record.remarks)}</td>
                             <td class="actions-cell">
                                 <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
@@ -973,6 +1072,7 @@
         if (!row) return;
 
         row.innerHTML = `
+            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
             <td>${buildEditInput(record.mbdDetails || "")}</td>
             <td>${buildEditSelect(["", "Walk-in"], record.donorType === "Walk-in" ? "Walk-in" : "")}</td>
             <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
@@ -994,7 +1094,6 @@
             <td>${buildEditSelect(["Single", "Double", "Triple", "Quadruple"], record.bloodBagType || "")}</td>
             <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
             <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
-            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
             <td>${buildEditInput(record.remarks || "")}</td>
             <td class="actions-cell">
                 <button class="small-btn save-btn" onclick="saveEdit('${id}')">Save</button>
@@ -1007,9 +1106,9 @@
         const row = document.getElementById(`row-${id}`);
         const fields = row.querySelectorAll("input, select");
 
-        const mbdDetails = fields[0].value.trim();
-        const walkInValue = fields[1].value;
-        const patientDirectedDetails = fields[2].value.trim();
+        const mbdDetails = fields[1].value.trim();
+        const walkInValue = fields[2].value;
+        const patientDirectedDetails = fields[3].value.trim();
 
         let donorType = "";
         if (mbdDetails) donorType = "MBD";
@@ -1017,28 +1116,28 @@
         else if (walkInValue === "Walk-in") donorType = "Walk-in";
 
         const updatedData = {
+            entryDate: fields[0].value,
             mbdDetails: mbdDetails,
             patientDirectedDetails: patientDirectedDetails,
             donorType: donorType,
-            surname: fields[3].value.trim(),
-            firstName: fields[4].value.trim(),
-            middleName: fields[5].value.trim(),
-            birthday: fields[6].value,
-            age: parseInt(fields[7].value || "0"),
-            sex: fields[8].value,
-            contactNumber: fields[9].value.trim(),
-            address: fields[10].value.trim(),
-            cityProvince: fields[11].value.trim(),
-            donorCategory: fields[12].value,
-            numberOfDonations: parseInt(fields[13].value || "0"),
-            bloodType: fields[14].value,
-            serialNumber: fields[15].value.trim(),
-            amount: fields[16].value,
-            bloodBagBrand: fields[17].value,
-            bloodBagType: fields[18].value,
-            timeStarted: fields[19].value,
-            timeEnded: fields[20].value,
-            entryDate: fields[21].value,
+            surname: fields[4].value.trim(),
+            firstName: fields[5].value.trim(),
+            middleName: fields[6].value.trim(),
+            birthday: fields[7].value,
+            age: parseInt(fields[8].value || "0"),
+            sex: fields[9].value,
+            contactNumber: fields[10].value.trim(),
+            address: fields[11].value.trim(),
+            cityProvince: fields[12].value.trim(),
+            donorCategory: fields[13].value,
+            numberOfDonations: parseInt(fields[14].value || "0"),
+            bloodType: fields[15].value,
+            serialNumber: fields[16].value.trim(),
+            amount: fields[17].value,
+            bloodBagBrand: fields[18].value,
+            bloodBagType: fields[19].value,
+            timeStarted: fields[20].value,
+            timeEnded: fields[21].value,
             remarks: fields[22].value.trim()
         };
 
@@ -1083,6 +1182,11 @@
             icon.textContent = "−";
             collapsedGroups[groupKey] = false;
         }
+    };
+
+    window.setHeaderFilter = function(filterKey, value) {
+        headerFilters[filterKey] = value;
+        renderTracking();
     };
 
     function getRecordsForMonth(monthValue) {
@@ -1306,7 +1410,7 @@
             allDonors.sort((a, b) => {
                 const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
                 if (dateCompare !== 0) return dateCompare;
-                return (a.serialNumber || "").localeCompare(b.serialNumber || "");
+                return (a.serialNumber || "").localeCompare(b.serialNumber || "", undefined, { numeric: true, sensitivity: "base" });
             });
 
             renderTracking();
