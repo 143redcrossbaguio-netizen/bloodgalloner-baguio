@@ -20,9 +20,15 @@
     .field label { display:block; margin-bottom:6px; font-size:13px; color:#6b7280; font-weight:700; }
     .field input,.field select { width:100%; padding:10px 12px; border:1px solid #d6dde6; border-radius:10px; font-size:14px; }
     button { border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-    .btn-red{background:#b30000;color:#fff}.btn-blue{background:#2563eb;color:#fff}.btn-green{background:#15803d;color:#fff}.btn-gray{background:#374151;color:#fff}
+    .btn-red{background:#b30000;color:#fff}
+    .btn-blue{background:#2563eb;color:#fff}
+    .btn-green{background:#15803d;color:#fff}
+    .btn-gray{background:#374151;color:#fff}
+    .btn-orange{background:#ea580c;color:#fff}
     .status{padding:12px 14px;border-radius:12px;font-weight:700;margin-bottom:12px}
-    .info{background:#eff6ff;color:#1d4ed8}.ok{background:#ecfdf5;color:#15803d}.error{background:#fef2f2;color:#b91c1c}
+    .info{background:#eff6ff;color:#1d4ed8}
+    .ok{background:#ecfdf5;color:#15803d}
+    .error{background:#fef2f2;color:#b91c1c}
     .summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
     .summary-box{border:1px solid #d6dde6;border-radius:12px;padding:14px}
     .summary-box .label{font-size:13px;color:#6b7280;font-weight:700;margin-bottom:8px}
@@ -33,7 +39,7 @@
     .badge{background:#f3e8e8;color:#8b0000;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
     .mapping-form{display:grid;grid-template-columns:1.1fr .8fr 1.1fr auto;gap:10px;margin-bottom:12px}
     .mapping-list{border:1px solid #d6dde6;border-radius:12px;overflow:hidden}
-    .mapping-row{display:grid;grid-template-columns:1.1fr .8fr 1.1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec}
+    .mapping-row{display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec}
     .mapping-row:last-child{border-bottom:none}
     .year-block,.month-block,.sheet-block{border:1px solid #d6dde6;border-radius:12px;overflow:hidden;margin-bottom:14px;background:#fff}
     .year-head,.month-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;font-weight:700}
@@ -117,7 +123,10 @@
         </div>
         <div class="field">
           <label>&nbsp;</label>
-          <button class="btn-red" onclick="saveGroupCategory()">Save Mapping</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn-red" id="saveMappingBtn" onclick="saveGroupCategory()">Save Mapping</button>
+            <button type="button" class="btn-gray" onclick="clearMappingEditor()">Cancel</button>
+          </div>
         </div>
       </div>
       <div id="mappingList" class="mapping-list">
@@ -155,6 +164,7 @@ let releasingRecords = [];
 let categoryMappings = [];
 let groupedCache = null;
 let eventsAttached = false;
+let editingMappingId = null;
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -385,9 +395,47 @@ function normalizeDonorType(v){
 }
 
 function normalizeBloodType(v){
-  const s = String(v || "").toUpperCase().replace(/\s+/g, "");
-  const valid = ["O+","A+","B+","AB+","O-","A-","B-","AB-"];
-  return valid.includes(s) ? s : "Unknown";
+  let s = String(v || "").toUpperCase().trim();
+  if (!s) return "Unknown";
+
+  s = s.replace(/\./g, " ");
+  s = s.replace(/\s+/g, " ");
+  s = s.replace(/POSITIVE/g, "POS");
+  s = s.replace(/NEGATIVE/g, "NEG");
+  s = s.replace(/RH/g, "");
+  s = s.replace(/\s+/g, " ").trim();
+
+  s = s.replace("POS", "+").replace("NEG", "-");
+  s = s.replace(/\s+/g, "");
+
+  if (s === "O+") return "O+";
+  if (s === "A+") return "A+";
+  if (s === "B+") return "B+";
+  if (s === "AB+") return "AB+";
+  if (s === "O-") return "O-";
+  if (s === "A-") return "A-";
+  if (s === "B-") return "B-";
+  if (s === "AB-") return "AB-";
+
+  if (s === "OPOS" || s === "O+") return "O+";
+  if (s === "APOS" || s === "A+") return "A+";
+  if (s === "BPOS" || s === "B+") return "B+";
+  if (s === "ABPOS" || s === "AB+") return "AB+";
+  if (s === "ONEG" || s === "O-") return "O-";
+  if (s === "ANEG" || s === "A-") return "A-";
+  if (s === "BNEG" || s === "B-") return "B-";
+  if (s === "ABNEG" || s === "AB-") return "AB-";
+
+  if (s.startsWith("O+")) return "O+";
+  if (s.startsWith("A+")) return "A+";
+  if (s.startsWith("B+")) return "B+";
+  if (s.startsWith("AB+")) return "AB+";
+  if (s.startsWith("O-")) return "O-";
+  if (s.startsWith("A-")) return "A-";
+  if (s.startsWith("B-")) return "B-";
+  if (s.startsWith("AB-")) return "AB-";
+
+  return "Unknown";
 }
 
 function normalizeSex(v){
@@ -443,23 +491,42 @@ function getPreparedComponentsFromBag(r){
 }
 
 function createBloodTypeCounter(){
-  return { "O+":0,"A+":0,"B+":0,"AB+":0,"O-":0,"A-":0,"B-":0,"AB-":0,"Unknown":0 };
+  return {
+    "O+":0,
+    "A+":0,
+    "B+":0,
+    "AB+":0,
+    "O-":0,
+    "A-":0,
+    "B-":0,
+    "AB-":0,
+    "Unknown":0
+  };
 }
 
 function emptyStats(){
   return {
     totalDonors: 0,
-    officeBleeding: { "Walk-in": { S:0,D:0,T:0,Q:0 }, "Patient Directed": { S:0,D:0,T:0,Q:0 } },
+    officeBleeding: {
+      "Walk-in": { S:0, D:0, T:0, Q:0 },
+      "Patient Directed": { S:0, D:0, T:0, Q:0 }
+    },
     fieldDonation: {
-      "Total MBD": { S:0,D:0,T:0,Q:0 },
-      "Group": { S:0,D:0,T:0,Q:0 },
-      "RC143 / BRGY Base": { S:0,D:0,T:0,Q:0 },
-      "Pledge 25": { S:0,D:0,T:0,Q:0 },
-      "Unmapped": { S:0,D:0,T:0,Q:0 }
+      "Total MBD": { S:0, D:0, T:0, Q:0 },
+      "Group": { S:0, D:0, T:0, Q:0 },
+      "RC143 / BRGY Base": { S:0, D:0, T:0, Q:0 },
+      "Pledge 25": { S:0, D:0, T:0, Q:0 },
+      "Unmapped": { S:0, D:0, T:0, Q:0 }
     },
     fieldDetails: { group: [], rc143: [], pledge25: [] },
-    bloodType: { "O+":0,"A+":0,"B+":0,"AB+":0,"O-":0,"A-":0,"B-":0,"AB-":0,"Unknown":0 },
-    components: { "450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0 },
+    bloodType: createBloodTypeCounter(),
+    bagTypeBloodType: {
+      S: createBloodTypeCounter(),
+      D: createBloodTypeCounter(),
+      T: createBloodTypeCounter(),
+      Q: createBloodTypeCounter()
+    },
+    components: { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 },
     componentBloodType: {
       "450 cc": createBloodTypeCounter(),
       "PRBC": createBloodTypeCounter(),
@@ -467,23 +534,10 @@ function emptyStats(){
       "PC": createBloodTypeCounter(),
       "CRYO": createBloodTypeCounter()
     },
-    requests: { "450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0 },
-    sex: { "Male":0,"Female":0 },
-    frequency: { "First-time donors":0,"Repeat non-regular":0,"Repeat regular":0,"Total":0 },
-    age: { "16-17":0,"18-20":0,"21-30":0,"31-40":0,"41-50":0,"51-60":0,"60-65":0,"66 & above":0,"Total":0 }
+    requests: { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 },
+    sex: { "Male":0, "Female":0 },
+    frequency: { "First-time donors":0, "Repeat non-regular":0, "Repeat regular":0, "Total":0 }
   };
-}
-
-function getAge(r){
-  let age = Number(r.age);
-  if (Number.isFinite(age) && age > 0) return age;
-  const bday = parseDate(r.birthday);
-  const donation = parseDate(getDonorDate(r));
-  if (!bday || !donation) return null;
-  let years = donation.getFullYear() - bday.getFullYear();
-  const m = donation.getMonth() - bday.getMonth();
-  if (m < 0 || (m === 0 && donation.getDate() < bday.getDate())) years--;
-  return years >= 0 ? years : null;
 }
 
 function formatDateForDisplay(raw){
@@ -504,14 +558,37 @@ function applyDonor(s, r){
   const smartName = mapping ? (mapping.partnerName || partnerName || "Unspecified") : smartGroupDisplayName(partnerName || "Unspecified");
   const smartPlace = mapping && mapping.place ? mapping.place : getPartnerPlace(r);
 
-  const bt = normalizeBloodType(r.bloodType || r.bloodtype || r.aboRh || r.group || "");
-  const bagCode = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+  const bt = normalizeBloodType(
+    r.bloodType ||
+    r.bloodtype ||
+    r.aboRh ||
+    r.group ||
+    r.blood_group ||
+    r.bloodGroup ||
+    ""
+  );
+
+  const bagCode = normalizeBagCode(
+    r.bloodBagType ||
+    r.bagType ||
+    r.bag ||
+    r.bagConfiguration ||
+    ""
+  );
+
   const bagCounts = bagCodeToColumnObject(bagCode);
+
+  s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
+  if (!s.bagTypeBloodType[bagCode]) {
+    s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
+  }
+  s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
 
   if (donorType === "MBD") {
     addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
+
     const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
-    if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0,D:0,T:0,Q:0 };
+    if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
     addBagCounts(s.fieldDonation[category], bagCounts);
 
     const detail = {
@@ -533,13 +610,14 @@ function applyDonor(s, r){
     addBagCounts(s.officeBleeding["Patient Directed"], bagCounts);
   }
 
-  s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
-
   const prep = getPreparedComponentsFromBag(r);
   Object.keys(prep).forEach(component => {
-    const value = prep[component];
-    s.components[component] += value;
-    if (value > 0) s.componentBloodType[component][bt] += value;
+    const qty = Number(prep[component] || 0);
+    s.components[component] += qty;
+    if (qty > 0) {
+      s.componentBloodType[component][bt] =
+        (s.componentBloodType[component][bt] || 0) + qty;
+    }
   });
 
   const sex = normalizeSex(r.sex || r.gender || "");
@@ -645,17 +723,6 @@ function sumBagTypeColumn(s, code){
   return Number(s.officeBleeding["Walk-in"][code] || 0) +
          Number(s.officeBleeding["Patient Directed"][code] || 0) +
          Number(s.fieldDonation["Total MBD"][code] || 0);
-}
-
-function sumBagTypeForBloodType(bt, code){
-  let total = 0;
-  const filtered = getFilteredDonors();
-  filtered.forEach(r => {
-    const rowBt = normalizeBloodType(r.bloodType || r.bloodtype || r.aboRh || r.group || "");
-    const rowCode = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
-    if (rowBt === bt && rowCode === code) total++;
-  });
-  return total;
 }
 
 function num(v){
@@ -824,10 +891,10 @@ function renderReport(grouped){
                         ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
                           <tr>
                             <td>${bt}</td>
-                            <td>${num(sumBagTypeForBloodType(bt, "S"))}</td>
-                            <td>${num(sumBagTypeForBloodType(bt, "D"))}</td>
-                            <td>${num(sumBagTypeForBloodType(bt, "T"))}</td>
-                            <td>${num(sumBagTypeForBloodType(bt, "Q"))}</td>
+                            <td>${num(s.bagTypeBloodType.S[bt] || 0)}</td>
+                            <td>${num(s.bagTypeBloodType.D[bt] || 0)}</td>
+                            <td>${num(s.bagTypeBloodType.T[bt] || 0)}</td>
+                            <td>${num(s.bagTypeBloodType.Q[bt] || 0)}</td>
                           </tr>
                         `).join("")}
                         <tr class="subheader">
@@ -846,17 +913,32 @@ function renderReport(grouped){
                     <div class="table-wrap">
                       <table>
                         <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
-                        <tr class="subheader"><td>No. of components prepared</td><td>${num(s.components["450 cc"])}</td><td>${num(s.components["PRBC"])}</td><td>${num(s.components["FFP"])}</td><td>${num(s.components["PC"])}</td><td>${num(s.components["CRYO"])}</td></tr>
+                        <tr class="subheader">
+                          <td>No. of components prepared</td>
+                          <td>${num(s.components["450 cc"])}</td>
+                          <td>${num(s.components["PRBC"])}</td>
+                          <td>${num(s.components["FFP"])}</td>
+                          <td>${num(s.components["PC"])}</td>
+                          <td>${num(s.components["CRYO"])}</td>
+                        </tr>
                         ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
                           <tr>
                             <td>${bt}</td>
-                            <td>${num(s.componentBloodType["450 cc"][bt])}</td>
-                            <td>${num(s.componentBloodType["PRBC"][bt])}</td>
-                            <td>${num(s.componentBloodType["FFP"][bt])}</td>
-                            <td>${num(s.componentBloodType["PC"][bt])}</td>
-                            <td>${num(s.componentBloodType["CRYO"][bt])}</td>
+                            <td>${num(s.componentBloodType["450 cc"][bt] || 0)}</td>
+                            <td>${num(s.componentBloodType["PRBC"][bt] || 0)}</td>
+                            <td>${num(s.componentBloodType["FFP"][bt] || 0)}</td>
+                            <td>${num(s.componentBloodType["PC"][bt] || 0)}</td>
+                            <td>${num(s.componentBloodType["CRYO"][bt] || 0)}</td>
                           </tr>
                         `).join("")}
+                        <tr class="subheader">
+                          <td>Unknown</td>
+                          <td>${num(s.componentBloodType["450 cc"]["Unknown"] || 0)}</td>
+                          <td>${num(s.componentBloodType["PRBC"]["Unknown"] || 0)}</td>
+                          <td>${num(s.componentBloodType["FFP"]["Unknown"] || 0)}</td>
+                          <td>${num(s.componentBloodType["PC"]["Unknown"] || 0)}</td>
+                          <td>${num(s.componentBloodType["CRYO"]["Unknown"] || 0)}</td>
+                        </tr>
                       </table>
                     </div>
                   </div>
@@ -948,10 +1030,9 @@ async function saveGroupCategory(){
 
   try{
     const normalized = normalizeAliasKey(partner);
-    const existing = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === normalized);
 
-    if (existing) {
-      await fs.collection("donorGroupCategories").doc(existing.id).update({
+    if (editingMappingId) {
+      await fs.collection("donorGroupCategories").doc(editingMappingId).update({
         partnerName: smartGroupDisplayName(partner),
         category,
         place,
@@ -959,22 +1040,35 @@ async function saveGroupCategory(){
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } else {
-      await fs.collection("donorGroupCategories").add({
-        partnerName: smartGroupDisplayName(partner),
-        category,
-        place,
-        normalizedKey: normalized,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      const existing = categoryMappings.find(x =>
+        normalizeAliasKey(x.partnerName || x.name || "") === normalized
+      );
+
+      if (existing) {
+        await fs.collection("donorGroupCategories").doc(existing.id).update({
+          partnerName: smartGroupDisplayName(partner),
+          category,
+          place,
+          normalizedKey: normalized,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        await fs.collection("donorGroupCategories").add({
+          partnerName: smartGroupDisplayName(partner),
+          category,
+          place,
+          normalizedKey: normalized,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
     }
 
-    document.getElementById("mapPartnerName").value = "";
-    document.getElementById("mapPlace").value = "";
+    clearMappingEditor();
     await loadCategoryMappings();
     renderMappings();
     buildStatistics();
-    alert("Group category mapping saved.");
+    alert("Group category saved successfully.");
   }catch(error){
     console.error(error);
     alert("Failed to save mapping: " + (error.message || error));
@@ -994,16 +1088,28 @@ async function deleteGroupCategory(id){
   }
 }
 
-function fillMappingForEdit(name, category, place){
-  document.getElementById("mapPartnerName").value = name;
-  document.getElementById("mapCategory").value = category;
+function fillMappingForEdit(id, name, category, place){
+  editingMappingId = id || null;
+  document.getElementById("mapPartnerName").value = name || "";
+  document.getElementById("mapCategory").value = category || "Group";
   document.getElementById("mapPlace").value = place || "";
+
   const body = document.getElementById("mappingBody");
   const badge = document.getElementById("mappingBadge");
-  if (!body.classList.contains("open")) {
-    body.classList.add("open");
-    badge.textContent = "Expanded";
-  }
+  if (!body.classList.contains("open")) body.classList.add("open");
+  badge.textContent = "Expanded";
+
+  const saveBtn = document.getElementById("saveMappingBtn");
+  if (saveBtn) saveBtn.textContent = "Update Mapping";
+}
+
+function clearMappingEditor(){
+  editingMappingId = null;
+  document.getElementById("mapPartnerName").value = "";
+  document.getElementById("mapCategory").value = "Group";
+  document.getElementById("mapPlace").value = "";
+  const saveBtn = document.getElementById("saveMappingBtn");
+  if (saveBtn) saveBtn.textContent = "Save Mapping";
 }
 
 function renderMappings(){
@@ -1024,8 +1130,8 @@ function renderMappings(){
       <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
       <div>${escapeHtml(item.category || "Unmapped")}</div>
       <div>${escapeHtml(item.place || "")}</div>
-      <div>
-        <button class="btn-blue" onclick="fillMappingForEdit('${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}','${escapeJs(item.place || "")}')">Edit</button>
+      <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn-blue" onclick="fillMappingForEdit('${item.id}','${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}','${escapeJs(item.place || "")}')">Edit</button>
         <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
       </div>
     </div>
