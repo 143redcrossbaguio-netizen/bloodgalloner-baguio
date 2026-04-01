@@ -110,6 +110,10 @@ font-weight:bold;
 border-radius:6px;
 margin-top:20px;
 font-size:18px;
+cursor:pointer;
+display:flex;
+justify-content:space-between;
+align-items:center;
 }
 
 .summaryBox{
@@ -288,6 +292,41 @@ font-size:12px;
 font-weight:bold;
 }
 
+.collapsibleSection{
+margin-bottom:20px;
+}
+
+.collapsibleHeader{
+background:#e0f2f1;
+padding:12px 14px;
+font-weight:bold;
+border-radius:6px;
+font-size:17px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+cursor:pointer;
+color:#00695c;
+border:1px solid #b2dfdb;
+}
+
+.collapsibleBody{
+display:none;
+margin-top:12px;
+}
+
+.collapsibleBody.open{
+display:block;
+}
+
+.monthBody{
+display:none;
+}
+
+.monthBody.open{
+display:block;
+}
+
 @media (max-width: 1000px){
 .dashboardGrid{
 grid-template-columns:repeat(2,1fr);
@@ -314,6 +353,10 @@ background:white;
 box-shadow:none;
 margin:0;
 max-width:none;
+}
+.collapsibleBody,
+.monthBody{
+display:block !important;
 }
 }
 </style>
@@ -385,6 +428,8 @@ let currentPrices = {
 
 let expandedPatientSections = new Set();
 let expandedHospitalRows = new Set();
+let expandedMainSections = new Set(["dashboard","patientServed"]);
+let expandedMonths = new Set();
 
 async function loadPrices(){
     try{
@@ -704,37 +749,46 @@ function smallComponentTable(title, data){
 }
 
 function renderDashboard(grand){
+    const isOpen = expandedMainSections.has("dashboard");
     dashboardSection.innerHTML = `
-        <div class="dashboardGrid">
-            <div class="card">
-                <div class="cardTitle">Total Patients</div>
-                <div class="cardValue">${grand.patients}</div>
+        <div class="collapsibleSection">
+            <div class="collapsibleHeader" data-main-section="dashboard">
+                <span>DASHBOARD SUMMARY</span>
+                <span>${isOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
             </div>
-            <div class="card">
-                <div class="cardTitle">Total Male</div>
-                <div class="cardValue">${grand.male}</div>
-            </div>
-            <div class="card">
-                <div class="cardTitle">Total Female</div>
-                <div class="cardValue">${grand.female}</div>
-            </div>
-            <div class="card">
-                <div class="cardTitle">Actual Income</div>
-                <div class="cardValue">${grand.actualIncome.toFixed(2)}</div>
-            </div>
-            <div class="card">
-                <div class="cardTitle">Computed Total</div>
-                <div class="cardValue">${grand.computedTotal.toFixed(2)}</div>
-            </div>
-            <div class="card">
-                <div class="cardTitle">Box Containers</div>
-                <div class="cardValue">${grand.boxContainers}</div>
-            </div>
-        </div>
+            <div class="collapsibleBody ${isOpen ? "open" : ""}">
+                <div class="dashboardGrid">
+                    <div class="card">
+                        <div class="cardTitle">Total Patients</div>
+                        <div class="cardValue">${grand.patients}</div>
+                    </div>
+                    <div class="card">
+                        <div class="cardTitle">Total Male</div>
+                        <div class="cardValue">${grand.male}</div>
+                    </div>
+                    <div class="card">
+                        <div class="cardTitle">Total Female</div>
+                        <div class="cardValue">${grand.female}</div>
+                    </div>
+                    <div class="card">
+                        <div class="cardTitle">Actual Income</div>
+                        <div class="cardValue">${grand.actualIncome.toFixed(2)}</div>
+                    </div>
+                    <div class="card">
+                        <div class="cardTitle">Computed Total</div>
+                        <div class="cardValue">${grand.computedTotal.toFixed(2)}</div>
+                    </div>
+                    <div class="card">
+                        <div class="cardTitle">Box Containers</div>
+                        <div class="cardValue">${grand.boxContainers}</div>
+                    </div>
+                </div>
 
-        <div class="doubleGrid">
-            ${smallComponentTable("GRAND TOTAL REQUESTED", grand.requested)}
-            ${smallComponentTable("GRAND TOTAL ISSUED", grand.issued)}
+                <div class="doubleGrid">
+                    ${smallComponentTable("GRAND TOTAL REQUESTED", grand.requested)}
+                    ${smallComponentTable("GRAND TOTAL ISSUED", grand.issued)}
+                </div>
+            </div>
         </div>
     `;
 }
@@ -787,57 +841,65 @@ function renderPatientDetailsTable(entries){
 }
 
 function renderPatientServedTable(patientServed){
+    const sectionOpen = expandedMainSections.has("patientServed");
     const discountedOpen = expandedPatientSections.has("discounted");
     const noChargeOpen = expandedPatientSections.has("noCharge");
 
     patientServedSection.innerHTML = `
-        <div class="patientServedWrap">
-            <div class="patientServedTitle">PATIENT SERVED</div>
-            <table class="patientServedTable">
-                <tr>
-                    <th rowspan="2" class="patientServedLeft">Patient Served</th>
-                    <th colspan="2">Conventional units</th>
-                </tr>
-                <tr>
-                    <th>Male</th>
-                    <th>Female</th>
-                </tr>
-                <tr>
-                    <td class="patientServedLeft">Pay</td>
-                    <td>${patientServed.pay.male}</td>
-                    <td>${patientServed.pay.female}</td>
-                </tr>
-                <tr class="clickableRow" data-patient-section="discounted">
-                    <td class="patientServedLeft">DISCOUNTED <span class="expanderNote">${discountedOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
-                    <td>${patientServed.discounted.male}</td>
-                    <td>${patientServed.discounted.female}</td>
-                </tr>
-                ${discountedOpen ? `
-                <tr>
-                    <td colspan="3" style="padding:0;">
-                        <div class="patientDetailWrap">
-                            <div class="patientDetailTitle">DISCOUNTED PATIENT DETAILS</div>
-                            ${renderPatientDetailsTable(patientServed.discounted.entries)}
-                        </div>
-                    </td>
-                </tr>
-                ` : ""}
-                <tr class="clickableRow" data-patient-section="noCharge">
-                    <td class="patientServedLeft">NO CHARGE<br>(Indigent) <span class="expanderNote">${noChargeOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
-                    <td>${patientServed.noCharge.male}</td>
-                    <td>${patientServed.noCharge.female}</td>
-                </tr>
-                ${noChargeOpen ? `
-                <tr>
-                    <td colspan="3" style="padding:0;">
-                        <div class="patientDetailWrap">
-                            <div class="patientDetailTitle">NO CHARGE / INDIGENT PATIENT DETAILS</div>
-                            ${renderPatientDetailsTable(patientServed.noCharge.entries)}
-                        </div>
-                    </td>
-                </tr>
-                ` : ""}
-            </table>
+        <div class="collapsibleSection">
+            <div class="collapsibleHeader" data-main-section="patientServed">
+                <span>PATIENT SERVED</span>
+                <span>${sectionOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
+            </div>
+            <div class="collapsibleBody ${sectionOpen ? "open" : ""}">
+                <div class="patientServedWrap">
+                    <table class="patientServedTable">
+                        <tr>
+                            <th rowspan="2" class="patientServedLeft">Patient Served</th>
+                            <th colspan="2">Conventional units</th>
+                        </tr>
+                        <tr>
+                            <th>Male</th>
+                            <th>Female</th>
+                        </tr>
+                        <tr>
+                            <td class="patientServedLeft">Pay</td>
+                            <td>${patientServed.pay.male}</td>
+                            <td>${patientServed.pay.female}</td>
+                        </tr>
+                        <tr class="clickableRow" data-patient-section="discounted">
+                            <td class="patientServedLeft">DISCOUNTED <span class="expanderNote">${discountedOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
+                            <td>${patientServed.discounted.male}</td>
+                            <td>${patientServed.discounted.female}</td>
+                        </tr>
+                        ${discountedOpen ? `
+                        <tr>
+                            <td colspan="3" style="padding:0;">
+                                <div class="patientDetailWrap">
+                                    <div class="patientDetailTitle">DISCOUNTED PATIENT DETAILS</div>
+                                    ${renderPatientDetailsTable(patientServed.discounted.entries)}
+                                </div>
+                            </td>
+                        </tr>
+                        ` : ""}
+                        <tr class="clickableRow" data-patient-section="noCharge">
+                            <td class="patientServedLeft">NO CHARGE<br>(Indigent) <span class="expanderNote">${noChargeOpen ? "▲ HIDE DETAILS" : "▼ SHOW DETAILS"}</span></td>
+                            <td>${patientServed.noCharge.male}</td>
+                            <td>${patientServed.noCharge.female}</td>
+                        </tr>
+                        ${noChargeOpen ? `
+                        <tr>
+                            <td colspan="3" style="padding:0;">
+                                <div class="patientDetailWrap">
+                                    <div class="patientDetailTitle">NO CHARGE / INDIGENT PATIENT DETAILS</div>
+                                    ${renderPatientDetailsTable(patientServed.noCharge.entries)}
+                                </div>
+                            </td>
+                        </tr>
+                        ` : ""}
+                    </table>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -856,15 +918,26 @@ function renderStatistics(){
 
     if(months.length === 0){
         statisticsContainer.innerHTML = "<p>No releasing statistics found.</p>";
+        attachExpandableEvents();
         return;
     }
 
     months.forEach(month => {
         const m = stats[month];
+        const monthOpen = expandedMonths.has(month);
+
+        const wrapper = document.createElement("div");
 
         const header = document.createElement("div");
         header.className = "monthHeader";
-        header.textContent = monthName(month);
+        header.dataset.monthKey = month;
+        header.innerHTML = `
+            <span>${monthName(month)}</span>
+            <span>${monthOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
+        `;
+
+        const body = document.createElement("div");
+        body.className = `monthBody ${monthOpen ? "open" : ""}`;
 
         const summary = document.createElement("div");
         summary.className = "summaryBox";
@@ -980,9 +1053,13 @@ function renderStatistics(){
         `;
         table.appendChild(totalRow);
 
-        statisticsContainer.appendChild(header);
-        statisticsContainer.appendChild(summary);
-        statisticsContainer.appendChild(table);
+        body.appendChild(summary);
+        body.appendChild(table);
+
+        wrapper.appendChild(header);
+        wrapper.appendChild(body);
+
+        statisticsContainer.appendChild(wrapper);
     });
 
     attachExpandableEvents();
@@ -1008,6 +1085,30 @@ function attachExpandableEvents(){
                 expandedHospitalRows.delete(key);
             }else{
                 expandedHospitalRows.add(key);
+            }
+            renderStatistics();
+        };
+    });
+
+    document.querySelectorAll("[data-main-section]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.mainSection;
+            if(expandedMainSections.has(key)){
+                expandedMainSections.delete(key);
+            }else{
+                expandedMainSections.add(key);
+            }
+            renderStatistics();
+        };
+    });
+
+    document.querySelectorAll("[data-month-key]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.monthKey;
+            if(expandedMonths.has(key)){
+                expandedMonths.delete(key);
+            }else{
+                expandedMonths.add(key);
             }
             renderStatistics();
         };
