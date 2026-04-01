@@ -141,6 +141,14 @@
             padding: 14px 14px 12px;
             margin-bottom: 14px;
             box-shadow: 0 6px 18px rgba(15,23,42,0.05);
+            cursor: pointer;
+            transition: all .18s ease;
+        }
+
+        .sidebar-brand:hover{
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(15,23,42,0.07);
+            border-color: #f0caca;
         }
 
         .sidebar-brand-title{
@@ -255,6 +263,11 @@
             font-size: 12px;
             opacity: 0.9;
             flex-shrink: 0;
+            transition: transform .18s ease;
+        }
+
+        .nav-btn.active .nav-arrow{
+            transform: rotate(180deg);
         }
 
         .submenu{
@@ -263,10 +276,16 @@
             margin-top: -2px;
             border-left: 2px solid #e7edf4;
             margin-left: 14px;
+            animation: fadeIn .18s ease;
         }
 
         .submenu.open{
             display: block;
+        }
+
+        @keyframes fadeIn{
+            from{ opacity:0; transform: translateY(-4px); }
+            to{ opacity:1; transform: translateY(0); }
         }
 
         .sub-btn{
@@ -472,14 +491,6 @@
             margin-bottom: 14px;
         }
 
-        .welcome-desc{
-            font-size: 14px;
-            color: #6b7280;
-            line-height: 1.7;
-            max-width: 500px;
-            margin: 0 auto 20px;
-        }
-
         .welcome-grid{
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -604,9 +615,9 @@
     <div class="layout">
 
         <aside class="sidebar">
-            <div class="sidebar-brand">
-                <div class="sidebar-brand-title">Hospital LIS Dashboard</div>
-                <div class="sidebar-brand-sub">Central access panel for donor database, releasing, imports, backup, and administrative tools.</div>
+            <div class="sidebar-brand" onclick="goDashboardHome()">
+                <div class="sidebar-brand-title">Red Cross Dashboard</div>
+                <div class="sidebar-brand-sub">Click to return to dashboard home</div>
             </div>
 
             <div class="nav-group">
@@ -742,10 +753,6 @@
                         <img src="images/logo.png" class="welcome-logo" alt="PRC Logo">
                         <div class="welcome-title">Philippine Red Cross</div>
                         <div class="welcome-subtitle">Baguio City Chapter Database</div>
-                        <div class="welcome-desc">
-                            Organized hospital-style dashboard for donor records, blood releasing, imports, backup management,
-                            and administrative workflows. Select a module from the left panel to begin.
-                        </div>
 
                         <div class="welcome-grid">
                             <div class="welcome-mini">
@@ -868,14 +875,29 @@
         if (nav) nav.classList.add("active");
     }
 
+    function closeAllSections() {
+        sections.forEach(sectionName => {
+            const section = document.getElementById("section-" + sectionName);
+            const nav = document.getElementById("nav-" + sectionName);
+            if (section) section.classList.remove("open");
+            if (nav) nav.classList.remove("active");
+        });
+    }
+
     function showWelcomeHome() {
         clearActiveSubs();
+        clearActiveNavs();
+        closeAllSections();
         frame.classList.add("hidden-view");
         welcomePanel.classList.remove("hidden-view");
         workspaceTitle.textContent = "Philippine Red Cross Baguio City Chapter Database";
         workspaceSubtitle.textContent = "Select a module from the left panel to open its workspace.";
         frame.src = "";
     }
+
+    window.goDashboardHome = function() {
+        showWelcomeHome();
+    };
 
     function showModuleFrame() {
         welcomePanel.classList.add("hidden-view");
@@ -930,30 +952,14 @@
             return;
         }
 
+        const clickedSection = document.getElementById("section-" + name);
         const clickedNav = document.getElementById("nav-" + name);
+        const willOpen = !clickedSection.classList.contains("open");
 
-        sections.forEach(sectionName => {
-            const section = document.getElementById("section-" + sectionName);
-            const nav = document.getElementById("nav-" + sectionName);
+        closeAllSections();
 
-            if (!section || !nav) return;
-
-            if (sectionName === name) {
-                const willOpen = !section.classList.contains("open");
-                section.classList.toggle("open", willOpen);
-                if (willOpen) {
-                    clearActiveNavs();
-                    nav.classList.add("active");
-                } else {
-                    nav.classList.remove("active");
-                }
-            } else {
-                section.classList.remove("open");
-                nav.classList.remove("active");
-            }
-        });
-
-        if (clickedNav && document.getElementById("section-" + name)?.classList.contains("open")) {
+        if (willOpen) {
+            clickedSection.classList.add("open");
             clickedNav.classList.add("active");
         }
     };
@@ -1002,17 +1008,12 @@
         clearActiveNavs();
         navButton.classList.add("active");
         clearActiveSubs();
+        closeAllSections();
+        navButton.classList.add("active");
         showModuleFrame();
         frame.src = buildFreshUrl(url);
         workspaceTitle.textContent = title;
         workspaceSubtitle.textContent = subtitle;
-
-        sections.forEach(sectionName => {
-            const section = document.getElementById("section-" + sectionName);
-            const nav = document.getElementById("nav-" + sectionName);
-            if (section) section.classList.remove("open");
-            if (nav && nav.id !== navButton.id) nav.classList.remove("active");
-        });
     };
 
     window.reloadFrame = function() {
