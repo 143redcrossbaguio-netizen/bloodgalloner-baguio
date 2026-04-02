@@ -154,12 +154,26 @@
             align-items: center;
         }
 
-        .radio-box,
-        .serial-tools-box {
+        .radio-box {
             border: 1px solid #dbe3ec;
             border-radius: 10px;
             padding: 12px;
             background: #f8fafc;
+        }
+
+        .serial-tools-box {
+            border: 1px solid #efc6c6;
+            border-radius: 12px;
+            padding: 12px;
+            background: linear-gradient(180deg, #fff7f7 0%, #ffe9e9 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        }
+
+        .serial-tools-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #8a1111;
+            margin-bottom: 8px;
         }
 
         .radio-options {
@@ -226,13 +240,16 @@
         }
 
         .serial-batch-info {
-            background: #eefaf2;
-            border: 1px solid #b8e0c2;
-            color: #166534;
+            background: #fff;
+            border: 1px solid #efc6c6;
+            color: #8a1111;
+            margin-top: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
         }
 
         .helper-text {
-            margin-top: 6px;
+            margin-top: 4px;
             font-size: 12px;
             color: #64748b;
         }
@@ -284,7 +301,7 @@
         }
 
         .main-btn {
-            padding: 11px 18px;
+            padding: 10px 16px;
             font-size: 14px;
         }
 
@@ -299,6 +316,13 @@
             gap: 12px;
             flex-wrap: wrap;
             margin-top: 18px;
+        }
+
+        .serial-btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
         }
 
         textarea {
@@ -355,8 +379,8 @@
         .serial-batch-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
-            gap: 12px;
-            margin-top: 10px;
+            gap: 10px;
+            margin-top: 6px;
         }
 
         .serial-batch-grid .field-group {
@@ -364,13 +388,13 @@
         }
 
         .preview-box {
-            margin-top: 10px;
-            padding: 10px 12px;
-            background: #fff;
-            border: 1px dashed #cbd5e1;
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.8);
+            border: 1px dashed #e3a4a4;
             border-radius: 8px;
             font-size: 12px;
-            color: #334155;
+            color: #5b1c1c;
             line-height: 1.5;
         }
 
@@ -535,10 +559,10 @@
                     </div>
 
                     <div class="field-group span-12">
-                        <label>Serial Range Helper</label>
                         <div class="serial-tools-box">
+                            <div class="serial-tools-title">Serial Range Helper</div>
                             <div class="helper-text">
-                                Recommended for bulk entry: enter only the numeric ending. Example start: <b>4152</b>, end: <b>4160</b>, skip: <b>4155,4158</b>
+                                Bulk entry helper. Enter only the numeric ending. Example: start <b>4152</b>, end <b>4160</b>, skip <b>4155,4158</b>
                             </div>
 
                             <div class="serial-batch-grid">
@@ -561,22 +585,12 @@
                                     <label>&nbsp;</label>
                                     <button type="button" id="generateSerialRangeBtn" class="main-btn orange-btn">Generate</button>
                                 </div>
-
-                                <div class="field-group span-10">
-                                    <label for="serialManualQueue">Or Paste List of Numbers</label>
-                                    <input type="text" id="serialManualQueue" placeholder="4152,4153,4154,4160">
-                                </div>
-
-                                <div class="field-group span-2">
-                                    <label>&nbsp;</label>
-                                    <button type="button" id="useManualQueueBtn" class="main-btn blue-btn">Use List</button>
-                                </div>
                             </div>
 
                             <div id="serialBatchInfo" class="serial-batch-info hidden"></div>
                             <div id="serialBatchPreview" class="preview-box hidden"></div>
 
-                            <div class="btn-row" style="margin-top:12px;">
+                            <div class="serial-btn-row">
                                 <button type="button" id="nextSerialBtn" class="main-btn blue-btn">Load Next Serial</button>
                                 <button type="button" id="clearSerialBatchBtn" class="main-btn gray-btn">Clear Serial List</button>
                             </div>
@@ -819,9 +833,7 @@
     const serialRangeStart = document.getElementById("serialRangeStart");
     const serialRangeEnd = document.getElementById("serialRangeEnd");
     const serialRangeSkip = document.getElementById("serialRangeSkip");
-    const serialManualQueue = document.getElementById("serialManualQueue");
     const generateSerialRangeBtn = document.getElementById("generateSerialRangeBtn");
-    const useManualQueueBtn = document.getElementById("useManualQueueBtn");
     const nextSerialBtn = document.getElementById("nextSerialBtn");
     const clearSerialBatchBtn = document.getElementById("clearSerialBatchBtn");
     const serialBatchInfo = document.getElementById("serialBatchInfo");
@@ -1117,21 +1129,6 @@
         return list;
     }
 
-    function buildSerialListFromManual(text) {
-        const parts = String(text || "")
-            .split(",")
-            .map(item => stripPrefixFromPossibleFullSerial(item))
-            .filter(Boolean);
-
-        const unique = Array.from(new Set(parts));
-
-        if (!unique.length) {
-            throw new Error("Please enter at least one serial number in the list.");
-        }
-
-        return unique;
-    }
-
     function getLocalSerialBatch() {
         try {
             const raw = localStorage.getItem(SERIAL_BATCH_STORAGE_KEY);
@@ -1171,7 +1168,7 @@
             prefix: serialPrefix.textContent.trim(),
             list: list.slice(),
             originalCount: list.length,
-            sourceLabel: sourceLabel || "manual",
+            sourceLabel: sourceLabel || "range",
             createdAtMs: Date.now()
         };
         setLocalSerialBatch(batch);
@@ -1198,8 +1195,8 @@
         const prefixText = batch.prefix || serialPrefix.textContent.trim();
         const next = batch.list[0];
         const remaining = batch.list.length;
-        const previewItems = batch.list.slice(0, 8).map(item => `${prefixText}${item}`);
-        const moreText = batch.list.length > 8 ? ` ... and ${batch.list.length - 8} more` : "";
+        const previewItems = batch.list.slice(0, 6).map(item => `${prefixText}${item}`);
+        const moreText = batch.list.length > 6 ? ` ... and ${batch.list.length - 6} more` : "";
 
         serialBatchInfo.textContent = `Active serial list: ${remaining} remaining | Next serial: ${prefixText}${next}`;
         serialBatchPreview.innerHTML = `<b>Preview:</b> ${escapeHtml(previewItems.join(", "))}${escapeHtml(moreText)}`;
@@ -1463,16 +1460,6 @@
             );
             setSerialBatch(list, "range");
             showMessage(`Serial list generated successfully. ${list.length} serial number(s) ready.`, "success");
-        } catch (error) {
-            showMessage(error.message, "error");
-        }
-    });
-
-    useManualQueueBtn.addEventListener("click", function() {
-        try {
-            const list = buildSerialListFromManual(serialManualQueue.value);
-            setSerialBatch(list, "manual");
-            showMessage(`Manual serial list loaded successfully. ${list.length} serial number(s) ready.`, "success");
         } catch (error) {
             showMessage(error.message, "error");
         }
