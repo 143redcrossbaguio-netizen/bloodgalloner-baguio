@@ -48,29 +48,9 @@
 
         .summary-grid {
             display: grid;
-            grid-template-columns: 180px 180px minmax(220px, 1fr) minmax(220px, 1fr) 180px 220px minmax(380px, auto);
+            grid-template-columns: minmax(260px, 1.3fr) 220px 220px minmax(520px, auto);
             gap: 12px;
             align-items: center;
-        }
-
-        .count-card {
-            background: #fff5f5;
-            border: 1px solid #efc1c1;
-            border-radius: 10px;
-            padding: 12px 14px;
-        }
-
-        .count-title {
-            font-size: 12px;
-            color: #64748b;
-            margin-bottom: 6px;
-            font-weight: bold;
-        }
-
-        .count-value {
-            font-size: 26px;
-            font-weight: bold;
-            color: #b30000;
         }
 
         .field-group {
@@ -119,6 +99,7 @@
         .green-btn { background: #2e7d32; color: white; }
         .gray-btn { background: #64748b; color: white; }
         .red-btn { background: #8a1111; color: white; }
+        .purple-btn { background: #6b21a8; color: white; }
 
         .toolbar-actions {
             display: flex;
@@ -155,6 +136,35 @@
             background: #fdeaea;
             color: #b71c1c;
             border: 1px solid #efb7b7;
+        }
+
+        .missing-serials-box {
+            display: none;
+            margin-bottom: 12px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid #dbe3ec;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .missing-serials-box.show {
+            display: block;
+        }
+
+        .missing-serials-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #8b0000;
+            margin-bottom: 10px;
+        }
+
+        .missing-serials-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1f2937;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .year-group,
@@ -344,7 +354,7 @@
 
         @media print {
             body { background: white; }
-            header, .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage { display: none !important; }
+            header, .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #missingSerialsBox { display: none !important; }
             .page-wrap { padding: 0; }
             .year-group, .month-group, .table-wrap {
                 box-shadow: none;
@@ -358,7 +368,7 @@
 
         @media (max-width: 1700px) {
             .summary-grid {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(2, 1fr);
             }
 
             .toolbar-actions {
@@ -367,13 +377,7 @@
             }
         }
 
-        @media (max-width: 1100px) {
-            .summary-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        @media (max-width: 700px) {
+        @media (max-width: 900px) {
             .summary-grid {
                 grid-template-columns: 1fr;
             }
@@ -391,35 +395,20 @@
 <div class="page-wrap">
     <div class="top-summary">
         <div class="summary-grid">
-            <div class="count-card">
-                <div class="count-title">Total Entries</div>
-                <div class="count-value" id="totalCount">0</div>
-            </div>
-
-            <div class="count-card">
-                <div class="count-title">Displayed Entries</div>
-                <div class="count-value" id="displayedCount">0</div>
-            </div>
-
             <div class="field-group">
                 <label for="searchInput">Search</label>
-                <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact">
+                <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, MBD, Walk-in, Patient Directed, organization">
             </div>
 
             <div class="field-group">
-                <label for="groupSearchInput">Specific Group Search</label>
-                <input type="text" id="groupSearchInput" placeholder="Search group name like MBD / Walk-in / Patient Directed / organization">
-            </div>
-
-            <div class="field-group">
-                <label for="groupMonthFilter">Group Search Month Filter</label>
+                <label for="groupMonthFilter">Month Filter</label>
                 <select id="groupMonthFilter">
                     <option value="">All Months</option>
                 </select>
             </div>
 
             <div class="field-group">
-                <label for="printMonthSelect">Print Selected Month</label>
+                <label for="printMonthSelect">Print / Missing Serial Month</label>
                 <select id="printMonthSelect">
                     <option value="">Select month</option>
                 </select>
@@ -430,11 +419,17 @@
                 <button class="main-btn green-btn" id="exportCsvBtn">Export</button>
                 <button class="main-btn red-btn" id="collapseAllBtn">Collapse</button>
                 <button class="main-btn blue-btn" id="expandAllBtn">Expand</button>
+                <button class="main-btn purple-btn" id="missingSerialsBtn">Missing Serial Numbers</button>
             </div>
         </div>
     </div>
 
     <div id="statusMessage" class="status-message"></div>
+
+    <div id="missingSerialsBox" class="missing-serials-box">
+        <div class="missing-serials-title" id="missingSerialsTitle">Missing Serial Numbers</div>
+        <div class="missing-serials-content" id="missingSerialsContent"></div>
+    </div>
 
     <main class="content-panel">
         <div id="trackingContainer"></div>
@@ -461,17 +456,18 @@
     const auth = firebase.auth();
 
     const trackingContainer = document.getElementById("trackingContainer");
-    const totalCountEl = document.getElementById("totalCount");
-    const displayedCountEl = document.getElementById("displayedCount");
     const searchInput = document.getElementById("searchInput");
-    const groupSearchInput = document.getElementById("groupSearchInput");
     const groupMonthFilter = document.getElementById("groupMonthFilter");
     const printMonthSelect = document.getElementById("printMonthSelect");
     const printSelectedMonthBtn = document.getElementById("printSelectedMonthBtn");
     const exportCsvBtn = document.getElementById("exportCsvBtn");
     const collapseAllBtn = document.getElementById("collapseAllBtn");
     const expandAllBtn = document.getElementById("expandAllBtn");
+    const missingSerialsBtn = document.getElementById("missingSerialsBtn");
     const statusMessage = document.getElementById("statusMessage");
+    const missingSerialsBox = document.getElementById("missingSerialsBox");
+    const missingSerialsTitle = document.getElementById("missingSerialsTitle");
+    const missingSerialsContent = document.getElementById("missingSerialsContent");
 
     let allDonors = [];
     let filteredDonors = [];
@@ -491,6 +487,18 @@
         statusMessage.textContent = message;
         statusMessage.className = "status-message";
         statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
+    }
+
+    function hideMissingSerials() {
+        missingSerialsBox.classList.remove("show");
+        missingSerialsTitle.textContent = "Missing Serial Numbers";
+        missingSerialsContent.textContent = "";
+    }
+
+    function showMissingSerials(title, content) {
+        missingSerialsTitle.textContent = title;
+        missingSerialsContent.textContent = content;
+        missingSerialsBox.classList.add("show");
     }
 
     function escapeHtml(text) {
@@ -697,7 +705,7 @@
         return "";
     }
 
-    function matchesSearch(record, keyword) {
+    function matchesUnifiedSearch(record, keyword) {
         if (!keyword) return true;
 
         const text = [
@@ -730,25 +738,11 @@
         return text.includes(keyword.toLowerCase());
     }
 
-    function matchesGroupSearch(record) {
-        const groupKeyword = groupSearchInput.value.trim().toLowerCase();
+    function matchesMonthFilter(record) {
         const selectedMonth = groupMonthFilter.value;
-
-        if (!groupKeyword && !selectedMonth) return true;
-
-        const groupText = [
-            record.donorType || "",
-            record.mbdDetails || "",
-            record.patientDirectedDetails || "",
-            getGroupLabel(record)
-        ].join(" ").toLowerCase();
-
+        if (!selectedMonth) return true;
         const monthKey = getYearMonth(record._resolvedEntryDate).monthKey;
-
-        const groupMatch = !groupKeyword || groupText.includes(groupKeyword);
-        const monthMatch = !selectedMonth || monthKey === selectedMonth;
-
-        return groupMatch && monthMatch;
+        return monthKey === selectedMonth;
     }
 
     function matchesHeaderFilters(record) {
@@ -944,15 +938,13 @@
         const keyword = searchInput.value.trim();
 
         filteredDonors = allDonors
-            .filter(record => matchesSearch(record, keyword))
-            .filter(record => matchesGroupSearch(record))
+            .filter(record => matchesUnifiedSearch(record, keyword))
+            .filter(record => matchesMonthFilter(record))
             .filter(record => matchesHeaderFilters(record));
 
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
         sequenceMap = computeSequenceMap(filteredDonors);
 
-        totalCountEl.textContent = allDonors.length;
-        displayedCountEl.textContent = filteredDonors.length;
         populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
         populateGroupMonthOptions(allDonors);
 
@@ -1431,6 +1423,81 @@
         document.body.removeChild(link);
     }
 
+    function extractSerialNumberInfo(serial) {
+        const text = String(serial || "").trim();
+        if (!text) return null;
+
+        const match = text.match(/^(.*?)(\d+)$/);
+        if (!match) return null;
+
+        return {
+            original: text,
+            prefix: match[1],
+            numericPart: match[2],
+            number: parseInt(match[2], 10),
+            width: match[2].length
+        };
+    }
+
+    function findMissingSerialsForMonth(monthValue) {
+        const monthRecords = allDonors.filter(record => {
+            const { monthKey } = getYearMonth(record._resolvedEntryDate);
+            return monthKey === monthValue;
+        });
+
+        const serialInfos = monthRecords
+            .map(record => extractSerialNumberInfo(record.serialNumber))
+            .filter(Boolean);
+
+        if (!serialInfos.length) {
+            return {
+                label: monthValue,
+                missing: [],
+                foundCount: 0
+            };
+        }
+
+        const prefixGroups = {};
+
+        serialInfos.forEach(info => {
+            const key = `${info.prefix}|${info.width}`;
+            if (!prefixGroups[key]) {
+                prefixGroups[key] = {
+                    prefix: info.prefix,
+                    width: info.width,
+                    numbers: []
+                };
+            }
+            prefixGroups[key].numbers.push(info.number);
+        });
+
+        const allMissing = [];
+
+        Object.values(prefixGroups).forEach(group => {
+            const uniqueNumbers = [...new Set(group.numbers)].sort((a, b) => a - b);
+            if (uniqueNumbers.length < 2) return;
+
+            for (let i = 0; i < uniqueNumbers.length - 1; i++) {
+                const current = uniqueNumbers[i];
+                const next = uniqueNumbers[i + 1];
+
+                if (next - current > 1) {
+                    for (let n = current + 1; n < next; n++) {
+                        allMissing.push(`${group.prefix}${String(n).padStart(group.width, "0")}`);
+                    }
+                }
+            }
+        });
+
+        allMissing.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+
+        return {
+            label: monthValue,
+            missing: allMissing,
+            foundCount: serialInfos.length
+        };
+    }
+
     window.printOneMonth = function(monthValue) {
         const records = getRecordsForMonth(monthValue);
         if (!records.length) {
@@ -1463,8 +1530,6 @@
             const user = auth.currentUser;
             if (!user) {
                 trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
-                totalCountEl.textContent = "0";
-                displayedCountEl.textContent = "0";
                 return;
             }
 
@@ -1490,9 +1555,15 @@
         }
     }
 
-    searchInput.addEventListener("input", renderTracking);
-    groupSearchInput.addEventListener("input", renderTracking);
-    groupMonthFilter.addEventListener("change", renderTracking);
+    searchInput.addEventListener("input", function() {
+        hideMissingSerials();
+        renderTracking();
+    });
+
+    groupMonthFilter.addEventListener("change", function() {
+        hideMissingSerials();
+        renderTracking();
+    });
 
     printSelectedMonthBtn.addEventListener("click", function() {
         const value = printMonthSelect.value;
@@ -1530,13 +1601,45 @@
         renderTracking();
     });
 
+    missingSerialsBtn.addEventListener("click", function() {
+        const selectedMonth = printMonthSelect.value;
+
+        if (!selectedMonth) {
+            showMessage("Please select a month first for Missing Serial Numbers.", "error");
+            return;
+        }
+
+        const result = findMissingSerialsForMonth(selectedMonth);
+        const parts = selectedMonth.split("-");
+        const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
+
+        if (!result.foundCount) {
+            showMissingSerials(
+                `Missing Serial Numbers - ${monthLabel}`,
+                "No serial numbers found for this month."
+            );
+            return;
+        }
+
+        if (!result.missing.length) {
+            showMissingSerials(
+                `Missing Serial Numbers - ${monthLabel}`,
+                "No missing serial numbers found for this month."
+            );
+            return;
+        }
+
+        showMissingSerials(
+            `Missing Serial Numbers - ${monthLabel}`,
+            `Total missing serial numbers: ${result.missing.length}\n\n${result.missing.join(", ")}`
+        );
+    });
+
     auth.onAuthStateChanged(user => {
         if (user) {
             loadDonors();
         } else {
             trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
-            totalCountEl.textContent = "0";
-            displayedCountEl.textContent = "0";
         }
     });
 </script>
