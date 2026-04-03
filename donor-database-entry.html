@@ -22,11 +22,25 @@
         header {
             background: linear-gradient(90deg, #8b0000, #b30000);
             color: white;
-            padding: 14px 18px;
-            text-align: center;
+            padding: 10px 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .header-title {
             font-size: 24px;
             font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            text-align: left;
         }
 
         .page {
@@ -58,13 +72,21 @@
         }
 
         .auth-indicator {
-            padding: 10px 12px;
+            padding: 8px 12px;
             border-radius: 8px;
             font-size: 13px;
             font-weight: bold;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            color: #444;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.28);
+            color: #fff;
+            min-width: 220px;
+            text-align: center;
+        }
+
+        .lookup-sticky {
+            position: sticky;
+            top: 76px;
+            z-index: 900;
         }
 
         .lookup-grid,
@@ -461,23 +483,35 @@
             .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 {
                 grid-column: span 1;
             }
+
+            .header-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-title,
+            .auth-indicator {
+                text-align: center;
+            }
+
+            .lookup-sticky {
+                top: 104px;
+            }
         }
     </style>
 </head>
 <body>
 
-<header>Donor Database Entry</header>
+<header>
+    <div class="header-bar">
+        <div class="header-title">Donor Database Entry</div>
+        <div id="authIndicator" class="auth-indicator">Checking login status...</div>
+    </div>
+</header>
 
 <div class="page">
 
-    <div class="lis-panel">
-        <div class="panel-head">System Status</div>
-        <div class="panel-body">
-            <div id="authIndicator" class="auth-indicator">Checking login status...</div>
-        </div>
-    </div>
-
-    <div class="lis-panel">
+    <div class="lis-panel lookup-sticky">
         <div class="panel-head">Find Existing Donor</div>
         <div class="panel-body">
             <div class="lookup-grid">
@@ -910,6 +944,7 @@
     let autoTypeSuggestion = "";
     let autoTypeReason = "";
     let isSaving = false;
+    let donorSearchDebounce = null;
 
     const ACTIVE_GROUP_STORAGE_KEY = "donorEntryActiveGroup";
     const SERIAL_BATCH_STORAGE_KEY = "donorEntrySerialBatch";
@@ -950,9 +985,9 @@
 
     function setAuthIndicator(text, ok) {
         authIndicator.textContent = text;
-        authIndicator.style.background = ok ? "#e8f7e8" : "#f5f5f5";
-        authIndicator.style.borderColor = ok ? "#b7dfb9" : "#ddd";
-        authIndicator.style.color = ok ? "#1b5e20" : "#444";
+        authIndicator.style.background = ok ? "rgba(30,95,35,0.35)" : "rgba(255,255,255,0.15)";
+        authIndicator.style.borderColor = ok ? "rgba(183,223,185,0.75)" : "rgba(255,255,255,0.28)";
+        authIndicator.style.color = "#fff";
     }
 
     function setSavingState(saving) {
@@ -1667,6 +1702,13 @@
             const birthdayValue = lookupBirthday.value;
             const contactValue = normalizeText(lookupContact.value);
 
+            if (!keyword && !birthdayValue && !contactValue) {
+                donorLookupResults = [];
+                lookupResultsBody.innerHTML = "";
+                lookupResultsBox.classList.add("hidden");
+                return;
+            }
+
             const snapshot = await db.collection("donorDatabase").orderBy("entryDate", "desc").get();
             const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -1711,6 +1753,8 @@
 
             if (uniqueRecords.length) {
                 showMessage(`${uniqueRecords.length} donor match(es) found.`, "success");
+            } else {
+                showMessage("No existing donor matched your search.", "error");
             }
         } catch (error) {
             console.error(error);
@@ -1788,7 +1832,17 @@
         timeHelperBox.textContent = "";
     }
 
+    function triggerLiveDonorSearch() {
+        clearTimeout(donorSearchDebounce);
+        donorSearchDebounce = setTimeout(() => {
+            searchExistingDonors();
+        }, 300);
+    }
+
     searchDonorBtn.addEventListener("click", searchExistingDonors);
+    lookupSearch.addEventListener("input", triggerLiveDonorSearch);
+    lookupBirthday.addEventListener("input", triggerLiveDonorSearch);
+    lookupContact.addEventListener("input", triggerLiveDonorSearch);
     clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
 
     startWalkInGroupBtn.addEventListener("click", function() {
@@ -1832,11 +1886,11 @@
                 return;
             }
 
-            const organization = mbdDetails.value.trim();
+            const org = mbdDetails.value.trim();
             const count = parseInt(mbdCount.value || "0");
 
-            if (!organization) {
-                showMessage("Please enter the MBD site or organization.", "error");
+            if (!org) {
+                showMessage("Please enter MBD site / organization.", "error");
                 return;
             }
 
@@ -1848,7 +1902,7 @@
             setActiveGroup({
                 entryDate: entryDate.value,
                 donorType: "MBD",
-                organization: organization,
+                organization: org,
                 details: "",
                 remaining: count,
                 originalCount: count,
@@ -1859,7 +1913,7 @@
 
             setSelectedDonorType("MBD");
             renderActiveGroup();
-            showMessage(`MBD group started for ${count} donors under ${organization}.`, "success");
+            showMessage(`MBD group started for ${count} donors under ${org}.`, "success");
         } catch (error) {
             console.error(error);
             showMessage("Failed to start MBD group: " + error.message, "error");
@@ -1867,111 +1921,87 @@
     });
 
     endGroupBtn.addEventListener("click", function() {
-        try {
-            if (!authReady || !currentUser) {
-                showMessage("You must be logged in first.", "error");
-                return;
-            }
-
-            clearActiveGroup();
-            renderActiveGroup();
-            walkInCount.value = "";
-            mbdCount.value = "";
-            showMessage("Active donor group ended.", "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to end active group: " + error.message, "error");
-        }
+        clearActiveGroup();
+        renderActiveGroup();
+        showMessage("Active group ended manually.", "success");
     });
 
     donorForm.addEventListener("submit", async function(e) {
         e.preventDefault();
-        e.stopPropagation();
 
         if (isSaving) return false;
 
         try {
             clearMessage();
 
-            if (!authReady) {
-                showMessage("Authentication is still loading. Please wait a moment.", "error");
-                return false;
-            }
-
-            if (!currentUser) {
-                showMessage("No logged in user detected. Please log in again from dashboard.", "error");
-                return false;
-            }
-
-            const timeValidation = validateAndDescribeTimes();
-            if (!timeValidation.valid) {
-                showMessage("Please fix the time started / time ended fields.", "error");
-                return false;
-            }
-
-            let donorTypeValue = getSelectedDonorType();
-            let patientDirectedValue = patientDirectedDetails.value.trim();
-            let mbdValue = mbdDetails.value.trim();
-
-            const activeGroup = getActiveGroup();
-            const hasMatchingActiveGroup = activeGroup && activeGroup.remaining > 0 && activeGroup.entryDate === entryDate.value;
-
-            const serialBatch = getSerialBatch();
-            const hasSerialBatchType = serialBatch && serialBatch.rangeDonorType;
-
-            if (hasMatchingActiveGroup) {
-                donorTypeValue = activeGroup.donorType;
-
-                if (activeGroup.donorType === "MBD") {
-                    mbdValue = activeGroup.organization || "";
-                    mbdDetails.value = mbdValue;
-                    setSelectedDonorType("MBD");
-                } else if (activeGroup.donorType === "Walk-in") {
-                    setSelectedDonorType("Walk-in");
-                } else if (activeGroup.donorType === "Patient Directed") {
-                    patientDirectedValue = activeGroup.details || "";
-                    patientDirectedDetails.value = patientDirectedValue;
-                    setSelectedDonorType("Patient Directed");
-                }
-            } else if (hasSerialBatchType) {
-                donorTypeValue = serialBatch.rangeDonorType;
-
-                if (donorTypeValue === "MBD") {
-                    mbdValue = serialBatch.rangeMbdDetails || "";
-                    mbdDetails.value = mbdValue;
-                    setSelectedDonorType("MBD");
-                } else if (donorTypeValue === "Patient Directed") {
-                    patientDirectedValue = serialBatch.rangePatientDetails || "";
-                    patientDirectedDetails.value = patientDirectedValue;
-                    setSelectedDonorType("Patient Directed");
-                } else if (donorTypeValue === "Walk-in") {
-                    setSelectedDonorType("Walk-in");
-                }
-            }
-
-            if (!entryDate.value) {
-                showMessage("Please select entry date.", "error");
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first before saving donor data.", "error");
                 return false;
             }
 
             const finalSerialNumber = getFinalSerialNumber();
+            const donorTypeValue = getSelectedDonorType();
+            const patientDirectedValue = patientDirectedDetails.value.trim();
+            const mbdValue = mbdDetails.value.trim();
+            const activeGroup = getActiveGroup();
+            const serialBatch = getSerialBatch();
+
+            const timeValidation = validateAndDescribeTimes();
+            if (!timeValidation.valid) {
+                return false;
+            }
+
+            let hasMatchingActiveGroup = false;
+
+            if (activeGroup && activeGroup.entryDate === entryDate.value && activeGroup.remaining > 0) {
+                if (activeGroup.donorType === "Walk-in") {
+                    hasMatchingActiveGroup = true;
+                    if (!donorTypeValue) setSelectedDonorType("Walk-in");
+                } else if (activeGroup.donorType === "MBD") {
+                    hasMatchingActiveGroup = true;
+                    setSelectedDonorType("MBD");
+                    if (!mbdDetails.value.trim()) mbdDetails.value = activeGroup.organization || "";
+                } else if (activeGroup.donorType === "Patient Directed") {
+                    hasMatchingActiveGroup = true;
+                    setSelectedDonorType("Patient Directed");
+                    if (!patientDirectedDetails.value.trim()) patientDirectedDetails.value = activeGroup.details || "";
+                }
+            }
+
+            const rangeType = serialBatch ? (serialBatch.rangeDonorType || "") : "";
+            if (rangeType && !donorTypeValue) {
+                setSelectedDonorType(rangeType);
+
+                if (rangeType === "MBD" && serialBatch.rangeMbdDetails) {
+                    mbdDetails.value = serialBatch.rangeMbdDetails;
+                }
+                if (rangeType === "Patient Directed" && serialBatch.rangePatientDetails) {
+                    patientDirectedDetails.value = serialBatch.rangePatientDetails;
+                }
+            }
+
+            if (!entryDate.value) {
+                showMessage("Please enter date.", "error");
+                return false;
+            }
+
             if (!finalSerialNumber) {
                 showMessage("Please enter serial number.", "error");
                 return false;
             }
 
-            if (!donorTypeValue) {
+            if (!getSelectedDonorType()) {
                 showMessage("Please select donor type.", "error");
                 return false;
             }
 
-            if (donorTypeValue === "Patient Directed" && !patientDirectedValue) {
+            if (getSelectedDonorType() === "Patient Directed" && !patientDirectedDetails.value.trim()) {
                 showMessage("Please enter patient directed details.", "error");
                 return false;
             }
 
-            if (donorTypeValue === "MBD" && !mbdValue) {
-                showMessage("Please enter MBD site or organization.", "error");
+            if (getSelectedDonorType() === "MBD" && !mbdDetails.value.trim()) {
+                showMessage("Please enter MBD site / organization.", "error");
                 return false;
             }
 
