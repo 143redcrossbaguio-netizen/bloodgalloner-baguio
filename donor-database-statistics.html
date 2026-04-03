@@ -143,11 +143,30 @@
     .mapping-list{
       border:1px solid #d6dde6;border-radius:12px;overflow:hidden
     }
-    .mapping-row{
+    .mapping-head{
       display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;
-      gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec
+      gap:10px;align-items:center;padding:10px 12px;
+      border-bottom:1px solid #d6dde6;background:#f8fafc;
+      font-size:12px;font-weight:800;color:#6b7280;text-transform:uppercase
+    }
+    .mapping-row{
+      padding:10px 12px;border-bottom:1px solid #ececec
     }
     .mapping-row:last-child{border-bottom:none}
+    .mapping-view,.mapping-edit{
+      display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;
+      gap:10px;align-items:center
+    }
+    .mapping-edit{display:none}
+    .mapping-row.editing .mapping-view{display:none}
+    .mapping-row.editing .mapping-edit{display:grid}
+    .mapping-inline-input,.mapping-inline-select{
+      width:100%;padding:10px 12px;border:1px solid #d6dde6;
+      border-radius:10px;font-size:14px;background:#fff
+    }
+    .mapping-actions{
+      display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap
+    }
 
     .year-block,.month-block,.sheet-block{
       border:1px solid #d6dde6;border-radius:12px;
@@ -205,12 +224,15 @@
     }
 
     @media (max-width:1200px){
-      .toolbar,.mapping-form,.mapping-row,.summary-grid{grid-template-columns:1fr 1fr}
+      .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr 1fr}
+      .mapping-head,.mapping-view,.mapping-edit{grid-template-columns:1fr 1fr}
     }
     @media (max-width:760px){
-      .toolbar,.mapping-form,.mapping-row,.summary-grid{grid-template-columns:1fr}
+      .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr}
+      .mapping-head,.mapping-view,.mapping-edit{grid-template-columns:1fr}
       .panel-buttons{flex-direction:column}
       .panel-buttons button{width:100%}
+      .mapping-actions{justify-content:flex-start}
     }
   </style>
 </head>
@@ -1360,152 +1382,114 @@ function renderDetailReport(grouped){
                     ${renderFieldCategoryTable("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
                     ${renderFieldCategoryTable("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
                     ${renderFieldCategoryTable("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
+                    ${renderFieldCategoryTable("Unmapped / Others", "Group", combineSmartGroupRows(s.fieldDetails.unmapped))}
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-c">II. Blood Type Distribution of Blood Collection</div>
+                    <div class="sheet-title title-c">C. Blood Type Distribution</div>
                     <div class="table-wrap">
                       <table>
-                        <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
+                        <tr><th>Blood Type</th><th>Total</th></tr>
+                        ${Object.entries(s.bloodType).map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td>${num(v)}</td></tr>`).join("")}
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="sheet-block">
+                    <div class="sheet-title title-d">D. Blood Bag Type by Blood Type</div>
+                    <div class="table-wrap">
+                      <table>
+                        <tr>
+                          <th>Bag Type</th>
+                          <th>O+</th><th>A+</th><th>B+</th><th>AB+</th>
+                          <th>O-</th><th>A-</th><th>B-</th><th>AB-</th>
+                          <th>Unknown</th>
+                        </tr>
+                        ${["S","D","T","Q"].map(code => `
                           <tr>
-                            <td>${bt}</td>
-                            <td>${num(s.bagTypeBloodType.S[bt] || 0)}</td>
-                            <td>${num(s.bagTypeBloodType.D[bt] || 0)}</td>
-                            <td>${num(s.bagTypeBloodType.T[bt] || 0)}</td>
-                            <td>${num(s.bagTypeBloodType.Q[bt] || 0)}</td>
+                            <td>${code}</td>
+                            <td>${num(s.bagTypeBloodType[code]["O+"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["A+"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["B+"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["AB+"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["O-"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["A-"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["B-"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["AB-"])}</td>
+                            <td>${num(s.bagTypeBloodType[code]["Unknown"])}</td>
                           </tr>
                         `).join("")}
-                        <tr class="subheader">
-                          <td>Total</td>
-                          <td>${num(sumBagTypeColumn(s, "S"))}</td>
-                          <td>${num(sumBagTypeColumn(s, "D"))}</td>
-                          <td>${num(sumBagTypeColumn(s, "T"))}</td>
-                          <td>${num(sumBagTypeColumn(s, "Q"))}</td>
-                        </tr>
                       </table>
                     </div>
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-d">III. Component Preparation</div>
+                    <div class="sheet-title title-e">E. Component Preparation</div>
                     <div class="table-wrap">
                       <table>
-                        <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
-                        <tr class="subheader">
-                          <td>No. of components prepared</td>
-                          <td>${num(s.components["450 cc"])}</td>
-                          <td>${num(s.components["PRBC"])}</td>
-                          <td>${num(s.components["FFP"])}</td>
-                          <td>${num(s.components["PC"])}</td>
-                          <td>${num(s.components["CRYO"])}</td>
-                        </tr>
-                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
-                          <tr>
-                            <td>${bt}</td>
-                            <td>${num(s.componentBloodType["450 cc"][bt] || 0)}</td>
-                            <td>${num(s.componentBloodType["PRBC"][bt] || 0)}</td>
-                            <td>${num(s.componentBloodType["FFP"][bt] || 0)}</td>
-                            <td>${num(s.componentBloodType["PC"][bt] || 0)}</td>
-                            <td>${num(s.componentBloodType["CRYO"][bt] || 0)}</td>
-                          </tr>
-                        `).join("")}
-                        <tr class="subheader">
-                          <td>Unknown</td>
-                          <td>${num(s.componentBloodType["450 cc"]["Unknown"] || 0)}</td>
-                          <td>${num(s.componentBloodType["PRBC"]["Unknown"] || 0)}</td>
-                          <td>${num(s.componentBloodType["FFP"]["Unknown"] || 0)}</td>
-                          <td>${num(s.componentBloodType["PC"]["Unknown"] || 0)}</td>
-                          <td>${num(s.componentBloodType["CRYO"]["Unknown"] || 0)}</td>
-                        </tr>
+                        <tr><th>Component</th><th>Total</th></tr>
+                        <tr><td>450 cc</td><td>${num(s.components["450 cc"])}</td></tr>
+                        <tr><td>PRBC</td><td>${num(s.components["PRBC"])}</td></tr>
+                        <tr><td>FFP</td><td>${num(s.components["FFP"])}</td></tr>
+                        <tr><td>PC</td><td>${num(s.components["PC"])}</td></tr>
+                        <tr><td>CRYO</td><td>${num(s.components["CRYO"])}</td></tr>
                       </table>
                     </div>
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-e">IV. Blood Requests Received</div>
+                    <div class="sheet-title title-f">F. Requested Blood Components</div>
                     <div class="table-wrap">
                       <table>
-                        <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
-                        <tr><td>Requested Only</td><td>${num(s.requests["450 cc"])}</td><td>${num(s.requests["PRBC"])}</td><td>${num(s.requests["FFP"])}</td><td>${num(s.requests["PC"])}</td><td>${num(s.requests["CRYO"])}</td></tr>
+                        <tr><th>Component</th><th>Total Requested</th></tr>
+                        <tr><td>450 cc</td><td>${num(s.requests["450 cc"])}</td></tr>
+                        <tr><td>PRBC</td><td>${num(s.requests["PRBC"])}</td></tr>
+                        <tr><td>FFP</td><td>${num(s.requests["FFP"])}</td></tr>
+                        <tr><td>PC</td><td>${num(s.requests["PC"])}</td></tr>
+                        <tr><td>CRYO</td><td>${num(s.requests["CRYO"])}</td></tr>
                       </table>
                     </div>
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-f">V. Sex Distribution of Donors</div>
+                    <div class="sheet-title title-g">G. Sex Distribution</div>
                     <div class="table-wrap">
                       <table>
-                        <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
-                        <tr>
-                          <td>Donors</td>
-                          <td>${num(s.sex["Male"])}</td>
-                          <td>${num(s.sex["Female"])}</td>
-                          <td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td>
-                        </tr>
+                        <tr><th>Sex</th><th>Total</th></tr>
+                        <tr><td>Male</td><td>${num(s.sex["Male"])}</td></tr>
+                        <tr><td>Female</td><td>${num(s.sex["Female"])}</td></tr>
+                        <tr class="subheader"><td>Total</td><td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td></tr>
                       </table>
                     </div>
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-g">VI. Distribution of Donors according to Frequency of Donation</div>
+                    <div class="sheet-title title-h">H. Donor Frequency</div>
                     <div class="table-wrap">
                       <table>
-                        <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
-                        <tr>
-                          <td>Donors</td>
-                          <td>${num(s.frequency["First-time donors"])}</td>
-                          <td>${num(s.frequency["Repeat non-regular"])}</td>
-                          <td>${num(s.frequency["Repeat regular"])}</td>
-                          <td>${num(s.frequency["Total"])}</td>
-                        </tr>
+                        <tr><th>Type</th><th>Total</th></tr>
+                        <tr><td>First-time donors</td><td>${num(s.frequency["First-time donors"])}</td></tr>
+                        <tr><td>Repeat non-regular</td><td>${num(s.frequency["Repeat non-regular"])}</td></tr>
+                        <tr><td>Repeat regular</td><td>${num(s.frequency["Repeat regular"])}</td></tr>
+                        <tr class="subheader"><td>Total</td><td>${num(s.frequency["Total"])}</td></tr>
                       </table>
                     </div>
                   </div>
 
                   <div class="sheet-block">
-                    <div class="sheet-title title-h">VII. Distribution of Donors By Age Group</div>
+                    <div class="sheet-title title-i">I. Age Distribution</div>
                     <div class="table-wrap">
                       <table>
-                        <tr>
-                          <th></th>
-                          <th>16-17</th>
-                          <th>18-20</th>
-                          <th>21-30</th>
-                          <th>31-40</th>
-                          <th>41-50</th>
-                          <th>51-60</th>
-                          <th>60-65</th>
-                          <th>66 & above</th>
-                          <th>Total</th>
-                        </tr>
-                        <tr>
-                          <td>Donors</td>
-                          <td>${num(s.age["16-17"])}</td>
-                          <td>${num(s.age["18-20"])}</td>
-                          <td>${num(s.age["21-30"])}</td>
-                          <td>${num(s.age["31-40"])}</td>
-                          <td>${num(s.age["41-50"])}</td>
-                          <td>${num(s.age["51-60"])}</td>
-                          <td>${num(s.age["60-65"])}</td>
-                          <td>${num(s.age["66 & above"])}</td>
-                          <td>${num(s.age["Total"])}</td>
-                        </tr>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div class="sheet-block">
-                    <div class="sheet-title title-i">VIII. Donor Statistics by Age Range</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Category</th><th>Count</th></tr>
-                        <tr><td>Donors under 18 years</td><td>${num(s.agePicture["Under 18"])}</td></tr>
-                        <tr><td>Donors aged 18 to 24 years</td><td>${num(s.agePicture["18-24"])}</td></tr>
-                        <tr><td>Donors aged 25 to 44 years</td><td>${num(s.agePicture["25-44"])}</td></tr>
-                        <tr><td>Donors aged 45 to 64 years</td><td>${num(s.agePicture["45-64"])}</td></tr>
-                        <tr><td>Donors aged 65 years or older</td><td>${num(s.agePicture["65 & above"])}</td></tr>
-                        <tr class="subheader"><td>Total number of donations</td><td>${num(s.agePicture["Total donations"])}</td></tr>
+                        <tr><th>Age Group</th><th>Total</th></tr>
+                        <tr><td>16-17</td><td>${num(s.age["16-17"])}</td></tr>
+                        <tr><td>18-20</td><td>${num(s.age["18-20"])}</td></tr>
+                        <tr><td>21-30</td><td>${num(s.age["21-30"])}</td></tr>
+                        <tr><td>31-40</td><td>${num(s.age["31-40"])}</td></tr>
+                        <tr><td>41-50</td><td>${num(s.age["41-50"])}</td></tr>
+                        <tr><td>51-60</td><td>${num(s.age["51-60"])}</td></tr>
+                        <tr><td>60-65</td><td>${num(s.age["60-65"])}</td></tr>
+                        <tr><td>66 & above</td><td>${num(s.age["66 & above"])}</td></tr>
+                        <tr class="subheader"><td>Total</td><td>${num(s.age["Total"])}</td></tr>
                       </table>
                     </div>
                   </div>
@@ -1672,13 +1656,10 @@ async function deleteGroupCategory(id){
   }
 }
 
-function fillMappingForEdit(id, name, category, place){
-  editingMappingId = id || null;
-  document.getElementById("mapPartnerName").value = name || "";
-  document.getElementById("mapCategory").value = category || "Group";
-  document.getElementById("mapPlace").value = place || "";
-  const saveBtn = document.getElementById("saveMappingBtn");
-  if (saveBtn) saveBtn.textContent = "Update Mapping";
+function fillMappingForEdit(id){
+  document.querySelectorAll(".mapping-row").forEach(row => row.classList.remove("editing"));
+  const row = document.getElementById("mappingRow_" + id);
+  if (row) row.classList.add("editing");
 }
 
 function clearMappingEditor(){
@@ -1688,6 +1669,54 @@ function clearMappingEditor(){
   document.getElementById("mapPlace").value = "";
   const saveBtn = document.getElementById("saveMappingBtn");
   if (saveBtn) saveBtn.textContent = "Save Mapping";
+  document.querySelectorAll(".mapping-row").forEach(row => row.classList.remove("editing"));
+}
+
+async function saveInlineMapping(id){
+  const partner = (document.getElementById("inlinePartner_" + id).value || "").trim();
+  const category = document.getElementById("inlineCategory_" + id).value;
+  const place = (document.getElementById("inlinePlace_" + id).value || "").trim();
+
+  if (!partner) {
+    alert("Please enter a partner / group name.");
+    return;
+  }
+
+  try{
+    const normalized = normalizeAliasKey(partner);
+
+    await fs.collection("donorGroupCategories").doc(id).update({
+      partnerName: smartGroupDisplayName(partner),
+      category,
+      place,
+      normalizedKey: normalized,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await loadCategoryMappings();
+    renderMappings();
+    buildStatistics();
+    alert("Group category updated successfully.");
+  }catch(error){
+    console.error(error);
+    alert("Failed to update mapping: " + (error.message || error));
+  }
+}
+
+function cancelInlineEdit(id){
+  const row = document.getElementById("mappingRow_" + id);
+  if (row) row.classList.remove("editing");
+}
+
+function handleInlineMappingKey(event, id){
+  if (event.key === "Enter") {
+    event.preventDefault();
+    saveInlineMapping(id);
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancelInlineEdit(id);
+  }
 }
 
 function renderMappings(){
@@ -1703,17 +1732,60 @@ function renderMappings(){
     return an.localeCompare(bn);
   });
 
-  list.innerHTML = sorted.map(item => `
-    <div class="mapping-row">
-      <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
-      <div>${escapeHtml(item.category || "Unmapped")}</div>
-      <div>${escapeHtml(item.place || "")}</div>
-      <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-        <button class="btn-blue" onclick="fillMappingForEdit('${item.id}','${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}','${escapeJs(item.place || "")}')">Edit</button>
-        <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
-      </div>
+  list.innerHTML = `
+    <div class="mapping-head">
+      <div>Partner / Alias / Group Name</div>
+      <div>Category</div>
+      <div>Place Override</div>
+      <div>Actions</div>
     </div>
-  `).join("");
+    ${sorted.map(item => `
+      <div class="mapping-row" id="mappingRow_${item.id}">
+        <div class="mapping-view">
+          <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
+          <div>${escapeHtml(item.category || "Unmapped")}</div>
+          <div>${escapeHtml(item.place || "")}</div>
+          <div class="mapping-actions">
+            <button class="btn-blue" onclick="fillMappingForEdit('${item.id}')">Edit</button>
+            <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
+          </div>
+        </div>
+
+        <div class="mapping-edit">
+          <input
+            class="mapping-inline-input"
+            id="inlinePartner_${item.id}"
+            type="text"
+            value="${escapeHtml(item.partnerName || item.name || "")}"
+            onkeydown="handleInlineMappingKey(event,'${item.id}')"
+          >
+
+          <select
+            class="mapping-inline-select"
+            id="inlineCategory_${item.id}"
+            onkeydown="handleInlineMappingKey(event,'${item.id}')"
+          >
+            <option value="Group" ${(item.category || "Group") === "Group" ? "selected" : ""}>Group</option>
+            <option value="RC143 / BRGY Base" ${(item.category || "") === "RC143 / BRGY Base" ? "selected" : ""}>RC143 / BRGY Base</option>
+            <option value="Pledge 25" ${(item.category || "") === "Pledge 25" ? "selected" : ""}>Pledge 25</option>
+          </select>
+
+          <input
+            class="mapping-inline-input"
+            id="inlinePlace_${item.id}"
+            type="text"
+            value="${escapeHtml(item.place || "")}"
+            onkeydown="handleInlineMappingKey(event,'${item.id}')"
+          >
+
+          <div class="mapping-actions">
+            <button class="btn-red" onclick="saveInlineMapping('${item.id}')">Save</button>
+            <button class="btn-gray" onclick="cancelInlineEdit('${item.id}')">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `).join("")}
+  `;
 }
 
 function populateFilters(){
