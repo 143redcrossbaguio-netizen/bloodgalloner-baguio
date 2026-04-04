@@ -28,7 +28,7 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     }
     .container {
-        max-width: 1800px;
+        max-width: 1850px;
         margin: 16px auto;
         padding: 0 14px 20px;
     }
@@ -45,7 +45,7 @@
         padding: 16px;
         box-shadow: 0 3px 12px rgba(0,0,0,0.08);
     }
-    h2, h3 {
+    h3 {
         margin-top: 0;
         color: #8b0000;
     }
@@ -145,7 +145,7 @@
     }
     table {
         width: 100%;
-        min-width: 5200px;
+        min-width: 5000px;
         border-collapse: collapse;
         font-size: 12px;
     }
@@ -237,7 +237,6 @@
         font-size: 12px;
         background: white;
     }
-
     .inline-input.long { min-width: 180px; }
     .inline-input.medium { min-width: 120px; }
     .inline-input.short { min-width: 70px; }
@@ -270,9 +269,43 @@
         cursor: pointer;
         white-space: nowrap;
     }
-    .mini-edit { background: #1565c0; color: white; }
     .mini-remove { background: #8b0000; color: white; }
     .mini-restore { background: #2e7d32; color: white; }
+
+    .topbar-flex {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .pager {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .status-line {
+        font-size: 12px;
+        margin-top: 8px;
+    }
+
+    .progress-bar-wrap {
+        width: 100%;
+        height: 12px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        overflow: hidden;
+        margin-top: 8px;
+    }
+    .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #8b0000, #d32f2f);
+        transition: width .2s ease;
+    }
 
     @media (max-width: 1200px) {
         .grid { grid-template-columns: 1fr; }
@@ -312,14 +345,19 @@
                 <button class="btn-dark" id="reloadHistoryBtn" type="button">Reload Upload History</button>
             </div>
 
+            <div class="status-line muted" id="analysisStatus">No analysis running.</div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar" id="analysisProgress"></div>
+            </div>
+
             <div class="note">
-                <b>Importer rules:</b><br>
-                • Reads all selected Excel files and all sheets<br>
-                • Blank <b>date</b> cells can inherit from the last valid date above<br>
-                • Missing and duplicate rows are <b>retained for manual review</b><br>
-                • You can <b>edit rows inline</b> before importing<br>
-                • You can <b>remove unwanted duplicates manually</b><br>
-                • You can import fixed missing rows after editing
+                <b>Optimized for large files:</b><br>
+                • Reads all selected Excel files and sheets<br>
+                • Keeps full analyzed data in memory<br>
+                • Shows only one page at a time for faster loading<br>
+                • Inline edit still works on visible rows<br>
+                • Missing and duplicate rows are retained for manual review<br>
+                • Import runs only on selected rows
             </div>
 
             <div style="margin-top:12px;">
@@ -387,13 +425,29 @@
     </div>
 
     <div class="card" style="margin-bottom:12px;">
-        <h3>Preview Before Import</h3>
-        <div class="row">
+        <div class="topbar-flex">
+            <h3 style="margin:0;">Preview Before Import</h3>
+            <div class="pager">
+                <label style="font-weight:bold;">Rows per page</label>
+                <select id="pageSizeSelect" style="min-width:110px;">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="250">250</option>
+                    <option value="500">500</option>
+                </select>
+                <button class="btn-gray" id="prevPageBtn">Prev</button>
+                <span id="pageInfo" class="muted">Page 1 / 1</span>
+                <button class="btn-gray" id="nextPageBtn">Next</button>
+            </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
             <button class="btn-gray" id="selectAllBtn">Select All Visible</button>
             <button class="btn-gray" id="unselectAllBtn">Unselect All Visible</button>
             <button class="btn-gray" id="restoreAllBtn">Restore All Removed</button>
             <button class="btn-gray" id="clearFilterBtn">Show All Rows</button>
         </div>
+
         <div id="previewInfo" class="muted">No preview yet.</div>
         <div id="filterBanner" class="filter-box muted">Current view: ALL ROWS</div>
     </div>
@@ -469,9 +523,8 @@ const firebaseConfig = {
     measurementId: "G-XYXJH9JNXJ"
 };
 
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
 const db = firebase.firestore();
 const auth = firebase.auth();
 
@@ -480,7 +533,11 @@ let existingRecords = [];
 let existingDonationKeySet = new Set();
 let existingLooseKeySet = new Set();
 let donorHistoryMap = new Map();
+
 let currentPreviewFilter = "ALL";
+let currentPage = 1;
+let pageSize = 100;
+let recomputeTimer = null;
 
 const FIELD_ALIASES = {
     serialNumber: ["serial number","serial no","serial","donor no","donor number","control no","control number","sn","serial #"],
@@ -884,6 +941,10 @@ function hasAnchorIdentityOrDonorData(raw) {
     );
 }
 
+function createRowId() {
+    return "row_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context) {
     const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
     const defaultMbdGroup = document.getElementById("defaultMbdGroup").value.trim();
@@ -978,39 +1039,15 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
     return raw;
 }
 
-function createRowId() {
-    return "row_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
 function isTrulyBlankMappedRow(raw) {
-    if (!hasAnchorIdentityOrDonorData(raw)) {
-        return true;
-    }
+    if (!hasAnchorIdentityOrDonorData(raw)) return true;
 
     return [
-        raw.serialNumber,
-        raw.surname,
-        raw.firstName,
-        raw.middleName,
-        raw.birthday,
-        raw.entryDate,
-        raw.donorTypeRaw,
-        raw.donorCategory,
-        raw.mbdDetails,
-        raw.patientDirectedDetails,
-        raw.walkInRaw,
-        raw.sex,
-        raw.contactNumber,
-        raw.address,
-        raw.cityProvince,
-        raw.bloodType,
-        raw.amount,
-        raw.bloodBagBrand,
-        raw.bloodBagType,
-        raw.timeStarted,
-        raw.timeEnded,
-        raw.age,
-        raw.remarks,
+        raw.serialNumber, raw.surname, raw.firstName, raw.middleName, raw.birthday,
+        raw.entryDate, raw.donorTypeRaw, raw.donorCategory, raw.mbdDetails,
+        raw.patientDirectedDetails, raw.walkInRaw, raw.sex, raw.contactNumber,
+        raw.address, raw.cityProvince, raw.bloodType, raw.amount, raw.bloodBagBrand,
+        raw.bloodBagType, raw.timeStarted, raw.timeEnded, raw.age, raw.remarks,
         raw.numberOfDonationsImported
     ].every(v => String(v ?? "").trim() === "" || String(v ?? "") === "0");
 }
@@ -1025,23 +1062,11 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
 
     const { rows: objectRows } = aoaToObjectRows(aoa);
     const parsed = [];
-
-    const context = {
-        lastDate: ""
-    };
+    const context = { lastDate: "" };
 
     objectRows.forEach(item => {
-        const raw = buildMappedRawFromRow(
-            item.row,
-            fileName,
-            sheetName,
-            item.sourceRowNumber,
-            context
-        );
-
-        if (!isTrulyBlankMappedRow(raw)) {
-            parsed.push(raw);
-        }
+        const raw = buildMappedRawFromRow(item.row, fileName, sheetName, item.sourceRowNumber, context);
+        if (!isTrulyBlankMappedRow(raw)) parsed.push(raw);
     });
 
     return parsed;
@@ -1070,11 +1095,8 @@ function computeImportedFinalCounts(rows) {
 
         donorRows.forEach(row => {
             const importedCount = parseIntSafe(row.numberOfDonationsImported);
-            if (importedCount > baseline) {
-                baseline = importedCount;
-            } else {
-                baseline += 1;
-            }
+            if (importedCount > baseline) baseline = importedCount;
+            else baseline += 1;
             row.numberOfDonationsFinal = baseline;
         });
     });
@@ -1136,7 +1158,7 @@ function recomputePreviewRows() {
     const batchSeenStrong = new Set();
     const batchSeenLoose = new Set();
 
-    activeRows.forEach((row) => {
+    activeRows.forEach(row => {
         const dKey = donorKey(row);
 
         let importStatus = "NEW";
@@ -1171,6 +1193,14 @@ function recomputePreviewRows() {
     });
 }
 
+function scheduleRecomputeAndRender() {
+    clearTimeout(recomputeTimer);
+    recomputeTimer = setTimeout(() => {
+        recomputePreviewRows();
+        renderPreviewTable();
+    }, 200);
+}
+
 function processPreviewRows(rows) {
     previewRows = rows.map(row => ({
         ...row,
@@ -1188,7 +1218,7 @@ function statusPill(status) {
     return `<span class="pill pill-missing">MISSING DATA</span>`;
 }
 
-function getVisiblePreviewRows() {
+function getFilteredRows() {
     const active = previewRows.filter(r => !r.removed);
 
     if (currentPreviewFilter === "ALL") return active;
@@ -1199,6 +1229,16 @@ function getVisiblePreviewRows() {
     if (currentPreviewFilter === "MBD_ONLY") return active.filter(r => r.donorType === "MBD");
     if (currentPreviewFilter === "WALK_PD_ONLY") return active.filter(r => r.donorType === "Walk-in" || r.donorType === "Patient Directed");
     return active;
+}
+
+function getPageRows() {
+    const filtered = getFilteredRows();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
 }
 
 function updateFilterBoxes() {
@@ -1214,13 +1254,13 @@ function updateFilterBoxes() {
         MBD_ONLY: "boxMbd",
         WALK_PD_ONLY: "boxWalkPd"
     };
-    if (map[currentPreviewFilter]) {
-        document.getElementById(map[currentPreviewFilter]).classList.add("active");
-    }
+    if (map[currentPreviewFilter]) document.getElementById(map[currentPreviewFilter]).classList.add("active");
 }
 
 function renderStats() {
     const activeRows = previewRows.filter(r => !r.removed);
+    const filtered = getFilteredRows();
+
     const total = activeRows.length;
     const ready = activeRows.filter(r => r.importStatus === "NEW").length;
     const dupDb = activeRows.filter(r => r.importStatus === "DUPLICATE_DB").length;
@@ -1253,7 +1293,10 @@ function renderStats() {
     };
 
     document.getElementById("filterBanner").innerHTML =
-        `Current view: <b>${bannerText[currentPreviewFilter] || "ALL ROWS"}</b> — showing <b>${getVisiblePreviewRows().length}</b> row(s).`;
+        `Current view: <b>${bannerText[currentPreviewFilter] || "ALL ROWS"}</b> — showing <b>${filtered.length}</b> row(s).`;
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    document.getElementById("pageInfo").textContent = `Page ${currentPage} / ${totalPages}`;
 
     document.getElementById("importBtn").disabled = selected === 0;
     updateFilterBoxes();
@@ -1286,7 +1329,7 @@ function inputCell(type, rowIndex, field, value, className = "") {
 
 function renderPreviewTable() {
     const tbody = document.getElementById("previewBody");
-    const visibleRows = getVisiblePreviewRows();
+    const pageRows = getPageRows();
 
     if (!previewRows.length) {
         tbody.innerHTML = `<tr><td colspan="35" class="muted">No rows parsed yet.</td></tr>`;
@@ -1294,13 +1337,13 @@ function renderPreviewTable() {
         return;
     }
 
-    if (!visibleRows.length) {
+    if (!pageRows.length) {
         tbody.innerHTML = `<tr><td colspan="35" class="muted">No rows match the current filter.</td></tr>`;
         renderStats();
         return;
     }
 
-    tbody.innerHTML = visibleRows.map((row) => {
+    tbody.innerHTML = pageRows.map((row) => {
         const index = previewRows.findIndex(r => r.rowId === row.rowId);
         const rowClass = row.removed ? "row-removed" : "";
 
@@ -1365,6 +1408,11 @@ function formatTimestamp(ts) {
     }
 }
 
+function updateAnalysisProgress(percent, text) {
+    document.getElementById("analysisProgress").style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    document.getElementById("analysisStatus").textContent = text;
+}
+
 async function loadImportHistory() {
     const box = document.getElementById("importHistoryBox");
     box.innerHTML = `<div class="muted">Loading upload history...</div>`;
@@ -1376,12 +1424,7 @@ async function loadImportHistory() {
             .get();
 
         const batches = [];
-        snap.forEach(doc => {
-            batches.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
+        snap.forEach(doc => batches.push({ id: doc.id, ...doc.data() }));
 
         if (!batches.length) {
             box.innerHTML = `<div class="muted">No upload history found.</div>`;
@@ -1390,7 +1433,6 @@ async function loadImportHistory() {
 
         box.innerHTML = batches.map(batch => {
             const files = Array.isArray(batch.fileNames) ? batch.fileNames : [];
-
             return `
                 <div class="batch-item">
                     <div><b>Batch ID:</b> ${escapeHtml(batch.id)}</div>
@@ -1421,10 +1463,20 @@ async function analyzeFiles() {
 
     document.getElementById("analyzeBtn").disabled = true;
     document.getElementById("analyzeBtn").textContent = "Analyzing...";
+    updateAnalysisProgress(0, "Loading existing donor records...");
 
     try {
         await loadExistingRecords();
+
         const parsedRows = [];
+        let totalSheets = 0;
+        let processedSheets = 0;
+
+        for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+            totalSheets += workbook.SheetNames.length;
+        }
 
         for (const file of files) {
             const buffer = await file.arrayBuffer();
@@ -1434,15 +1486,24 @@ async function analyzeFiles() {
                 const sheet = workbook.Sheets[sheetName];
                 const rows = readSheetRowsWithInheritance(sheet, file.name, sheetName);
                 rows.forEach(r => parsedRows.push(r));
+
+                processedSheets++;
+                const percent = totalSheets ? Math.round((processedSheets / totalSheets) * 100) : 100;
+                updateAnalysisProgress(percent, `Analyzing ${file.name} → ${sheetName} (${processedSheets}/${totalSheets} sheets)`);
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
 
+        updateAnalysisProgress(100, "Building optimized preview...");
         processPreviewRows(parsedRows);
         currentPreviewFilter = "ALL";
+        currentPage = 1;
         renderPreviewTable();
+        updateAnalysisProgress(100, `Analysis complete. ${parsedRows.length} rows loaded.`);
 
     } catch (error) {
         console.error(error);
+        updateAnalysisProgress(0, "Analysis failed.");
         alert("Error analyzing files: " + error.message);
     } finally {
         document.getElementById("analyzeBtn").disabled = false;
@@ -1567,6 +1628,8 @@ async function importSelectedRows() {
                     console.warn("Batch history progress update failed:", historyProgressError);
                     historyUpdateFailed = true;
                 }
+
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
 
@@ -1585,10 +1648,9 @@ async function importSelectedRows() {
         await loadImportHistory();
 
         previewRows.forEach(row => {
-            if (!row.removed && row.selected) {
-                row.selected = false;
-            }
+            if (!row.removed && row.selected) row.selected = false;
         });
+
         recomputePreviewRows();
         renderPreviewTable();
 
@@ -1633,6 +1695,7 @@ async function retractBatch(batchId) {
                 deletedCount++;
             });
             await batch.commit();
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         await batchDocRef.delete();
@@ -1701,6 +1764,7 @@ function renderSelectedFiles(files) {
 
 function setPreviewFilter(filterValue) {
     currentPreviewFilter = filterValue;
+    currentPage = 1;
     renderPreviewTable();
 }
 
@@ -1708,24 +1772,19 @@ function removePreviewRow(index) {
     if (!previewRows[index]) return;
     previewRows[index].removed = true;
     previewRows[index].selected = false;
-    recomputePreviewRows();
-    renderPreviewTable();
+    scheduleRecomputeAndRender();
 }
 
 function restorePreviewRow(index) {
     if (!previewRows[index]) return;
     previewRows[index].removed = false;
     previewRows[index].selected = true;
-    recomputePreviewRows();
-    renderPreviewTable();
+    scheduleRecomputeAndRender();
 }
 
 function restoreAllRemovedRows() {
-    previewRows.forEach(row => {
-        row.removed = false;
-    });
-    recomputePreviewRows();
-    renderPreviewTable();
+    previewRows.forEach(row => row.removed = false);
+    scheduleRecomputeAndRender();
 }
 
 function updateRowField(index, field, value) {
@@ -1749,9 +1808,7 @@ function updateRowField(index, field, value) {
         }
     }
 
-    syncRowComputedFields(row);
-    recomputePreviewRows();
-    renderPreviewTable();
+    scheduleRecomputeAndRender();
 }
 
 document.addEventListener("change", (e) => {
@@ -1768,15 +1825,9 @@ document.addEventListener("change", (e) => {
         const field = e.target.dataset.field;
         let value = e.target.value;
 
-        if (field === "surname" || field === "firstName" || field === "middleName") {
-            value = cleanName(value);
-        }
-        if (field === "birthday" || field === "entryDate") {
-            value = parsePossibleDate(value);
-        }
-        if (field === "numberOfDonationsImported") {
-            value = parseIntSafe(value);
-        }
+        if (field === "surname" || field === "firstName" || field === "middleName") value = cleanName(value);
+        if (field === "birthday" || field === "entryDate") value = parsePossibleDate(value);
+        if (field === "numberOfDonationsImported") value = parseIntSafe(value);
 
         updateRowField(index, field, value);
     }
@@ -1791,25 +1842,42 @@ document.getElementById("analyzeBtn").addEventListener("click", analyzeFiles);
 document.getElementById("clearBtn").addEventListener("click", () => {
     previewRows = [];
     currentPreviewFilter = "ALL";
+    currentPage = 1;
     renderPreviewTable();
+    updateAnalysisProgress(0, "No analysis running.");
 });
 
 document.getElementById("selectAllBtn").addEventListener("click", () => {
-    getVisiblePreviewRows().forEach(row => {
-        row.selected = true;
-    });
+    getPageRows().forEach(row => row.selected = true);
     renderPreviewTable();
 });
 
 document.getElementById("unselectAllBtn").addEventListener("click", () => {
-    getVisiblePreviewRows().forEach(row => {
-        row.selected = false;
-    });
+    getPageRows().forEach(row => row.selected = false);
     renderPreviewTable();
 });
 
 document.getElementById("restoreAllBtn").addEventListener("click", restoreAllRemovedRows);
 document.getElementById("clearFilterBtn").addEventListener("click", () => setPreviewFilter("ALL"));
+
+document.getElementById("prevPageBtn").addEventListener("click", () => {
+    currentPage--;
+    if (currentPage < 1) currentPage = 1;
+    renderPreviewTable();
+});
+
+document.getElementById("nextPageBtn").addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(getFilteredRows().length / pageSize));
+    currentPage++;
+    if (currentPage > totalPages) currentPage = totalPages;
+    renderPreviewTable();
+});
+
+document.getElementById("pageSizeSelect").addEventListener("change", (e) => {
+    pageSize = Number(e.target.value) || 100;
+    currentPage = 1;
+    renderPreviewTable();
+});
 
 document.getElementById("importBtn").addEventListener("click", importSelectedRows);
 document.getElementById("historyBtn").addEventListener("click", searchHistory);
