@@ -1,2298 +1,1841 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Donor Database Entry</title>
-
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-
-    <style>
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #eef2f6;
-            color: #1f2937;
-        }
-
-        header {
-            background: linear-gradient(90deg, #8b0000, #b30000);
-            color: white;
-            padding: 10px 18px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-
-        .header-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-
-        .header-title {
-            display: none;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-left: auto;
-        }
-
-        .header-reload-btn {
-            padding: 8px 14px;
-            font-size: 13px;
-            border: none;
-            border-radius: 9px;
-            background: #1976d2;
-            color: #fff;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.16);
-        }
-
-        .page {
-            max-width: 1180px;
-            margin: 12px auto;
-            padding: 0 10px 18px;
-        }
-
-        .lis-panel {
-            background: white;
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-            overflow: hidden;
-            margin-bottom: 16px;
-        }
-
-        .panel-head {
-            background: #dde7f1;
-            color: #243447;
-            font-weight: bold;
-            padding: 9px 12px;
-            border-bottom: 1px solid #d4dde7;
-            font-size: 13px;
-        }
-
-        .panel-body {
-            padding: 12px;
-        }
-
-        .auth-indicator {
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: bold;
-            background: rgba(255,255,255,0.15);
-            border: 1px solid rgba(255,255,255,0.28);
-            color: #fff;
-            min-width: 220px;
-            text-align: center;
-        }
-
-        .lookup-sticky {
-            position: sticky;
-            top: 68px;
-            z-index: 900;
-        }
-
-        .lookup-grid,
-        .field-row {
-            display: grid;
-            gap: 12px;
-        }
-
-        .lookup-grid { grid-template-columns: minmax(320px, 1.5fr) minmax(170px, 0.8fr) auto; align-items: end; }
-        .field-row { grid-template-columns: 1fr 1fr; }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            gap: 10px 12px;
-        }
-
-        .full-width {
-            grid-column: 1 / -1;
-        }
-
-        .span-1 { grid-column: span 1; }
-        .span-2 { grid-column: span 2; }
-        .span-3 { grid-column: span 3; }
-        .span-4 { grid-column: span 4; }
-        .span-5 { grid-column: span 5; }
-        .span-6 { grid-column: span 6; }
-        .span-7 { grid-column: span 7; }
-        .span-8 { grid-column: span 8; }
-        .span-9 { grid-column: span 9; }
-        .span-10 { grid-column: span 10; }
-        .span-11 { grid-column: span 11; }
-        .span-12 { grid-column: span 12; }
-
-        .field-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .field-group label {
-            font-weight: bold;
-            margin-bottom: 4px;
-            font-size: 12px;
-            color: #334155;
-        }
-
-        .field-group input,
-        .field-group select,
-        .field-group textarea {
-            width: 100%;
-            padding: 8px 9px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            font-size: 13px;
-            background: #fff;
-        }
-
-        .field-group input:focus,
-        .field-group select:focus,
-        .field-group textarea:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
-        }
-
-        .readonly-fill {
-            background: #f8fafc !important;
-        }
-
-        .serial-main-box {
-            border: 1px solid #bfd5f7;
-            border-radius: 12px;
-            background: linear-gradient(180deg, #f4f8ff 0%, #e8f1ff 100%);
-            padding: 12px;
-        }
-
-        .serial-wrap {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .serial-prefix {
-            background: #dce9ff;
-            border: 1px solid #b9cced;
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-weight: bold;
-            white-space: nowrap;
-            color: #334155;
-            min-height: 42px;
-            display: flex;
-            align-items: center;
-        }
-
-        .radio-box {
-            border: 1px solid #dbe3ec;
-            border-radius: 10px;
-            padding: 12px;
-            background: #f8fafc;
-        }
-
-        .serial-tools-box {
-            border: 1px solid #efc6c6;
-            border-radius: 12px;
-            padding: 12px;
-            background: linear-gradient(180deg, #fff7f7 0%, #ffe9e9 100%);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
-        }
-
-        .serial-tools-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: #8a1111;
-            margin: 0;
-        }
-
-        .toggle-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .toggle-icon {
-            font-size: 16px;
-            font-weight: bold;
-            color: #8a1111;
-        }
-
-        .serial-toggle-content.hidden {
-            display: none;
-        }
-
-        .range-type-box {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.75);
-            border: 1px solid #f0c8c8;
-        }
-
-        .radio-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 18px;
-            margin-bottom: 10px;
-        }
-
-        .radio-options label,
-        .range-type-options label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin: 0;
-            font-weight: normal;
-            cursor: pointer;
-        }
-
-        .range-type-options {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 18px;
-            margin-top: 6px;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .group-info,
-        .loaded-donor-info,
-        .type-helper,
-        .serial-helper,
-        .time-helper,
-        .serial-batch-info,
-        .range-type-info {
-            margin-top: 10px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: bold;
-        }
-
-        .group-info {
-            background: #fff5f5;
-            border: 1px solid #efc6c6;
-            color: #8a1111;
-        }
-
-        .loaded-donor-info {
-            background: #edf7ed;
-            border: 1px solid #b7dfb9;
-            color: #166534;
-        }
-
-        .type-helper {
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            color: #1d4ed8;
-        }
-
-        .serial-helper {
-            background: #edf4ff;
-            border: 1px solid #bfd5f7;
-            color: #274690;
-        }
-
-        .time-helper {
-            background: #fff7ed;
-            border: 1px solid #fed7aa;
-            color: #9a3412;
-        }
-
-        .serial-batch-info {
-            background: #fff;
-            border: 1px solid #efc6c6;
-            color: #8a1111;
-            margin-top: 8px;
-            padding: 8px 10px;
-            font-size: 12px;
-        }
-
-        .range-type-info {
-            background: #f0f9ff;
-            border: 1px solid #bae6fd;
-            color: #075985;
-            font-size: 12px;
-            padding: 8px 10px;
-        }
-
-        .helper-text {
-            margin-top: 4px;
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .lookup-results {
-            margin-top: 14px;
-            border: 1px solid #dbe3ec;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .lookup-table-wrap {
-            max-height: 260px;
-            overflow: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 900px;
-        }
-
-        th, td {
-            border-bottom: 1px solid #e5e7eb;
-            padding: 9px 10px;
-            text-align: left;
-            font-size: 13px;
-            white-space: nowrap;
-        }
-
-        th {
-            background: #f1f5f9;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-
-        .small-btn,
-        .main-btn {
-            padding: 8px 13px;
-            font-size: 13px;
-        }
-
-        .small-btn {
-            padding: 7px 9px;
-            font-size: 11px;
-        }
-
-        .main-btn {
-            padding: 10px 16px;
-            font-size: 14px;
-        }
-
-        .blue-btn { background: #1565c0; color: white; }
-        .green-btn { background: #2e7d32; color: white; }
-        .gray-btn { background: #64748b; color: white; }
-        .red-btn { background: #8a1111; color: white; }
-        .orange-btn { background: #c56a00; color: white; }
-
-        .btn-row {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 14px;
-        }
-
-        .serial-btn-row {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        textarea {
-            min-height: 85px;
-            resize: vertical;
-        }
-
-        .status-message {
-            margin-top: 14px;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: bold;
-            display: none;
-        }
-
-        .status-success {
-            display: block;
-            background: #e8f7e8;
-            color: #1b5e20;
-            border: 1px solid #b7dfb9;
-        }
-
-        .status-error {
-            display: block;
-            background: #fdeaea;
-            color: #b71c1c;
-            border: 1px solid #efb7b7;
-        }
-
-        .section-note {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: -2px;
-            margin-bottom: 8px;
-        }
-
-        .inline-toggle {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 14px;
-            align-items: center;
-            margin-top: 8px;
-        }
-
-        .inline-toggle label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin: 0;
-            font-weight: normal;
-            cursor: pointer;
-        }
-
-        .serial-batch-grid {
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            gap: 10px;
-            margin-top: 6px;
-        }
-
-        .serial-batch-grid .field-group {
-            margin-bottom: 0;
-        }
-
-        .preview-box {
-            margin-top: 8px;
-            padding: 8px 10px;
-            background: rgba(255,255,255,0.8);
-            border: 1px dashed #e3a4a4;
-            border-radius: 8px;
-            font-size: 12px;
-            color: #5b1c1c;
-            line-height: 1.5;
-        }
-
-        @media (max-width: 1100px) {
-            .form-grid,
-            .serial-batch-grid {
-                grid-template-columns: repeat(6, 1fr);
-            }
-
-            .span-1, .span-2, .span-3, .span-4, .span-5, .span-6,
-            .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 {
-                grid-column: span 6;
-            }
-
-            .lookup-grid,
-            .field-row {
-                grid-template-columns: 1fr;
-            }
-
-            .serial-wrap {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 700px) {
-            .form-grid,
-            .serial-batch-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .span-1, .span-2, .span-3, .span-4, .span-5, .span-6,
-            .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 {
-                grid-column: span 1;
-            }
-
-            .header-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .header-right {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .auth-indicator {
-                text-align: center;
-            }
-
-            .lookup-sticky {
-                top: 114px;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galloners Club - Donor Bulk Import</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #eef3f7;
+        color: #1f2937;
+    }
+    header {
+        background: linear-gradient(90deg, #8b0000, #b30000);
+        color: white;
+        padding: 16px;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    }
+    .container {
+        max-width: 1800px;
+        margin: 16px auto;
+        padding: 0 14px 20px;
+    }
+    .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    .card {
+        background: white;
+        border: 1px solid #dbe3ec;
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+    }
+    h2, h3 {
+        margin-top: 0;
+        color: #8b0000;
+    }
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .row label {
+        min-width: 170px;
+        font-weight: bold;
+        color: #334155;
+    }
+    input[type="file"],
+    input[type="text"],
+    input[type="date"],
+    input[type="number"],
+    select {
+        flex: 1;
+        min-width: 220px;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 14px;
+        background: white;
+    }
+    button {
+        border: none;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    .btn-red { background: #b30000; color: white; }
+    .btn-orange { background: #ef6c00; color: white; }
+    .btn-green { background: #2e7d32; color: white; }
+    .btn-blue { background: #1565c0; color: white; }
+    .btn-gray { background: #64748b; color: white; }
+    .btn-dark { background: #374151; color: white; }
+    .btn-danger { background: #8b0000; color: white; }
+
+    .note {
+        background: #fff8e1;
+        border: 1px solid #f0d98a;
+        color: #6d4c41;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 13px;
+        margin-top: 10px;
+        line-height: 1.45;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 12px;
+        margin: 12px 0;
+    }
+    .stat-box {
+        background: white;
+        border: 1px solid #dbe3ec;
+        border-radius: 12px;
+        padding: 14px;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+        cursor: pointer;
+        transition: 0.15s ease;
+    }
+    .stat-box:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 5px 12px rgba(0,0,0,0.10);
+    }
+    .stat-box.active {
+        border-color: #b30000;
+        box-shadow: 0 0 0 2px rgba(179,0,0,0.10);
+    }
+    .stat-num {
+        font-size: 28px;
+        font-weight: bold;
+        color: #b30000;
+    }
+    .stat-label {
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: bold;
+    }
+
+    .table-wrap {
+        overflow: auto;
+        background: white;
+        border: 1px solid #dbe3ec;
+        border-radius: 14px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+    }
+    table {
+        width: 100%;
+        min-width: 5200px;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+    th, td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
+    }
+    th {
+        background: #f8fafc;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .pill {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+    .pill-new { background: #e8f5e9; color: #1b5e20; }
+    .pill-dupdb { background: #fdeaea; color: #b71c1c; }
+    .pill-dupbatch { background: #fff3e0; color: #e65100; }
+    .pill-missing { background: #fff8e1; color: #8d6e00; }
+
+    .file-list, .history-box, .import-log-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fafafa;
+        padding: 10px;
+        max-height: 180px;
+        overflow: auto;
+    }
+
+    .history-results {
+        margin-top: 10px;
+        border: 1px solid #dbe3ec;
+        border-radius: 12px;
+        background: white;
+        max-height: 350px;
+        overflow: auto;
+    }
+    .history-item {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+    }
+    .history-item:last-child {
+        border-bottom: none;
+    }
+
+    .batch-item {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .batch-item:last-child {
+        margin-bottom: 0;
+    }
+    .batch-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+
+    .muted { color: #64748b; }
+    .success { color: #1b5e20; font-weight: bold; }
+    .danger { color: #b71c1c; font-weight: bold; }
+    .warning { color: #e65100; font-weight: bold; }
+
+    .small-text {
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .inline-input,
+    .inline-select {
+        width: 100%;
+        min-width: 90px;
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 12px;
+        background: white;
+    }
+
+    .inline-input.long { min-width: 180px; }
+    .inline-input.medium { min-width: 120px; }
+    .inline-input.short { min-width: 70px; }
+
+    .row-removed {
+        opacity: .45;
+        background: #f8fafc;
+    }
+
+    .filter-box {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #dbe3ec;
+        font-size: 13px;
+    }
+
+    .mini-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .mini-btn {
+        border: none;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: bold;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .mini-edit { background: #1565c0; color: white; }
+    .mini-remove { background: #8b0000; color: white; }
+    .mini-restore { background: #2e7d32; color: white; }
+
+    @media (max-width: 1200px) {
+        .grid { grid-template-columns: 1fr; }
+        .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
 </head>
 <body>
 
-<header>
-    <div class="header-bar">
-        <div class="header-title"></div>
-        <div class="header-right">
-            <div id="authIndicator" class="auth-indicator">Checking login status...</div>
-            <button type="button" id="reloadPageBtn" class="header-reload-btn">Reload</button>
-        </div>
-    </div>
-</header>
+<header>Donor Database - Bulk Import</header>
 
-<div class="page">
+<div class="container">
 
-    <div class="lis-panel lookup-sticky">
-        <div class="panel-head lookup-panel-head">Find Existing Donor</div>
-        <div class="panel-body">
-            <div class="lookup-grid">
-                <div class="field-group">
-                    <label for="lookupSearch">Search donor</label>
-                    <input type="text" id="lookupSearch" placeholder="Search surname, first name, or birthday">
-                </div>
-                <div class="field-group">
-                    <label for="lookupBirthday">Birthday</label>
-                    <input type="date" id="lookupBirthday">
-                </div>
-                <div class="field-group">
-                    <label>&nbsp;</label>
-                    <button type="button" id="searchDonorBtn" class="main-btn blue-btn">Search</button>
-                </div>
+    <div class="grid">
+        <div class="card">
+            <h3>Import Files</h3>
+
+            <div class="row">
+                <label>Select Excel Files</label>
+                <input type="file" id="excelFiles" accept=".xlsx,.xls,.csv" multiple>
             </div>
 
-            <div class="helper-text">
-                Search first if donor already donated before. Loading a donor only copies personal details for the new entry. It does not overwrite older donation records.
+            <div class="row">
+                <label>Default Donation Date</label>
+                <input type="date" id="defaultDonationDate">
             </div>
 
-            <div id="loadedDonorInfo" class="loaded-donor-info hidden"></div>
+            <div class="row">
+                <label>Default MBD Group</label>
+                <input type="text" id="defaultMbdGroup" placeholder="Optional fallback MBD group">
+            </div>
 
-            <div id="lookupResultsBox" class="lookup-results hidden">
-                <div class="lookup-table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Action</th>
-                                <th>Surname</th>
-                                <th>First Name</th>
-                                <th>Middle Name</th>
-                                <th>Birthday</th>
-                                <th>Contact</th>
-                                <th>Blood Type</th>
-                                <th>Last Entry Date</th>
-                                <th>Type of Donor</th>
-                                <th># of Donations</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lookupResultsBody"></tbody>
-                    </table>
-                </div>
+            <div class="row">
+                <button class="btn-red" id="analyzeBtn">Analyze Files</button>
+                <button class="btn-orange" id="clearBtn">Clear Preview</button>
+                <button class="btn-green" id="importBtn" disabled>Import Selected Reviewed Rows</button>
+                <button class="btn-dark" id="reloadHistoryBtn" type="button">Reload Upload History</button>
+            </div>
+
+            <div class="note">
+                <b>Importer rules:</b><br>
+                • Reads all selected Excel files and all sheets<br>
+                • Blank <b>date</b> cells can inherit from the last valid date above<br>
+                • Missing and duplicate rows are <b>retained for manual review</b><br>
+                • You can <b>edit rows inline</b> before importing<br>
+                • You can <b>remove unwanted duplicates manually</b><br>
+                • You can import fixed missing rows after editing
+            </div>
+
+            <div style="margin-top:12px;">
+                <b>Selected files</b>
+                <div class="file-list" id="fileList">No files selected.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Donor History Viewer</h3>
+
+            <div class="row">
+                <label>Surname</label>
+                <input type="text" id="historySurname" placeholder="Surname">
+            </div>
+            <div class="row">
+                <label>First Name</label>
+                <input type="text" id="historyFirstName" placeholder="First Name">
+            </div>
+            <div class="row">
+                <label>Birthday</label>
+                <input type="date" id="historyBirthday">
+            </div>
+            <div class="row">
+                <button class="btn-blue" id="historyBtn">Search History</button>
+                <button class="btn-gray" id="clearHistoryBtn">Clear</button>
+            </div>
+
+            <div class="history-box muted" id="historySummary">No donor history loaded.</div>
+            <div class="history-results" id="historyResults">
+                <div class="history-item muted">Enter donor details to view donation history.</div>
             </div>
         </div>
     </div>
 
-    <div class="lis-panel">
-        <div class="panel-head">Donor Entry Form</div>
-        <div class="panel-body">
-            <div class="section-note">Entry order is kept based on your requested arrangement.</div>
-
-            <form id="donorForm" novalidate>
-                <div class="form-grid">
-
-                    <div class="field-group span-12">
-                        <label for="entryDate">Date</label>
-                        <input type="date" id="entryDate" required>
-                    </div>
-
-                    <div class="field-group span-6">
-                        <div class="serial-main-box">
-                            <label for="serialNumber">1. Serial Number</label>
-                            <div class="serial-wrap">
-                                <span id="serialPrefix" class="serial-prefix">PRC2600-2600</span>
-                                <input type="text" id="serialNumber" placeholder="Enter manual number or scan barcode" required>
-                            </div>
-                            <div class="inline-toggle">
-                                <label><input type="checkbox" id="useSerialPrefix" checked> Enable prefix</label>
-                            </div>
-                            <div id="serialHelperBox" class="serial-helper">
-                                Prefix enabled. Saved serial will be prefix + your manual input or scanned value.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label>2. Donor Type</label>
-                        <div class="radio-box">
-                            <div class="radio-options">
-                                <label><input type="radio" name="donorType" value="Patient Directed"> Patient Directed</label>
-                                <label><input type="radio" name="donorType" value="Walk-in"> Walk-in</label>
-                                <label><input type="radio" name="donorType" value="MBD"> MBD</label>
-                            </div>
-
-                            <div id="patientDirectedBox" class="hidden">
-                                <input type="text" id="patientDirectedDetails" placeholder="Enter patient directed details">
-                            </div>
-
-                            <div id="walkInBox" class="hidden" style="margin-top:10px;">
-                                <div class="field-row">
-                                    <input type="number" id="walkInCount" min="1" placeholder="Number of walk-in donors">
-                                    <button type="button" id="startWalkInGroupBtn" class="main-btn blue-btn">Start Walk-in Group</button>
-                                </div>
-                            </div>
-
-                            <div id="mbdBox" class="hidden" style="margin-top:10px;">
-                                <div class="field-row">
-                                    <input type="text" id="mbdDetails" placeholder="Enter MBD site / organization">
-                                    <input type="number" id="mbdCount" min="1" placeholder="Number of MBD donors">
-                                </div>
-                                <div style="margin-top:10px;">
-                                    <button type="button" id="startMbdGroupBtn" class="main-btn blue-btn">Start MBD Group</button>
-                                </div>
-                            </div>
-
-                            <div id="groupInfoBox" class="group-info hidden"></div>
-                        </div>
-                    </div>
-
-                    <div class="field-group span-12">
-                        <div class="serial-tools-box">
-                            <div class="toggle-head" id="serialHelperToggle">
-                                <div class="serial-tools-title">Serial Range Helper</div>
-                                <div id="serialHelperToggleIcon" class="toggle-icon">+</div>
-                            </div>
-                            <div id="serialHelperContent" class="serial-toggle-content hidden">
-                            <div class="helper-text">
-                                Bulk entry helper. Enter only the numeric ending. Example: start <b>4152</b>, end <b>4160</b>, skip <b>4155,4158</b>
-                            </div>
-
-                            <div class="serial-batch-grid">
-                                <div class="field-group span-3">
-                                    <label for="serialRangeStart">Start Number</label>
-                                    <input type="text" id="serialRangeStart" placeholder="4152">
-                                </div>
-
-                                <div class="field-group span-3">
-                                    <label for="serialRangeEnd">End Number</label>
-                                    <input type="text" id="serialRangeEnd" placeholder="4160">
-                                </div>
-
-                                <div class="field-group span-4">
-                                    <label for="serialRangeSkip">Skipped Numbers</label>
-                                    <input type="text" id="serialRangeSkip" placeholder="4155,4158">
-                                </div>
-
-                                <div class="field-group span-2">
-                                    <label>&nbsp;</label>
-                                    <button type="button" id="generateSerialRangeBtn" class="main-btn orange-btn">Generate</button>
-                                </div>
-                            </div>
-
-                            <div class="range-type-box">
-                                <label style="font-weight:bold; font-size:13px; color:#7f1d1d;">Range Donor Type</label>
-                                <div class="range-type-options">
-                                    <label><input type="radio" name="rangeDonorType" value="Walk-in"> Walk-in</label>
-                                    <label><input type="radio" name="rangeDonorType" value="MBD"> MBD</label>
-                                    <label><input type="radio" name="rangeDonorType" value="Patient Directed"> Patient Directed</label>
-                                </div>
-
-                                <div id="rangeMbdBox" class="hidden" style="margin-top:10px;">
-                                    <input type="text" id="rangeMbdDetails" placeholder="Range MBD site / organization">
-                                </div>
-
-                                <div id="rangePatientBox" class="hidden" style="margin-top:10px;">
-                                    <input type="text" id="rangePatientDetails" placeholder="Range patient directed details">
-                                </div>
-
-                                <div id="rangeTypeInfo" class="range-type-info hidden"></div>
-                            </div>
-
-                            <div id="serialBatchInfo" class="serial-batch-info hidden"></div>
-                            <div id="serialBatchPreview" class="preview-box hidden"></div>
-
-                            <div class="serial-btn-row">
-                                <button type="button" id="nextSerialBtn" class="main-btn blue-btn">Load Next Serial</button>
-                                <button type="button" id="clearSerialBatchBtn" class="main-btn gray-btn">Clear Serial List</button>
-                            </div>
-                                                    </div>
-                        </div>
-                    </div>
-
-                    <div class="field-group span-2">
-                        <label for="suffix">3. Suffix</label>
-                        <input type="text" id="suffix" placeholder="Jr., Sr., III">
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="surname">4. Surname</label>
-                        <input type="text" id="surname" required>
-                    </div>
-
-                    <div class="field-group span-4">
-                        <label for="firstName">5. First Name</label>
-                        <input type="text" id="firstName" required>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="middleName">6. Middle Name</label>
-                        <input type="text" id="middleName">
-                    </div>
-
-                    <div class="field-group span-4">
-                        <label for="birthday">7. Birthday</label>
-                        <input type="date" id="birthday" required>
-                    </div>
-
-                    <div class="field-group span-2">
-                        <label for="age">8. Age</label>
-                        <input type="number" id="age" placeholder="Age" readonly class="readonly-fill">
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="civilStatus">9. Civil Status</label>
-                        <select id="civilStatus" required>
-                            <option value="">Select</option>
-                            <option value="Single">Single</option>
-                            <option value="Married">Married</option>
-                            <option value="Separated">Separated</option>
-                            <option value="Divorced">Divorced</option>
-                            <option value="Widowed">Widowed</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="sex">10. Sex</label>
-                        <select id="sex" required>
-                            <option value="">Select</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-8">
-                        <label for="address">11. Address</label>
-                        <input type="text" id="address" required>
-                    </div>
-
-                    <div class="field-group span-4">
-                        <label for="cityProvince">12. Province / City</label>
-                        <input type="text" id="cityProvince" required>
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="contactNumber">13. Contact Number</label>
-                        <input type="text" id="contactNumber">
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="occupation">14. Occupation</label>
-                        <input type="text" id="occupation">
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="donorCategory">15. Type of Donor</label>
-                        <select id="donorCategory">
-                            <option value="Auto">Auto</option>
-                            <option value="New">New</option>
-                            <option value="Repeat">Repeat</option>
-                            <option value="Lapse">Lapse</option>
-                        </select>
-                        <div class="helper-text">
-                            Auto will only apply logic if enough donor history is available.
-                        </div>
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="numberOfDonations">16. Number of Donations</label>
-                        <input type="number" id="numberOfDonations" min="0" value="0">
-                        <div class="helper-text">
-                            This is manual. Loading an existing donor will not automatically add +1.
-                        </div>
-                    </div>
-
-                    <div class="field-group span-12">
-                        <div id="typeHelperBox" class="type-helper hidden"></div>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="bloodType">17. Blood Type</label>
-                        <select id="bloodType" required>
-                            <option value="">Select</option>
-                            <option value="A+">A+</option>
-                            <option value="A-">A-</option>
-                            <option value="B+">B+</option>
-                            <option value="B-">B-</option>
-                            <option value="AB+">AB+</option>
-                            <option value="AB-">AB-</option>
-                            <option value="O+">O+</option>
-                            <option value="O-">O-</option>
-                            <option value="Unknown">Unknown</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="bloodBagBrand">18. Blood Bag Used</label>
-                        <select id="bloodBagBrand" required>
-                            <option value="">Select</option>
-                            <option value="KARMI">KARMI</option>
-                            <option value="TERUMO">TERUMO</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="bloodBagType">19. Blood Bag Type</label>
-                        <select id="bloodBagType" required>
-                            <option value="">Select</option>
-                            <option value="Single">Single</option>
-                            <option value="Double">Double</option>
-                            <option value="Triple">Triple</option>
-                            <option value="Quadruple">Quadruple</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-3">
-                        <label for="amount">20. Amount</label>
-                        <select id="amount" required>
-                            <option value="">Select</option>
-                            <option value="450 ml">450 ml</option>
-                            <option value="QNS">QNS</option>
-                            <option value="UB">UB</option>
-                        </select>
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="timeStarted">21. Time Started</label>
-                        <input type="text" id="timeStarted" placeholder="Examples: 7, 7:30, 07:30, 19:30">
-                    </div>
-
-                    <div class="field-group span-6">
-                        <label for="timeEnded">22. Time Ended</label>
-                        <input type="text" id="timeEnded" placeholder="Examples: 8, 8:15, 20:15">
-                    </div>
-
-                    <div class="field-group span-12">
-                        <div class="helper-text">Accepts simple hour or hour:minute input. No AM/PM required.</div>
-                        <div id="timeHelperBox" class="time-helper hidden"></div>
-                    </div>
-
-                    <div class="field-group span-12">
-                        <label for="remarks">23. Remarks</label>
-                        <textarea id="remarks"></textarea>
-                    </div>
-                </div>
-
-                <div class="btn-row">
-                    <button type="submit" id="saveDonorBtn" class="main-btn green-btn">Save Donor Entry</button>
-                    <button type="reset" class="main-btn gray-btn">Clear Form</button>
-                    <button type="button" id="clearLoadedDonorBtn" class="main-btn blue-btn">Clear Loaded Donor</button>
-                    <button type="button" id="endGroupBtn" class="main-btn red-btn">End Active Group</button>
-                </div>
-
-                <div id="statusMessage" class="status-message"></div>
-            </form>
+    <div class="stats-grid">
+        <div class="stat-box active" id="boxAll" onclick="setPreviewFilter('ALL')">
+            <div class="stat-num" id="statTotal">0</div>
+            <div class="stat-label">Rows Read</div>
+        </div>
+        <div class="stat-box" id="boxReady" onclick="setPreviewFilter('NEW')">
+            <div class="stat-num" id="statReady">0</div>
+            <div class="stat-label">Ready</div>
+        </div>
+        <div class="stat-box" id="boxDupDb" onclick="setPreviewFilter('DUPLICATE_DB')">
+            <div class="stat-num" id="statDupDb">0</div>
+            <div class="stat-label">Duplicates in DB</div>
+        </div>
+        <div class="stat-box" id="boxDupBatch" onclick="setPreviewFilter('DUPLICATE_BATCH')">
+            <div class="stat-num" id="statDupBatch">0</div>
+            <div class="stat-label">Duplicates in Files</div>
+        </div>
+        <div class="stat-box" id="boxMissing" onclick="setPreviewFilter('MISSING_DATA')">
+            <div class="stat-num" id="statMissing">0</div>
+            <div class="stat-label">Missing Identity Data</div>
+        </div>
+        <div class="stat-box" id="boxMbd" onclick="setPreviewFilter('MBD_ONLY')">
+            <div class="stat-num" id="statMbd">0</div>
+            <div class="stat-label">MBD Rows</div>
+        </div>
+        <div class="stat-box" id="boxWalkPd" onclick="setPreviewFilter('WALK_PD_ONLY')">
+            <div class="stat-num" id="statWalkInPd">0</div>
+            <div class="stat-label">Walk-in / P.D.</div>
         </div>
     </div>
+
+    <div class="card" style="margin-bottom:12px;">
+        <h3>Preview Before Import</h3>
+        <div class="row">
+            <button class="btn-gray" id="selectAllBtn">Select All Visible</button>
+            <button class="btn-gray" id="unselectAllBtn">Unselect All Visible</button>
+            <button class="btn-gray" id="restoreAllBtn">Restore All Removed</button>
+            <button class="btn-gray" id="clearFilterBtn">Show All Rows</button>
+        </div>
+        <div id="previewInfo" class="muted">No preview yet.</div>
+        <div id="filterBanner" class="filter-box muted">Current view: ALL ROWS</div>
+    </div>
+
+    <div class="table-wrap" style="margin-bottom:16px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Select</th>
+                    <th>#</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    <th>File</th>
+                    <th>Sheet</th>
+                    <th>Row</th>
+                    <th>Inherited Date?</th>
+                    <th>Inherited Group?</th>
+                    <th>Serial No.</th>
+                    <th>Surname</th>
+                    <th>First Name</th>
+                    <th>Middle Name</th>
+                    <th>Birthday</th>
+                    <th>Entry Date</th>
+                    <th>Donor Type</th>
+                    <th>MBD Details</th>
+                    <th>Patient Directed Details</th>
+                    <th>Walk-in Raw</th>
+                    <th>Category Display</th>
+                    <th>Imported Count</th>
+                    <th>Computed Final Count</th>
+                    <th>Donor Category</th>
+                    <th>Sex</th>
+                    <th>Blood Type</th>
+                    <th>Contact</th>
+                    <th>Address</th>
+                    <th>City/Province</th>
+                    <th>Amount</th>
+                    <th>Blood Bag Brand</th>
+                    <th>Blood Bag Type</th>
+                    <th>Time Started</th>
+                    <th>Time Ended</th>
+                    <th>Remarks</th>
+                </tr>
+            </thead>
+            <tbody id="previewBody">
+                <tr><td colspan="35" class="muted">No rows parsed yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Uploaded Import History / Retract Past Uploads</h3>
+        <div class="small-text muted" style="margin-bottom:10px;">
+            Only active batches are shown here. When you retract, the donor rows are deleted and the batch history document is also deleted.
+        </div>
+        <div class="import-log-box" id="importHistoryBox">
+            <div class="muted">No upload history loaded yet.</div>
+        </div>
+    </div>
+
 </div>
 
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.firebasestorage.app",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+let previewRows = [];
+let existingRecords = [];
+let existingDonationKeySet = new Set();
+let existingLooseKeySet = new Set();
+let donorHistoryMap = new Map();
+let currentPreviewFilter = "ALL";
+
+const FIELD_ALIASES = {
+    serialNumber: ["serial number","serial no","serial","donor no","donor number","control no","control number","sn","serial #"],
+    surname: ["surname","last name","lastname","family name","apelido"],
+    firstName: ["first name","firstname","given name","given","name","pangalan","given names"],
+    middleName: ["middle name","middlename","middle initial","mi","m.i."],
+    birthday: ["birthday","birth date","birthdate","date of birth","dob","bday"],
+    donationDate: ["donation date","date donated","date of donation","date bled","bleeding date","date","collection date","entry date"],
+    donorType: ["donor type","type of donor","type","donor"],
+    donorCategory: ["donor category","type of donor category","category","regular/new donor","new/repeat/lapse","new repeat lapse"],
+    mbdDetails: ["mbd","mbd details","organization","group","group name","company","school","office","site","venue","mobile blood donation"],
+    patientDirectedDetails: ["patient directed","patient directed details","patient name","patient","patient directed donor","pd","p.d."],
+    walkIn: ["walk in","walk-in","walkin"],
+    sex: ["sex","gender","gENDER"],
+    contactNumber: ["contact","contact number","mobile","mobile number","phone","phone number","cellphone","cp no","contact no"],
+    address: ["address","home address","house number/purok/street name","house number","street","purok"],
+    cityProvince: ["barangay/city","barangay city","city","city/province","barangay","city or province","town/city","municipality/city"],
+    bloodType: ["blood type","blood group","abo rh","abo/rh","blood","blood type/rh","abo"],
+    amount: ["amount","collection amount","volume","ml"],
+    bloodBagBrand: ["blood bag brand","blood bag used","brand","bag brand","bb used"],
+    bloodBagType: ["blood bag type","type of blood bag","bag type","type of bb"],
+    timeStarted: ["time started","start time","bleeding time start","time start"],
+    timeEnded: ["time ended","end time","bleeding time end","time end"],
+    age: ["age"],
+    remarks: ["remarks","remark","notes","comment","donor rxn","results"],
+    numberOfDonations: ["# of donations","number of donations","donation count","count","no of donations","donations"]
+};
+
+const EXACT_COLUMN_ROLE_MAP = {
+    "mbd": "mbdColumn",
+    "walk-in": "walkInColumn",
+    "walk in": "walkInColumn",
+    "walkin": "walkInColumn",
+    "patient directed": "patientDirectedColumn",
+    "patient-directed": "patientDirectedColumn",
+    "p.d.": "patientDirectedColumn",
+    "pd": "patientDirectedColumn"
+};
+
+function normalizeText(value) {
+    return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function cleanName(value) {
+    return String(value ?? "").trim().replace(/\s+/g, " ").replace(/[.,]/g, "").toUpperCase();
+}
+
+function escapeHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function standardizeHeader(header) {
+    return String(header ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\n/g, " ")
+        .replace(/_/g, " ")
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ");
+}
+
+function excelSerialToDate(serial) {
+    const utcDays = Math.floor(serial - 25569);
+    const utcValue = utcDays * 86400;
+    const dateInfo = new Date(utcValue * 1000);
+    return new Date(dateInfo.getFullYear(), dateInfo.getMonth(), dateInfo.getDate());
+}
+
+function toISODate(dateObj) {
+    if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "";
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const dd = String(dateObj.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function parsePossibleDate(value) {
+    if (value === null || value === undefined || value === "") return "";
+    if (value instanceof Date && !isNaN(value.getTime())) return toISODate(value);
+
+    if (typeof value === "number" && value > 20000 && value < 60000) {
+        return toISODate(excelSerialToDate(value));
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return "";
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(raw)) {
+        const [m, d, y] = raw.split("/");
+        const yyyy = Number(y) < 50 ? `20${y}` : `19${y}`;
+        return `${yyyy}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+        const [m, d, y] = raw.split("/");
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return toISODate(d);
+
+    return "";
+}
+
+function parseDateFromText(text) {
+    const name = String(text || "").toLowerCase();
+
+    const patterns = [
+        /(\d{4})[-_](\d{1,2})[-_](\d{1,2})/,
+        /(\d{1,2})[-_](\d{1,2})[-_](\d{4})/
+    ];
+
+    for (const p of patterns) {
+        const match = name.match(p);
+        if (match) {
+            if (match[1].length === 4) {
+                const [, y, m, d] = match;
+                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            } else {
+                const [, m, d, y] = match;
+                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            }
+        }
+    }
+
+    const monthMap = {
+        jan: "01", january: "01",
+        feb: "02", february: "02",
+        mar: "03", march: "03",
+        apr: "04", april: "04",
+        may: "05",
+        jun: "06", june: "06",
+        jul: "07", july: "07",
+        aug: "08", august: "08",
+        sep: "09", sept: "09", september: "09",
+        oct: "10", october: "10",
+        nov: "11", november: "11",
+        dec: "12", december: "12"
     };
 
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+    const monthYearMatch = name.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
+    if (monthYearMatch) {
+        const monthText = monthYearMatch[1];
+        const year = monthYearMatch[2];
+        return `${year}-${monthMap[monthText]}-01`;
     }
 
-    const db = firebase.firestore();
-    const auth = firebase.auth();
+    return "";
+}
 
-    const donorForm = document.getElementById("donorForm");
-    const entryDate = document.getElementById("entryDate");
-    const birthday = document.getElementById("birthday");
-    const age = document.getElementById("age");
-    const donorCategory = document.getElementById("donorCategory");
-    const numberOfDonations = document.getElementById("numberOfDonations");
-    const typeHelperBox = document.getElementById("typeHelperBox");
-    const statusMessage = document.getElementById("statusMessage");
-    const authIndicator = document.getElementById("authIndicator");
-    const saveDonorBtn = document.getElementById("saveDonorBtn");
-    const reloadPageBtn = document.getElementById("reloadPageBtn");
-    const serialHelperToggle = document.getElementById("serialHelperToggle");
-    const serialHelperContent = document.getElementById("serialHelperContent");
-    const serialHelperToggleIcon = document.getElementById("serialHelperToggleIcon");
+function donorKey(data) {
+    return [
+        normalizeText(data.surname),
+        normalizeText(data.firstName),
+        parsePossibleDate(data.birthday)
+    ].join("|");
+}
 
-    const donorTypeRadios = document.querySelectorAll('input[name="donorType"]');
-    const patientDirectedBox = document.getElementById("patientDirectedBox");
-    const patientDirectedDetails = document.getElementById("patientDirectedDetails");
-    const walkInBox = document.getElementById("walkInBox");
-    const walkInCount = document.getElementById("walkInCount");
-    const startWalkInGroupBtn = document.getElementById("startWalkInGroupBtn");
-    const mbdBox = document.getElementById("mbdBox");
-    const mbdDetails = document.getElementById("mbdDetails");
-    const mbdCount = document.getElementById("mbdCount");
-    const startMbdGroupBtn = document.getElementById("startMbdGroupBtn");
-    const groupInfoBox = document.getElementById("groupInfoBox");
-    const endGroupBtn = document.getElementById("endGroupBtn");
+function donationStrongKey(data) {
+    return [
+        donorKey(data),
+        parsePossibleDate(data.entryDate || data.donationDate),
+        normalizeText(data.serialNumber),
+        normalizeText(data.donorType),
+        normalizeText(data.mbdDetails),
+        normalizeText(data.patientDirectedDetails)
+    ].join("|");
+}
 
-    const lookupSearch = document.getElementById("lookupSearch");
-    const lookupBirthday = document.getElementById("lookupBirthday");
-    const searchDonorBtn = document.getElementById("searchDonorBtn");
-    const lookupResultsBox = document.getElementById("lookupResultsBox");
-    const lookupResultsBody = document.getElementById("lookupResultsBody");
-    const loadedDonorInfo = document.getElementById("loadedDonorInfo");
-    const clearLoadedDonorBtn = document.getElementById("clearLoadedDonorBtn");
+function donationLooseKey(data) {
+    return [
+        donorKey(data),
+        parsePossibleDate(data.entryDate || data.donationDate),
+        normalizeText(data.donorType),
+        normalizeText(data.mbdDetails),
+        normalizeText(data.patientDirectedDetails)
+    ].join("|");
+}
 
-    const serialPrefix = document.getElementById("serialPrefix");
-    const serialNumberInput = document.getElementById("serialNumber");
-    const useSerialPrefix = document.getElementById("useSerialPrefix");
-    const serialHelperBox = document.getElementById("serialHelperBox");
+function isMissingCritical(data) {
+    return !data.surname || !data.firstName || !data.birthday;
+}
 
-    const serialRangeStart = document.getElementById("serialRangeStart");
-    const serialRangeEnd = document.getElementById("serialRangeEnd");
-    const serialRangeSkip = document.getElementById("serialRangeSkip");
-    const generateSerialRangeBtn = document.getElementById("generateSerialRangeBtn");
-    const nextSerialBtn = document.getElementById("nextSerialBtn");
-    const clearSerialBatchBtn = document.getElementById("clearSerialBatchBtn");
-    const serialBatchInfo = document.getElementById("serialBatchInfo");
-    const serialBatchPreview = document.getElementById("serialBatchPreview");
+function parseIntSafe(value) {
+    const n = parseInt(String(value ?? "").replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(n) ? n : 0;
+}
 
-    const rangeDonorTypeRadios = document.querySelectorAll('input[name="rangeDonorType"]');
-    const rangeMbdBox = document.getElementById("rangeMbdBox");
-    const rangeMbdDetails = document.getElementById("rangeMbdDetails");
-    const rangePatientBox = document.getElementById("rangePatientBox");
-    const rangePatientDetails = document.getElementById("rangePatientDetails");
-    const rangeTypeInfo = document.getElementById("rangeTypeInfo");
+function looksLikeWalkInValue(value) {
+    const v = normalizeText(value);
+    return v === "walk-in" || v === "walk in" || v === "walkin";
+}
 
-    const timeStartedInput = document.getElementById("timeStarted");
-    const timeEndedInput = document.getElementById("timeEnded");
-    const timeHelperBox = document.getElementById("timeHelperBox");
+function looksLikePdValue(value) {
+    const v = normalizeText(value);
+    return v.includes("patient");
+}
 
-    let currentUser = null;
-    let authReady = false;
-    let loadedDonorRecord = null;
-    let donorLookupResults = [];
-    let autoTypeSuggestion = "";
-    let autoTypeReason = "";
-    let isSaving = false;
-    let donorSearchDebounce = null;
+function inferDonorType(raw) {
+    const mbd = String(raw.mbdDetails || "").trim();
+    const walkInRaw = String(raw.walkInRaw || "").trim();
+    const pd = String(raw.patientDirectedDetails || "").trim();
+    const donorTypeRaw = normalizeText(raw.donorTypeRaw || "");
 
-    const ACTIVE_GROUP_STORAGE_KEY = "donorEntryActiveGroup";
-    const SERIAL_BATCH_STORAGE_KEY = "donorEntrySerialBatch";
+    if (mbd) return "MBD";
+    if (walkInRaw) return "Walk-in";
+    if (pd) return "Patient Directed";
 
-    function setTodayDate() {
-        entryDate.value = new Date().toISOString().split("T")[0];
-        updateSerialPrefixByDate();
+    if (donorTypeRaw.includes("mbd")) return "MBD";
+    if (donorTypeRaw.includes("walk")) return "Walk-in";
+    if (donorTypeRaw.includes("patient")) return "Patient Directed";
+
+    return "";
+}
+
+function normalizeDonorCategory(value) {
+    const v = normalizeText(value);
+    if (v.includes("new")) return "New";
+    if (v.includes("repeat")) return "Repeat";
+    if (v.includes("lapse")) return "Lapse";
+    return String(value || "").trim();
+}
+
+function buildSequenceGroupKey(record) {
+    const date = record.entryDate || "";
+    const donorType = record.donorType || "";
+    let typeGroupKey = `${date}|${donorType}`;
+
+    if (donorType === "MBD") {
+        typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
+    } else if (donorType === "Patient Directed") {
+        typeGroupKey += `|${normalizeText(record.patientDirectedDetails || "patient-directed")}`;
+    } else if (donorType === "Walk-in") {
+        typeGroupKey += `|walk-in`;
     }
 
-    function computeAge() {
-        if (!birthday.value) {
-            age.value = "";
-            return;
-        }
+    return typeGroupKey;
+}
 
-        const birthDate = new Date(birthday.value);
-        const today = new Date();
-        let years = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
+function getCategoryDisplay(record, sequence) {
+    if (!sequence) return "";
+    if (record.donorType === "Walk-in") return `Walk-in-${sequence}`;
+    if (record.donorType === "MBD") return `${record.mbdDetails || "MBD"}-${sequence}`;
+    if (record.donorType === "Patient Directed") return `Patient Directed-${sequence}`;
+    return "";
+}
 
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            years--;
-        }
+function computeExistingMaxDonationCount(dKey) {
+    const donorHistory = donorHistoryMap.get(dKey) || [];
+    let maxCount = 0;
+    donorHistory.forEach(record => {
+        maxCount = Math.max(maxCount, parseIntSafe(record.numberOfDonations));
+    });
+    return maxCount;
+}
 
-        age.value = years >= 0 ? years : "";
-    }
+async function loadExistingRecords() {
+    existingRecords = [];
+    existingDonationKeySet = new Set();
+    existingLooseKeySet = new Set();
+    donorHistoryMap = new Map();
 
-    function showMessage(message, type) {
-        statusMessage.textContent = message;
-        statusMessage.className = "status-message";
-        statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
-    }
+    const snap = await db.collection("donorDatabase").get();
 
-    function clearMessage() {
-        statusMessage.textContent = "";
-        statusMessage.className = "status-message";
-    }
-
-    function setAuthIndicator(text, ok) {
-        authIndicator.textContent = text;
-        authIndicator.style.background = ok ? "rgba(30,95,35,0.35)" : "rgba(255,255,255,0.15)";
-        authIndicator.style.borderColor = ok ? "rgba(183,223,185,0.75)" : "rgba(255,255,255,0.28)";
-        authIndicator.style.color = "#fff";
-    }
-
-    function setSavingState(saving) {
-        isSaving = saving;
-        saveDonorBtn.disabled = saving;
-        saveDonorBtn.textContent = saving ? "Saving..." : "Save Donor Entry";
-    }
-
-    function getSelectedDonorType() {
-        const selected = document.querySelector('input[name="donorType"]:checked');
-        return selected ? selected.value : "";
-    }
-
-    function setSelectedDonorType(value) {
-        donorTypeRadios.forEach(radio => {
-            radio.checked = radio.value === value;
-        });
-        updateDonorTypeFields();
-    }
-
-    function updateDonorTypeFields() {
-        const selected = getSelectedDonorType();
-        patientDirectedBox.classList.add("hidden");
-        walkInBox.classList.add("hidden");
-        mbdBox.classList.add("hidden");
-
-        if (selected === "Patient Directed") patientDirectedBox.classList.remove("hidden");
-        if (selected === "Walk-in") walkInBox.classList.remove("hidden");
-        if (selected === "MBD") mbdBox.classList.remove("hidden");
-    }
-
-    function getSelectedRangeDonorType() {
-        const selected = document.querySelector('input[name="rangeDonorType"]:checked');
-        return selected ? selected.value : "";
-    }
-
-    function updateRangeDonorTypeFields() {
-        const selected = getSelectedRangeDonorType();
-        rangeMbdBox.classList.add("hidden");
-        rangePatientBox.classList.add("hidden");
-
-        if (selected === "MBD") {
-            rangeMbdBox.classList.remove("hidden");
-        }
-        if (selected === "Patient Directed") {
-            rangePatientBox.classList.remove("hidden");
-        }
-
-        if (selected) {
-            let text = `Serial range donor type set to: ${selected}`;
-            if (selected === "MBD" && rangeMbdDetails.value.trim()) {
-                text += ` | ${rangeMbdDetails.value.trim()}`;
-            }
-            if (selected === "Patient Directed" && rangePatientDetails.value.trim()) {
-                text += ` | ${rangePatientDetails.value.trim()}`;
-            }
-            rangeTypeInfo.textContent = text;
-            rangeTypeInfo.classList.remove("hidden");
-        } else {
-            rangeTypeInfo.textContent = "";
-            rangeTypeInfo.classList.add("hidden");
-        }
-    }
-
-    function normalizeText(value) {
-        return String(value || "").trim().toLowerCase();
-    }
-
-    function normalizeAlpha(value) {
-        return String(value || "")
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "");
-    }
-
-    function escapeHtml(text) {
-        if (text === null || text === undefined) return "";
-        return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    function getStrongIdentityKey(record) {
-        return [
-            normalizeAlpha(record.surname),
-            normalizeAlpha(record.firstName),
-            String(record.birthday || "").trim()
-        ].join("|");
-    }
-
-    function calculateAutoDonorCategory(lastEntryDate) {
-        if (!lastEntryDate || !entryDate.value) {
-            return {
-                value: "New",
-                reason: "No previous donation date found, so Auto defaults to New."
-            };
-        }
-
-        const newDate = new Date(entryDate.value + "T00:00:00");
-        const lastDate = new Date(lastEntryDate + "T00:00:00");
-
-        if (isNaN(newDate) || isNaN(lastDate)) {
-            return {
-                value: "New",
-                reason: "Date comparison is incomplete, so Auto defaults to New."
-            };
-        }
-
-        const diffMs = newDate - lastDate;
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-        if (diffDays < 0) {
-            return {
-                value: "New",
-                reason: "Entry date is earlier than last donation date, so Auto is not reliable."
-            };
-        }
-
-        if (diffDays <= 365) {
-            return {
-                value: "Repeat",
-                reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
-            };
-        }
-
-        return {
-            value: "Lapse",
-            reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
+    snap.forEach(doc => {
+        const data = doc.data() || {};
+        const record = {
+            id: doc.id,
+            surname: data.surname || "",
+            firstName: data.firstName || "",
+            middleName: data.middleName || "",
+            birthday: parsePossibleDate(data.birthday || ""),
+            entryDate: parsePossibleDate(data.entryDate || ""),
+            donorType: data.donorType || "",
+            mbdDetails: data.mbdDetails || "",
+            patientDirectedDetails: data.patientDirectedDetails || "",
+            serialNumber: data.serialNumber || "",
+            numberOfDonations: parseIntSafe(data.numberOfDonations)
         };
+
+        const dKey = donorKey(record);
+        existingRecords.push(record);
+        existingDonationKeySet.add(donationStrongKey(record));
+        existingLooseKeySet.add(donationLooseKey(record));
+
+        if (!donorHistoryMap.has(dKey)) donorHistoryMap.set(dKey, []);
+        donorHistoryMap.get(dKey).push(record);
+    });
+}
+
+function getAliasSet() {
+    const set = new Set();
+    Object.values(FIELD_ALIASES).forEach(arr => arr.forEach(v => set.add(standardizeHeader(v))));
+    Object.keys(EXACT_COLUMN_ROLE_MAP).forEach(v => set.add(standardizeHeader(v)));
+    return set;
+}
+
+function detectHeaderRowIndex(aoa) {
+    const aliasSet = getAliasSet();
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    const maxScan = Math.min(25, aoa.length);
+
+    for (let i = 0; i < maxScan; i++) {
+        const row = aoa[i] || [];
+        let score = 0;
+
+        row.forEach(cell => {
+            const v = standardizeHeader(cell);
+            if (aliasSet.has(v)) score += 1;
+        });
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = i;
+        }
     }
 
-    function refreshTypeHelper() {
-        const selectedMode = donorCategory.value;
+    return bestScore >= 2 ? bestIndex : 0;
+}
 
-        if (selectedMode === "Auto") {
-            if (autoTypeSuggestion) {
-                typeHelperBox.textContent = `Auto result: ${autoTypeSuggestion}. ${autoTypeReason}`;
-                typeHelperBox.classList.remove("hidden");
+function aoaToObjectRows(aoa) {
+    if (!aoa.length) return { rows: [], headers: [] };
+
+    const headerIndex = detectHeaderRowIndex(aoa);
+    const headers = (aoa[headerIndex] || []).map((h, idx) => {
+        const raw = String(h ?? "").trim();
+        return raw || `COLUMN_${idx + 1}`;
+    });
+
+    const rows = [];
+    for (let i = headerIndex + 1; i < aoa.length; i++) {
+        const rowArr = aoa[i] || [];
+        const obj = {};
+        headers.forEach((header, colIndex) => {
+            obj[header] = rowArr[colIndex] ?? "";
+        });
+        rows.push({
+            row: obj,
+            sourceRowNumber: i + 1
+        });
+    }
+
+    return { rows, headers };
+}
+
+function getFirstMappedValue(row, aliases) {
+    for (const [key, value] of Object.entries(row)) {
+        if (aliases.includes(standardizeHeader(key))) {
+            if (value !== null && value !== undefined && String(value).trim() !== "") {
+                return value;
+            }
+        }
+    }
+    return "";
+}
+
+function extractFromSpecialColumns(row) {
+    let mbdColumn = "";
+    let walkInColumn = "";
+    let patientDirectedColumn = "";
+
+    for (const [key, value] of Object.entries(row)) {
+        const normalizedKey = standardizeHeader(key);
+        const mappedRole = EXACT_COLUMN_ROLE_MAP[normalizedKey];
+        if (!mappedRole) continue;
+
+        const text = String(value ?? "").trim();
+        if (!text) continue;
+
+        if (mappedRole === "mbdColumn") mbdColumn = text;
+        if (mappedRole === "walkInColumn") walkInColumn = text;
+        if (mappedRole === "patientDirectedColumn") patientDirectedColumn = text;
+    }
+
+    return { mbdColumn, walkInColumn, patientDirectedColumn };
+}
+
+function hasAnchorIdentityOrDonorData(raw) {
+    return !!(
+        String(raw.serialNumber || "").trim() ||
+        String(raw.surname || "").trim() ||
+        String(raw.firstName || "").trim() ||
+        String(raw.middleName || "").trim() ||
+        String(raw.birthday || "").trim() ||
+        String(raw.entryDate || "").trim() ||
+        String(raw.contactNumber || "").trim() ||
+        String(raw.bloodType || "").trim() ||
+        String(raw.mbdDetails || "").trim() ||
+        String(raw.patientDirectedDetails || "").trim() ||
+        String(raw.walkInRaw || "").trim() ||
+        String(raw.donorTypeRaw || "").trim()
+    );
+}
+
+function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, context) {
+    const defaultDonationDate = document.getElementById("defaultDonationDate").value.trim();
+    const defaultMbdGroup = document.getElementById("defaultMbdGroup").value.trim();
+
+    const specialColumns = extractFromSpecialColumns(row);
+
+    const directDonationDate = parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.donationDate) || "");
+    const sheetDate = parseDateFromText(sheetName);
+    const fileDate = parseDateFromText(fileName);
+
+    let donorTypeRawDirect = String(getFirstMappedValue(row, FIELD_ALIASES.donorType) || "").trim();
+    let donorCategoryDirect = normalizeDonorCategory(getFirstMappedValue(row, FIELD_ALIASES.donorCategory) || "");
+    let mbdDirect = String(getFirstMappedValue(row, FIELD_ALIASES.mbdDetails) || "").trim();
+    let pdDirect = String(getFirstMappedValue(row, FIELD_ALIASES.patientDirectedDetails) || "").trim();
+    let walkInDirect = String(getFirstMappedValue(row, FIELD_ALIASES.walkIn) || "").trim();
+
+    if (!mbdDirect && specialColumns.mbdColumn && !looksLikeWalkInValue(specialColumns.mbdColumn) && !looksLikePdValue(specialColumns.mbdColumn)) {
+        mbdDirect = specialColumns.mbdColumn;
+    }
+    if (!walkInDirect && specialColumns.walkInColumn) {
+        walkInDirect = specialColumns.walkInColumn;
+    }
+    if (!pdDirect && specialColumns.patientDirectedColumn) {
+        pdDirect = specialColumns.patientDirectedColumn;
+    }
+
+    const inheritedDateUsed = !directDonationDate && !!context.lastDate;
+    const entryDate = directDonationDate || context.lastDate || sheetDate || fileDate || defaultDonationDate || "";
+
+    if (directDonationDate) context.lastDate = directDonationDate;
+    else if (!context.lastDate && entryDate) context.lastDate = entryDate;
+
+    const raw = {
+        rowId: createRowId(),
+        serialNumber: String(getFirstMappedValue(row, FIELD_ALIASES.serialNumber) || "").trim(),
+        surname: cleanName(getFirstMappedValue(row, FIELD_ALIASES.surname) || ""),
+        firstName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.firstName) || ""),
+        middleName: cleanName(getFirstMappedValue(row, FIELD_ALIASES.middleName) || ""),
+        birthday: parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.birthday) || ""),
+        entryDate,
+        donorTypeRaw: donorTypeRawDirect,
+        donorCategory: donorCategoryDirect,
+        mbdDetails: mbdDirect || defaultMbdGroup || "",
+        patientDirectedDetails: pdDirect || "",
+        walkInRaw: walkInDirect || "",
+        sex: String(getFirstMappedValue(row, FIELD_ALIASES.sex) || "").trim().toUpperCase(),
+        contactNumber: String(getFirstMappedValue(row, FIELD_ALIASES.contactNumber) || "").trim(),
+        address: String(getFirstMappedValue(row, FIELD_ALIASES.address) || "").trim(),
+        cityProvince: String(getFirstMappedValue(row, FIELD_ALIASES.cityProvince) || "").trim(),
+        bloodType: String(getFirstMappedValue(row, FIELD_ALIASES.bloodType) || "").trim().toUpperCase(),
+        amount: String(getFirstMappedValue(row, FIELD_ALIASES.amount) || "").trim(),
+        bloodBagBrand: String(getFirstMappedValue(row, FIELD_ALIASES.bloodBagBrand) || "").trim(),
+        bloodBagType: String(getFirstMappedValue(row, FIELD_ALIASES.bloodBagType) || "").trim(),
+        timeStarted: String(getFirstMappedValue(row, FIELD_ALIASES.timeStarted) || "").trim(),
+        timeEnded: String(getFirstMappedValue(row, FIELD_ALIASES.timeEnded) || "").trim(),
+        age: parseIntSafe(getFirstMappedValue(row, FIELD_ALIASES.age) || ""),
+        remarks: String(getFirstMappedValue(row, FIELD_ALIASES.remarks) || "").trim(),
+        numberOfDonationsImported: parseIntSafe(getFirstMappedValue(row, FIELD_ALIASES.numberOfDonations) || ""),
+        sourceFile: fileName,
+        sourceSheet: sheetName,
+        sourceRowNumber,
+        inheritedDateUsed,
+        inheritedGroupUsed: false,
+        removed: false,
+        selected: true,
+        manualReviewed: false
+    };
+
+    if (mbdDirect) {
+        raw.donorType = "MBD";
+        raw.mbdDetails = mbdDirect;
+        raw.walkInRaw = "";
+        raw.patientDirectedDetails = "";
+    } else if (walkInDirect) {
+        raw.donorType = "Walk-in";
+        raw.walkInRaw = walkInDirect || "WALK-IN";
+        raw.mbdDetails = "";
+        raw.patientDirectedDetails = "";
+    } else if (pdDirect) {
+        raw.donorType = "Patient Directed";
+        raw.patientDirectedDetails = pdDirect;
+        raw.mbdDetails = "";
+        raw.walkInRaw = "";
+    } else {
+        raw.donorType = inferDonorType(raw);
+    }
+
+    raw._donorKey = donorKey(raw);
+    raw._strongKey = donationStrongKey(raw);
+    raw._looseKey = donationLooseKey(raw);
+
+    return raw;
+}
+
+function createRowId() {
+    return "row_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function isTrulyBlankMappedRow(raw) {
+    if (!hasAnchorIdentityOrDonorData(raw)) {
+        return true;
+    }
+
+    return [
+        raw.serialNumber,
+        raw.surname,
+        raw.firstName,
+        raw.middleName,
+        raw.birthday,
+        raw.entryDate,
+        raw.donorTypeRaw,
+        raw.donorCategory,
+        raw.mbdDetails,
+        raw.patientDirectedDetails,
+        raw.walkInRaw,
+        raw.sex,
+        raw.contactNumber,
+        raw.address,
+        raw.cityProvince,
+        raw.bloodType,
+        raw.amount,
+        raw.bloodBagBrand,
+        raw.bloodBagType,
+        raw.timeStarted,
+        raw.timeEnded,
+        raw.age,
+        raw.remarks,
+        raw.numberOfDonationsImported
+    ].every(v => String(v ?? "").trim() === "" || String(v ?? "") === "0");
+}
+
+function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
+    const aoa = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+        blankrows: false
+    });
+
+    const { rows: objectRows } = aoaToObjectRows(aoa);
+    const parsed = [];
+
+    const context = {
+        lastDate: ""
+    };
+
+    objectRows.forEach(item => {
+        const raw = buildMappedRawFromRow(
+            item.row,
+            fileName,
+            sheetName,
+            item.sourceRowNumber,
+            context
+        );
+
+        if (!isTrulyBlankMappedRow(raw)) {
+            parsed.push(raw);
+        }
+    });
+
+    return parsed;
+}
+
+function computeImportedFinalCounts(rows) {
+    const donorGroups = {};
+
+    rows.forEach(row => {
+        if (!donorGroups[row._donorKey]) donorGroups[row._donorKey] = [];
+        donorGroups[row._donorKey].push(row);
+    });
+
+    Object.keys(donorGroups).forEach(key => {
+        const donorRows = donorGroups[key];
+
+        donorRows.sort((a, b) => {
+            const dateCompare = (a.entryDate || "").localeCompare(b.entryDate || "");
+            if (dateCompare !== 0) return dateCompare;
+            const sheetCompare = (a.sourceSheet || "").localeCompare(b.sourceSheet || "");
+            if (sheetCompare !== 0) return sheetCompare;
+            return (a.serialNumber || "").localeCompare(b.serialNumber || "");
+        });
+
+        let baseline = computeExistingMaxDonationCount(key);
+
+        donorRows.forEach(row => {
+            const importedCount = parseIntSafe(row.numberOfDonationsImported);
+            if (importedCount > baseline) {
+                baseline = importedCount;
             } else {
-                typeHelperBox.textContent = "Auto result is not available yet.";
-                typeHelperBox.classList.remove("hidden");
+                baseline += 1;
             }
-        } else {
-            typeHelperBox.textContent = `Manual override selected: ${selectedMode}.`;
-            typeHelperBox.classList.remove("hidden");
-        }
-    }
-
-    function updateAutoTypeSuggestion() {
-        if (!loadedDonorRecord) {
-            autoTypeSuggestion = "New";
-            autoTypeReason = "No loaded donor history, so Auto defaults to New.";
-            refreshTypeHelper();
-            return;
-        }
-
-        const result = calculateAutoDonorCategory(loadedDonorRecord.entryDate);
-        autoTypeSuggestion = result.value;
-        autoTypeReason = result.reason;
-        refreshTypeHelper();
-    }
-
-    function getFinalDonorCategoryToSave() {
-        if (donorCategory.value !== "Auto") {
-            return donorCategory.value;
-        }
-        return autoTypeSuggestion || "New";
-    }
-
-    function getSerialPrefixFromYear(year) {
-        const yearText = String(year || "");
-        const twoDigitYear = yearText.slice(-2) || "26";
-        return `PRC2600-${twoDigitYear}00`;
-    }
-
-    function getSelectedEntryYear() {
-        if (entryDate.value) {
-            return Number(entryDate.value.split("-")[0]);
-        }
-        return new Date().getFullYear();
-    }
-
-    function updateSerialPrefixByDate() {
-        const selectedYear = getSelectedEntryYear();
-        serialPrefix.textContent = getSerialPrefixFromYear(selectedYear);
-        updateSerialModeUI();
-        renderSerialBatchInfo();
-    }
-
-    function updateSerialModeUI() {
-        const enabled = useSerialPrefix.checked;
-        const currentPrefix = serialPrefix.textContent.trim();
-
-        serialPrefix.style.display = enabled ? "flex" : "none";
-        serialHelperBox.textContent = enabled
-            ? `Prefix enabled. Saved serial will be ${currentPrefix} + your manual input or scanned value.`
-            : "Prefix disabled. Saved serial will be exactly what you type or scan.";
-    }
-
-    function getFinalSerialNumber() {
-        const raw = serialNumberInput.value.trim();
-        const currentPrefix = serialPrefix.textContent.trim();
-
-        if (!raw) return "";
-        if (!useSerialPrefix.checked) return raw;
-        if (raw.toUpperCase().startsWith(currentPrefix.toUpperCase())) return raw;
-
-        return currentPrefix + raw;
-    }
-
-    function stripPrefixFromPossibleFullSerial(value) {
-        let cleaned = String(value || "").trim();
-        if (!cleaned) return "";
-
-        cleaned = cleaned.replace(/\s+/g, "");
-        cleaned = cleaned.replace(/^PRC2600-\d{4}/i, "");
-        cleaned = cleaned.replace(/^PRC2600-/i, "");
-        cleaned = cleaned.replace(/[^0-9]/g, "");
-        return cleaned;
-    }
-
-    function parseSkipList(skipText) {
-        const rawItems = String(skipText || "")
-            .split(",")
-            .map(item => stripPrefixFromPossibleFullSerial(item))
-            .filter(Boolean);
-
-        return Array.from(new Set(rawItems));
-    }
-
-    function buildSerialListFromRange(startRaw, endRaw, skipText) {
-        const startStr = stripPrefixFromPossibleFullSerial(startRaw);
-        const endStr = stripPrefixFromPossibleFullSerial(endRaw);
-
-        if (!startStr || !endStr) {
-            throw new Error("Please enter both start and end serial numbers.");
-        }
-
-        const startNum = Number(startStr);
-        const endNum = Number(endStr);
-
-        if (Number.isNaN(startNum) || Number.isNaN(endNum)) {
-            throw new Error("Start and end serial numbers must be numeric.");
-        }
-
-        if (endNum < startNum) {
-            throw new Error("End serial number must be greater than or equal to start serial number.");
-        }
-
-        const width = Math.max(startStr.length, endStr.length);
-        const skipSet = new Set(parseSkipList(skipText));
-        const list = [];
-
-        for (let num = startNum; num <= endNum; num++) {
-            const padded = String(num).padStart(width, "0");
-            if (!skipSet.has(padded) && !skipSet.has(String(num))) {
-                list.push(padded);
-            }
-        }
-
-        if (!list.length) {
-            throw new Error("No serial numbers left after applying skipped numbers.");
-        }
-
-        return list;
-    }
-
-    function getLocalSerialBatch() {
-        try {
-            const raw = localStorage.getItem(SERIAL_BATCH_STORAGE_KEY);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== "object") return null;
-            if (!Array.isArray(parsed.list)) return null;
-            return parsed;
-        } catch (error) {
-            console.error("Failed to read serial batch:", error);
-            return null;
-        }
-    }
-
-    function setLocalSerialBatch(data) {
-        try {
-            localStorage.setItem(SERIAL_BATCH_STORAGE_KEY, JSON.stringify(data));
-        } catch (error) {
-            console.error("Failed to save serial batch:", error);
-        }
-    }
-
-    function clearLocalSerialBatch() {
-        try {
-            localStorage.removeItem(SERIAL_BATCH_STORAGE_KEY);
-        } catch (error) {
-            console.error("Failed to clear serial batch:", error);
-        }
-    }
-
-    function getSerialBatch() {
-        return getLocalSerialBatch();
-    }
-
-    function setSerialBatch(list) {
-        const batch = {
-            prefix: serialPrefix.textContent.trim(),
-            list: list.slice(),
-            originalCount: list.length,
-            rangeDonorType: getSelectedRangeDonorType(),
-            rangeMbdDetails: rangeMbdDetails.value.trim(),
-            rangePatientDetails: rangePatientDetails.value.trim(),
-            createdAtMs: Date.now()
-        };
-        setLocalSerialBatch(batch);
-        renderSerialBatchInfo();
-        loadNextSerialFromBatch(false);
-    }
-
-    function clearSerialBatch() {
-        clearLocalSerialBatch();
-        renderSerialBatchInfo();
-    }
-
-    function renderSerialBatchInfo() {
-        const batch = getSerialBatch();
-
-        if (!batch || !Array.isArray(batch.list) || !batch.list.length) {
-            serialBatchInfo.classList.add("hidden");
-            serialBatchPreview.classList.add("hidden");
-            serialBatchInfo.textContent = "";
-            serialBatchPreview.textContent = "";
-            return;
-        }
-
-        const prefixText = batch.prefix || serialPrefix.textContent.trim();
-        const next = batch.list[0];
-        const remaining = batch.list.length;
-        const previewItems = batch.list.slice(0, 6).map(item => `${prefixText}${item}`);
-        const moreText = batch.list.length > 6 ? ` ... and ${batch.list.length - 6} more` : "";
-
-        let donorTypeText = batch.rangeDonorType ? ` | Type: ${batch.rangeDonorType}` : "";
-
-        if (batch.rangeDonorType === "MBD" && batch.rangeMbdDetails) {
-            donorTypeText += ` - ${batch.rangeMbdDetails}`;
-        }
-        if (batch.rangeDonorType === "Patient Directed" && batch.rangePatientDetails) {
-            donorTypeText += ` - ${batch.rangePatientDetails}`;
-        }
-
-        serialBatchInfo.textContent = `Active serial list: ${remaining} remaining | Next serial: ${prefixText}${next}${donorTypeText}`;
-        serialBatchPreview.innerHTML = `<b>Preview:</b> ${escapeHtml(previewItems.join(", "))}${escapeHtml(moreText)}`;
-
-        serialBatchInfo.classList.remove("hidden");
-        serialBatchPreview.classList.remove("hidden");
-    }
-
-    function loadNextSerialFromBatch(showStatus = true) {
-        const batch = getSerialBatch();
-
-        if (!batch || !Array.isArray(batch.list) || !batch.list.length) {
-            if (showStatus) showMessage("No active serial list found.", "error");
-            renderSerialBatchInfo();
-            return;
-        }
-
-        const nextSerial = batch.list[0];
-        serialNumberInput.value = nextSerial;
-        renderSerialBatchInfo();
-
-        if (showStatus) {
-            showMessage(`Next serial loaded: ${(batch.prefix || serialPrefix.textContent.trim())}${nextSerial}`, "success");
-        }
-    }
-
-    function consumeSerialBatchAfterSave() {
-        const batch = getSerialBatch();
-        if (!batch || !Array.isArray(batch.list) || !batch.list.length) return { batch: null, completed: false };
-
-        batch.list.shift();
-
-        if (!batch.list.length) {
-            clearLocalSerialBatch();
-            renderSerialBatchInfo();
-            return { batch: null, completed: true };
-        }
-
-        setLocalSerialBatch(batch);
-        renderSerialBatchInfo();
-        return { batch, completed: false };
-    }
-
-    function parseFlexibleTime(value) {
-        const raw = String(value || "").trim();
-        if (!raw) return null;
-
-        const match = raw.match(/^(\d{2}):(\d{2})$/);
-        if (!match) return null;
-
-        const hours = Number(match[1]);
-        const minutes = Number(match[2]);
-
-        if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-        if (hours < 0 || hours > 23) return null;
-        if (minutes < 0 || minutes > 59) return null;
-
-        return {
-            raw,
-            normalized: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
-            totalMinutes: (hours * 60) + minutes
-        };
-    }
-
-    function formatMinutesToHoursMinutes(totalMinutes) {
-        const hrs = Math.floor(totalMinutes / 60);
-        const mins = totalMinutes % 60;
-        if (hrs > 0 && mins > 0) return `${hrs} hr ${mins} min`;
-        if (hrs > 0) return `${hrs} hr`;
-        return `${mins} min`;
-    }
-
-    function validateAndDescribeTimes() {
-        const started = timeStartedInput.value.trim();
-        const ended = timeEndedInput.value.trim();
-
-        if (!started && !ended) {
-            timeHelperBox.classList.add("hidden");
-            timeHelperBox.textContent = "";
-            return {
-                valid: true,
-                durationMinutes: null,
-                overnight: false,
-                normalizedStarted: "",
-                normalizedEnded: ""
-            };
-        }
-
-        if ((started && !ended) || (!started && ended)) {
-            timeHelperBox.textContent = "Please complete both Time Started and Time Ended.";
-            timeHelperBox.classList.remove("hidden");
-            return { valid: false };
-        }
-
-        const startParsed = parseFlexibleTime(started);
-        const endParsed = parseFlexibleTime(ended);
-
-        if (!startParsed || !endParsed) {
-            timeHelperBox.textContent = "Invalid time input. Use examples like 7, 7:30, 07:30, or 19:30.";
-            timeHelperBox.classList.remove("hidden");
-            return { valid: false };
-        }
-
-        let duration = endParsed.totalMinutes - startParsed.totalMinutes;
-        let overnight = false;
-
-        if (duration < 0) {
-            duration += 24 * 60;
-            overnight = true;
-        }
-
-        if (duration === 0) {
-            timeHelperBox.textContent = "Time Started and Time Ended cannot be exactly the same.";
-            timeHelperBox.classList.remove("hidden");
-            return { valid: false };
-        }
-
-        timeHelperBox.textContent = overnight
-            ? `Accepted. Duration: ${formatMinutesToHoursMinutes(duration)} (crossed midnight).`
-            : `Accepted. Duration: ${formatMinutesToHoursMinutes(duration)}.`;
-        timeHelperBox.classList.remove("hidden");
-
-        return {
-            valid: true,
-            durationMinutes: duration,
-            overnight,
-            normalizedStarted: startParsed.normalized,
-            normalizedEnded: endParsed.normalized
-        };
-    }
-
-    function getLocalActiveGroup() {
-        try {
-            const raw = localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== "object") return null;
-            return parsed;
-        } catch (error) {
-            console.error("Failed to read active group from localStorage:", error);
-            return null;
-        }
-    }
-
-    function setLocalActiveGroup(data) {
-        try {
-            localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, JSON.stringify(data));
-        } catch (error) {
-            console.error("Failed to write active group to localStorage:", error);
-            throw new Error("Unable to save active group in this browser.");
-        }
-    }
-
-    function clearLocalActiveGroup() {
-        try {
-            localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY);
-        } catch (error) {
-            console.error("Failed to clear active group from localStorage:", error);
-        }
-    }
-
-    function getActiveGroup() {
-        return getLocalActiveGroup();
-    }
-
-    function setActiveGroup(data) {
-        setLocalActiveGroup(data);
-    }
-
-    function clearActiveGroup() {
-        clearLocalActiveGroup();
-    }
-
-    function renderActiveGroup() {
-        const activeGroup = getActiveGroup();
-
-        if (!activeGroup || !activeGroup.remaining || activeGroup.remaining <= 0) {
-            groupInfoBox.classList.add("hidden");
-            groupInfoBox.textContent = "";
-            return;
-        }
-
-        const originalCount = Number(activeGroup.originalCount || activeGroup.remaining || 0);
-        const remaining = Number(activeGroup.remaining || 0);
-        const currentNumber = Math.max(1, originalCount - remaining + 1);
-        const progressText = originalCount > 0
-            ? `Current donor in group: ${currentNumber} of ${originalCount} | Remaining donors after this entry: ${remaining}`
-            : `Remaining donors: ${remaining}`;
-
-        if (activeGroup.entryDate !== entryDate.value) {
-            groupInfoBox.textContent = `Saved active group found for ${activeGroup.entryDate}. ${progressText}`;
-            groupInfoBox.classList.remove("hidden");
-            return;
-        }
-
-        if (activeGroup.donorType === "Walk-in") {
-            groupInfoBox.textContent = `Active Group: Walk-in | Date: ${activeGroup.entryDate} | ${progressText}`;
-            setSelectedDonorType("Walk-in");
-        } else if (activeGroup.donorType === "MBD") {
-            groupInfoBox.textContent = `Active Group: MBD - ${activeGroup.organization} | Date: ${activeGroup.entryDate} | ${progressText}`;
-            setSelectedDonorType("MBD");
-            mbdDetails.value = activeGroup.organization || "";
-        } else if (activeGroup.donorType === "Patient Directed") {
-            groupInfoBox.textContent = `Active Group: Patient Directed - ${activeGroup.organization || activeGroup.details || ""} | Date: ${activeGroup.entryDate} | ${progressText}`;
-            setSelectedDonorType("Patient Directed");
-            patientDirectedDetails.value = activeGroup.details || "";
-        }
-
-        groupInfoBox.classList.remove("hidden");
-    }
-
-    function consumeGroupEntry() {
-        const activeGroup = getActiveGroup();
-        if (!activeGroup) return { group: null, completed: false };
-
-        const remaining = Number(activeGroup.remaining || 0) - 1;
-
-        if (remaining <= 0) {
-            clearActiveGroup();
-            return { group: null, completed: true };
-        }
-
-        const updatedGroup = {
-            ...activeGroup,
-            remaining: remaining,
-            updatedAtMs: Date.now()
-        };
-
-        setActiveGroup(updatedGroup);
-        return { group: updatedGroup, completed: false };
-    }
-
-    function getFocusableFields() {
-        return Array.from(
-            donorForm.querySelectorAll("input, select, textarea")
-        ).filter(el => {
-            if (el.type === "hidden") return false;
-            if (el.disabled) return false;
-            if (el.offsetParent === null) return false;
-            return true;
+            row.numberOfDonationsFinal = baseline;
         });
+    });
+}
+
+function syncRowComputedFields(row) {
+    row.surname = cleanName(row.surname || "");
+    row.firstName = cleanName(row.firstName || "");
+    row.middleName = cleanName(row.middleName || "");
+    row.birthday = parsePossibleDate(row.birthday || "");
+    row.entryDate = parsePossibleDate(row.entryDate || "");
+    row.donorCategory = normalizeDonorCategory(row.donorCategory || "");
+    row.sex = String(row.sex || "").trim().toUpperCase();
+    row.bloodType = String(row.bloodType || "").trim().toUpperCase();
+    row.numberOfDonationsImported = parseIntSafe(row.numberOfDonationsImported || 0);
+
+    if (row.donorType === "MBD") {
+        row.walkInRaw = "";
+        row.patientDirectedDetails = "";
+    } else if (row.donorType === "Walk-in") {
+        row.mbdDetails = "";
+        if (!row.walkInRaw) row.walkInRaw = "WALK-IN";
+        row.patientDirectedDetails = "";
+    } else if (row.donorType === "Patient Directed") {
+        row.mbdDetails = "";
+        row.walkInRaw = "";
     }
 
-    function focusNextField(currentElement) {
-        const fields = getFocusableFields();
-        const index = fields.indexOf(currentElement);
-        if (index === -1) return;
+    row._donorKey = donorKey(row);
+    row._strongKey = donationStrongKey(row);
+    row._looseKey = donationLooseKey(row);
+}
 
-        for (let i = index + 1; i < fields.length; i++) {
-            const next = fields[i];
-            if (!next.disabled && next.offsetParent !== null) {
-                next.focus();
-                if (typeof next.select === "function" && next.tagName.toLowerCase() === "input" && next.type !== "date") {
-                    next.select();
-                }
-                break;
-            }
+function recomputePreviewRows() {
+    const activeRows = previewRows.filter(r => !r.removed);
+
+    activeRows.forEach(syncRowComputedFields);
+    computeImportedFinalCounts(activeRows);
+
+    const grouped = {};
+    activeRows.forEach(row => {
+        const groupKey = buildSequenceGroupKey(row);
+        if (!grouped[groupKey]) grouped[groupKey] = [];
+        grouped[groupKey].push(row);
+    });
+
+    Object.keys(grouped).forEach(groupKey => {
+        grouped[groupKey].sort((a, b) => {
+            const serialCompare = (a.serialNumber || "").localeCompare(b.serialNumber || "");
+            if (serialCompare !== 0) return serialCompare;
+            return (a.firstName || "").localeCompare(b.firstName || "");
+        });
+        grouped[groupKey].forEach((row, index) => {
+            row.sequenceNumber = index + 1;
+            row.categoryDisplay = getCategoryDisplay(row, row.sequenceNumber);
+        });
+    });
+
+    const batchSeenStrong = new Set();
+    const batchSeenLoose = new Set();
+
+    activeRows.forEach((row) => {
+        const dKey = donorKey(row);
+
+        let importStatus = "NEW";
+        let reason = "";
+
+        if (isMissingCritical(row)) {
+            importStatus = "MISSING_DATA";
+            reason = "Missing surname, first name, or birthday.";
+        } else if (existingDonationKeySet.has(row._strongKey) || existingLooseKeySet.has(row._looseKey)) {
+            importStatus = "DUPLICATE_DB";
+            reason = "This donation record already exists in donorDatabase.";
+        } else if (batchSeenStrong.has(row._strongKey) || batchSeenLoose.has(row._looseKey)) {
+            importStatus = "DUPLICATE_BATCH";
+            reason = "Duplicate row found in selected files.";
+        } else {
+            importStatus = "NEW";
+            const maxExisting = computeExistingMaxDonationCount(dKey);
+            reason = maxExisting > 0
+                ? `Existing donor found. Highest saved count is ${maxExisting}. Imported row will continue from there.`
+                : "New donor record or first known imported donation for this donor.";
         }
+
+        batchSeenStrong.add(row._strongKey);
+        batchSeenLoose.add(row._looseKey);
+
+        row.importStatus = importStatus;
+        row.reason = reason;
+    });
+
+    previewRows.filter(r => r.removed).forEach(row => {
+        row.reason = "Removed from current import preview.";
+    });
+}
+
+function processPreviewRows(rows) {
+    previewRows = rows.map(row => ({
+        ...row,
+        removed: !!row.removed,
+        selected: row.selected !== false,
+        manualReviewed: !!row.manualReviewed
+    }));
+    recomputePreviewRows();
+}
+
+function statusPill(status) {
+    if (status === "NEW") return `<span class="pill pill-new">NEW</span>`;
+    if (status === "DUPLICATE_DB") return `<span class="pill pill-dupdb">DUPLICATE DB</span>`;
+    if (status === "DUPLICATE_BATCH") return `<span class="pill pill-dupbatch">DUPLICATE FILE</span>`;
+    return `<span class="pill pill-missing">MISSING DATA</span>`;
+}
+
+function getVisiblePreviewRows() {
+    const active = previewRows.filter(r => !r.removed);
+
+    if (currentPreviewFilter === "ALL") return active;
+    if (currentPreviewFilter === "NEW") return active.filter(r => r.importStatus === "NEW");
+    if (currentPreviewFilter === "DUPLICATE_DB") return active.filter(r => r.importStatus === "DUPLICATE_DB");
+    if (currentPreviewFilter === "DUPLICATE_BATCH") return active.filter(r => r.importStatus === "DUPLICATE_BATCH");
+    if (currentPreviewFilter === "MISSING_DATA") return active.filter(r => r.importStatus === "MISSING_DATA");
+    if (currentPreviewFilter === "MBD_ONLY") return active.filter(r => r.donorType === "MBD");
+    if (currentPreviewFilter === "WALK_PD_ONLY") return active.filter(r => r.donorType === "Walk-in" || r.donorType === "Patient Directed");
+    return active;
+}
+
+function updateFilterBoxes() {
+    const ids = ["boxAll","boxReady","boxDupDb","boxDupBatch","boxMissing","boxMbd","boxWalkPd"];
+    ids.forEach(id => document.getElementById(id).classList.remove("active"));
+
+    const map = {
+        ALL: "boxAll",
+        NEW: "boxReady",
+        DUPLICATE_DB: "boxDupDb",
+        DUPLICATE_BATCH: "boxDupBatch",
+        MISSING_DATA: "boxMissing",
+        MBD_ONLY: "boxMbd",
+        WALK_PD_ONLY: "boxWalkPd"
+    };
+    if (map[currentPreviewFilter]) {
+        document.getElementById(map[currentPreviewFilter]).classList.add("active");
+    }
+}
+
+function renderStats() {
+    const activeRows = previewRows.filter(r => !r.removed);
+    const total = activeRows.length;
+    const ready = activeRows.filter(r => r.importStatus === "NEW").length;
+    const dupDb = activeRows.filter(r => r.importStatus === "DUPLICATE_DB").length;
+    const dupBatch = activeRows.filter(r => r.importStatus === "DUPLICATE_BATCH").length;
+    const missing = activeRows.filter(r => r.importStatus === "MISSING_DATA").length;
+    const mbd = activeRows.filter(r => r.donorType === "MBD").length;
+    const walkPd = activeRows.filter(r => r.donorType === "Walk-in" || r.donorType === "Patient Directed").length;
+    const selected = activeRows.filter(r => r.selected).length;
+
+    document.getElementById("statTotal").textContent = total;
+    document.getElementById("statReady").textContent = ready;
+    document.getElementById("statDupDb").textContent = dupDb;
+    document.getElementById("statDupBatch").textContent = dupBatch;
+    document.getElementById("statMissing").textContent = missing;
+    document.getElementById("statMbd").textContent = mbd;
+    document.getElementById("statWalkInPd").textContent = walkPd;
+
+    document.getElementById("previewInfo").innerHTML =
+        total === 0 ? "No preview yet."
+        : `<b>${total}</b> active rows. <b>${selected}</b> selected for import. <span class="success">${ready} ready</span>, <span class="danger">${dupDb} duplicate(s) in database</span>, <span class="warning">${dupBatch} duplicate(s) in files</span>, <span class="warning">${missing} missing required donor identity data</span>.`;
+
+    const bannerText = {
+        ALL: "ALL ROWS",
+        NEW: "READY ROWS",
+        DUPLICATE_DB: "DUPLICATES IN DATABASE",
+        DUPLICATE_BATCH: "DUPLICATES IN FILES",
+        MISSING_DATA: "MISSING DATA ROWS",
+        MBD_ONLY: "MBD ROWS",
+        WALK_PD_ONLY: "WALK-IN / PATIENT DIRECTED ROWS"
+    };
+
+    document.getElementById("filterBanner").innerHTML =
+        `Current view: <b>${bannerText[currentPreviewFilter] || "ALL ROWS"}</b> — showing <b>${getVisiblePreviewRows().length}</b> row(s).`;
+
+    document.getElementById("importBtn").disabled = selected === 0;
+    updateFilterBoxes();
+}
+
+function buildDonorTypeSelect(rowIndex, value) {
+    return `
+        <select class="inline-select" data-index="${rowIndex}" data-field="donorType">
+            <option value=""></option>
+            <option value="MBD" ${value === "MBD" ? "selected" : ""}>MBD</option>
+            <option value="Walk-in" ${value === "Walk-in" ? "selected" : ""}>Walk-in</option>
+            <option value="Patient Directed" ${value === "Patient Directed" ? "selected" : ""}>Patient Directed</option>
+        </select>
+    `;
+}
+
+function buildSexSelect(rowIndex, value) {
+    return `
+        <select class="inline-select" data-index="${rowIndex}" data-field="sex">
+            <option value=""></option>
+            <option value="MALE" ${value === "MALE" ? "selected" : ""}>MALE</option>
+            <option value="FEMALE" ${value === "FEMALE" ? "selected" : ""}>FEMALE</option>
+        </select>
+    `;
+}
+
+function inputCell(type, rowIndex, field, value, className = "") {
+    return `<input class="inline-input ${className}" data-index="${rowIndex}" data-field="${field}" type="${type}" value="${escapeHtml(value || "")}">`;
+}
+
+function renderPreviewTable() {
+    const tbody = document.getElementById("previewBody");
+    const visibleRows = getVisiblePreviewRows();
+
+    if (!previewRows.length) {
+        tbody.innerHTML = `<tr><td colspan="35" class="muted">No rows parsed yet.</td></tr>`;
+        renderStats();
+        return;
     }
 
-    donorForm.addEventListener("keydown", function(e) {
-        const target = e.target;
-        const tag = target.tagName.toLowerCase();
+    if (!visibleRows.length) {
+        tbody.innerHTML = `<tr><td colspan="35" class="muted">No rows match the current filter.</td></tr>`;
+        renderStats();
+        return;
+    }
 
-        if (e.key !== "Enter") return;
-        if (tag === "textarea") return;
-        if (target.type === "button" || target.type === "submit" || target.type === "reset") return;
+    tbody.innerHTML = visibleRows.map((row) => {
+        const index = previewRows.findIndex(r => r.rowId === row.rowId);
+        const rowClass = row.removed ? "row-removed" : "";
 
-        e.preventDefault();
-        focusNextField(target);
-    });
-
-    donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
-    rangeDonorTypeRadios.forEach(radio => radio.addEventListener("change", updateRangeDonorTypeFields));
-    rangeMbdDetails.addEventListener("input", updateRangeDonorTypeFields);
-    rangePatientDetails.addEventListener("input", updateRangeDonorTypeFields);
-
-    birthday.addEventListener("change", computeAge);
-    entryDate.addEventListener("change", () => {
-        updateAutoTypeSuggestion();
-        renderActiveGroup();
-        updateSerialPrefixByDate();
-    });
-    donorCategory.addEventListener("change", refreshTypeHelper);
-    useSerialPrefix.addEventListener("change", updateSerialModeUI);
-    timeStartedInput.addEventListener("input", validateAndDescribeTimes);
-    timeEndedInput.addEventListener("input", validateAndDescribeTimes);
-
-    generateSerialRangeBtn.addEventListener("click", function() {
-        try {
-            const selectedRangeType = getSelectedRangeDonorType();
-
-            if (!selectedRangeType) {
-                showMessage("Please select the Range Donor Type.", "error");
-                return;
-            }
-
-            if (selectedRangeType === "MBD" && !rangeMbdDetails.value.trim()) {
-                showMessage("Please enter the Range MBD site or organization.", "error");
-                return;
-            }
-
-            if (selectedRangeType === "Patient Directed" && !rangePatientDetails.value.trim()) {
-                showMessage("Please enter the Range patient directed details.", "error");
-                return;
-            }
-
-            const list = buildSerialListFromRange(
-                serialRangeStart.value,
-                serialRangeEnd.value,
-                serialRangeSkip.value
-            );
-            setSerialBatch(list);
-            showMessage(`Serial list generated successfully. ${list.length} serial number(s) ready.`, "success");
-        } catch (error) {
-            showMessage(error.message, "error");
-        }
-    });
-
-    nextSerialBtn.addEventListener("click", function() {
-        loadNextSerialFromBatch(true);
-    });
-
-    clearSerialBatchBtn.addEventListener("click", function() {
-        clearSerialBatch();
-        showMessage("Serial list cleared.", "success");
-    });
-
-    function renderLookupResults(results) {
-        donorLookupResults = results;
-
-        if (!results.length) {
-            lookupResultsBox.classList.add("hidden");
-            lookupResultsBody.innerHTML = "";
-            showMessage("No existing donor matched your search.", "error");
-            return;
-        }
-
-        lookupResultsBody.innerHTML = results.map((record, index) => `
-            <tr>
-                <td><button type="button" class="small-btn blue-btn" onclick="loadExistingDonor(${index})">Load</button></td>
-                <td>${escapeHtml(record.surname || "")}</td>
-                <td>${escapeHtml(record.firstName || "")}</td>
-                <td>${escapeHtml(record.middleName || "")}</td>
-                <td>${escapeHtml(record.birthday || "")}</td>
-                <td>${escapeHtml(record.contactNumber || "")}</td>
-                <td>${escapeHtml(record.bloodType || "")}</td>
-                <td>${escapeHtml(record.entryDate || "")}</td>
-                <td>${escapeHtml(record.donorCategory || "New")}</td>
-                <td>${escapeHtml(record.numberOfDonations || 0)}</td>
+        return `
+            <tr class="${rowClass}">
+                <td><input type="checkbox" class="rowCheck" data-index="${index}" ${row.selected ? "checked" : ""}></td>
+                <td>${index + 1}</td>
+                <td>
+                    <div class="mini-actions">
+                        ${row.removed
+                            ? `<button class="mini-btn mini-restore" onclick="restorePreviewRow(${index})">Restore</button>`
+                            : `<button class="mini-btn mini-remove" onclick="removePreviewRow(${index})">Remove</button>`
+                        }
+                    </div>
+                </td>
+                <td>${statusPill(row.importStatus)}</td>
+                <td>${escapeHtml(row.reason)}${row.manualReviewed ? `<div class="success" style="margin-top:4px;">MANUALLY REVIEWED</div>` : ""}</td>
+                <td>${escapeHtml(row.sourceFile)}</td>
+                <td>${escapeHtml(row.sourceSheet)}</td>
+                <td>${escapeHtml(row.sourceRowNumber)}</td>
+                <td>${row.inheritedDateUsed ? '<span class="warning">YES</span>' : 'NO'}</td>
+                <td>${row.inheritedGroupUsed ? '<span class="warning">YES</span>' : 'NO'}</td>
+                <td>${inputCell("text", index, "serialNumber", row.serialNumber, "medium")}</td>
+                <td>${inputCell("text", index, "surname", row.surname, "medium")}</td>
+                <td>${inputCell("text", index, "firstName", row.firstName, "medium")}</td>
+                <td>${inputCell("text", index, "middleName", row.middleName, "medium")}</td>
+                <td>${inputCell("date", index, "birthday", row.birthday, "medium")}</td>
+                <td>${inputCell("date", index, "entryDate", row.entryDate, "medium")}</td>
+                <td>${buildDonorTypeSelect(index, row.donorType)}</td>
+                <td>${inputCell("text", index, "mbdDetails", row.mbdDetails, "long")}</td>
+                <td>${inputCell("text", index, "patientDirectedDetails", row.patientDirectedDetails, "long")}</td>
+                <td>${inputCell("text", index, "walkInRaw", row.walkInRaw, "medium")}</td>
+                <td>${escapeHtml(row.categoryDisplay)}</td>
+                <td>${inputCell("number", index, "numberOfDonationsImported", row.numberOfDonationsImported, "short")}</td>
+                <td><b>${escapeHtml(row.numberOfDonationsFinal)}</b></td>
+                <td>${inputCell("text", index, "donorCategory", row.donorCategory, "medium")}</td>
+                <td>${buildSexSelect(index, row.sex)}</td>
+                <td>${inputCell("text", index, "bloodType", row.bloodType, "short")}</td>
+                <td>${inputCell("text", index, "contactNumber", row.contactNumber, "medium")}</td>
+                <td>${inputCell("text", index, "address", row.address, "long")}</td>
+                <td>${inputCell("text", index, "cityProvince", row.cityProvince, "long")}</td>
+                <td>${inputCell("text", index, "amount", row.amount, "short")}</td>
+                <td>${inputCell("text", index, "bloodBagBrand", row.bloodBagBrand, "medium")}</td>
+                <td>${inputCell("text", index, "bloodBagType", row.bloodBagType, "medium")}</td>
+                <td>${inputCell("text", index, "timeStarted", row.timeStarted, "short")}</td>
+                <td>${inputCell("text", index, "timeEnded", row.timeEnded, "short")}</td>
+                <td>${inputCell("text", index, "remarks", row.remarks, "long")}</td>
             </tr>
-        `).join("");
+        `;
+    }).join("");
 
-        lookupResultsBox.classList.remove("hidden");
+    renderStats();
+}
+
+function formatTimestamp(ts) {
+    if (!ts) return "";
+    try {
+        if (ts.toDate) return ts.toDate().toLocaleString();
+        return String(ts);
+    } catch {
+        return String(ts);
     }
+}
 
-    async function searchExistingDonors() {
-        try {
-            clearMessage();
+async function loadImportHistory() {
+    const box = document.getElementById("importHistoryBox");
+    box.innerHTML = `<div class="muted">Loading upload history...</div>`;
 
-            const keyword = normalizeText(lookupSearch.value);
-            const birthdayValue = lookupBirthday.value;
+    try {
+        const snap = await db.collection("donorImportBatches")
+            .orderBy("createdAt", "desc")
+            .limit(40)
+            .get();
 
-            if (!keyword && !birthdayValue) {
-                donorLookupResults = [];
-                lookupResultsBody.innerHTML = "";
-                lookupResultsBox.classList.add("hidden");
-                return;
-            }
-
-            const snapshot = await db.collection("donorDatabase").orderBy("entryDate", "desc").get();
-            const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const groupedLatest = {};
-            allRecords.forEach(record => {
-                const donorKey = getStrongIdentityKey(record);
-
-                if (!groupedLatest[donorKey]) {
-                    groupedLatest[donorKey] = record;
-                } else {
-                    const existing = groupedLatest[donorKey];
-                    const existingDate = existing.entryDate || "";
-                    const newDate = record.entryDate || "";
-                    if (newDate > existingDate) {
-                        groupedLatest[donorKey] = record;
-                    }
-                }
+        const batches = [];
+        snap.forEach(doc => {
+            batches.push({
+                id: doc.id,
+                ...doc.data()
             });
+        });
 
-            let uniqueRecords = Object.values(groupedLatest);
-
-            uniqueRecords = uniqueRecords.filter(record => {
-                const searchable = [
-                    record.suffix,
-                    record.surname,
-                    record.firstName,
-                    record.middleName,
-                    record.contactNumber,
-                    record.birthday,
-                    record.bloodType
-                ].join(" ").toLowerCase();
-
-                const keywordMatch = !keyword || searchable.includes(keyword);
-                const birthdayMatch = !birthdayValue || record.birthday === birthdayValue;
-
-                return keywordMatch && birthdayMatch;
-            });
-
-            uniqueRecords.sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
-            renderLookupResults(uniqueRecords);
-
-            if (uniqueRecords.length) {
-                showMessage(`${uniqueRecords.length} donor match(es) found.`, "success");
-            } else {
-                showMessage("No existing donor matched your search.", "error");
-            }
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to search existing donors: " + error.message, "error");
+        if (!batches.length) {
+            box.innerHTML = `<div class="muted">No upload history found.</div>`;
+            return;
         }
+
+        box.innerHTML = batches.map(batch => {
+            const files = Array.isArray(batch.fileNames) ? batch.fileNames : [];
+
+            return `
+                <div class="batch-item">
+                    <div><b>Batch ID:</b> ${escapeHtml(batch.id)}</div>
+                    <div><b>Imported Rows:</b> ${escapeHtml(batch.importedRowCount || 0)}</div>
+                    <div><b>Requested Rows:</b> ${escapeHtml(batch.requestedRowCount || 0)}</div>
+                    <div><b>Files:</b> ${files.length ? escapeHtml(files.join(", ")) : "-"}</div>
+                    <div><b>Created:</b> ${escapeHtml(formatTimestamp(batch.createdAt))}</div>
+                    <div><b>Created By:</b> ${escapeHtml(batch.createdByEmail || "Unknown")}</div>
+                    <div class="batch-actions">
+                        <button class="btn-danger" onclick="retractBatch('${batch.id}')">Retract This Upload</button>
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+    } catch (error) {
+        console.error("Failed to load import history:", error);
+        box.innerHTML = `<div class="danger">Failed to load upload history: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+async function analyzeFiles() {
+    const files = document.getElementById("excelFiles").files;
+    if (!files.length) {
+        alert("Please select at least one Excel or CSV file.");
+        return;
     }
 
-    window.loadExistingDonor = function(index) {
-        const donor = donorLookupResults[index];
-        if (!donor) return;
+    document.getElementById("analyzeBtn").disabled = true;
+    document.getElementById("analyzeBtn").textContent = "Analyzing...";
 
-        loadedDonorRecord = donor;
+    try {
+        await loadExistingRecords();
+        const parsedRows = [];
 
-        document.getElementById("suffix").value = donor.suffix || "";
-        document.getElementById("surname").value = donor.surname || "";
-        document.getElementById("firstName").value = donor.firstName || "";
-        document.getElementById("middleName").value = donor.middleName || "";
-        document.getElementById("birthday").value = donor.birthday || "";
-        computeAge();
-        document.getElementById("civilStatus").value = donor.civilStatus || "";
-        document.getElementById("sex").value = donor.sex || "";
-        document.getElementById("address").value = donor.address || "";
-        document.getElementById("cityProvince").value = donor.cityProvince || "";
-        document.getElementById("occupation").value = donor.occupation || "";
-        document.getElementById("contactNumber").value = donor.contactNumber || "";
-        document.getElementById("bloodType").value = donor.bloodType || "";
+        for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
 
-        const previousCount = parseInt(donor.numberOfDonations || "0");
-        numberOfDonations.value = previousCount;
-
-        donorCategory.value = "Auto";
-        updateAutoTypeSuggestion();
-
-        loadedDonorInfo.textContent =
-            `Loaded donor identity only: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | ` +
-            `Last donation date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0} | ` +
-            `Old donor type/group was preserved in past record and not copied into this new donation entry.`;
-        loadedDonorInfo.classList.remove("hidden");
-
-        showMessage("Existing donor loaded for autofill only. New donation details were kept unchanged.", "success");
-    };
-
-    function clearLoadedDonor() {
-        loadedDonorRecord = null;
-        loadedDonorInfo.classList.add("hidden");
-        loadedDonorInfo.textContent = "";
-        donorCategory.value = "Auto";
-        numberOfDonations.value = "0";
-        updateAutoTypeSuggestion();
-    }
-
-    function clearEntryOnlyFieldsAfterSave() {
-        document.getElementById("suffix").value = "";
-        document.getElementById("surname").value = "";
-        document.getElementById("firstName").value = "";
-        document.getElementById("middleName").value = "";
-        document.getElementById("birthday").value = "";
-        document.getElementById("age").value = "";
-        document.getElementById("civilStatus").selectedIndex = 0;
-        document.getElementById("sex").selectedIndex = 0;
-        document.getElementById("address").value = "";
-        document.getElementById("cityProvince").value = "";
-        document.getElementById("occupation").value = "";
-        document.getElementById("contactNumber").value = "";
-        document.getElementById("bloodType").selectedIndex = 0;
-        document.getElementById("bloodBagBrand").selectedIndex = 0;
-        document.getElementById("bloodBagType").selectedIndex = 0;
-        document.getElementById("amount").selectedIndex = 0;
-        document.getElementById("timeStarted").value = "";
-        document.getElementById("timeEnded").value = "";
-        document.getElementById("remarks").value = "";
-        donorCategory.value = "Auto";
-        numberOfDonations.value = "0";
-        timeHelperBox.classList.add("hidden");
-        timeHelperBox.textContent = "";
-    }
-
-    function triggerLiveDonorSearch() {
-        clearTimeout(donorSearchDebounce);
-        donorSearchDebounce = setTimeout(() => {
-            searchExistingDonors();
-        }, 300);
-    }
-
-    searchDonorBtn.addEventListener("click", searchExistingDonors);
-    reloadPageBtn.addEventListener("click", () => window.location.reload());
-    serialHelperToggle.addEventListener("click", function() {
-        const isHidden = serialHelperContent.classList.contains("hidden");
-        serialHelperContent.classList.toggle("hidden", !isHidden);
-        serialHelperToggleIcon.textContent = isHidden ? "−" : "+";
-    });
-    lookupSearch.addEventListener("input", triggerLiveDonorSearch);
-    lookupBirthday.addEventListener("input", triggerLiveDonorSearch);
-    clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
-
-    startWalkInGroupBtn.addEventListener("click", function() {
-        try {
-            if (!authReady || !currentUser) {
-                showMessage("You must be logged in first.", "error");
-                return;
+            for (const sheetName of workbook.SheetNames) {
+                const sheet = workbook.Sheets[sheetName];
+                const rows = readSheetRowsWithInheritance(sheet, file.name, sheetName);
+                rows.forEach(r => parsedRows.push(r));
             }
-
-            const count = parseInt(walkInCount.value || "0");
-            if (count <= 0) {
-                showMessage("Please enter a valid number of walk-in donors.", "error");
-                return;
-            }
-
-            setActiveGroup({
-                entryDate: entryDate.value,
-                donorType: "Walk-in",
-                organization: "",
-                details: "",
-                remaining: count,
-                originalCount: count,
-                createdBy: currentUser.uid,
-                createdAtMs: Date.now(),
-                updatedAtMs: Date.now()
-            });
-
-            setSelectedDonorType("Walk-in");
-            renderActiveGroup();
-            showMessage(`Walk-in group started for ${count} donors.`, "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to start Walk-in group: " + error.message, "error");
         }
-    });
 
-    startMbdGroupBtn.addEventListener("click", function() {
-        try {
-            if (!authReady || !currentUser) {
-                showMessage("You must be logged in first.", "error");
-                return;
-            }
+        processPreviewRows(parsedRows);
+        currentPreviewFilter = "ALL";
+        renderPreviewTable();
 
-            const org = mbdDetails.value.trim();
-            const count = parseInt(mbdCount.value || "0");
+    } catch (error) {
+        console.error(error);
+        alert("Error analyzing files: " + error.message);
+    } finally {
+        document.getElementById("analyzeBtn").disabled = false;
+        document.getElementById("analyzeBtn").textContent = "Analyze Files";
+    }
+}
 
-            if (!org) {
-                showMessage("Please enter MBD site / organization.", "error");
-                return;
-            }
+async function importSelectedRows() {
+    const rowsToImport = previewRows.filter(row => !row.removed && row.selected);
 
-            if (count <= 0) {
-                showMessage("Please enter a valid number of MBD donors.", "error");
-                return;
-            }
+    if (!rowsToImport.length) {
+        alert("No selected rows to import.");
+        return;
+    }
 
-            setActiveGroup({
-                entryDate: entryDate.value,
-                donorType: "MBD",
-                organization: org,
-                details: "",
-                remaining: count,
-                originalCount: count,
-                createdBy: currentUser.uid,
-                createdAtMs: Date.now(),
-                updatedAtMs: Date.now()
-            });
+    const dupDbCount = rowsToImport.filter(r => r.importStatus === "DUPLICATE_DB").length;
+    const dupBatchCount = rowsToImport.filter(r => r.importStatus === "DUPLICATE_BATCH").length;
+    const missingCount = rowsToImport.filter(r => r.importStatus === "MISSING_DATA").length;
 
-            setSelectedDonorType("MBD");
-            renderActiveGroup();
-            showMessage(`MBD group started for ${count} donors under ${org}.`, "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to start MBD group: " + error.message, "error");
-        }
-    });
+    let warningText = "";
+    if (dupDbCount || dupBatchCount || missingCount) {
+        warningText =
+            `\n\nWarning before import:` +
+            `\n• Duplicate in DB: ${dupDbCount}` +
+            `\n• Duplicate in Files: ${dupBatchCount}` +
+            `\n• Missing Data: ${missingCount}` +
+            `\n\nSelected rows will still be imported.`;
+    }
 
-    endGroupBtn.addEventListener("click", function() {
-        clearActiveGroup();
-        renderActiveGroup();
-        showMessage("Active group ended manually.", "success");
-    });
+    if (!confirm(`Import ${rowsToImport.length} selected row(s)?${warningText}`)) return;
 
-    donorForm.addEventListener("submit", async function(e) {
-        e.preventDefault();
+    document.getElementById("importBtn").disabled = true;
+    document.getElementById("importBtn").textContent = "Importing...";
 
-        if (isSaving) return false;
+    try {
+        const user = auth.currentUser;
+        const batchRef = db.collection("donorImportBatches").doc();
+        const batchId = batchRef.id;
+
+        const fileNames = [...new Set(rowsToImport.map(r => r.sourceFile).filter(Boolean))];
+        const sheetNames = [...new Set(rowsToImport.map(r => r.sourceSheet).filter(Boolean))];
 
         try {
-            clearMessage();
-
-            if (!authReady || !currentUser) {
-                showMessage("You must be logged in first before saving donor data.", "error");
-                return false;
-            }
-
-            const finalSerialNumber = getFinalSerialNumber();
-            const donorTypeValue = getSelectedDonorType();
-            const patientDirectedValue = patientDirectedDetails.value.trim();
-            const mbdValue = mbdDetails.value.trim();
-            const activeGroup = getActiveGroup();
-            const serialBatch = getSerialBatch();
-
-            const timeValidation = validateAndDescribeTimes();
-            if (!timeValidation.valid) {
-                return false;
-            }
-
-            let hasMatchingActiveGroup = false;
-
-            if (activeGroup && activeGroup.entryDate === entryDate.value && activeGroup.remaining > 0) {
-                if (activeGroup.donorType === "Walk-in") {
-                    hasMatchingActiveGroup = true;
-                    if (!donorTypeValue) setSelectedDonorType("Walk-in");
-                } else if (activeGroup.donorType === "MBD") {
-                    hasMatchingActiveGroup = true;
-                    setSelectedDonorType("MBD");
-                    if (!mbdDetails.value.trim()) mbdDetails.value = activeGroup.organization || "";
-                } else if (activeGroup.donorType === "Patient Directed") {
-                    hasMatchingActiveGroup = true;
-                    setSelectedDonorType("Patient Directed");
-                    if (!patientDirectedDetails.value.trim()) patientDirectedDetails.value = activeGroup.details || "";
-                }
-            }
-
-            const rangeType = serialBatch ? (serialBatch.rangeDonorType || "") : "";
-            if (rangeType && !donorTypeValue) {
-                setSelectedDonorType(rangeType);
-
-                if (rangeType === "MBD" && serialBatch.rangeMbdDetails) {
-                    mbdDetails.value = serialBatch.rangeMbdDetails;
-                }
-                if (rangeType === "Patient Directed" && serialBatch.rangePatientDetails) {
-                    patientDirectedDetails.value = serialBatch.rangePatientDetails;
-                }
-            }
-
-            if (!entryDate.value) {
-                showMessage("Please enter date.", "error");
-                return false;
-            }
-
-            if (!finalSerialNumber) {
-                showMessage("Please enter serial number.", "error");
-                return false;
-            }
-
-            if (!getSelectedDonorType()) {
-                showMessage("Please select donor type.", "error");
-                return false;
-            }
-
-            if (getSelectedDonorType() === "Patient Directed" && !patientDirectedDetails.value.trim()) {
-                showMessage("Please enter patient directed details.", "error");
-                return false;
-            }
-
-            if (getSelectedDonorType() === "MBD" && !mbdDetails.value.trim()) {
-                showMessage("Please enter MBD site / organization.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("surname").value.trim()) {
-                showMessage("Please enter surname.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("firstName").value.trim()) {
-                showMessage("Please enter first name.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("birthday").value) {
-                showMessage("Please enter birthday.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("civilStatus").value) {
-                showMessage("Please select civil status.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("sex").value) {
-                showMessage("Please select sex.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("address").value.trim()) {
-                showMessage("Please enter address.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("cityProvince").value.trim()) {
-                showMessage("Please enter city / province.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("bloodType").value) {
-                showMessage("Please select blood type.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("bloodBagBrand").value) {
-                showMessage("Please select blood bag brand.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("bloodBagType").value) {
-                showMessage("Please select blood bag type.", "error");
-                return false;
-            }
-
-            if (!document.getElementById("amount").value) {
-                showMessage("Please select amount.", "error");
-                return false;
-            }
-
-            updateAutoTypeSuggestion();
-            setSavingState(true);
-
-            const donorData = {
-                entryDate: entryDate.value,
-                serialNumber: finalSerialNumber,
-                serialPrefixEnabled: useSerialPrefix.checked,
-                serialPrefixValue: serialPrefix.textContent.trim(),
-                donorType: donorTypeValue,
-                patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
-                mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
-                suffix: document.getElementById("suffix").value.trim(),
-                surname: document.getElementById("surname").value.trim(),
-                firstName: document.getElementById("firstName").value.trim(),
-                middleName: document.getElementById("middleName").value.trim(),
-                birthday: document.getElementById("birthday").value,
-                age: parseInt(document.getElementById("age").value || "0"),
-                civilStatus: document.getElementById("civilStatus").value,
-                sex: document.getElementById("sex").value,
-                address: document.getElementById("address").value.trim(),
-                cityProvince: document.getElementById("cityProvince").value.trim(),
-                occupation: document.getElementById("occupation").value.trim(),
-                contactNumber: document.getElementById("contactNumber").value.trim(),
-                donorCategoryMode: donorCategory.value,
-                donorCategory: getFinalDonorCategoryToSave(),
-                donorCategoryAutoSuggestion: autoTypeSuggestion || "",
-                donorCategoryAutoReason: autoTypeReason || "",
-                numberOfDonations: parseInt(numberOfDonations.value || "0"),
-                bloodType: document.getElementById("bloodType").value,
-                bloodBagBrand: document.getElementById("bloodBagBrand").value,
-                bloodBagType: document.getElementById("bloodBagType").value,
-                amount: document.getElementById("amount").value,
-                timeStarted: document.getElementById("timeStarted").value.trim(),
-                timeEnded: document.getElementById("timeEnded").value.trim(),
-                timeStartedNormalized: timeValidation.normalizedStarted || "",
-                timeEndedNormalized: timeValidation.normalizedEnded || "",
-                timeDurationMinutes: timeValidation.durationMinutes,
-                timeCrossedMidnight: timeValidation.overnight,
-                remarks: document.getElementById("remarks").value.trim(),
-                loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
-                lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
-                groupedEntryApplied: hasMatchingActiveGroup,
-                groupedEntryType: hasMatchingActiveGroup ? activeGroup.donorType : "",
-                groupedEntryOrganization: hasMatchingActiveGroup ? (activeGroup.organization || "") : "",
-                serialBatchActive: !!getSerialBatch(),
-                serialBatchAssignedType: serialBatch ? (serialBatch.rangeDonorType || "") : "",
+            await batchRef.set({
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                createdBy: currentUser.uid
-            };
+                createdByUid: user ? user.uid : "",
+                createdByEmail: user ? (user.email || "") : "",
+                fileNames,
+                sheetNames,
+                importedRowCount: 0,
+                requestedRowCount: rowsToImport.length,
+                importedFrom: "donor-import.html"
+            });
+        } catch (historyCreateError) {
+            console.warn("Batch history create failed, continuing import anyway:", historyCreateError);
+        }
 
-            await db.collection("donorDatabase").add(donorData);
+        let committedCount = 0;
+        let historyUpdateFailed = false;
 
-            let groupResult = { group: null, completed: false };
-            if (hasMatchingActiveGroup) {
-                groupResult = consumeGroupEntry();
-            }
+        for (let i = 0; i < rowsToImport.length; i++) {
+            const row = rowsToImport[i];
+            syncRowComputedFields(row);
 
-            const serialResult = consumeSerialBatchAfterSave();
+            await db.collection("donorDatabase").add({
+                mbdDetails: row.mbdDetails || "",
+                patientDirectedDetails: row.patientDirectedDetails || "",
+                donorType: row.donorType || "",
+                donorCategory: row.donorCategory || "",
+                surname: row.surname || "",
+                firstName: row.firstName || "",
+                middleName: row.middleName || "",
+                birthday: row.birthday || "",
+                age: row.age || 0,
+                sex: row.sex || "",
+                contactNumber: row.contactNumber || "",
+                address: row.address || "",
+                cityProvince: row.cityProvince || "",
+                numberOfDonations: row.numberOfDonationsFinal || 0,
+                numberOfDonationsImported: row.numberOfDonationsImported || 0,
+                bloodType: row.bloodType || "",
+                serialNumber: row.serialNumber || "",
+                amount: row.amount || "",
+                bloodBagBrand: row.bloodBagBrand || "",
+                bloodBagType: row.bloodBagType || "",
+                timeStarted: row.timeStarted || "",
+                timeEnded: row.timeEnded || "",
+                entryDate: row.entryDate || "",
+                remarks: row.remarks || "",
+                categoryDisplay: row.categoryDisplay || "",
+                walkInRaw: row.walkInRaw || "",
 
-            clearLoadedDonor();
-            clearEntryOnlyFieldsAfterSave();
+                donorMatchKey: row._donorKey,
+                donationStrongKey: row._strongKey,
+                donationLooseKey: row._looseKey,
 
-            const refreshedGroup = getActiveGroup();
+                importMeta: {
+                    batchId,
+                    importedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    importedFrom: "donor-import.html",
+                    sourceFile: row.sourceFile || "",
+                    sourceSheet: row.sourceSheet || "",
+                    sourceRowNumber: row.sourceRowNumber || "",
+                    inheritedDateUsed: !!row.inheritedDateUsed,
+                    inheritedGroupUsed: !!row.inheritedGroupUsed,
+                    originalImportStatus: row.importStatus || "",
+                    manualReviewed: !!row.manualReviewed
+                }
+            });
 
-            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
-                if (refreshedGroup.donorType === "Walk-in") {
-                    setSelectedDonorType("Walk-in");
-                } else if (refreshedGroup.donorType === "MBD") {
-                    setSelectedDonorType("MBD");
-                    mbdDetails.value = refreshedGroup.organization || "";
-                } else if (refreshedGroup.donorType === "Patient Directed") {
-                    setSelectedDonorType("Patient Directed");
-                    patientDirectedDetails.value = refreshedGroup.details || "";
+            committedCount++;
+            document.getElementById("importBtn").textContent = `Importing... ${committedCount}/${rowsToImport.length}`;
+
+            if (committedCount % 50 === 0 || committedCount === rowsToImport.length) {
+                try {
+                    await batchRef.set({
+                        importedRowCount: committedCount,
+                        requestedRowCount: rowsToImport.length,
+                        lastProgressAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (historyProgressError) {
+                    console.warn("Batch history progress update failed:", historyProgressError);
+                    historyUpdateFailed = true;
                 }
             }
-
-            renderActiveGroup();
-            updateAutoTypeSuggestion();
-            updateSerialPrefixByDate();
-
-            if (serialResult.batch && serialResult.batch.list && serialResult.batch.list.length) {
-                serialNumberInput.value = serialResult.batch.list[0];
-            } else {
-                serialNumberInput.value = "";
-            }
-
-            serialNumberInput.focus();
-
-            let successParts = ["Donor record saved successfully."];
-
-            if (serialResult.batch && serialResult.batch.list && serialResult.batch.list.length) {
-                successParts.push(`Next serial loaded automatically. Remaining serials: ${serialResult.batch.list.length}.`);
-            }
-
-            if (serialResult.completed) {
-                successParts.push("Serial range completed.");
-            }
-
-            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
-                successParts.push(`Active ${refreshedGroup.donorType} group remaining: ${refreshedGroup.remaining}.`);
-            }
-
-            if (groupResult.completed) {
-                successParts.push("Group completed.");
-                walkInCount.value = "";
-                mbdCount.value = "";
-            }
-
-            if (!refreshedGroup && !groupResult.completed) {
-                walkInCount.value = "";
-                mbdCount.value = "";
-            }
-
-            showMessage(successParts.join(" "), "success");
-            return false;
-
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to save donor record: " + error.message, "error");
-            return false;
-        } finally {
-            setSavingState(false);
         }
-    });
 
-    donorForm.addEventListener("reset", function() {
-        setTimeout(() => {
-            clearLoadedDonor();
-            setTodayDate();
-            age.value = "";
-            donorCategory.value = "Auto";
-            numberOfDonations.value = "0";
-            patientDirectedBox.classList.add("hidden");
-            walkInBox.classList.add("hidden");
-            mbdBox.classList.add("hidden");
-            clearMessage();
-            timeHelperBox.classList.add("hidden");
-            timeHelperBox.textContent = "";
-            updateSerialModeUI();
-            renderActiveGroup();
-            renderSerialBatchInfo();
-            updateAutoTypeSuggestion();
+        try {
+            await batchRef.set({
+                importedRowCount: committedCount,
+                requestedRowCount: rowsToImport.length,
+                completedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        } catch (historyCompleteError) {
+            console.warn("Batch history final update failed:", historyCompleteError);
+            historyUpdateFailed = true;
+        }
 
-            const batch = getSerialBatch();
-            if (batch && batch.list && batch.list.length) {
-                serialNumberInput.value = batch.list[0];
+        await loadExistingRecords();
+        await loadImportHistory();
+
+        previewRows.forEach(row => {
+            if (!row.removed && row.selected) {
+                row.selected = false;
             }
-        }, 50);
-    });
+        });
+        recomputePreviewRows();
+        renderPreviewTable();
 
-    auth.onAuthStateChanged((user) => {
-        authReady = true;
-        currentUser = user;
-
-        if (user) {
-            setAuthIndicator(`Logged in as: ${user.email || user.uid}`, true);
-            renderActiveGroup();
+        if (historyUpdateFailed) {
+            alert(`Import finished. ${committedCount} row(s) were saved to donorDatabase.\n\nBatch history updates had an error, but donor rows were still imported.`);
         } else {
-            setAuthIndicator("No logged in user detected on this page.", false);
-        }
-    });
-
-    setTodayDate();
-    donorCategory.value = "Auto";
-    numberOfDonations.value = "0";
-    updateAutoTypeSuggestion();
-    updateSerialModeUI();
-    validateAndDescribeTimes();
-    renderActiveGroup();
-    renderSerialBatchInfo();
-    updateRangeDonorTypeFields();
-
-    const existingBatch = getSerialBatch();
-    if (existingBatch && existingBatch.list && existingBatch.list.length) {
-        serialNumberInput.value = existingBatch.list[0];
-
-        if (existingBatch.rangeDonorType) {
-            rangeDonorTypeRadios.forEach(radio => {
-                radio.checked = radio.value === existingBatch.rangeDonorType;
-            });
+            alert(`Import completed successfully. ${committedCount} row(s) committed.`);
         }
 
-        rangeMbdDetails.value = existingBatch.rangeMbdDetails || "";
-        rangePatientDetails.value = existingBatch.rangePatientDetails || "";
-        updateRangeDonorTypeFields();
+    } catch (error) {
+        console.error(error);
+        alert("Import failed: " + error.message);
+    } finally {
+        document.getElementById("importBtn").textContent = "Import Selected Reviewed Rows";
+        document.getElementById("importBtn").disabled = !previewRows.some(r => !r.removed && r.selected);
     }
+}
+
+async function retractBatch(batchId) {
+    if (!batchId) return;
+
+    const ok = confirm(
+        `Are you sure you want to retract batch ${batchId}?\n\nThis will delete the imported donor records and remove the batch history record too.`
+    );
+    if (!ok) return;
+
+    try {
+        const batchDocRef = db.collection("donorImportBatches").doc(batchId);
+        let deletedCount = 0;
+
+        while (true) {
+            const snap = await db.collection("donorDatabase")
+                .where("importMeta.batchId", "==", batchId)
+                .limit(300)
+                .get();
+
+            if (snap.empty) break;
+
+            const batch = db.batch();
+            snap.forEach(doc => {
+                batch.delete(doc.ref);
+                deletedCount++;
+            });
+            await batch.commit();
+        }
+
+        await batchDocRef.delete();
+
+        alert(`Batch retracted successfully. Deleted ${deletedCount} imported donor record(s), and removed the batch history record.`);
+        await loadExistingRecords();
+        await loadImportHistory();
+
+    } catch (error) {
+        console.error("Retract failed:", error);
+        alert("Retract failed: " + error.message);
+    }
+}
+
+async function searchHistory() {
+    const surname = cleanName(document.getElementById("historySurname").value);
+    const firstName = cleanName(document.getElementById("historyFirstName").value);
+    const birthday = document.getElementById("historyBirthday").value;
+
+    if (!surname || !firstName || !birthday) {
+        alert("Please enter surname, first name, and birthday.");
+        return;
+    }
+
+    if (!existingRecords.length) await loadExistingRecords();
+
+    const key = [normalizeText(surname), normalizeText(firstName), birthday].join("|");
+    const matches = donorHistoryMap.get(key) || [];
+
+    document.getElementById("historySummary").innerHTML =
+        matches.length
+            ? `<b>${matches.length}</b> record(s) found for <b>${escapeHtml(surname)}, ${escapeHtml(firstName)}</b>.`
+            : `No records found for <b>${escapeHtml(surname)}, ${escapeHtml(firstName)}</b>.`;
+
+    const box = document.getElementById("historyResults");
+
+    if (!matches.length) {
+        box.innerHTML = `<div class="history-item muted">No donor history found.</div>`;
+        return;
+    }
+
+    const sorted = [...matches].sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
+
+    box.innerHTML = sorted.map(item => `
+        <div class="history-item">
+            <div><b>Date:</b> ${escapeHtml(item.entryDate || "")}</div>
+            <div><b>Type:</b> ${escapeHtml(item.donorType || "")}</div>
+            <div><b>MBD:</b> ${escapeHtml(item.mbdDetails || "")}</div>
+            <div><b>Patient Directed:</b> ${escapeHtml(item.patientDirectedDetails || "")}</div>
+            <div><b>Serial:</b> ${escapeHtml(item.serialNumber || "")}</div>
+            <div><b># of Donations:</b> ${escapeHtml(item.numberOfDonations || "")}</div>
+        </div>
+    `).join("");
+}
+
+function renderSelectedFiles(files) {
+    const fileList = document.getElementById("fileList");
+    if (!files || !files.length) {
+        fileList.textContent = "No files selected.";
+        return;
+    }
+    fileList.innerHTML = Array.from(files).map(file =>
+        `<div>${escapeHtml(file.name)} <span class="muted">(${Math.round(file.size / 1024)} KB)</span></div>`
+    ).join("");
+}
+
+function setPreviewFilter(filterValue) {
+    currentPreviewFilter = filterValue;
+    renderPreviewTable();
+}
+
+function removePreviewRow(index) {
+    if (!previewRows[index]) return;
+    previewRows[index].removed = true;
+    previewRows[index].selected = false;
+    recomputePreviewRows();
+    renderPreviewTable();
+}
+
+function restorePreviewRow(index) {
+    if (!previewRows[index]) return;
+    previewRows[index].removed = false;
+    previewRows[index].selected = true;
+    recomputePreviewRows();
+    renderPreviewTable();
+}
+
+function restoreAllRemovedRows() {
+    previewRows.forEach(row => {
+        row.removed = false;
+    });
+    recomputePreviewRows();
+    renderPreviewTable();
+}
+
+function updateRowField(index, field, value) {
+    const row = previewRows[index];
+    if (!row) return;
+
+    row[field] = value;
+    row.manualReviewed = true;
+
+    if (field === "donorType") {
+        if (value === "MBD") {
+            row.walkInRaw = "";
+            row.patientDirectedDetails = "";
+        } else if (value === "Walk-in") {
+            row.mbdDetails = "";
+            if (!row.walkInRaw) row.walkInRaw = "WALK-IN";
+            row.patientDirectedDetails = "";
+        } else if (value === "Patient Directed") {
+            row.mbdDetails = "";
+            row.walkInRaw = "";
+        }
+    }
+
+    syncRowComputedFields(row);
+    recomputePreviewRows();
+    renderPreviewTable();
+}
+
+document.addEventListener("change", (e) => {
+    if (e.target.classList.contains("rowCheck")) {
+        const index = Number(e.target.dataset.index);
+        if (previewRows[index]) {
+            previewRows[index].selected = e.target.checked;
+            renderStats();
+        }
+    }
+
+    if (e.target.classList.contains("inline-input") || e.target.classList.contains("inline-select")) {
+        const index = Number(e.target.dataset.index);
+        const field = e.target.dataset.field;
+        let value = e.target.value;
+
+        if (field === "surname" || field === "firstName" || field === "middleName") {
+            value = cleanName(value);
+        }
+        if (field === "birthday" || field === "entryDate") {
+            value = parsePossibleDate(value);
+        }
+        if (field === "numberOfDonationsImported") {
+            value = parseIntSafe(value);
+        }
+
+        updateRowField(index, field, value);
+    }
+});
+
+document.getElementById("excelFiles").addEventListener("change", (e) => {
+    renderSelectedFiles(e.target.files);
+});
+
+document.getElementById("analyzeBtn").addEventListener("click", analyzeFiles);
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+    previewRows = [];
+    currentPreviewFilter = "ALL";
+    renderPreviewTable();
+});
+
+document.getElementById("selectAllBtn").addEventListener("click", () => {
+    getVisiblePreviewRows().forEach(row => {
+        row.selected = true;
+    });
+    renderPreviewTable();
+});
+
+document.getElementById("unselectAllBtn").addEventListener("click", () => {
+    getVisiblePreviewRows().forEach(row => {
+        row.selected = false;
+    });
+    renderPreviewTable();
+});
+
+document.getElementById("restoreAllBtn").addEventListener("click", restoreAllRemovedRows);
+document.getElementById("clearFilterBtn").addEventListener("click", () => setPreviewFilter("ALL"));
+
+document.getElementById("importBtn").addEventListener("click", importSelectedRows);
+document.getElementById("historyBtn").addEventListener("click", searchHistory);
+document.getElementById("reloadHistoryBtn").addEventListener("click", loadImportHistory);
+
+document.getElementById("clearHistoryBtn").addEventListener("click", () => {
+    document.getElementById("historySurname").value = "";
+    document.getElementById("historyFirstName").value = "";
+    document.getElementById("historyBirthday").value = "";
+    document.getElementById("historySummary").textContent = "No donor history loaded.";
+    document.getElementById("historyResults").innerHTML = `<div class="history-item muted">Enter donor details to view donation history.</div>`;
+});
+
+window.retractBatch = retractBatch;
+window.setPreviewFilter = setPreviewFilter;
+window.removePreviewRow = removePreviewRow;
+window.restorePreviewRow = restorePreviewRow;
+
+window.addEventListener("load", async () => {
+    try {
+        await loadExistingRecords();
+        await loadImportHistory();
+    } catch (error) {
+        console.error("Initial preload failed:", error);
+    }
+});
 </script>
 
 </body>
