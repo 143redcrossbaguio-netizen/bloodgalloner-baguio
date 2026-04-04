@@ -34,16 +34,12 @@
         }
 
         .top-summary {
-            position: sticky;
-            top: 12px;
-            z-index: 1000;
             background: rgba(255,255,255,0.98);
             border: 1px solid #dbe3ec;
             border-radius: 12px;
             box-shadow: 0 6px 18px rgba(0,0,0,0.12);
             padding: 14px;
             margin-bottom: 16px;
-            backdrop-filter: blur(6px);
         }
 
         .summary-grid {
@@ -54,7 +50,7 @@
 
         .top-controls-row {
             display: grid;
-            grid-template-columns: minmax(320px, 1.7fr) 185px 220px auto;
+            grid-template-columns: 110px minmax(300px, 1.6fr) 180px 210px auto;
             gap: 10px;
             align-items: end;
         }
@@ -109,6 +105,7 @@
         .gray-btn { background: #64748b; color: white; }
         .red-btn { background: #8a1111; color: white; }
         .purple-btn { background: #6b21a8; color: white; }
+        .orange-btn { background: #ef6c00; color: white; }
 
         .toolbar-actions {
             display: flex;
@@ -148,7 +145,7 @@
             border: 1px solid #efb7b7;
         }
 
-        .missing-serials-box {
+        .duplicate-box {
             display: none;
             margin-bottom: 12px;
             padding: 14px;
@@ -158,23 +155,46 @@
             box-shadow: 0 3px 10px rgba(0,0,0,0.08);
         }
 
-        .missing-serials-box.show {
+        .duplicate-box.show {
             display: block;
         }
 
-        .missing-serials-title {
+        .duplicate-title {
             font-size: 16px;
             font-weight: bold;
             color: #8b0000;
             margin-bottom: 10px;
         }
 
-        .missing-serials-content {
-            font-size: 14px;
-            line-height: 1.6;
-            color: #1f2937;
-            white-space: pre-wrap;
-            word-break: break-word;
+        .duplicate-note {
+            font-size: 13px;
+            color: #475569;
+            margin-bottom: 12px;
+        }
+
+        .duplicate-wrap {
+            overflow: auto;
+            width: 100%;
+        }
+
+        .duplicate-table {
+            width: 100%;
+            min-width: 1400px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .duplicate-table th,
+        .duplicate-table td {
+            border: 1px solid #d7d7d7;
+            padding: 7px 8px;
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .duplicate-table th {
+            background: #f7f7f7;
         }
 
         .year-group,
@@ -364,7 +384,7 @@
 
         @media print {
             body { background: white; }
-            header, .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #missingSerialsBox { display: none !important; }
+            header, .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox { display: none !important; }
             .page-wrap { padding: 0; }
             .year-group, .month-group, .table-wrap {
                 box-shadow: none;
@@ -376,9 +396,9 @@
             .group-body.hidden { display: block !important; }
         }
 
-        @media (max-width: 1700px) {
+        @media (max-width: 1800px) {
             .top-controls-row {
-                grid-template-columns: minmax(260px, 1fr) 180px 210px;
+                grid-template-columns: 110px minmax(260px, 1fr) 180px 210px;
             }
 
             .toolbar-actions {
@@ -417,6 +437,8 @@
     <div class="top-summary">
         <div class="summary-grid">
             <div class="top-controls-row">
+                <button class="main-btn blue-btn" id="reloadBtn" type="button">Reload</button>
+
                 <div class="field-group">
                     <label for="searchInput">Search</label>
                     <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, MBD, Walk-in, Patient Directed, organization">
@@ -430,7 +452,7 @@
                 </div>
 
                 <div class="field-group">
-                    <label for="printMonthSelect">Print / Missing Serial Month</label>
+                    <label for="printMonthSelect">Print / Duplicate Month</label>
                     <select id="printMonthSelect">
                         <option value="">Select month</option>
                     </select>
@@ -441,7 +463,7 @@
                     <button class="main-btn green-btn" id="exportCsvBtn">Export</button>
                     <button class="main-btn red-btn" id="collapseAllBtn">Collapse</button>
                     <button class="main-btn blue-btn" id="expandAllBtn">Expand</button>
-                    <button class="main-btn purple-btn" id="missingSerialsBtn">Missing Serial Numbers</button>
+                    <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
                 </div>
             </div>
         </div>
@@ -449,9 +471,31 @@
 
     <div id="statusMessage" class="status-message"></div>
 
-    <div id="missingSerialsBox" class="missing-serials-box">
-        <div class="missing-serials-title" id="missingSerialsTitle">Missing Serial Numbers</div>
-        <div class="missing-serials-content" id="missingSerialsContent"></div>
+    <div id="duplicateBox" class="duplicate-box">
+        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
+        <div class="duplicate-note" id="duplicateNote"></div>
+        <div class="duplicate-wrap">
+            <table class="duplicate-table">
+                <thead>
+                    <tr>
+                        <th>Duplicate Group</th>
+                        <th>Entry Date</th>
+                        <th>Serial Number</th>
+                        <th>Surname</th>
+                        <th>First Name</th>
+                        <th>Middle Name</th>
+                        <th>Birthday</th>
+                        <th>Blood Type</th>
+                        <th>Donor Type</th>
+                        <th>MBD / Patient Directed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="duplicateBody">
+                    <tr><td colspan="11">No duplicate data found.</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <main class="content-panel">
@@ -486,11 +530,13 @@
     const exportCsvBtn = document.getElementById("exportCsvBtn");
     const collapseAllBtn = document.getElementById("collapseAllBtn");
     const expandAllBtn = document.getElementById("expandAllBtn");
-    const missingSerialsBtn = document.getElementById("missingSerialsBtn");
+    const duplicateDataBtn = document.getElementById("duplicateDataBtn");
+    const reloadBtn = document.getElementById("reloadBtn");
     const statusMessage = document.getElementById("statusMessage");
-    const missingSerialsBox = document.getElementById("missingSerialsBox");
-    const missingSerialsTitle = document.getElementById("missingSerialsTitle");
-    const missingSerialsContent = document.getElementById("missingSerialsContent");
+    const duplicateBox = document.getElementById("duplicateBox");
+    const duplicateTitle = document.getElementById("duplicateTitle");
+    const duplicateNote = document.getElementById("duplicateNote");
+    const duplicateBody = document.getElementById("duplicateBody");
 
     let allDonors = [];
     let filteredDonors = [];
@@ -512,16 +558,18 @@
         statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
     }
 
-    function hideMissingSerials() {
-        missingSerialsBox.classList.remove("show");
-        missingSerialsTitle.textContent = "Missing Serial Numbers";
-        missingSerialsContent.textContent = "";
+    function hideDuplicateBox() {
+        duplicateBox.classList.remove("show");
+        duplicateTitle.textContent = "Duplicate Data";
+        duplicateNote.textContent = "";
+        duplicateBody.innerHTML = `<tr><td colspan="11">No duplicate data found.</td></tr>`;
     }
 
-    function showMissingSerials(title, content) {
-        missingSerialsTitle.textContent = title;
-        missingSerialsContent.textContent = content;
-        missingSerialsBox.classList.add("show");
+    function showDuplicateBox(title, note, rowsHtml) {
+        duplicateTitle.textContent = title;
+        duplicateNote.textContent = note;
+        duplicateBody.innerHTML = rowsHtml;
+        duplicateBox.classList.add("show");
     }
 
     function escapeHtml(text) {
@@ -957,6 +1005,90 @@
         `;
     }
 
+    function buildDuplicateKey(record) {
+        return [
+            normalizeText(record._resolvedEntryDate),
+            normalizeText(record.serialNumber),
+            normalizeText(record.surname),
+            normalizeText(record.firstName),
+            normalizeText(record.middleName),
+            normalizeText(record._resolvedBirthday)
+        ].join("|");
+    }
+
+    function getDuplicateRecordsForMonth(monthValue) {
+        const monthRecords = allDonors.filter(record => {
+            const { monthKey } = getYearMonth(record._resolvedEntryDate);
+            return monthKey === monthValue;
+        });
+
+        const grouped = {};
+        monthRecords.forEach(record => {
+            const key = buildDuplicateKey(record);
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(record);
+        });
+
+        const duplicateGroups = Object.values(grouped).filter(group => group.length > 1);
+
+        return duplicateGroups;
+    }
+
+    function renderDuplicateMonthView(monthValue) {
+        if (!monthValue) {
+            showMessage("Please select a month first for Duplicate Data.", "error");
+            return;
+        }
+
+        const duplicateGroups = getDuplicateRecordsForMonth(monthValue);
+        const parts = monthValue.split("-");
+        const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
+
+        if (!duplicateGroups.length) {
+            showDuplicateBox(
+                `Duplicate Data - ${monthLabel}`,
+                "No duplicate data found for this month.",
+                `<tr><td colspan="11">No duplicate data found for this month.</td></tr>`
+            );
+            return;
+        }
+
+        let rowsHtml = "";
+        let groupCounter = 1;
+        let totalRows = 0;
+
+        duplicateGroups.forEach(group => {
+            group.forEach((record, index) => {
+                totalRows++;
+                rowsHtml += `
+                    <tr>
+                        <td>${index === 0 ? `Duplicate ${groupCounter} (${group.length})` : ""}</td>
+                        <td>${escapeHtml(record._resolvedEntryDate)}</td>
+                        <td>${escapeHtml(record.serialNumber)}</td>
+                        <td>${escapeHtml(record.surname)}</td>
+                        <td>${escapeHtml(record.firstName)}</td>
+                        <td>${escapeHtml(record.middleName)}</td>
+                        <td>${escapeHtml(record._resolvedBirthday)}</td>
+                        <td>${escapeHtml(record.bloodType)}</td>
+                        <td>${escapeHtml(record.donorType)}</td>
+                        <td>${escapeHtml(record.mbdDetails || record.patientDirectedDetails || "")}</td>
+                        <td class="actions-cell">
+                            <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
+                            <button class="small-btn delete-btn" onclick="deleteDonor('${record.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            groupCounter++;
+        });
+
+        showDuplicateBox(
+            `Duplicate Data - ${monthLabel}`,
+            `Duplicate groups found: ${duplicateGroups.length} | Duplicate rows: ${totalRows}`,
+            rowsHtml
+        );
+    }
+
     function renderTracking() {
         const keyword = searchInput.value.trim();
 
@@ -1018,6 +1150,7 @@
                         <div class="month-tools">
                             <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
                             <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
+                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
                         </div>
 
                         <div class="subtotal-bar">
@@ -1148,11 +1281,16 @@
     }
 
     window.startEdit = function(id) {
+        hideDuplicateBox();
+
         const record = allDonors.find(item => item.id === id);
         if (!record) return;
 
         const row = document.getElementById(`row-${id}`);
-        if (!row) return;
+        if (!row) {
+            showMessage("Record is not visible in the current table view. Clear filters or expand the month, then edit again.", "error");
+            return;
+        }
 
         row.innerHTML = `
             <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
@@ -1227,7 +1365,7 @@
         try {
             await db.collection("donorDatabase").doc(id).update(updatedData);
             showMessage("Record updated successfully.", "success");
-            loadDonors();
+            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to update record: " + error.message, "error");
@@ -1241,7 +1379,7 @@
         try {
             await db.collection("donorDatabase").doc(id).delete();
             showMessage("Record deleted successfully.", "success");
-            loadDonors();
+            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to delete record: " + error.message, "error");
@@ -1446,81 +1584,6 @@
         document.body.removeChild(link);
     }
 
-    function extractSerialNumberInfo(serial) {
-        const text = String(serial || "").trim();
-        if (!text) return null;
-
-        const match = text.match(/^(.*?)(\d+)$/);
-        if (!match) return null;
-
-        return {
-            original: text,
-            prefix: match[1],
-            numericPart: match[2],
-            number: parseInt(match[2], 10),
-            width: match[2].length
-        };
-    }
-
-    function findMissingSerialsForMonth(monthValue) {
-        const monthRecords = allDonors.filter(record => {
-            const { monthKey } = getYearMonth(record._resolvedEntryDate);
-            return monthKey === monthValue;
-        });
-
-        const serialInfos = monthRecords
-            .map(record => extractSerialNumberInfo(record.serialNumber))
-            .filter(Boolean);
-
-        if (!serialInfos.length) {
-            return {
-                label: monthValue,
-                missing: [],
-                foundCount: 0
-            };
-        }
-
-        const prefixGroups = {};
-
-        serialInfos.forEach(info => {
-            const key = `${info.prefix}|${info.width}`;
-            if (!prefixGroups[key]) {
-                prefixGroups[key] = {
-                    prefix: info.prefix,
-                    width: info.width,
-                    numbers: []
-                };
-            }
-            prefixGroups[key].numbers.push(info.number);
-        });
-
-        const allMissing = [];
-
-        Object.values(prefixGroups).forEach(group => {
-            const uniqueNumbers = [...new Set(group.numbers)].sort((a, b) => a - b);
-            if (uniqueNumbers.length < 2) return;
-
-            for (let i = 0; i < uniqueNumbers.length - 1; i++) {
-                const current = uniqueNumbers[i];
-                const next = uniqueNumbers[i + 1];
-
-                if (next - current > 1) {
-                    for (let n = current + 1; n < next; n++) {
-                        allMissing.push(`${group.prefix}${String(n).padStart(group.width, "0")}`);
-                    }
-                }
-            }
-        });
-
-        allMissing.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-
-        return {
-            label: monthValue,
-            missing: allMissing,
-            foundCount: serialInfos.length
-        };
-    }
-
     window.printOneMonth = function(monthValue) {
         const records = getRecordsForMonth(monthValue);
         if (!records.length) {
@@ -1571,6 +1634,12 @@
 
             populateGroupMonthOptions(allDonors);
             renderTracking();
+
+            if (printMonthSelect.value) {
+                renderDuplicateMonthView(printMonthSelect.value);
+            } else {
+                hideDuplicateBox();
+            }
         } catch (error) {
             console.error(error);
             trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
@@ -1578,13 +1647,19 @@
         }
     }
 
+    reloadBtn.addEventListener("click", async function() {
+        hideDuplicateBox();
+        await loadDonors();
+        showMessage("Tracking data reloaded.", "success");
+    });
+
     searchInput.addEventListener("input", function() {
-        hideMissingSerials();
+        hideDuplicateBox();
         renderTracking();
     });
 
     groupMonthFilter.addEventListener("change", function() {
-        hideMissingSerials();
+        hideDuplicateBox();
         renderTracking();
     });
 
@@ -1624,38 +1699,8 @@
         renderTracking();
     });
 
-    missingSerialsBtn.addEventListener("click", function() {
-        const selectedMonth = printMonthSelect.value;
-
-        if (!selectedMonth) {
-            showMessage("Please select a month first for Missing Serial Numbers.", "error");
-            return;
-        }
-
-        const result = findMissingSerialsForMonth(selectedMonth);
-        const parts = selectedMonth.split("-");
-        const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
-
-        if (!result.foundCount) {
-            showMissingSerials(
-                `Missing Serial Numbers - ${monthLabel}`,
-                "No serial numbers found for this month."
-            );
-            return;
-        }
-
-        if (!result.missing.length) {
-            showMissingSerials(
-                `Missing Serial Numbers - ${monthLabel}`,
-                "No missing serial numbers found for this month."
-            );
-            return;
-        }
-
-        showMissingSerials(
-            `Missing Serial Numbers - ${monthLabel}`,
-            `Total missing serial numbers: ${result.missing.length}\n\n${result.missing.join(", ")}`
-        );
+    duplicateDataBtn.addEventListener("click", function() {
+        renderDuplicateMonthView(printMonthSelect.value);
     });
 
     auth.onAuthStateChanged(user => {
