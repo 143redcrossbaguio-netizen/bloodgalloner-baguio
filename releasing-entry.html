@@ -19,7 +19,7 @@ header{
 }
 
 .container{
-    max-width:650px;
+    max-width:900px;
     margin:40px auto;
     background:white;
     padding:30px;
@@ -47,6 +47,12 @@ input,select{
     gap:10px;
     align-items:flex-end;
     margin-top:5px;
+    flex-wrap:wrap;
+}
+
+.row > div{
+    flex:1;
+    min-width:120px;
 }
 
 .row select{flex:2}
@@ -80,6 +86,76 @@ button{
     width:auto !important;
     min-width:120px !important;
     padding:10px 14px !important;
+}
+
+.topButtons{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:8px;
+}
+
+.topButtons button{
+    flex:1;
+    min-width:200px;
+    margin-top:0;
+}
+
+.searchWrap{
+    position:relative;
+    margin-top:10px;
+}
+
+.searchResults{
+    display:none;
+    position:absolute;
+    top:100%;
+    left:0;
+    right:0;
+    background:#fff;
+    border:1px solid #ddd;
+    border-top:none;
+    max-height:260px;
+    overflow:auto;
+    z-index:50;
+    box-shadow:0 6px 18px rgba(0,0,0,0.12);
+    border-radius:0 0 8px 8px;
+}
+
+.searchItem{
+    padding:10px 12px;
+    border-bottom:1px solid #eee;
+    cursor:pointer;
+}
+
+.searchItem:hover{
+    background:#fff3e0;
+}
+
+.searchItem strong{
+    display:block;
+    color:#333;
+}
+
+.searchMeta{
+    font-size:12px;
+    color:#666;
+    margin-top:4px;
+}
+
+.inline5{
+    display:grid;
+    grid-template-columns: 1.4fr 1.4fr 0.8fr 0.9fr 0.9fr;
+    gap:10px;
+    align-items:end;
+}
+
+.inline5 > div{
+    min-width:0;
+}
+
+.sectionSpacer{
+    margin-top:8px;
 }
 
 /* BLOOD AUGMENTATION */
@@ -142,6 +218,27 @@ button{
     margin-top:10px;
     background:white;
 }
+
+@media (max-width: 860px){
+    .inline5{
+        grid-template-columns:1fr 1fr;
+    }
+}
+
+@media (max-width: 600px){
+    .container{
+        margin:20px 12px;
+        padding:20px;
+    }
+
+    .inline5{
+        grid-template-columns:1fr;
+    }
+
+    .topButtons button{
+        min-width:unset;
+    }
+}
 </style>
 </head>
 
@@ -162,43 +259,59 @@ button{
 <input type="text" id="facility" list="facilityList" placeholder="Type facility name">
 <datalist id="facilityList"></datalist>
 
-<button class="facilityBtn" onclick="goFacilityManager()">OPEN FACILITY MANAGER</button>
-<button class="trackingBtn" onclick="goTracking()">GO TO TRACKING</button>
+<div class="topButtons">
+    <button class="facilityBtn" onclick="goFacilityManager()">OPEN FACILITY MANAGER</button>
+    <button class="trackingBtn" onclick="goTracking()">GO TO TRACKING</button>
+</div>
 
-<label>1. SURNAME</label>
-<input type="text" id="surname">
+<label>LIVE SEARCH FROM RELEASING TRACKING</label>
+<div class="searchWrap">
+    <input type="text" id="liveSearch" placeholder="Search surname, first name, facility, blood type, OR, date">
+    <div id="searchResults" class="searchResults"></div>
+</div>
 
-<label>2. FIRST NAME</label>
-<input type="text" id="firstname">
+<div class="sectionSpacer"></div>
 
-<label>3. AGE</label>
-<input type="number" id="age">
+<div class="inline5">
+    <div>
+        <label>1. SURNAME</label>
+        <input type="text" id="surname">
+    </div>
 
-<label>4. SEX</label>
-<select id="sex">
-<option value="">Select</option>
-<option>MALE</option>
-<option>FEMALE</option>
-</select>
+    <div>
+        <label>2. FIRST NAME</label>
+        <input type="text" id="firstname">
+    </div>
 
-<label>5. BLOOD TYPE</label>
-<select id="bloodtype">
-<option value="">Select</option>
-<option>A+</option>
-<option>A-</option>
-<option>B+</option>
-<option>B-</option>
-<option>AB+</option>
-<option>AB-</option>
-<option>O+</option>
-<option>O-</option>
-</select>
+    <div>
+        <label>3. AGE</label>
+        <input type="number" id="age">
+    </div>
 
-<label>6. OR (Optional)</label>
-<input type="text" id="or">
+    <div>
+        <label>4. SEX</label>
+        <select id="sex">
+            <option value="">Select</option>
+            <option>MALE</option>
+            <option>FEMALE</option>
+        </select>
+    </div>
 
-<label>6A. BOX CONTAINER</label>
-<input type="number" id="boxContainerQty" placeholder="Qty">
+    <div>
+        <label>5. BLOOD TYPE</label>
+        <select id="bloodtype">
+            <option value="">Select</option>
+            <option>A+</option>
+            <option>A-</option>
+            <option>B+</option>
+            <option>B-</option>
+            <option>AB+</option>
+            <option>AB-</option>
+            <option>O+</option>
+            <option>O-</option>
+        </select>
+    </div>
+</div>
 
 <label>7. REQUEST</label>
 <div id="requestContainer">
@@ -229,6 +342,12 @@ button{
         <button type="button" class="addBtn" onclick="addIssued()">+</button>
     </div>
 </div>
+
+<label>6A. BOX CONTAINER</label>
+<input type="number" id="boxContainerQty" placeholder="Qty">
+
+<label>6. OR (Optional)</label>
+<input type="text" id="or">
 
 <label>9. AMOUNT PAID</label>
 <div class="row">
@@ -321,6 +440,8 @@ const db = getDatabase(app);
 
 const facilityList = document.getElementById("facilityList");
 const saveBtn = document.getElementById("saveBtn");
+const liveSearchInput = document.getElementById("liveSearch");
+const searchResults = document.getElementById("searchResults");
 
 const urlParams = new URLSearchParams(window.location.search);
 const editId = urlParams.get("id");
@@ -328,6 +449,8 @@ const editId = urlParams.get("id");
 let authReady = false;
 let currentReleasingPriceSnapshot = null;
 let currentAugmentationPriceSnapshot = null;
+let allReleasingEntries = [];
+let selectedLoadedId = editId || null;
 
 function buildPriceSnapshot(){
   return {
@@ -417,6 +540,101 @@ async function loadComponentPrices(){
       BOXCONTAINER: 0
     };
   }
+}
+
+function safeUpper(value){
+  return String(value || "").toUpperCase();
+}
+
+function renderSearchResults(matches){
+  if(!matches.length){
+    searchResults.innerHTML = `<div class="searchItem">No matching record found.</div>`;
+    searchResults.style.display = "block";
+    return;
+  }
+
+  searchResults.innerHTML = matches.map(item => `
+    <div class="searchItem" data-id="${item.id}">
+      <strong>${safeUpper(item.surname)}, ${safeUpper(item.firstname)}</strong>
+      <div class="searchMeta">
+        DATE: ${item.date || "-"} | FACILITY: ${safeUpper(item.facility)} | BLOOD TYPE: ${item.bloodtype || "-"} | OR: ${safeUpper(item.or)}
+      </div>
+    </div>
+  `).join("");
+
+  searchResults.style.display = "block";
+
+  searchResults.querySelectorAll(".searchItem[data-id]").forEach(el => {
+    el.addEventListener("click", () => {
+      const found = allReleasingEntries.find(x => x.id === el.dataset.id);
+      if(found){
+        loadEntryIntoForm(found.id, found);
+        liveSearchInput.value = `${safeUpper(found.surname)}, ${safeUpper(found.firstname)} | ${found.date || ""}`;
+        searchResults.style.display = "none";
+      }
+    });
+  });
+}
+
+function performLiveSearch(keyword){
+  const term = safeUpper(keyword).trim();
+
+  if(!term){
+    searchResults.style.display = "none";
+    searchResults.innerHTML = "";
+    return;
+  }
+
+  const matches = allReleasingEntries.filter(item => {
+    const haystack = [
+      item.date,
+      item.facility,
+      item.surname,
+      item.firstname,
+      item.bloodtype,
+      item.or,
+      item.sex,
+      item.age
+    ].map(v => safeUpper(v)).join(" ");
+
+    return haystack.includes(term);
+  }).slice(0, 20);
+
+  renderSearchResults(matches);
+}
+
+function bindLiveSearch(){
+  liveSearchInput.addEventListener("input", (e) => {
+    performLiveSearch(e.target.value);
+  });
+
+  document.addEventListener("click", (e) => {
+    if(!e.target.closest(".searchWrap")){
+      searchResults.style.display = "none";
+    }
+  });
+}
+
+function loadTrackingSearchData(){
+  onValue(ref(db, "releasing"), (snapshot) => {
+    const rows = [];
+    if(snapshot.exists()){
+      snapshot.forEach(child => {
+        rows.push({
+          id: child.key,
+          ...(child.val() || {})
+        });
+      });
+    }
+
+    allReleasingEntries = rows.sort((a,b) => {
+      const aDate = a.date || "";
+      const bDate = b.date || "";
+      return bDate.localeCompare(aDate);
+    });
+  }, (error) => {
+    console.error("Tracking search load error:", error);
+  });
 }
 
 window.addRequest = function(){
@@ -522,6 +740,7 @@ function computeMainDiscountFromPercentOrPrice(){
 
 function resetForm(){
   currentReleasingPriceSnapshot = null;
+  selectedLoadedId = null;
 
   document.getElementById("date").value = new Date().toISOString().split("T")[0];
   document.getElementById("facility").value = "";
@@ -569,6 +788,117 @@ function resetForm(){
   computeIssuedTotal();
 }
 
+function fillRequestRows(requests){
+  const requestContainer = document.getElementById("requestContainer");
+  requestContainer.innerHTML = "";
+
+  if(requests && Array.isArray(requests) && requests.length > 0){
+    requests.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "row requestRow";
+      row.innerHTML = `
+        <select class="requestType">
+            <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+            <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+            <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+            <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+            <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+        </select>
+        <input type="number" class="requestQty" placeholder="Qty" value="${item.qty || ""}">
+        <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addRequest()" : "this.parentElement.remove()"}">${index===0 ? "+" : "-"}</button>
+      `;
+      requestContainer.appendChild(row);
+    });
+  }else{
+    requestContainer.innerHTML = `
+      <div class="row requestRow">
+          <select class="requestType">
+              <option>WB</option>
+              <option>PRBC</option>
+              <option>PC</option>
+              <option>FFP</option>
+              <option>CRYO</option>
+          </select>
+          <input type="number" class="requestQty" placeholder="Qty">
+          <button type="button" class="addBtn" onclick="addRequest()">+</button>
+      </div>
+    `;
+  }
+}
+
+function fillIssuedRows(issued){
+  const issuedContainer = document.getElementById("issuedContainer");
+  issuedContainer.innerHTML = "";
+
+  if(issued && Array.isArray(issued) && issued.length > 0){
+    issued.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "row issuedRow";
+      row.innerHTML = `
+        <select class="issuedType">
+            <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+            <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+            <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+            <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+            <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+        </select>
+        <input type="number" class="issuedQty" placeholder="Qty" value="${item.qty || ""}">
+        <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addIssued()" : "this.parentElement.remove(); computeIssuedTotal()"}">${index===0 ? "+" : "-"}</button>
+      `;
+      issuedContainer.appendChild(row);
+    });
+  }else{
+    issuedContainer.innerHTML = `
+      <div class="row issuedRow">
+          <select class="issuedType">
+              <option>WB</option>
+              <option>PRBC</option>
+              <option>PC</option>
+              <option>FFP</option>
+              <option>CRYO</option>
+          </select>
+          <input type="number" class="issuedQty" placeholder="Qty">
+          <button type="button" class="addBtn" onclick="addIssued()">+</button>
+      </div>
+    `;
+  }
+}
+
+function loadEntryIntoForm(id, entry){
+  selectedLoadedId = id || null;
+  currentReleasingPriceSnapshot = entry.priceSnapshot ? normalizePriceSnapshot(entry.priceSnapshot) : null;
+
+  document.getElementById("date").value = entry.date || "";
+  document.getElementById("facility").value = entry.facility || "";
+  document.getElementById("surname").value = entry.surname || "";
+  document.getElementById("firstname").value = entry.firstname || "";
+  document.getElementById("age").value = entry.age || "";
+  document.getElementById("sex").value = entry.sex || "";
+  document.getElementById("bloodtype").value = entry.bloodtype || "";
+  document.getElementById("or").value = entry.or || "";
+  document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
+  document.getElementById("amountPaid").value = entry.amountPaid || "";
+  document.getElementById("discount").value = entry.discount || "";
+
+  const original = Number(entry.amountPaid || 0);
+  const discountAmount = Number(entry.discount || 0);
+
+  if(discountAmount > 0){
+    document.getElementById("discountSection").style.display = "block";
+    document.getElementById("discountPrice").value = (original - discountAmount).toFixed(2);
+    document.getElementById("discountPercent").value = original > 0 ? ((discountAmount / original) * 100).toFixed(2) : "";
+  }else{
+    document.getElementById("discountPrice").value = "";
+    document.getElementById("discountPercent").value = "";
+    document.getElementById("discount").value = "";
+    document.getElementById("discountSection").style.display = "none";
+  }
+
+  fillRequestRows(entry.requests);
+  fillIssuedRows(entry.issued);
+  computeIssuedTotal();
+}
+
 async function loadEditEntry(){
   if(!editId) return;
 
@@ -576,103 +906,7 @@ async function loadEditEntry(){
     const snapshot = await get(ref(db, "releasing/" + editId));
 
     if(snapshot.exists()){
-      const entry = snapshot.val();
-
-      currentReleasingPriceSnapshot = entry.priceSnapshot ? normalizePriceSnapshot(entry.priceSnapshot) : null;
-
-      document.getElementById("date").value = entry.date || "";
-      document.getElementById("facility").value = entry.facility || "";
-      document.getElementById("surname").value = entry.surname || "";
-      document.getElementById("firstname").value = entry.firstname || "";
-      document.getElementById("age").value = entry.age || "";
-      document.getElementById("sex").value = entry.sex || "";
-      document.getElementById("bloodtype").value = entry.bloodtype || "";
-      document.getElementById("or").value = entry.or || "";
-      document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
-      document.getElementById("amountPaid").value = entry.amountPaid || "";
-      document.getElementById("discount").value = entry.discount || "";
-
-      const original = Number(entry.amountPaid || 0);
-      const discountAmount = Number(entry.discount || 0);
-      if(discountAmount > 0){
-        document.getElementById("discountSection").style.display = "block";
-        document.getElementById("discountPrice").value = (original - discountAmount).toFixed(2);
-        document.getElementById("discountPercent").value = original > 0 ? ((discountAmount / original) * 100).toFixed(2) : "";
-      }
-
-      const requestContainer = document.getElementById("requestContainer");
-      const issuedContainer = document.getElementById("issuedContainer");
-
-      requestContainer.innerHTML = "";
-      issuedContainer.innerHTML = "";
-
-      if(entry.requests && Array.isArray(entry.requests) && entry.requests.length > 0){
-        entry.requests.forEach((item, index) => {
-          const row = document.createElement("div");
-          row.className = "row requestRow";
-          row.innerHTML = `
-            <select class="requestType">
-                <option ${item.type==="WB" ? "selected" : ""}>WB</option>
-                <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
-                <option ${item.type==="PC" ? "selected" : ""}>PC</option>
-                <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
-                <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
-            </select>
-            <input type="number" class="requestQty" placeholder="Qty" value="${item.qty || ""}">
-            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addRequest()" : "this.parentElement.remove()"}">${index===0 ? "+" : "-"}</button>
-          `;
-          requestContainer.appendChild(row);
-        });
-      } else {
-        requestContainer.innerHTML = `
-          <div class="row requestRow">
-              <select class="requestType">
-                  <option>WB</option>
-                  <option>PRBC</option>
-                  <option>PC</option>
-                  <option>FFP</option>
-                  <option>CRYO</option>
-              </select>
-              <input type="number" class="requestQty" placeholder="Qty">
-              <button type="button" class="addBtn" onclick="addRequest()">+</button>
-          </div>
-        `;
-      }
-
-      if(entry.issued && Array.isArray(entry.issued) && entry.issued.length > 0){
-        entry.issued.forEach((item, index) => {
-          const row = document.createElement("div");
-          row.className = "row issuedRow";
-          row.innerHTML = `
-            <select class="issuedType">
-                <option ${item.type==="WB" ? "selected" : ""}>WB</option>
-                <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
-                <option ${item.type==="PC" ? "selected" : ""}>PC</option>
-                <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
-                <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
-            </select>
-            <input type="number" class="issuedQty" placeholder="Qty" value="${item.qty || ""}">
-            <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addIssued()" : "this.parentElement.remove(); computeIssuedTotal()"}">${index===0 ? "+" : "-"}</button>
-          `;
-          issuedContainer.appendChild(row);
-        });
-      } else {
-        issuedContainer.innerHTML = `
-          <div class="row issuedRow">
-              <select class="issuedType">
-                  <option>WB</option>
-                  <option>PRBC</option>
-                  <option>PC</option>
-                  <option>FFP</option>
-                  <option>CRYO</option>
-              </select>
-              <input type="number" class="issuedQty" placeholder="Qty">
-              <button type="button" class="addBtn" onclick="addIssued()">+</button>
-          </div>
-        `;
-      }
-
-      computeIssuedTotal();
+      loadEntryIntoForm(editId, snapshot.val());
     }
   }catch(error){
     console.error("Load edit error:", error);
@@ -725,14 +959,15 @@ saveBtn.addEventListener("click", async () => {
   };
 
   try {
-    if(editId){
-      await update(ref(db, "releasing/" + editId), entryData);
+    if(selectedLoadedId){
+      await update(ref(db, "releasing/" + selectedLoadedId), entryData);
       alert("Updated successfully!");
       window.location.href = "releasing-tracking.html";
     }else{
       await push(ref(db, "releasing"), entryData);
       alert("Saved successfully!");
       resetForm();
+      liveSearchInput.value = "";
     }
   } catch (error) {
     console.error("Save entry error:", error);
@@ -1036,6 +1271,8 @@ onAuthStateChanged(auth, async (user) => {
 
   setTodayDate();
   loadFacilities();
+  bindLiveSearch();
+  loadTrackingSearchData();
   await loadComponentPrices();
   await loadEditEntry();
   computeIssuedTotal();
