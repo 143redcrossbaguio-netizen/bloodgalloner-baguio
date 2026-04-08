@@ -769,6 +769,7 @@ function createBloodTypeCounter(){
 function emptyStats(){
   return {
     totalDonors: 0,
+    dailyCounts: {},
     officeBleeding: {
       "Walk-in": { S:0, D:0, T:0, Q:0 },
       "Patient Directed": { S:0, D:0, T:0, Q:0 }
@@ -865,6 +866,13 @@ function formatDateForDisplay(raw){
 
 function applyDonor(s, r){
   s.totalDonors++;
+
+  const donorDate = parseDate(getDonorDate(r));
+  const donorParts = getDateParts(donorDate);
+  if (donorParts.year && donorParts.month && donorParts.day) {
+    const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
+    s.dailyCounts[dayKey] = (s.dailyCounts[dayKey] || 0) + 1;
+  }
 
   const donorType = normalizeDonorType(getDonorType(r));
   const partnerName = getPartnerName(r);
@@ -1144,6 +1152,16 @@ function renderOverview(grouped){
           <div class="summary-grid">
             ${monthKeys.map(key => {
               const s = grouped[year][key];
+
+              const dailyCountHtml = Object.keys(s.dailyCounts || {})
+                .sort((a,b)=>a.localeCompare(b))
+                .map(dayKey => {
+                  const d = parseDate(dayKey);
+                  const display = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
+                  return `<div class="sub">Daily: ${escapeHtml(display)} - ${num(s.dailyCounts[dayKey])}</div>`;
+                })
+                .join("");
+
               return `
                 <div class="summary-box">
                   <div class="label">${escapeHtml(getMonthLabel(s._meta || {}))}</div>
@@ -1153,6 +1171,7 @@ function renderOverview(grouped){
                   <div class="sub">Field: ${num(sumBagGroup(s.fieldDonation["Total MBD"]))}</div>
                   <div class="sub">Prepared: ${num(sumVals(s.components))}</div>
                   <div class="sub">Requested: ${num(sumVals(s.requests))}</div>
+                  ${dailyCountHtml}
                 </div>
               `;
             }).join("")}
