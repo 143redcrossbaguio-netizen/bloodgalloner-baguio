@@ -77,6 +77,8 @@ color:white;
 .edit-btn{background:#1565c0;}
 .delete-btn{background:#c62828;}
 .view-btn{background:#6a1b9a;}
+.remarks-btn{background:#2e7d32;}
+.save-remarks-btn{background:#b30000;}
 
 .top-btn{background:#b30000;}
 
@@ -93,6 +95,90 @@ border:1px solid #ccc;
 padding:10px;
 border-radius:6px;
 text-align:left;
+}
+
+.serial-detail-layout{
+display:grid;
+grid-template-columns: 1.2fr 1fr;
+gap:15px;
+align-items:start;
+}
+
+.serial-count-box{
+background:#fff4f4;
+border:1px solid #e0b4b4;
+padding:10px;
+border-radius:6px;
+font-weight:bold;
+color:#b30000;
+margin-bottom:10px;
+}
+
+.serial-table{
+width:100%;
+border-collapse:collapse;
+background:white;
+}
+
+.serial-table th,
+.serial-table td{
+border:1px solid #ddd;
+padding:8px;
+text-align:left;
+}
+
+.serial-table th{
+background:#b30000;
+color:white;
+text-align:center;
+}
+
+.remarks-panel{
+background:#ffffff;
+border:1px solid #ccc;
+border-radius:6px;
+padding:10px;
+}
+
+.remarks-panel h4{
+margin:0 0 10px 0;
+color:#b30000;
+}
+
+.remarks-textarea{
+width:100%;
+min-height:140px;
+padding:10px;
+box-sizing:border-box;
+resize:vertical;
+font-family:Arial;
+font-size:14px;
+border:1px solid #ccc;
+border-radius:6px;
+}
+
+.remark-indicator{
+display:inline-block;
+margin-left:6px;
+padding:2px 6px;
+font-size:10px;
+border-radius:10px;
+background:#2e7d32;
+color:white;
+vertical-align:middle;
+}
+
+.no-remarks-label{
+font-size:12px;
+color:#888;
+margin-top:8px;
+display:block;
+}
+
+@media (max-width: 900px){
+.serial-detail-layout{
+grid-template-columns:1fr;
+}
 }
 
 </style>
@@ -265,6 +351,7 @@ if(bloodFilter && d.bloodType !== bloodFilter) return;
 
 let badge=getBadge(serialCount);
 let bloodIcon=getBloodIcon(d.bloodType,d.rhFactor);
+let hasRemarks = (d.remarks || "").trim() !== "";
 
 table.innerHTML+=`
 
@@ -274,6 +361,7 @@ table.innerHTML+=`
 
 <td class="name-cell">
 ${d.firstName||""} ${d.middleName||""} ${d.surname||""}
+${hasRemarks ? `<span class="remark-indicator">REMARK</span>` : ``}
 </td>
 
 <td>${badge}</td>
@@ -291,6 +379,7 @@ ${serialCount}
 
 <td>
 
+<button class="remarks-btn" onclick="openRemarksOnly(${index})">Remarks</button>
 <button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>
 <button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>
 
@@ -310,7 +399,7 @@ ${serialCount}
 
 }
 
-/* SERIAL VIEW */
+/* SERIAL VIEW WITH REMARKS PANEL */
 
 function toggleSerial(index){
 
@@ -319,14 +408,7 @@ let container=document.getElementById("serialList"+index);
 
 if(row.style.display==="none"){
 
-container.innerHTML="";
-
-let serials=donorsData[index].serials||[];
-
-serials.forEach(s=>{
-container.innerHTML+=`${s.serial} - ${s.date}<br>`;
-});
-
+renderSerialAndRemarks(index);
 row.style.display="table-row";
 
 }else{
@@ -334,6 +416,114 @@ row.style.display="table-row";
 row.style.display="none";
 
 }
+
+}
+
+function openRemarksOnly(index){
+
+let row=document.getElementById("serialRow"+index);
+
+if(row.style.display==="none"){
+row.style.display="table-row";
+}
+
+renderSerialAndRemarks(index);
+
+let remarksBox=document.getElementById("remarksText"+index);
+if(remarksBox){
+remarksBox.focus();
+}
+}
+
+function renderSerialAndRemarks(index){
+
+let container=document.getElementById("serialList"+index);
+let donor = donorsData[index];
+let serials = donor.serials || [];
+let remarks = donor.remarks || "";
+
+let serialRows = "";
+
+if(serials.length){
+serials.forEach((s,i)=>{
+serialRows += `
+<tr>
+<td style="text-align:center;">${i+1}</td>
+<td>${s.serial||""}</td>
+<td>${s.date||""}</td>
+</tr>
+`;
+});
+}else{
+serialRows = `
+<tr>
+<td colspan="3" style="text-align:center;">No serial records found.</td>
+</tr>
+`;
+}
+
+container.innerHTML = `
+<div class="serial-detail-layout">
+
+<div>
+<div class="serial-count-box">Total Serial Records: ${serials.length}</div>
+
+<table class="serial-table">
+<thead>
+<tr>
+<th style="width:70px;">#</th>
+<th>Serial Number</th>
+<th style="width:180px;">Date</th>
+</tr>
+</thead>
+<tbody>
+${serialRows}
+</tbody>
+</table>
+</div>
+
+<div class="remarks-panel">
+<h4>Remarks</h4>
+<textarea id="remarksText${index}" class="remarks-textarea" placeholder="Enter remarks here...">${escapeHtmlToTextarea(remarks)}</textarea>
+<button class="save-remarks-btn" onclick="saveRemarks(${index})">Save Remarks</button>
+${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</span>` : ``}
+</div>
+
+</div>
+`;
+
+}
+
+/* SAVE REMARKS */
+
+function saveRemarks(index){
+
+let donor = donorsData[index];
+let remarksValue = document.getElementById("remarksText"+index).value.trim();
+
+if (!auth.currentUser) {
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+db.collection("donors").doc(donor.id).update({
+remarks: remarksValue
+}).then(()=>{
+donorsData[index].remarks = remarksValue;
+renderTable();
+
+let reopenedRow = document.getElementById("serialRow"+index);
+if(reopenedRow){
+reopenedRow.style.display="table-row";
+renderSerialAndRemarks(index);
+}
+
+alert("Remarks saved successfully.");
+}).catch(error=>{
+console.error("Remarks save error:", error);
+alert("Error saving remarks.");
+});
 
 }
 
@@ -382,10 +572,10 @@ window.location.href="donor-entry.html?editId="+id;
 
 function exportToCSV(){
 
-let csv="Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact\n";
+let csv="Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Remarks\n";
 
 donorsData.forEach(d=>{
-csv+=`${d.bloodType||""},${d.rhFactor||""},${d.firstName||""},${d.middleName||""},${d.surname||""},${d.contact||""}\n`;
+csv+=`${d.bloodType||""},${d.rhFactor||""},${d.firstName||""},${d.middleName||""},${d.surname||""},${d.contact||""},"${(d.remarks||"").replace(/"/g,'""')}"\n`;
 });
 
 let blob=new Blob([csv],{type:"text/csv"});
@@ -398,6 +588,13 @@ a.click();
 
 window.URL.revokeObjectURL(url);
 
+}
+
+function escapeHtmlToTextarea(text){
+return String(text || "")
+.replace(/&/g, "&amp;")
+.replace(/</g, "&lt;")
+.replace(/>/g, "&gt;");
 }
 
 /* AUTH CHECK */
