@@ -11,11 +11,93 @@
 
     <style>
         body { margin:0; font-family:Arial; background:#f4f4f4; }
-        header { background:#b30000; color:white; padding:15px; text-align:center; }
+        header { background:#b30000; color:white; padding:15px; text-align:center; position:relative; }
+        .header-search-wrap {
+            max-width: 500px;
+            margin: 12px auto 0;
+            position: relative;
+        }
+        .header-search-wrap input {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            color: black;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            max-height: 260px;
+            overflow-y: auto;
+            z-index: 999;
+            display: none;
+            text-align: left;
+        }
+        .search-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .search-item:hover {
+            background: #f8f8f8;
+        }
+        .search-item small {
+            display: block;
+            color: #666;
+            margin-top: 3px;
+        }
+
         .container { max-width:500px; margin:20px auto; background:white; padding:20px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
         input, select { width:100%; padding:8px; margin-bottom:10px; box-sizing:border-box; }
         button { padding:8px; margin-top:5px; background:#b30000; color:white; border:none; border-radius:5px; cursor:pointer; }
         .serial-box { margin-top:10px; }
+
+        .serial-table-wrap {
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        .serial-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .serial-table th,
+        .serial-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: middle;
+        }
+        .serial-table th {
+            background: #f2f2f2;
+        }
+        .serial-count {
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #b30000;
+        }
+        .section-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            align-items: end;
+        }
+        .edit-indicator {
+            display: none;
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 
@@ -23,9 +105,18 @@
 
 <header>
     <h2>Donor Entry</h2>
+
+    <div class="header-search-wrap">
+        <input type="text" id="liveSearch" placeholder="Live Search: Serial Number or Name">
+        <div id="searchResults" class="search-results"></div>
+    </div>
 </header>
 
 <div class="container">
+
+<div id="editIndicator" class="edit-indicator">
+    Existing donor record loaded. You can now add a new serial number and date.
+</div>
 
 <input type="text" id="firstName" placeholder="First Name">
 <input type="text" id="middleName" placeholder="Middle Name">
@@ -52,15 +143,17 @@
 
 <h3>Serial Records</h3>
 
-<input type="text" id="serialInput" placeholder="Serial Number">
-<input type="date" id="dateInput">
-<button onclick="addSerial()">Add Serial</button>
+<div class="section-row">
+    <input type="date" id="dateInput">
+    <input type="text" id="serialInput" placeholder="Serial Number">
+</div>
+<button id="addSerialBtn" onclick="addSerial()">Add Serial</button>
 
 <div id="serialList" class="serial-box"></div>
 
 <hr>
 
-<button onclick="saveDonor()">Save Donor</button>
+<button id="saveDonorBtn" onclick="saveDonor()">Save Donor</button>
 <button onclick="window.location.href='dashboard.html'">Return to Dashboard</button>
 <button onclick="window.location.href='tracking.html'">Go to Tracking</button>
 
@@ -86,6 +179,7 @@
     let serials = [];
     let editDocId = null;
     let authReady = false;
+    let allDonors = [];
 
     auth.onAuthStateChanged(function(user) {
         if (!user) {
@@ -94,61 +188,116 @@
         }
 
         authReady = true;
+        loadAllDonors();
 
         let params = new URLSearchParams(window.location.search);
         if (params.has("editId")) {
             editDocId = params.get("editId");
-            db.collection("donors").doc(editDocId).get().then(docSnap => {
-                if (docSnap.exists) {
-                    let d = docSnap.data();
-                    document.getElementById("firstName").value = d.firstName || "";
-                    document.getElementById("middleName").value = d.middleName || "";
-                    document.getElementById("surname").value = d.surname || "";
-                    document.getElementById("bloodType").value = d.bloodType || "";
-                    document.getElementById("rhFactor").value = d.rhFactor || "";
-                    document.getElementById("birthday").value = d.birthday || "";
-                    document.getElementById("contact").value = d.contact || "";
-                    serials = d.serials || [];
-                    renderSerials();
-                }
-            }).catch(error => {
-                console.error("Error loading donor:", error);
-                alert("Error loading donor record.");
-            });
+            loadDonorById(editDocId);
         }
     });
 
+    function loadAllDonors() {
+        db.collection("donors").get().then(snapshot => {
+            allDonors = [];
+            snapshot.forEach(doc => {
+                allDonors.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+        }).catch(error => {
+            console.error("Error loading donors for search:", error);
+        });
+    }
+
+    function loadDonorById(docId) {
+        db.collection("donors").doc(docId).get().then(docSnap => {
+            if (docSnap.exists) {
+                let d = docSnap.data();
+                editDocId = docId;
+
+                document.getElementById("firstName").value = d.firstName || "";
+                document.getElementById("middleName").value = d.middleName || "";
+                document.getElementById("surname").value = d.surname || "";
+                document.getElementById("bloodType").value = d.bloodType || "";
+                document.getElementById("rhFactor").value = d.rhFactor || "";
+                document.getElementById("birthday").value = d.birthday || "";
+                document.getElementById("contact").value = d.contact || "";
+                serials = Array.isArray(d.serials) ? d.serials : [];
+                renderSerials();
+
+                document.getElementById("editIndicator").style.display = "block";
+                document.getElementById("dateInput").focus();
+            }
+        }).catch(error => {
+            console.error("Error loading donor:", error);
+            alert("Error loading donor record.");
+        });
+    }
+
     function addSerial() {
-        let serial = document.getElementById("serialInput").value.trim();
         let date = document.getElementById("dateInput").value;
+        let serial = document.getElementById("serialInput").value.trim();
 
         if (serial === "" || date === "") {
-            alert("Enter serial number and date.");
+            alert("Enter date and serial number.");
             return;
         }
 
-        if (serials.some(s => s.serial === serial)) {
+        if (serials.some(s => (s.serial || "").toLowerCase() === serial.toLowerCase())) {
             alert("Duplicate serial detected!");
             return;
         }
 
         serials.push({ serial: serial, date: date });
-        document.getElementById("serialInput").value = "";
         document.getElementById("dateInput").value = "";
+        document.getElementById("serialInput").value = "";
         renderSerials();
+        document.getElementById("dateInput").focus();
     }
 
     function renderSerials() {
         let container = document.getElementById("serialList");
-        container.innerHTML = "";
+
+        if (!serials.length) {
+            container.innerHTML = "";
+            return;
+        }
+
+        let html = `
+            <div class="serial-count">Total Serial Records: ${serials.length}</div>
+            <div class="serial-table-wrap">
+                <table class="serial-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">#</th>
+                            <th>Date</th>
+                            <th>Serial Number</th>
+                            <th style="width:110px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
         serials.forEach((s, i) => {
-            container.innerHTML += `
-                <div>
-                    ${s.serial} - ${s.date}
-                    <button onclick="removeSerial(${i})">Remove</button>
-                </div>
+            html += `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${s.date || ""}</td>
+                    <td>${s.serial || ""}</td>
+                    <td><button onclick="removeSerial(${i})">Remove</button></td>
+                </tr>
             `;
         });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        container.innerHTML = html;
     }
 
     function removeSerial(index) {
@@ -190,7 +339,10 @@
         if (editDocId) {
             db.collection("donors").doc(editDocId).update(donorData).then(() => {
                 alert("Donor updated successfully!");
-                window.location.href = "tracking.html";
+                loadAllDonors();
+                document.getElementById("dateInput").value = "";
+                document.getElementById("serialInput").value = "";
+                document.getElementById("dateInput").focus();
             }).catch(error => {
                 console.error("Update error:", error);
                 alert("Error updating donor.");
@@ -198,7 +350,8 @@
         } else {
             db.collection("donors").add(donorData).then(() => {
                 alert("Donor saved successfully!");
-                window.location.href = "tracking.html";
+                clearFormForNewEntry();
+                loadAllDonors();
             }).catch(error => {
                 console.error("Save error:", error);
                 alert("Error saving donor.");
@@ -206,9 +359,132 @@
         }
     }
 
+    function clearFormForNewEntry() {
+        editDocId = null;
+        serials = [];
+        document.getElementById("firstName").value = "";
+        document.getElementById("middleName").value = "";
+        document.getElementById("surname").value = "";
+        document.getElementById("bloodType").value = "";
+        document.getElementById("rhFactor").value = "";
+        document.getElementById("birthday").value = "";
+        document.getElementById("contact").value = "";
+        document.getElementById("dateInput").value = "";
+        document.getElementById("serialInput").value = "";
+        document.getElementById("liveSearch").value = "";
+        document.getElementById("searchResults").style.display = "none";
+        document.getElementById("editIndicator").style.display = "none";
+        renderSerials();
+        document.getElementById("firstName").focus();
+    }
+
+    function getFullName(donor) {
+        return [
+            donor.firstName || "",
+            donor.middleName || "",
+            donor.surname || ""
+        ].join(" ").replace(/\s+/g, " ").trim();
+    }
+
+    function matchesSearch(donor, query) {
+        const q = query.toLowerCase().trim();
+        if (!q) return false;
+
+        const fullName = getFullName(donor).toLowerCase();
+        const serialMatch = Array.isArray(donor.serials)
+            ? donor.serials.some(s => (s.serial || "").toLowerCase().includes(q))
+            : false;
+
+        return fullName.includes(q) || serialMatch;
+    }
+
+    function renderSearchResults(results) {
+        const resultsBox = document.getElementById("searchResults");
+
+        if (!results.length) {
+            resultsBox.innerHTML = `<div class="search-item">No matching donor found.</div>`;
+            resultsBox.style.display = "block";
+            return;
+        }
+
+        resultsBox.innerHTML = results.map(donor => {
+            const latestSerial = Array.isArray(donor.serials) && donor.serials.length
+                ? donor.serials[donor.serials.length - 1]
+                : null;
+
+            return `
+                <div class="search-item" onclick="selectSearchResult('${donor.id}')">
+                    <strong>${escapeHtml(getFullName(donor)) || "No Name"}</strong>
+                    <small>
+                        ${latestSerial ? "Latest Serial: " + escapeHtml(latestSerial.serial || "") + " | Date: " + escapeHtml(latestSerial.date || "") : "No serial records"}
+                    </small>
+                </div>
+            `;
+        }).join("");
+
+        resultsBox.style.display = "block";
+    }
+
+    function selectSearchResult(docId) {
+        document.getElementById("searchResults").style.display = "none";
+        loadDonorById(docId);
+    }
+
+    function escapeHtml(text) {
+        return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    document.getElementById("liveSearch").addEventListener("input", function() {
+        const query = this.value.trim();
+
+        if (!query) {
+            document.getElementById("searchResults").style.display = "none";
+            return;
+        }
+
+        const matched = allDonors.filter(donor => matchesSearch(donor, query)).slice(0, 15);
+        renderSearchResults(matched);
+    });
+
+    document.addEventListener("click", function(e) {
+        const searchWrap = document.querySelector(".header-search-wrap");
+        if (!searchWrap.contains(e.target)) {
+            document.getElementById("searchResults").style.display = "none";
+        }
+    });
+
+    function setupEnterToNext() {
+        const selectors = 'input, select';
+        const fields = Array.from(document.querySelectorAll(selectors)).filter(el => !el.disabled && el.type !== 'hidden');
+
+        fields.forEach((field, index) => {
+            field.addEventListener("keydown", function(e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+
+                    const nextField = fields[index + 1];
+                    if (nextField) {
+                        nextField.focus();
+                        if (typeof nextField.select === "function" && nextField.type !== "date") {
+                            nextField.select();
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    setupEnterToNext();
+
     window.addSerial = addSerial;
     window.removeSerial = removeSerial;
     window.saveDonor = saveDonor;
+    window.selectSearchResult = selectSearchResult;
 </script>
 
 </body>
