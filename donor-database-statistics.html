@@ -125,6 +125,78 @@
       font-size:12px;color:#6b7280;margin-top:6px;font-weight:700
     }
 
+    .daily-dropdown-wrap{
+      margin-top:10px;
+    }
+    .daily-dropdown-btn{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 12px;
+      border:1px solid #d6dde6;
+      border-radius:10px;
+      background:#f8fafc;
+      color:#8b0000;
+      font-size:12px;
+      font-weight:800;
+      cursor:pointer;
+    }
+    .daily-dropdown-btn:hover{
+      transform:none;
+      background:#fff1f2;
+    }
+    .daily-dropdown-content{
+      display:none;
+      margin-top:8px;
+      border:1px solid #d6dde6;
+      border-radius:10px;
+      background:#fff;
+      overflow:hidden;
+    }
+    .daily-dropdown-content.open{
+      display:block;
+    }
+    .daily-dropdown-list{
+      max-height:220px;
+      overflow:auto;
+    }
+    .daily-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:8px 12px;
+      border-bottom:1px solid #eef2f7;
+      font-size:12px;
+      font-weight:700;
+      color:#4b5563;
+    }
+    .daily-row:last-child{
+      border-bottom:none;
+    }
+    .daily-row-date{
+      text-align:left;
+    }
+    .daily-row-count{
+      min-width:28px;
+      text-align:center;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#b30000;
+      color:#fff;
+      font-size:11px;
+      font-weight:800;
+    }
+    .daily-empty{
+      padding:10px 12px;
+      font-size:12px;
+      font-weight:700;
+      color:#6b7280;
+      text-align:center;
+    }
+
     .section-head{
       display:flex;justify-content:space-between;align-items:center;
       padding:16px;cursor:pointer;border-bottom:1px solid #d6dde6
@@ -1131,6 +1203,48 @@ function getMonthLabel(meta){
   return `${MONTHS[(meta.month || 1) - 1]} ${meta.year || ""}`.trim();
 }
 
+function buildDailyDropdown(monthKey, s){
+  const dailyCounts = s.dailyCounts || {};
+  const keys = Object.keys(dailyCounts).sort((a,b) => a.localeCompare(b));
+
+  if (!keys.length) {
+    return `
+      <div class="daily-dropdown-wrap">
+        <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
+          <span>Daily Count of Donors</span>
+          <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
+        </button>
+        <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
+          <div class="daily-empty">No daily donor counts found.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const rows = keys.map(dayKey => {
+    const d = parseDate(dayKey);
+    const label = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
+    return `
+      <div class="daily-row">
+        <div class="daily-row-date">${escapeHtml(label)}</div>
+        <div class="daily-row-count">${num(dailyCounts[dayKey])}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="daily-dropdown-wrap">
+      <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
+        <span>Daily Count of Donors</span>
+        <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
+      </button>
+      <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
+        <div class="daily-dropdown-list">${rows}</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderOverview(grouped){
   const container = document.getElementById("summaryContainer");
   const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
@@ -1152,16 +1266,6 @@ function renderOverview(grouped){
           <div class="summary-grid">
             ${monthKeys.map(key => {
               const s = grouped[year][key];
-
-              const dailyCountHtml = Object.keys(s.dailyCounts || {})
-                .sort((a,b)=>a.localeCompare(b))
-                .map(dayKey => {
-                  const d = parseDate(dayKey);
-                  const display = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
-                  return `<div class="sub">Daily: ${escapeHtml(display)} - ${num(s.dailyCounts[dayKey])}</div>`;
-                })
-                .join("");
-
               return `
                 <div class="summary-box">
                   <div class="label">${escapeHtml(getMonthLabel(s._meta || {}))}</div>
@@ -1171,7 +1275,7 @@ function renderOverview(grouped){
                   <div class="sub">Field: ${num(sumBagGroup(s.fieldDonation["Total MBD"]))}</div>
                   <div class="sub">Prepared: ${num(sumVals(s.components))}</div>
                   <div class="sub">Requested: ${num(sumVals(s.requests))}</div>
-                  ${dailyCountHtml}
+                  ${buildDailyDropdown(key, s)}
                 </div>
               `;
             }).join("")}
@@ -1591,6 +1695,14 @@ function buildStatistics(){
     document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build detailed statistics.</div>`;
     setStatus("Failed to build statistics: " + (error.message || error), "error");
   }
+}
+
+function toggleDailyDropdown(monthKey){
+  const box = document.getElementById(`dailyDropdown-${monthKey}`);
+  const arrow = document.getElementById(`dailyArrow-${monthKey}`);
+  if (!box) return;
+  box.classList.toggle("open");
+  if (arrow) arrow.textContent = box.classList.contains("open") ? "▲" : "▼";
 }
 
 function toggleNext(el){
