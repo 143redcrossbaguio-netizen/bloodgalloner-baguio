@@ -917,12 +917,12 @@
 
                     <div class="field-group span-6">
                         <label for="timeStarted">21. Time Started</label>
-                        <input type="time" id="timeStarted" step="60">
+                        <input type="text" id="timeStarted" inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off">
                     </div>
 
                     <div class="field-group span-6">
                         <label for="timeEnded">22. Time Ended</label>
-                        <input type="time" id="timeEnded" step="60">
+                        <input type="text" id="timeEnded" inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off">
                     </div>
 
                     <div class="field-group span-12">
@@ -1488,21 +1488,64 @@
         const raw = String(value || "").trim();
         if (!raw) return null;
 
-        const match = raw.match(/^(\d{2}):(\d{2})$/);
+        const match = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
         if (!match) return null;
 
         const hours = Number(match[1]);
         const minutes = Number(match[2]);
-
-        if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-        if (hours < 0 || hours > 23) return null;
-        if (minutes < 0 || minutes > 59) return null;
 
         return {
             raw,
             normalized: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
             totalMinutes: (hours * 60) + minutes
         };
+    }
+
+    function formatTimeInputValue(value) {
+        const digits = String(value || "").replace(/\D/g, "").slice(0, 4);
+        if (!digits) return "";
+
+        if (digits.length <= 2) {
+            return digits;
+        }
+
+        if (digits.length === 3) {
+            return `0${digits.charAt(0)}:${digits.slice(1)}`;
+        }
+
+        return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+    }
+
+    function normalizeTimeInputField(input) {
+        const formatted = formatTimeInputValue(input.value);
+        input.value = formatted;
+
+        const parsed = parseFlexibleTime(formatted);
+        if (parsed) {
+            input.value = parsed.normalized;
+            return parsed.normalized;
+        }
+
+        return "";
+    }
+
+    function handleTimeInputAutoFormat(event) {
+        const input = event.target;
+        const previousLength = input.value.length;
+        input.value = formatTimeInputValue(input.value);
+
+        if (input.value.length === 5 && previousLength <= 5 && parseFlexibleTime(input.value)) {
+            validateAndDescribeTimes();
+            focusNextField(input);
+            return;
+        }
+
+        validateAndDescribeTimes();
+    }
+
+    function handleTimeInputBlur(event) {
+        normalizeTimeInputField(event.target);
+        validateAndDescribeTimes();
     }
 
     function formatMinutesToHoursMinutes(totalMinutes) {
@@ -1726,8 +1769,10 @@
     });
     donorCategory.addEventListener("change", refreshTypeHelper);
     useSerialPrefix.addEventListener("change", updateSerialModeUI);
-    timeStartedInput.addEventListener("input", validateAndDescribeTimes);
-    timeEndedInput.addEventListener("input", validateAndDescribeTimes);
+    timeStartedInput.addEventListener("input", handleTimeInputAutoFormat);
+    timeEndedInput.addEventListener("input", handleTimeInputAutoFormat);
+    timeStartedInput.addEventListener("blur", handleTimeInputBlur);
+    timeEndedInput.addEventListener("blur", handleTimeInputBlur);
 
     generateSerialRangeBtn.addEventListener("click", function() {
         try {
@@ -2184,8 +2229,8 @@
                 bloodBagBrand: document.getElementById("bloodBagBrand").value,
                 bloodBagType: document.getElementById("bloodBagType").value,
                 amount: document.getElementById("amount").value,
-                timeStarted: document.getElementById("timeStarted").value.trim(),
-                timeEnded: document.getElementById("timeEnded").value.trim(),
+                timeStarted: timeValidation.normalizedStarted || "",
+                timeEnded: timeValidation.normalizedEnded || "",
                 timeStartedNormalized: timeValidation.normalizedStarted || "",
                 timeEndedNormalized: timeValidation.normalizedEnded || "",
                 timeDurationMinutes: timeValidation.durationMinutes,
