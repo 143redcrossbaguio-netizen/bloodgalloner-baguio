@@ -295,7 +295,18 @@
       font-size:13px;
     }
 
+    .details-layout{
+      display:grid;
+      grid-template-columns:minmax(0,1.45fr) minmax(340px,.95fr);
+      gap:16px;
+      align-items:start;
+    }
+    .details-column{
+      min-width:0;
+    }
+
     @media (max-width:1200px){
+      .details-layout{grid-template-columns:1fr}
       .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr 1fr}
       .mapping-head,.mapping-view,.mapping-edit{grid-template-columns:1fr 1fr}
     }
@@ -373,8 +384,16 @@
 
   <div id="detailsPanel" class="panel">
     <div class="card">
-      <h3 style="margin-top:0;color:#991b1b;">Detailed Statistics</h3>
-      <div id="reportContainer"></div>
+      <div class="details-layout">
+        <div class="details-column">
+          <h3 style="margin-top:0;color:#991b1b;">Detailed Statistics</h3>
+          <div id="reportContainer"></div>
+        </div>
+        <div class="details-column">
+          <h3 style="margin-top:0;color:#991b1b;">Group Monthly Statistics</h3>
+          <div id="groupStatsContainer"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -991,8 +1010,10 @@ function applyDonor(s, r){
       "450 cc S": bagCounts.S,
       "450 cc D": bagCounts.D,
       "450 cc T": bagCounts.T,
-      "450 cc Q": bagCounts.Q
+      "450 cc Q": bagCounts.Q,
+      bloodTypeCounts: createBloodTypeCounter()
     };
+    detail.bloodTypeCounts[bt] = (detail.bloodTypeCounts[bt] || 0) + 1;
 
     if (category === "Group") s.fieldDetails.group.push(detail);
     else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
@@ -1459,6 +1480,149 @@ function renderFieldCategoryTable(title, label, rows){
   `;
 }
 
+function aggregateGroupMonthlyStats(rows){
+  const map = {};
+  (rows || []).forEach(r => {
+    const name = String(r.name || "").trim() || "UNSPECIFIED";
+    const date = String(r.date || "").trim();
+    const key = `${normalizeAliasKey(name)}__${date}`;
+
+    if (!map[key]) {
+      map[key] = {
+        name,
+        date,
+        rawDate: parseDate(r.rawDate || r.date),
+        totalDonors: 0,
+        bags: { S:0, D:0, T:0, Q:0 },
+        bloodTypes: createBloodTypeCounter()
+      };
+    }
+
+    map[key].totalDonors += Number(r.totalDonors || 0);
+    map[key].bags.S += Number(r["450 cc S"] || 0);
+    map[key].bags.D += Number(r["450 cc D"] || 0);
+    map[key].bags.T += Number(r["450 cc T"] || 0);
+    map[key].bags.Q += Number(r["450 cc Q"] || 0);
+
+    const counters = r.bloodTypeCounts || {};
+    Object.keys(map[key].bloodTypes).forEach(bt => {
+      map[key].bloodTypes[bt] += Number(counters[bt] || 0);
+    });
+  });
+
+  return Object.values(map).sort((a,b) => {
+    const at = a.rawDate ? a.rawDate.getTime() : 0;
+    const bt = b.rawDate ? b.rawDate.getTime() : 0;
+    return bt - at || a.name.localeCompare(b.name);
+  });
+}
+
+function renderGroupMonthlyStatistics(grouped){
+  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
+  const container = document.getElementById("groupStatsContainer");
+
+  if (!years.length) {
+    container.innerHTML = `<div class="empty">No group monthly statistics found for the selected filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = years.map((year, yi) => {
+    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
+    return `
+      <div class="year-block">
+        <div class="year-head" onclick="toggleNext(this)">
+          <span>${year}</span>
+          <span>${monthKeys.length} month group(s)</span>
+        </div>
+        <div class="year-content ${yi === 0 ? "open" : ""}">
+          ${monthKeys.map((key, mi) => {
+            const s = grouped[year][key];
+            const monthName = MONTHS[(s._meta.month || 1) - 1];
+            const rows = aggregateGroupMonthlyStats([
+              ...(s.fieldDetails.group || []),
+              ...(s.fieldDetails.rc143 || []),
+              ...(s.fieldDetails.pledge25 || []),
+              ...(s.fieldDetails.unmapped || [])
+            ]);
+
+            return `
+              <div class="month-block">
+                <div class="month-head" onclick="toggleNext(this)">
+                  <span>${monthName}</span>
+                  <span>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))} group donor(s)</span>
+                </div>
+                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
+                  ${rows.length ? `
+                    <div class="table-wrap">
+                      <table>
+                        <tr>
+                          <th>Group</th>
+                          <th>Date</th>
+                          <th>Total</th>
+                          <th>S</th>
+                          <th>D</th>
+                          <th>T</th>
+                          <th>Q</th>
+                          <th>O+</th>
+                          <th>A+</th>
+                          <th>B+</th>
+                          <th>AB+</th>
+                          <th>O-</th>
+                          <th>A-</th>
+                          <th>B-</th>
+                          <th>AB-</th>
+                          <th>Unknown</th>
+                        </tr>
+                        ${rows.map(r => `
+                          <tr>
+                            <td>${escapeHtml(r.name || "")}</td>
+                            <td>${escapeHtml(r.date || "")}</td>
+                            <td>${num(r.totalDonors)}</td>
+                            <td>${num(r.bags.S)}</td>
+                            <td>${num(r.bags.D)}</td>
+                            <td>${num(r.bags.T)}</td>
+                            <td>${num(r.bags.Q)}</td>
+                            <td>${num(r.bloodTypes["O+"])}</td>
+                            <td>${num(r.bloodTypes["A+"])}</td>
+                            <td>${num(r.bloodTypes["B+"])}</td>
+                            <td>${num(r.bloodTypes["AB+"])}</td>
+                            <td>${num(r.bloodTypes["O-"])}</td>
+                            <td>${num(r.bloodTypes["A-"])}</td>
+                            <td>${num(r.bloodTypes["B-"])}</td>
+                            <td>${num(r.bloodTypes["AB-"])}</td>
+                            <td>${num(r.bloodTypes["Unknown"])}</td>
+                          </tr>
+                        `).join("")}
+                        <tr class="subheader">
+                          <td colspan="2">Monthly Total</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.S || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.D || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.T || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.Q || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["O+"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["A+"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["B+"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["AB+"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["O-"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["A-"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["B-"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["AB-"] || 0), 0))}</td>
+                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["Unknown"] || 0), 0))}</td>
+                        </tr>
+                      </table>
+                    </div>
+                  ` : `<div class="empty">No group records found for this month.</div>`}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderDetailReport(grouped){
   const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
   const container = document.getElementById("reportContainer");
@@ -1682,6 +1846,7 @@ function buildStatistics(){
     renderOverview(grouped);
     renderMonthlySexTable(grouped);
     renderDetailReport(grouped);
+    renderGroupMonthlyStatistics(grouped);
 
     const q = String(document.getElementById("searchText").value || "").trim();
     renderSearchGroupReport(grouped, q);
@@ -1693,6 +1858,7 @@ function buildStatistics(){
     document.getElementById("sexMonthlyContainer").innerHTML = `<div class="empty">Failed to build male / female table.</div>`;
     document.getElementById("searchResultsContainer").innerHTML = `<div class="empty">Failed to build search results.</div>`;
     document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build detailed statistics.</div>`;
+    document.getElementById("groupStatsContainer").innerHTML = `<div class="empty">Failed to build group monthly statistics.</div>`;
     setStatus("Failed to build statistics: " + (error.message || error), "error");
   }
 }
