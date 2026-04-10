@@ -305,6 +305,10 @@
       min-width:0;
     }
 
+    .print-bundle{
+      display:block;
+    }
+
     @media print{
       @page{
         size: landscape;
@@ -360,20 +364,10 @@
       table,
       tr,
       td,
-      th{
+      th,
+      .print-bundle{
         break-inside:avoid;
         page-break-inside:avoid;
-      }
-      .summary-year-block,
-      .year-block,
-      .month-block{
-        page-break-before:auto;
-      }
-      .sheet-block{
-        page-break-before:always;
-      }
-      .sheet-block:first-child{
-        page-break-before:auto;
       }
       .details-layout{
         display:block;
@@ -394,6 +388,16 @@
       }
       th{
         background:#f3f4f6 !important;
+      }
+      .sheet-block{
+        page-break-before:auto;
+        margin-bottom:10px;
+      }
+      .print-bundle{
+        page-break-before:always;
+      }
+      .print-bundle:first-child{
+        page-break-before:auto;
       }
       button:hover{
         transform:none;
@@ -1245,12 +1249,6 @@ function sumDetailField(rows, field){
   return (rows || []).reduce((a,b)=>a + (Number(b[field])||0), 0);
 }
 
-function sumBagTypeColumn(s, code){
-  return Number(s.officeBleeding["Walk-in"][code] || 0) +
-         Number(s.officeBleeding["Patient Directed"][code] || 0) +
-         Number(s.fieldDonation["Total MBD"][code] || 0);
-}
-
 function num(v){
   return Number(v || 0).toLocaleString();
 }
@@ -1747,147 +1745,155 @@ function renderDetailReport(grouped){
                 </div>
                 <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-a">A. Office Bleeding</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                        <tr><td>1. Walk-in</td><td>${num(s.officeBleeding["Walk-in"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q)}</td></tr>
-                        <tr><td>2. Patient-directed</td><td>${num(s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.officeBleeding["Walk-in"].S + s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D + s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T + s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                      </table>
+                  <div class="print-bundle">
+                    <div class="sheet-block">
+                      <div class="sheet-title title-a">A. Office Bleeding</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+                          <tr><td>1. Walk-in</td><td>${num(s.officeBleeding["Walk-in"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q)}</td></tr>
+                          <tr><td>2. Patient-directed</td><td>${num(s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Patient Directed"].Q)}</td></tr>
+                          <tr class="subheader"><td>Total</td><td>${num(s.officeBleeding["Walk-in"].S + s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D + s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T + s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q)}</td></tr>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div class="sheet-block">
+                      <div class="sheet-title title-b">B. Field Donation</div>
+                      ${renderFieldCategoryTable("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
+                      ${renderFieldCategoryTable("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
+                      ${renderFieldCategoryTable("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
+                      ${renderFieldCategoryTable("Unmapped / Others", "Group", combineSmartGroupRows(s.fieldDetails.unmapped))}
                     </div>
                   </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-b">B. Field Donation</div>
-                    ${renderFieldCategoryTable("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
-                    ${renderFieldCategoryTable("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
-                    ${renderFieldCategoryTable("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
-                    ${renderFieldCategoryTable("Unmapped / Others", "Group", combineSmartGroupRows(s.fieldDetails.unmapped))}
-                  </div>
-
-                  <div class="sheet-block">
-                    <div class="sheet-title title-c">C. Blood Type Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Blood Type</th><th>Total</th></tr>
-                        ${Object.entries(s.bloodType).map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td>${num(v)}</td></tr>`).join("")}
-                      </table>
+                  <div class="print-bundle">
+                    <div class="sheet-block">
+                      <div class="sheet-title title-c">C. Blood Type Distribution</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Blood Type</th><th>Total</th></tr>
+                          ${Object.entries(s.bloodType).map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td>${num(v)}</td></tr>`).join("")}
+                        </table>
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-d">D. Blood Bag Type by Blood Type</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr>
-                          <th>Bag Type</th>
-                          <th>O+</th><th>A+</th><th>B+</th><th>AB+</th>
-                          <th>O-</th><th>A-</th><th>B-</th><th>AB-</th>
-                          <th>Unknown</th>
-                        </tr>
-                        ${["S","D","T","Q"].map(code => `
+                    <div class="sheet-block">
+                      <div class="sheet-title title-d">D. Blood Bag Type by Blood Type</div>
+                      <div class="table-wrap">
+                        <table>
                           <tr>
-                            <td>${code}</td>
-                            <td>${num(s.bagTypeBloodType[code]["O+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["A+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["B+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["AB+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["O-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["A-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["B-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["AB-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["Unknown"])}</td>
+                            <th>Bag Type</th>
+                            <th>O+</th><th>A+</th><th>B+</th><th>AB+</th>
+                            <th>O-</th><th>A-</th><th>B-</th><th>AB-</th>
+                            <th>Unknown</th>
                           </tr>
-                        `).join("")}
-                      </table>
+                          ${["S","D","T","Q"].map(code => `
+                            <tr>
+                              <td>${code}</td>
+                              <td>${num(s.bagTypeBloodType[code]["O+"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["A+"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["B+"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["AB+"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["O-"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["A-"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["B-"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["AB-"])}</td>
+                              <td>${num(s.bagTypeBloodType[code]["Unknown"])}</td>
+                            </tr>
+                          `).join("")}
+                        </table>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-e">E. Component Preparation</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Component</th><th>Total</th></tr>
-                        <tr><td>450 cc</td><td>${num(s.components["450 cc"])}</td></tr>
-                        <tr><td>PRBC</td><td>${num(s.components["PRBC"])}</td></tr>
-                        <tr><td>FFP</td><td>${num(s.components["FFP"])}</td></tr>
-                        <tr><td>PC</td><td>${num(s.components["PC"])}</td></tr>
-                        <tr><td>CRYO</td><td>${num(s.components["CRYO"])}</td></tr>
-                      </table>
+                  <div class="print-bundle">
+                    <div class="sheet-block">
+                      <div class="sheet-title title-e">E. Component Preparation</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Component</th><th>Total</th></tr>
+                          <tr><td>450 cc</td><td>${num(s.components["450 cc"])}</td></tr>
+                          <tr><td>PRBC</td><td>${num(s.components["PRBC"])}</td></tr>
+                          <tr><td>FFP</td><td>${num(s.components["FFP"])}</td></tr>
+                          <tr><td>PC</td><td>${num(s.components["PC"])}</td></tr>
+                          <tr><td>CRYO</td><td>${num(s.components["CRYO"])}</td></tr>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div class="sheet-block">
+                      <div class="sheet-title title-f">F. Requested Blood Components</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Component</th><th>Total Requested</th></tr>
+                          <tr><td>450 cc</td><td>${num(s.requests["450 cc"])}</td></tr>
+                          <tr><td>PRBC</td><td>${num(s.requests["PRBC"])}</td></tr>
+                          <tr><td>FFP</td><td>${num(s.requests["FFP"])}</td></tr>
+                          <tr><td>PC</td><td>${num(s.requests["PC"])}</td></tr>
+                          <tr><td>CRYO</td><td>${num(s.requests["CRYO"])}</td></tr>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div class="sheet-block">
+                      <div class="sheet-title title-g">G. Sex Distribution</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Sex</th><th>Total</th></tr>
+                          <tr><td>Male</td><td>${num(s.sex["Male"])}</td></tr>
+                          <tr><td>Female</td><td>${num(s.sex["Female"])}</td></tr>
+                          <tr class="subheader"><td>Total</td><td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td></tr>
+                        </table>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-f">F. Requested Blood Components</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Component</th><th>Total Requested</th></tr>
-                        <tr><td>450 cc</td><td>${num(s.requests["450 cc"])}</td></tr>
-                        <tr><td>PRBC</td><td>${num(s.requests["PRBC"])}</td></tr>
-                        <tr><td>FFP</td><td>${num(s.requests["FFP"])}</td></tr>
-                        <tr><td>PC</td><td>${num(s.requests["PC"])}</td></tr>
-                        <tr><td>CRYO</td><td>${num(s.requests["CRYO"])}</td></tr>
-                      </table>
+                  <div class="print-bundle">
+                    <div class="sheet-block">
+                      <div class="sheet-title title-h">H. Donor Frequency</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Type</th><th>Total</th></tr>
+                          <tr><td>First-time donors</td><td>${num(s.frequency["First-time donors"])}</td></tr>
+                          <tr><td>Repeat non-regular</td><td>${num(s.frequency["Repeat non-regular"])}</td></tr>
+                          <tr><td>Repeat regular</td><td>${num(s.frequency["Repeat regular"])}</td></tr>
+                          <tr class="subheader"><td>Total</td><td>${num(s.frequency["Total"])}</td></tr>
+                        </table>
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-g">G. Sex Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Sex</th><th>Total</th></tr>
-                        <tr><td>Male</td><td>${num(s.sex["Male"])}</td></tr>
-                        <tr><td>Female</td><td>${num(s.sex["Female"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td></tr>
-                      </table>
+                    <div class="sheet-block">
+                      <div class="sheet-title title-i">I. Age Distribution</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th>Age Group</th><th>Total</th></tr>
+                          <tr><td>16-17</td><td>${num(s.age["16-17"])}</td></tr>
+                          <tr><td>18-20</td><td>${num(s.age["18-20"])}</td></tr>
+                          <tr><td>21-30</td><td>${num(s.age["21-30"])}</td></tr>
+                          <tr><td>31-40</td><td>${num(s.age["31-40"])}</td></tr>
+                          <tr><td>41-50</td><td>${num(s.age["41-50"])}</td></tr>
+                          <tr><td>51-60</td><td>${num(s.age["51-60"])}</td></tr>
+                          <tr><td>60-65</td><td>${num(s.age["60-65"])}</td></tr>
+                          <tr><td>66 & above</td><td>${num(s.age["66 & above"])}</td></tr>
+                          <tr class="subheader"><td>Total</td><td>${num(s.age["Total"])}</td></tr>
+                        </table>
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-h">H. Donor Frequency</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Type</th><th>Total</th></tr>
-                        <tr><td>First-time donors</td><td>${num(s.frequency["First-time donors"])}</td></tr>
-                        <tr><td>Repeat non-regular</td><td>${num(s.frequency["Repeat non-regular"])}</td></tr>
-                        <tr><td>Repeat regular</td><td>${num(s.frequency["Repeat regular"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.frequency["Total"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div class="sheet-block">
-                    <div class="sheet-title title-i">I. Age Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Age Group</th><th>Total</th></tr>
-                        <tr><td>16-17</td><td>${num(s.age["16-17"])}</td></tr>
-                        <tr><td>18-20</td><td>${num(s.age["18-20"])}</td></tr>
-                        <tr><td>21-30</td><td>${num(s.age["21-30"])}</td></tr>
-                        <tr><td>31-40</td><td>${num(s.age["31-40"])}</td></tr>
-                        <tr><td>41-50</td><td>${num(s.age["41-50"])}</td></tr>
-                        <tr><td>51-60</td><td>${num(s.age["51-60"])}</td></tr>
-                        <tr><td>60-65</td><td>${num(s.age["60-65"])}</td></tr>
-                        <tr><td>66 & above</td><td>${num(s.age["66 & above"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.age["Total"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div class="sheet-block">
-                    <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
-                        <tr>
-                          <td>16-25 Years Old</td>
-                          <td>${num(s.youth1625Sex["Male"])}</td>
-                          <td>${num(s.youth1625Sex["Female"])}</td>
-                          <td>${num(s.youth1625Sex["Total"])}</td>
-                        </tr>
-                      </table>
+                    <div class="sheet-block">
+                      <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
+                      <div class="table-wrap">
+                        <table>
+                          <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
+                          <tr>
+                            <td>16-25 Years Old</td>
+                            <td>${num(s.youth1625Sex["Male"])}</td>
+                            <td>${num(s.youth1625Sex["Female"])}</td>
+                            <td>${num(s.youth1625Sex["Total"])}</td>
+                          </tr>
+                        </table>
+                      </div>
                     </div>
                   </div>
 
