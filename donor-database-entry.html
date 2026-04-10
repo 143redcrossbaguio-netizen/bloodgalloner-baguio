@@ -1,2180 +1,2466 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Donor Database Statistics</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donor Database Entry</title>
 
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
-  <style>
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:Arial,sans-serif; background:#f3f4f6; color:#1f2937; }
-    header {
-      background:linear-gradient(135deg,#b30000,#8b0000);
-      color:#fff; text-align:center; padding:20px;
-      font-size:24px; font-weight:700;
-      position:sticky; top:0; z-index:20;
-      box-shadow:0 4px 14px rgba(0,0,0,.12);
-    }
-    .page { width:min(1450px,96%); margin:18px auto; }
-    .card {
-      background:#fff; border-radius:14px;
-      box-shadow:0 8px 20px rgba(0,0,0,.08);
-      padding:16px; margin-bottom:16px;
-    }
+    <style>
+        * { box-sizing: border-box; }
 
-    .toolbar {
-      display:grid;
-      grid-template-columns:1fr 1fr 1fr auto auto auto;
-      gap:12px; align-items:end;
-    }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #eef2f6;
+            color: #1f2937;
+        }
 
-    .field label {
-      display:block; margin-bottom:6px;
-      font-size:13px; color:#6b7280; font-weight:700;
-    }
+        header {
+            background: linear-gradient(90deg, #8b0000, #b30000);
+            color: white;
+            padding: 10px 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
 
-    .field input,.field select {
-      width:100%; padding:10px 12px;
-      border:1px solid #d6dde6; border-radius:10px; font-size:14px;
-      background:#fff;
-    }
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
 
-    button {
-      border:none; border-radius:10px;
-      padding:10px 16px; font-weight:700; cursor:pointer;
-      transition:.18s ease;
-    }
+        .header-title {
+            font-size: 0;
+            font-weight: bold;
+            text-align: left;
+            min-width: 0;
+        }
 
-    button:hover { transform:translateY(-1px); }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            width: 100%;
+            justify-content: flex-end;
+        }
 
-    .btn-red{background:#b30000;color:#fff}
-    .btn-blue{background:#2563eb;color:#fff}
-    .btn-green{background:#15803d;color:#fff}
-    .btn-gray{background:#374151;color:#fff}
-    .btn-light{
-      background:#f8fafc;color:#374151;border:1px solid #d6dde6;
-    }
-    .btn-tab.active{
-      background:#b30000 !important;
-      color:#fff !important;
-      border-color:#b30000 !important;
-    }
+        .header-find-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1 1 420px;
+            min-width: 280px;
+            max-width: 620px;
+        }
 
-    .status{
-      padding:12px 14px;border-radius:12px;
-      font-weight:700;margin-bottom:12px
-    }
-    .info{background:#eff6ff;color:#1d4ed8}
-    .ok{background:#ecfdf5;color:#15803d}
-    .error{background:#fef2f2;color:#b91c1c}
+        .header-find-label {
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
 
-    .panel-buttons{
-      display:flex; gap:10px; flex-wrap:wrap;
-    }
+        .header-find-input {
+            width: 100%;
+            min-width: 180px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.32);
+            background: rgba(255,255,255,0.94);
+            color: #1f2937;
+            font-size: 13px;
+        }
 
-    .panel{
-      display:none;
-    }
-    .panel.active{
-      display:block;
-    }
+        .header-find-input:focus {
+            outline: none;
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.18);
+        }
 
-    .summary-year-block{
-      border:1px solid #d6dde6;
-      border-radius:14px;
-      overflow:hidden;
-      margin-bottom:14px;
-      background:#fff;
-    }
-    .summary-year-head{
-      display:flex; justify-content:space-between; align-items:center;
-      padding:14px 16px; cursor:pointer; font-weight:800;
-      background:linear-gradient(90deg,#fdf2f8,#fff1f2);
-      color:#8b0000;
-    }
-    .summary-year-content{
-      display:none; padding:16px;
-    }
-    .summary-year-content.open{
-      display:block;
-    }
+        .page {
+            max-width: 1180px;
+            margin: 12px auto;
+            padding: 0 10px 16px;
+        }
 
-    .summary-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:12px;
-    }
-    .summary-box{
-      border:1px solid #d6dde6;
-      border-radius:12px;
-      padding:14px;
-      background:#fff;
-    }
-    .summary-box .label{
-      font-size:13px;color:#6b7280;font-weight:700;margin-bottom:8px
-    }
-    .summary-box .value{
-      font-size:28px;font-weight:800;color:#b30000
-    }
-    .summary-box .sub{
-      font-size:12px;color:#6b7280;margin-top:6px;font-weight:700
-    }
+        .lis-panel {
+            background: white;
+            border: 1px solid #dbe3ec;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
 
-    .daily-dropdown-wrap{
-      margin-top:10px;
-    }
-    .daily-dropdown-btn{
-      width:100%;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:10px 12px;
-      border:1px solid #d6dde6;
-      border-radius:10px;
-      background:#f8fafc;
-      color:#8b0000;
-      font-size:12px;
-      font-weight:800;
-      cursor:pointer;
-    }
-    .daily-dropdown-btn:hover{
-      transform:none;
-      background:#fff1f2;
-    }
-    .daily-dropdown-content{
-      display:none;
-      margin-top:8px;
-      border:1px solid #d6dde6;
-      border-radius:10px;
-      background:#fff;
-      overflow:hidden;
-    }
-    .daily-dropdown-content.open{
-      display:block;
-    }
-    .daily-dropdown-list{
-      max-height:220px;
-      overflow:auto;
-    }
-    .daily-row{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
-      padding:8px 12px;
-      border-bottom:1px solid #eef2f7;
-      font-size:12px;
-      font-weight:700;
-      color:#4b5563;
-    }
-    .daily-row:last-child{
-      border-bottom:none;
-    }
-    .daily-row-date{
-      text-align:left;
-    }
-    .daily-row-count{
-      min-width:28px;
-      text-align:center;
-      padding:4px 8px;
-      border-radius:999px;
-      background:#b30000;
-      color:#fff;
-      font-size:11px;
-      font-weight:800;
-    }
-    .daily-empty{
-      padding:10px 12px;
-      font-size:12px;
-      font-weight:700;
-      color:#6b7280;
-      text-align:center;
-    }
+        .panel-head {
+            background: #dde7f1;
+            color: #243447;
+            font-weight: bold;
+            padding: 9px 12px;
+            border-bottom: 1px solid #d4dde7;
+            font-size: 13px;
+        }
 
-    .section-head{
-      display:flex;justify-content:space-between;align-items:center;
-      padding:16px;cursor:pointer;border-bottom:1px solid #d6dde6
-    }
-    .section-body{display:none;padding:16px}
-    .section-body.open{display:block}
-    .badge{
-      background:#f3e8e8;color:#8b0000;padding:6px 10px;
-      border-radius:999px;font-size:12px;font-weight:700
-    }
+        .panel-head.small-head {
+            padding: 7px 10px;
+            font-size: 12px;
+        }
 
-    .mapping-form{
-      display:grid;grid-template-columns:1.1fr .8fr 1.1fr auto;
-      gap:10px;margin-bottom:12px
-    }
-    .mapping-list{
-      border:1px solid #d6dde6;border-radius:12px;overflow:hidden
-    }
-    .mapping-head{
-      display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;
-      gap:10px;align-items:center;padding:10px 12px;
-      border-bottom:1px solid #d6dde6;background:#f8fafc;
-      font-size:12px;font-weight:800;color:#6b7280;text-transform:uppercase
-    }
-    .mapping-row{
-      padding:10px 12px;border-bottom:1px solid #ececec
-    }
-    .mapping-row:last-child{border-bottom:none}
-    .mapping-view,.mapping-edit{
-      display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;
-      gap:10px;align-items:center
-    }
-    .mapping-edit{display:none}
-    .mapping-row.editing .mapping-view{display:none}
-    .mapping-row.editing .mapping-edit{display:grid}
-    .mapping-inline-input,.mapping-inline-select{
-      width:100%;padding:10px 12px;border:1px solid #d6dde6;
-      border-radius:10px;font-size:14px;background:#fff
-    }
-    .mapping-actions{
-      display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap
-    }
+        .collapse-btn {
+            width: 100%;
+            border: 1px solid #efc6c6;
+            border-radius: 10px;
+            background: linear-gradient(180deg, #fff7f7 0%, #ffe9e9 100%);
+            color: #8a1111;
+            font-weight: bold;
+            padding: 9px 12px;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
 
-    .year-block,.month-block,.sheet-block{
-      border:1px solid #d6dde6;border-radius:12px;
-      overflow:hidden;margin-bottom:14px;background:#fff
-    }
-    .year-head,.month-head{
-      display:flex;justify-content:space-between;align-items:center;
-      padding:14px 16px;cursor:pointer;font-weight:700
-    }
-    .year-head{
-      background:linear-gradient(90deg,#fdf2f8,#fff1f2);color:#8b0000
-    }
-    .month-head{
-      background:linear-gradient(90deg,#eff6ff,#f8fafc);color:#1e3a8a
-    }
-    .year-content,.month-content{display:none;padding:16px}
-    .year-content.open,.month-content.open{display:block}
+        .collapse-btn .chevron {
+            font-size: 12px;
+            transition: transform 0.2s ease;
+        }
 
-    .sheet-title{
-      padding:10px 12px;font-weight:800;border-bottom:1px solid #d6dde6
-    }
-    .title-a{background:linear-gradient(90deg,#fee2e2,#fff1f2)}
-    .title-b{background:linear-gradient(90deg,#fef3c7,#fff7ed)}
-    .title-c{background:linear-gradient(90deg,#dcfce7,#ecfdf5)}
-    .title-d{background:linear-gradient(90deg,#dbeafe,#eff6ff)}
-    .title-e{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
-    .title-f{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
-    .title-g{background:linear-gradient(90deg,#fef9c3,#fefce8)}
-    .title-h{background:linear-gradient(90deg,#cffafe,#ecfeff)}
-    .title-i{background:linear-gradient(90deg,#fef3c7,#fefce8)}
-    .title-j{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
+        .collapse-btn.open .chevron {
+            transform: rotate(180deg);
+        }
 
-    .table-wrap{overflow-x:auto}
-    table{width:100%;border-collapse:collapse;min-width:760px}
-    th,td{
-      border:1px solid #d6dde6;padding:8px 10px;
-      font-size:14px;text-align:center;vertical-align:middle
-    }
-    th{background:#f8fafc;font-weight:700}
-    td:first-child,th:first-child{text-align:left;font-weight:700}
-    .subheader{background:#f3f4f6!important;font-weight:700}
-    .empty{
-      padding:20px;text-align:center;color:#6b7280;
-      border:1px dashed #d6dde6;border-radius:10px
-    }
+        .collapse-content.hidden {
+            display: none;
+        }
 
-    .helper-note{
-      margin-top:8px;
-      padding:10px 12px;
-      border-radius:10px;
-      background:#eff6ff;
-      color:#1d4ed8;
-      font-weight:700;
-      font-size:13px;
-    }
+        .panel-body {
+            padding: 12px;
+        }
 
-    .details-layout{
-      display:grid;
-      grid-template-columns:minmax(0,1.45fr) minmax(340px,.95fr);
-      gap:16px;
-      align-items:start;
-    }
-    .details-column{
-      min-width:0;
-    }
+        .auth-indicator {
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.28);
+            color: #fff;
+            min-width: 220px;
+            text-align: center;
+        }
 
-    @media (max-width:1200px){
-      .details-layout{grid-template-columns:1fr}
-      .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr 1fr}
-      .mapping-head,.mapping-view,.mapping-edit{grid-template-columns:1fr 1fr}
-    }
-    @media (max-width:760px){
-      .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr}
-      .mapping-head,.mapping-view,.mapping-edit{grid-template-columns:1fr}
-      .panel-buttons{flex-direction:column}
-      .panel-buttons button{width:100%}
-      .mapping-actions{justify-content:flex-start}
-    }
-  </style>
+        .reload-btn {
+            padding: 8px 12px;
+            font-size: 13px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+        }
+
+        .reload-btn:hover {
+            background: #1565c0;
+        }
+
+        .lookup-sticky {
+            position: sticky;
+            top: 66px;
+            z-index: 900;
+        }
+
+        .lookup-grid,
+        .field-row {
+            display: grid;
+            gap: 12px;
+        }
+
+        .lookup-grid { grid-template-columns: 1fr; align-items: end; }
+        .field-row { grid-template-columns: 1fr 1fr; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px 12px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .span-1 { grid-column: span 1; }
+        .span-2 { grid-column: span 2; }
+        .span-3 { grid-column: span 3; }
+        .span-4 { grid-column: span 4; }
+        .span-5 { grid-column: span 5; }
+        .span-6 { grid-column: span 6; }
+        .span-7 { grid-column: span 7; }
+        .span-8 { grid-column: span 8; }
+        .span-9 { grid-column: span 9; }
+        .span-10 { grid-column: span 10; }
+        .span-11 { grid-column: span 11; }
+        .span-12 { grid-column: span 12; }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .field-group label {
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .field-group input,
+        .field-group select,
+        .field-group textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .field-group input:focus,
+        .field-group select:focus,
+        .field-group textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+        }
+
+        .readonly-fill {
+            background: #f8fafc !important;
+        }
+
+        .serial-main-box {
+            border: 1px solid #bfd5f7;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #f4f8ff 0%, #e8f1ff 100%);
+            padding: 12px;
+        }
+
+        .serial-wrap {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .serial-prefix {
+            background: #dce9ff;
+            border: 1px solid #b9cced;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            white-space: nowrap;
+            color: #334155;
+            min-height: 42px;
+            display: flex;
+            align-items: center;
+        }
+
+        .radio-box {
+            border: 1px solid #dbe3ec;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+
+        .serial-tools-box {
+            border: 1px solid #efc6c6;
+            border-radius: 12px;
+            padding: 12px;
+            background: linear-gradient(180deg, #fff7f7 0%, #ffe9e9 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        }
+
+        .serial-tools-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #8a1111;
+            margin-bottom: 8px;
+        }
+
+        .range-type-box {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.75);
+            border: 1px solid #f0c8c8;
+        }
+
+        .radio-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-bottom: 10px;
+        }
+
+        .radio-options label,
+        .range-type-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .range-type-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-top: 6px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .group-info,
+        .loaded-donor-info,
+        .type-helper,
+        .serial-helper,
+        .time-helper,
+        .serial-batch-info,
+        .range-type-info {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .group-info {
+            background: #fff5f5;
+            border: 1px solid #efc6c6;
+            color: #8a1111;
+        }
+
+        .loaded-donor-info {
+            background: #edf7ed;
+            border: 1px solid #b7dfb9;
+            color: #166534;
+        }
+
+        .type-helper {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+        }
+
+        .serial-helper {
+            background: #edf4ff;
+            border: 1px solid #bfd5f7;
+            color: #274690;
+        }
+
+        .time-helper {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            color: #9a3412;
+        }
+
+        .serial-batch-info {
+            background: #fff;
+            border: 1px solid #efc6c6;
+            color: #8a1111;
+            margin-top: 8px;
+            padding: 7px 9px;
+            font-size: 11px;
+        }
+
+        .range-type-info {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            color: #075985;
+            font-size: 12px;
+            padding: 8px 10px;
+        }
+
+        .helper-text {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .lookup-results {
+            margin-top: 14px;
+            border: 1px solid #dbe3ec;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .lookup-table-wrap {
+            max-height: 260px;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 9px 10px;
+            text-align: left;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .small-btn,
+        .main-btn {
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .small-btn {
+            padding: 7px 9px;
+            font-size: 11px;
+        }
+
+        .main-btn {
+            padding: 10px 16px;
+            font-size: 13px;
+        }
+
+        .blue-btn { background: #1565c0; color: white; }
+        .green-btn { background: #2e7d32; color: white; }
+        .gray-btn { background: #64748b; color: white; }
+        .red-btn { background: #8a1111; color: white; }
+        .orange-btn { background: #c56a00; color: white; }
+
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+
+        .serial-btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        textarea {
+            min-height: 85px;
+            resize: vertical;
+        }
+
+        .status-message {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .status-success {
+            display: block;
+            background: #e8f7e8;
+            color: #1b5e20;
+            border: 1px solid #b7dfb9;
+        }
+
+        .status-error {
+            display: block;
+            background: #fdeaea;
+            color: #b71c1c;
+            border: 1px solid #efb7b7;
+        }
+
+        .section-note {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: -4px;
+            margin-bottom: 12px;
+        }
+
+        .inline-toggle {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .inline-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .serial-batch-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .serial-batch-grid .field-group {
+            margin-bottom: 0;
+        }
+
+        .preview-box {
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.8);
+            border: 1px dashed #e3a4a4;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #5b1c1c;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 1100px) {
+            .form-grid,
+            .serial-batch-grid {
+                grid-template-columns: repeat(6, 1fr);
+            }
+
+            .span-1, .span-2, .span-3, .span-4, .span-5, .span-6,
+            .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 {
+                grid-column: span 6;
+            }
+
+            .lookup-grid,
+            .field-row {
+                grid-template-columns: 1fr;
+            }
+
+            .serial-wrap {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .form-grid,
+            .serial-batch-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .span-1, .span-2, .span-3, .span-4, .span-5, .span-6,
+            .span-7, .span-8, .span-9, .span-10, .span-11, .span-12 {
+                grid-column: span 1;
+            }
+
+            .header-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-title,
+            .auth-indicator {
+                text-align: center;
+            }
+
+            .header-actions {
+                justify-content: stretch;
+            }
+
+            .header-find-wrap {
+                min-width: 100%;
+                order: 3;
+            }
+
+            .header-find-label {
+                min-width: fit-content;
+            }
+
+            .lookup-sticky {
+                top: 88px;
+            }
+        }
+    </style>
 </head>
 <body>
-<header>Donor Database Statistics</header>
+
+<header>
+    <div class="header-bar">
+        <div class="header-title"></div>
+        <div class="header-actions">
+            <div class="header-find-wrap">
+                <span class="header-find-label">Find Existing Donor</span>
+                <input type="text" id="lookupSearch" class="header-find-input" placeholder="Live search surname, first name, middle name, birthday, blood type">
+            </div>
+            <div id="authIndicator" class="auth-indicator">Checking login status...</div>
+            <button type="button" id="reloadPageBtn" class="reload-btn">Reload</button>
+        </div>
+    </div>
+</header>
 
 <div class="page">
-  <div class="card">
-    <div class="toolbar">
-      <div class="field">
-        <label for="filterYear">Year</label>
-        <select id="filterYear"><option value="ALL">All Years</option></select>
-      </div>
-      <div class="field">
-        <label for="filterMonth">Month</label>
-        <select id="filterMonth"><option value="ALL">All Months</option></select>
-      </div>
-      <div class="field">
-        <label for="searchText">Search Group</label>
-        <input id="searchText" type="text" placeholder="Search group / partner">
-      </div>
-      <button class="btn-red" onclick="reloadStatistics()">Reload Statistics</button>
-      <button class="btn-blue" onclick="window.print()">Print</button>
-      <button class="btn-green" onclick="exportCSV()">Export CSV</button>
-    </div>
-    <div class="helper-note">
-      Use the buttons below so only one section shows at a time.
-    </div>
-  </div>
 
-  <div id="statusBox" class="status info">Loading statistics...</div>
+    <div class="lis-panel lookup-sticky">
+        <div class="panel-body" style="padding-top:10px; padding-bottom:10px;">
+            <div id="loadedDonorInfo" class="loaded-donor-info hidden"></div>
 
-  <div class="card">
-    <div class="panel-buttons">
-      <button id="btnOverview" class="btn-light btn-tab active" onclick="showPanel('overviewPanel', this)">Overview</button>
-      <button id="btnSex" class="btn-light btn-tab" onclick="showPanel('sexPanel', this)">Male / Female</button>
-      <button id="btnSearch" class="btn-light btn-tab" onclick="showPanel('searchPanel', this)">Group Search Results</button>
-      <button id="btnDetails" class="btn-light btn-tab" onclick="showPanel('detailsPanel', this)">Detailed Statistics</button>
-      <button id="btnMapping" class="btn-light btn-tab" onclick="showPanel('mappingPanel', this)">Group Category Entry</button>
-    </div>
-  </div>
-
-  <div id="overviewPanel" class="panel active">
-    <div class="card">
-      <h3 style="margin-top:0;color:#991b1b;">Monthly Overview</h3>
-      <div id="summaryContainer"></div>
-    </div>
-  </div>
-
-  <div id="sexPanel" class="panel">
-    <div class="card">
-      <h3 style="margin-top:0;color:#991b1b;">Male / Female Per Month</h3>
-      <div id="sexMonthlyContainer"></div>
-    </div>
-  </div>
-
-  <div id="searchPanel" class="panel">
-    <div class="card">
-      <h3 style="margin-top:0;color:#991b1b;">Group Search Results</h3>
-      <div class="helper-note">
-        When you type a group name, this section will list only the dates and total donors per date.
-      </div>
-      <div id="searchResultsContainer"></div>
-    </div>
-  </div>
-
-  <div id="detailsPanel" class="panel">
-    <div class="card">
-      <div class="details-layout">
-        <div class="details-column">
-          <h3 style="margin-top:0;color:#991b1b;">Detailed Statistics</h3>
-          <div id="reportContainer"></div>
-        </div>
-        <div class="details-column">
-          <h3 style="margin-top:0;color:#991b1b;">Group Monthly Statistics</h3>
-          <div id="groupStatsContainer"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="mappingPanel" class="panel">
-    <div class="card">
-      <div class="section-head" onclick="toggleSectionBody('mappingBody','mappingBadge')">
-        <h3 style="margin:0;color:#8b0000;">Group Category Entry</h3>
-        <div id="mappingBadge" class="badge">Expanded</div>
-      </div>
-      <div id="mappingBody" class="section-body open">
-        <div class="mapping-form">
-          <div class="field">
-            <label for="mapPartnerName">Partner / Alias / Group Name</label>
-            <input type="text" id="mapPartnerName" placeholder="Example: LOCAL BLOOD COUNCIL">
-          </div>
-          <div class="field">
-            <label for="mapCategory">Category</label>
-            <select id="mapCategory">
-              <option value="Group">Group</option>
-              <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
-              <option value="Pledge 25">Pledge 25</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="mapPlace">Place Override</label>
-            <input type="text" id="mapPlace" placeholder="Example: 0891 ADIWANG ROAD, DONTONGAN">
-          </div>
-          <div class="field">
-            <label>&nbsp;</label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn-red" id="saveMappingBtn" onclick="saveGroupCategory()">Save Mapping</button>
-              <button type="button" class="btn-gray" onclick="clearMappingEditor()">Cancel</button>
+            <div id="lookupResultsBox" class="lookup-results hidden">
+                <div class="lookup-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>Surname</th>
+                                <th>First Name</th>
+                                <th>Middle Name</th>
+                                <th>Birthday</th>
+                                <th>Blood Type</th>
+                                <th>Last Entry Date</th>
+                                <th>Type of Donor</th>
+                                <th># of Donations</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lookupResultsBody"></tbody>
+                    </table>
+                </div>
             </div>
-          </div>
         </div>
-        <div id="mappingList" class="mapping-list">
-          <div class="empty">No group category mappings yet.</div>
-        </div>
-      </div>
     </div>
-  </div>
+
+    <div class="lis-panel">
+        <div class="panel-head">Donor Entry Form</div>
+        <div class="panel-body">
+            <div class="section-note">Entry order is kept based on your requested arrangement.</div>
+
+            <form id="donorForm" novalidate>
+                <div class="form-grid">
+
+                    <div class="field-group span-12">
+                        <label for="entryDate">Date</label>
+                        <input type="date" id="entryDate" required>
+                    </div>
+
+                    <div class="field-group span-6">
+                        <div class="serial-main-box">
+                            <label for="serialNumber">1. Serial Number</label>
+                            <div class="serial-wrap">
+                                <span id="serialPrefix" class="serial-prefix">PRC2600-2600</span>
+                                <input type="text" id="serialNumber" placeholder="Enter manual number or scan barcode" required>
+                            </div>
+                            <div class="inline-toggle">
+                                <label><input type="checkbox" id="useSerialPrefix" checked> Enable prefix</label>
+                            </div>
+                            <div id="serialHelperBox" class="serial-helper">
+                                Prefix enabled. Saved serial will be prefix + your manual input or scanned value.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label>2. Donor Type</label>
+                        <div class="radio-box">
+                            <div class="radio-options">
+                                <label><input type="radio" name="donorType" value="Patient Directed"> Patient Directed</label>
+                                <label><input type="radio" name="donorType" value="Walk-in"> Walk-in</label>
+                                <label><input type="radio" name="donorType" value="MBD"> MBD</label>
+                            </div>
+
+                            <div id="patientDirectedBox" class="hidden">
+                                <input type="text" id="patientDirectedDetails" placeholder="Enter patient directed details">
+                            </div>
+
+                            <div id="walkInBox" class="hidden" style="margin-top:10px;">
+                                <div class="field-row">
+                                    <input type="number" id="walkInCount" min="1" placeholder="Number of walk-in donors">
+                                    <button type="button" id="startWalkInGroupBtn" class="main-btn blue-btn">Start Walk-in Group</button>
+                                </div>
+                            </div>
+
+                            <div id="mbdBox" class="hidden" style="margin-top:10px;">
+                                <div class="field-row">
+                                    <input type="text" id="mbdDetails" placeholder="Enter MBD site / organization">
+                                    <input type="number" id="mbdCount" min="1" placeholder="Number of MBD donors">
+                                </div>
+                                <div style="margin-top:10px;">
+                                    <button type="button" id="startMbdGroupBtn" class="main-btn blue-btn">Start MBD Group</button>
+                                </div>
+                            </div>
+
+                            <div id="groupInfoBox" class="group-info hidden"></div>
+                        </div>
+                    </div>
+
+                    <div class="field-group span-12">
+                        <button type="button" id="serialRangeToggleBtn" class="collapse-btn" aria-expanded="false">
+                            <span>Serial Range Helper</span>
+                            <span class="chevron">▼</span>
+                        </button>
+                        <div id="serialRangeCollapse" class="collapse-content hidden">
+                            <div class="serial-tools-box">
+                                <div class="helper-text">
+                                    Bulk entry helper. Enter only the numeric ending. Example: start <b>4152</b>, end <b>4160</b>, skip <b>4155,4158</b>
+                                </div>
+
+                            <div class="serial-batch-grid">
+                                <div class="field-group span-3">
+                                    <label for="serialRangeStart">Start Number</label>
+                                    <input type="text" id="serialRangeStart" placeholder="4152">
+                                </div>
+
+                                <div class="field-group span-3">
+                                    <label for="serialRangeEnd">End Number</label>
+                                    <input type="text" id="serialRangeEnd" placeholder="4160">
+                                </div>
+
+                                <div class="field-group span-4">
+                                    <label for="serialRangeSkip">Skipped Numbers</label>
+                                    <input type="text" id="serialRangeSkip" placeholder="4155,4158">
+                                </div>
+
+                                <div class="field-group span-2">
+                                    <label>&nbsp;</label>
+                                    <button type="button" id="generateSerialRangeBtn" class="main-btn orange-btn">Generate</button>
+                                </div>
+                            </div>
+
+                            <div class="range-type-box">
+                                <label style="font-weight:bold; font-size:13px; color:#7f1d1d;">Range Donor Type</label>
+                                <div class="range-type-options">
+                                    <label><input type="radio" name="rangeDonorType" value="Walk-in"> Walk-in</label>
+                                    <label><input type="radio" name="rangeDonorType" value="MBD"> MBD</label>
+                                    <label><input type="radio" name="rangeDonorType" value="Patient Directed"> Patient Directed</label>
+                                </div>
+
+                                <div id="rangeMbdBox" class="hidden" style="margin-top:10px;">
+                                    <input type="text" id="rangeMbdDetails" placeholder="Range MBD site / organization">
+                                </div>
+
+                                <div id="rangePatientBox" class="hidden" style="margin-top:10px;">
+                                    <input type="text" id="rangePatientDetails" placeholder="Range patient directed details">
+                                </div>
+
+                                <div id="rangeTypeInfo" class="range-type-info hidden"></div>
+                            </div>
+
+                            <div id="serialBatchInfo" class="serial-batch-info hidden"></div>
+                            <div id="serialBatchPreview" class="preview-box hidden"></div>
+
+                            <div class="serial-btn-row">
+                                <button type="button" id="nextSerialBtn" class="main-btn blue-btn">Load Next Serial</button>
+                                <button type="button" id="clearSerialBatchBtn" class="main-btn gray-btn">Clear Serial List</button>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="field-group span-2">
+                        <label for="suffix">3. Suffix</label>
+                        <input type="text" id="suffix" placeholder="Jr., Sr., III">
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="surname">4. Surname</label>
+                        <input type="text" id="surname" required>
+                    </div>
+
+                    <div class="field-group span-4">
+                        <label for="firstName">5. First Name</label>
+                        <input type="text" id="firstName" required>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="middleName">6. Middle Name</label>
+                        <input type="text" id="middleName">
+                    </div>
+
+                    <div class="field-group span-4">
+                        <label for="birthday">7. Birthday</label>
+                        <input type="date" id="birthday" required>
+                    </div>
+
+                    <div class="field-group span-2">
+                        <label for="age">8. Age</label>
+                        <input type="number" id="age" placeholder="Age" readonly class="readonly-fill">
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="civilStatus">9. Civil Status</label>
+                        <select id="civilStatus" required>
+                            <option value="">Select</option>
+                            <option value="Single">Single</option>
+                            <option value="Married">Married</option>
+                            <option value="Separated">Separated</option>
+                            <option value="Divorced">Divorced</option>
+                            <option value="Widowed">Widowed</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="sex">10. Sex</label>
+                        <select id="sex" required>
+                            <option value="">Select</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-8">
+                        <label for="address">11. Address</label>
+                        <input type="text" id="address" required>
+                    </div>
+
+                    <div class="field-group span-4">
+                        <label for="cityProvince">12. Province / City</label>
+                        <input type="text" id="cityProvince" required>
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="contactNumber">13. Contact Number</label>
+                        <input type="text" id="contactNumber">
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="occupation">14. Occupation</label>
+                        <input type="text" id="occupation">
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="donorCategory">15. Type of Donor</label>
+                        <select id="donorCategory">
+                            <option value="Auto">Auto</option>
+                            <option value="New">New</option>
+                            <option value="Repeat">Repeat</option>
+                            <option value="Lapse">Lapse</option>
+                        </select>
+                        <div class="helper-text">
+                            Auto will only apply logic if enough donor history is available.
+                        </div>
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="numberOfDonations">16. Number of Donations</label>
+                        <input type="number" id="numberOfDonations" min="0" value="0">
+                        <div class="helper-text">
+                            This is manual. Loading an existing donor will not automatically add +1.
+                        </div>
+                    </div>
+
+                    <div class="field-group span-12">
+                        <div id="typeHelperBox" class="type-helper hidden"></div>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="bloodType">17. Blood Type</label>
+                        <select id="bloodType" required>
+                            <option value="">Select</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="bloodBagBrand">18. Blood Bag Used</label>
+                        <select id="bloodBagBrand" required>
+                            <option value="">Select</option>
+                            <option value="KARMI">KARMI</option>
+                            <option value="TERUMO">TERUMO</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="bloodBagType">19. Blood Bag Type</label>
+                        <select id="bloodBagType" required>
+                            <option value="">Select</option>
+                            <option value="Single">Single</option>
+                            <option value="Double">Double</option>
+                            <option value="Triple">Triple</option>
+                            <option value="Quadruple">Quadruple</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-3">
+                        <label for="amount">20. Amount</label>
+                        <select id="amount" required>
+                            <option value="">Select</option>
+                            <option value="450 ml">450 ml</option>
+                            <option value="QNS">QNS</option>
+                            <option value="UB">UB</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="timeStarted">21. Time Started</label>
+                        <input type="text" id="timeStarted" inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off">
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="timeEnded">22. Time Ended</label>
+                        <input type="text" id="timeEnded" inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off">
+                    </div>
+
+                    <div class="field-group span-12">
+                        <div class="helper-text">Type 930 for 09:30 or 1930 for 19:30. You can also type 13:14 directly. No AM/PM needed.</div>
+                        <div id="timeHelperBox" class="time-helper hidden"></div>
+                    </div>
+
+                    <div class="field-group span-12">
+                        <label for="remarks">23. Remarks</label>
+                        <textarea id="remarks"></textarea>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button type="submit" id="saveDonorBtn" class="main-btn green-btn">Save Donor Entry</button>
+                    <button type="reset" class="main-btn gray-btn">Clear Form</button>
+                    <button type="button" id="clearLoadedDonorBtn" class="main-btn blue-btn">Clear Loaded Donor</button>
+                    <button type="button" id="endGroupBtn" class="main-btn red-btn">End Active Group</button>
+                </div>
+
+                <div id="statusMessage" class="status-message"></div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-  authDomain: "galloners-club.firebaseapp.com",
-  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "galloners-club",
-  storageBucket: "galloners-club.firebasestorage.app",
-  messagingSenderId: "213049860421",
-  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-  measurementId: "G-XYXJH9JNXJ"
-};
-
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-
-const auth = firebase.auth();
-const fs = firebase.firestore();
-const rtdb = firebase.database();
-
-let donorRecords = [];
-let releasingRecords = [];
-let categoryMappings = [];
-let groupedCache = null;
-let eventsAttached = false;
-let editingMappingId = null;
-
-const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December"
-];
-
-document.addEventListener("DOMContentLoaded", () => {
-  auth.onAuthStateChanged(async () => {
-    await initializePage();
-  });
-
-  setTimeout(async () => {
-    if (!donorRecords.length) await initializePage();
-  }, 2500);
-});
-
-function showPanel(panelId, btn){
-  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-  const panel = document.getElementById(panelId);
-  if (panel) panel.classList.add("active");
-
-  document.querySelectorAll(".btn-tab").forEach(b => b.classList.remove("active"));
-  if (btn) btn.classList.add("active");
-}
-
-async function initializePage(){
-  try{
-    setStatus("Loading statistics...", "info");
-    await Promise.allSettled([
-      loadDonorDatabase(),
-      loadCategoryMappings(),
-      loadReleasingSafe()
-    ]);
-    populateFilters();
-    attachEventsOnce();
-    renderMappings();
-    buildStatistics();
-    setStatus("Statistics loaded successfully.", "ok");
-  }catch(error){
-    console.error(error);
-    setStatus("Failed to load statistics: " + (error.message || error), "error");
-  }
-}
-
-function setStatus(message, type){
-  const el = document.getElementById("statusBox");
-  el.className = "status " + type;
-  el.textContent = message;
-}
-
-async function loadDonorDatabase(){
-  donorRecords = [];
-  const snap = await fs.collection("donorDatabase").get();
-  snap.forEach(doc => donorRecords.push({ id: doc.id, ...doc.data() }));
-}
-
-async function loadCategoryMappings(){
-  categoryMappings = [];
-  try{
-    const snap = await fs.collection("donorGroupCategories").get();
-    snap.forEach(doc => categoryMappings.push({ id: doc.id, ...doc.data() }));
-  }catch(e){
-    categoryMappings = [];
-  }
-}
-
-async function loadReleasingSafe(){
-  releasingRecords = [];
-  try{
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Realtime Database timeout")), 6000));
-    const req = rtdb.ref("releasing").once("value");
-    const snap = await Promise.race([req, timeout]);
-    const raw = snap.val();
-    releasingRecords = flattenRealtime(raw);
-  }catch(e){
-    releasingRecords = [];
-  }
-}
-
-function flattenRealtime(node){
-  const out = [];
-  walkNode(node, out);
-  return out;
-}
-
-function walkNode(node, out){
-  if (node == null) return;
-  if (Array.isArray(node)) {
-    node.forEach(x => walkNode(x, out));
-    return;
-  }
-  if (typeof node !== "object") return;
-
-  const keys = Object.keys(node).map(k => String(k).toLowerCase());
-  const looksRecord =
-    keys.includes("date") || keys.includes("requestdate") || keys.includes("releaseddate") ||
-    keys.includes("requests") || keys.includes("wb") || keys.includes("prbc") ||
-    keys.includes("ffp") || keys.includes("pc") || keys.includes("cryo");
-
-  if (looksRecord) {
-    out.push(node);
-    return;
-  }
-  Object.keys(node).forEach(k => walkNode(node[k], out));
-}
-
-function attachEventsOnce(){
-  if (eventsAttached) return;
-  eventsAttached = true;
-  document.getElementById("filterYear").addEventListener("change", buildStatistics);
-  document.getElementById("filterMonth").addEventListener("change", buildStatistics);
-  document.getElementById("searchText").addEventListener("input", buildStatistics);
-}
-
-function parseDateFromText(text){
-  const value = String(text || "").trim().toLowerCase();
-  if (!value) return "";
-
-  const ymd = value.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
-  if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2,"0")}-${String(ymd[3]).padStart(2,"0")}`;
-
-  const mdy = value.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
-  if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2,"0")}-${String(mdy[2]).padStart(2,"0")}`;
-
-  const monthMap = {
-    jan:"01", january:"01", feb:"02", february:"02", mar:"03", march:"03",
-    apr:"04", april:"04", may:"05", jun:"06", june:"06", jul:"07", july:"07",
-    aug:"08", august:"08", sep:"09", sept:"09", september:"09",
-    oct:"10", october:"10", nov:"11", november:"11", dec:"12", december:"12"
-  };
-
-  const monthYear = value.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
-  if (monthYear) return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
-
-  const yearMonth = value.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
-  if (yearMonth) return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
-
-  return "";
-}
-
-function parseDate(raw){
-  if (!raw) return null;
-  if (raw instanceof Date) return isNaN(raw) ? null : raw;
-  if (typeof raw?.toDate === "function") return raw.toDate();
-  if (typeof raw === "object" && raw.seconds) return new Date(raw.seconds * 1000);
-
-  if (typeof raw === "number") {
-    const excelEpoch = new Date(1899, 11, 30);
-    const d = new Date(excelEpoch.getTime() + raw * 86400000);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      const [y,m,d] = trimmed.split("-").map(Number);
-      return new Date(y, m - 1, d);
-    }
-
-    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) {
-      const [m,d,yRaw] = trimmed.split("/");
-      let y = Number(yRaw);
-      if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
-      return new Date(y, Number(m) - 1, Number(d));
-    }
-
-    if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(trimmed)) {
-      const [m,d,yRaw] = trimmed.split("-");
-      let y = Number(yRaw);
-      if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
-      return new Date(y, Number(m) - 1, Number(d));
-    }
-
-    const parsedText = parseDateFromText(trimmed);
-    if (parsedText) {
-      const [y,m,d] = parsedText.split("-").map(Number);
-      return new Date(y, m - 1, d);
-    }
-
-    const fallback = new Date(trimmed);
-    if (!isNaN(fallback.getTime())) return fallback;
-  }
-
-  return null;
-}
-
-function getDateParts(d){
-  if (!d || isNaN(d)) return { year:null, month:null, day:null };
-  return { year:d.getFullYear(), month:d.getMonth() + 1, day:d.getDate() };
-}
-
-function parseDateFromImportMeta(r){
-  const sheet = r?.importMeta?.sourceSheet || "";
-  const file = r?.importMeta?.sourceFile || "";
-  return parseDateFromText(sheet) || parseDateFromText(file) || null;
-}
-
-function getDonorDate(r){
-  return (
-    r.entryDate ||
-    r.donationDate ||
-    r.date ||
-    r.bleedingDate ||
-    r.collectionDate ||
-    r.dateOfDonation ||
-    r.donation_date ||
-    r.bleedDate ||
-    parseDateFromImportMeta(r) ||
-    r.createdAt ||
-    null
-  );
-}
-
-function getBirthdayValue(r){
-  return (
-    r.birthday ||
-    r.birthDate ||
-    r.birthdate ||
-    r.dateOfBirth ||
-    r.dob ||
-    r.birth_date ||
-    null
-  );
-}
-
-function getAgeValue(r){
-  return (
-    r.age ??
-    r.AGE ??
-    r.donorAge ??
-    r.ageYears ??
-    r.age_years ??
-    null
-  );
-}
-
-function getReleaseDate(r){
-  return r.date || r.requestDate || r.releasedDate || r.entryDate || null;
-}
-
-function getDonorType(r){
-  return r.donorType || r.typeOfDonation || r.type || r.donationType || "";
-}
-
-function getPartnerName(r){
-  return r.mbdDetails || r.groupName || r.partnerName || r.partnerOrganization || r.organization || r.company || r.office || r.school || r.barangay || "";
-}
-
-function getPartnerPlace(r){
-  return r.place || r.location || r.address || r.barangay || r.municipality || r.city || r.province || "";
-}
-
-function normalizeAliasKey(value){
-  let s = String(value || "").toUpperCase().trim();
-  s = s.replace(/\(.*?\)/g, " ");
-  s = s.replace(/[_.,/\\]+/g, " ");
-  s = s.replace(/\s*-\s*\d+\s*$/g, " ");
-  s = s.replace(/\d+\s*$/g, " ");
-  s = s.replace(/\bNO\.?\s*\d+\b/g, " ");
-  s = s.replace(/\b#\s*\d+\b/g, " ");
-  s = s.replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g, " ");
-  s = s.replace(/\s+/g, " ").trim();
-  return s;
-}
-
-function smartGroupDisplayName(value){
-  return normalizeAliasKey(value || "");
-}
-
-function getBestMapping(partnerName){
-  const norm = normalizeAliasKey(partnerName || "");
-  if (!norm) return null;
-
-  const exact = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === norm);
-  if (exact) return exact;
-
-  const partial = categoryMappings.find(x => {
-    const target = normalizeAliasKey(x.partnerName || x.name || "");
-    return target && (target.includes(norm) || norm.includes(target));
-  });
-  return partial || null;
-}
-
-function normalizeDonorType(v){
-  const s = String(v || "").toLowerCase();
-  if (s.includes("mbd")) return "MBD";
-  if (s.includes("walk")) return "Walk-in";
-  if (s.includes("patient")) return "Patient Directed";
-  return "Other";
-}
-
-function normalizeBloodType(v){
-  let s = String(v || "").toUpperCase().trim();
-  if (!s) return "Unknown";
-
-  s = s.replace(/\./g, " ");
-  s = s.replace(/\s+/g, " ");
-  s = s.replace(/POSITIVE/g, "POS");
-  s = s.replace(/NEGATIVE/g, "NEG");
-  s = s.replace(/RH/g, "");
-  s = s.replace(/\s+/g, " ").trim();
-  s = s.replace("POS", "+").replace("NEG", "-");
-  s = s.replace(/\s+/g, "");
-
-  if (s === "O+") return "O+";
-  if (s === "A+") return "A+";
-  if (s === "B+") return "B+";
-  if (s === "AB+") return "AB+";
-  if (s === "O-") return "O-";
-  if (s === "A-") return "A-";
-  if (s === "B-") return "B-";
-  if (s === "AB-") return "AB-";
-
-  if (s === "OPOS") return "O+";
-  if (s === "APOS") return "A+";
-  if (s === "BPOS") return "B+";
-  if (s === "ABPOS") return "AB+";
-  if (s === "ONEG") return "O-";
-  if (s === "ANEG") return "A-";
-  if (s === "BNEG") return "B-";
-  if (s === "ABNEG") return "AB-";
-
-  if (s.startsWith("O+")) return "O+";
-  if (s.startsWith("A+")) return "A+";
-  if (s.startsWith("B+")) return "B+";
-  if (s.startsWith("AB+")) return "AB+";
-  if (s.startsWith("O-")) return "O-";
-  if (s.startsWith("A-")) return "A-";
-  if (s.startsWith("B-")) return "B-";
-  if (s.startsWith("AB-")) return "AB-";
-
-  return "Unknown";
-}
-
-function normalizeSex(v){
-  const s = String(v || "").toLowerCase();
-  if (s === "male" || s === "m") return "Male";
-  if (s === "female" || s === "f") return "Female";
-  return "";
-}
-
-function normalizeDonorCategory(v){
-  const s = String(v || "").toLowerCase();
-  if (s.includes("new")) return "New";
-  if (s.includes("repeat")) return "Repeat";
-  if (s.includes("lapse")) return "Lapse";
-  return "";
-}
-
-function normalizeBagCode(v){
-  const s = String(v || "").toLowerCase().trim();
-  if (!s) return "S";
-  if (s.includes("quad")) return "Q";
-  if (s.includes("triple")) return "T";
-  if (s.includes("double")) return "D";
-  if (s.includes("single")) return "S";
-  if (s === "4" || s === "q") return "Q";
-  if (s === "3" || s === "t") return "T";
-  if (s === "2" || s === "d") return "D";
-  if (s === "1" || s === "s") return "S";
-  return "S";
-}
-
-function bagCodeToColumnObject(code){
-  return { S: code === "S" ? 1 : 0, D: code === "D" ? 1 : 0, T: code === "T" ? 1 : 0, Q: code === "Q" ? 1 : 0 };
-}
-
-function addBagCounts(target, source){
-  target.S += source.S;
-  target.D += source.D;
-  target.T += source.T;
-  target.Q += source.Q;
-}
-
-function sumBagGroup(obj){
-  return Number(obj.S || 0) + Number(obj.D || 0) + Number(obj.T || 0) + Number(obj.Q || 0);
-}
-
-function getPreparedComponentsFromBag(r){
-  const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
-  if (code === "Q") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
-  if (code === "T") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
-  if (code === "D") return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-  return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-}
-
-function createBloodTypeCounter(){
-  return {
-    "O+":0,"A+":0,"B+":0,"AB+":0,
-    "O-":0,"A-":0,"B-":0,"AB-":0,
-    "Unknown":0
-  };
-}
-
-function emptyStats(){
-  return {
-    totalDonors: 0,
-    dailyCounts: {},
-    officeBleeding: {
-      "Walk-in": { S:0, D:0, T:0, Q:0 },
-      "Patient Directed": { S:0, D:0, T:0, Q:0 }
-    },
-    fieldDonation: {
-      "Total MBD": { S:0, D:0, T:0, Q:0 },
-      "Group": { S:0, D:0, T:0, Q:0 },
-      "RC143 / BRGY Base": { S:0, D:0, T:0, Q:0 },
-      "Pledge 25": { S:0, D:0, T:0, Q:0 },
-      "Unmapped": { S:0, D:0, T:0, Q:0 }
-    },
-    fieldDetails: { group: [], rc143: [], pledge25: [], unmapped: [] },
-    bloodType: createBloodTypeCounter(),
-    bagTypeBloodType: {
-      S: createBloodTypeCounter(),
-      D: createBloodTypeCounter(),
-      T: createBloodTypeCounter(),
-      Q: createBloodTypeCounter()
-    },
-    components: { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 },
-    componentBloodType: {
-      "450 cc": createBloodTypeCounter(),
-      "PRBC": createBloodTypeCounter(),
-      "FFP": createBloodTypeCounter(),
-      "PC": createBloodTypeCounter(),
-      "CRYO": createBloodTypeCounter()
-    },
-    requests: { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 },
-    sex: { "Male":0, "Female":0 },
-    frequency: { "First-time donors":0, "Repeat non-regular":0, "Repeat regular":0, "Total":0 },
-    age: {
-      "16-17":0, "18-20":0, "21-30":0, "31-40":0,
-      "41-50":0, "51-60":0, "60-65":0, "66 & above":0, "Total":0
-    },
-    agePicture: {
-      "Under 18":0, "18-24":0, "25-44":0, "45-64":0, "65 & above":0, "Total donations":0
-    },
-    youth1625Sex: { "Male":0, "Female":0, "Total":0 }
-  };
-}
-
-function parseNumericAge(value){
-  if (value == null || value === "") return null;
-  if (typeof value === "number" && isFinite(value)) return value;
-  const match = String(value).match(/(\d{1,3})/);
-  if (!match) return null;
-  const age = Number(match[1]);
-  return isFinite(age) ? age : null;
-}
-
-function getAge(r){
-  const directAge = parseNumericAge(getAgeValue(r));
-  if (directAge != null && directAge >= 0 && directAge <= 120) return directAge;
-
-  const birthday = parseDate(getBirthdayValue(r));
-  const donation = parseDate(getDonorDate(r));
-  if (!birthday || !donation) return null;
-
-  let years = donation.getFullYear() - birthday.getFullYear();
-  const m = donation.getMonth() - birthday.getMonth();
-  if (m < 0 || (m === 0 && donation.getDate() < birthday.getDate())) years--;
-  return (years >= 0 && years <= 120) ? years : null;
-}
-
-function getAgeGroup(age){
-  if (age == null) return null;
-  if (age <= 17) return "16-17";
-  if (age <= 20) return "18-20";
-  if (age <= 30) return "21-30";
-  if (age <= 40) return "31-40";
-  if (age <= 50) return "41-50";
-  if (age <= 60) return "51-60";
-  if (age <= 65) return "60-65";
-  return "66 & above";
-}
-
-function getAgeGroupPicture(age){
-  if (age == null) return null;
-  if (age < 18) return "Under 18";
-  if (age <= 24) return "18-24";
-  if (age <= 44) return "25-44";
-  if (age <= 64) return "45-64";
-  return "65 & above";
-}
-
-function formatDateForDisplay(raw){
-  const d = parseDate(raw);
-  if (!d || isNaN(d)) return "";
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${mm}/${dd}/${yy}`;
-}
-
-function applyDonor(s, r){
-  s.totalDonors++;
-
-  const donorDate = parseDate(getDonorDate(r));
-  const donorParts = getDateParts(donorDate);
-  if (donorParts.year && donorParts.month && donorParts.day) {
-    const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
-    s.dailyCounts[dayKey] = (s.dailyCounts[dayKey] || 0) + 1;
-  }
-
-  const donorType = normalizeDonorType(getDonorType(r));
-  const partnerName = getPartnerName(r);
-  const mapping = getBestMapping(partnerName);
-  const smartName = mapping ? (mapping.partnerName || partnerName || "Unspecified") : smartGroupDisplayName(partnerName || "Unspecified");
-  const smartPlace = mapping && mapping.place ? mapping.place : getPartnerPlace(r);
-
-  const bt = normalizeBloodType(
-    r.bloodType ||
-    r.bloodtype ||
-    r.aboRh ||
-    r.group ||
-    r.blood_group ||
-    r.bloodGroup ||
-    ""
-  );
-
-  const bagCode = normalizeBagCode(
-    r.bloodBagType ||
-    r.bagType ||
-    r.bag ||
-    r.bagConfiguration ||
-    ""
-  );
-
-  const bagCounts = bagCodeToColumnObject(bagCode);
-
-  s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
-  if (!s.bagTypeBloodType[bagCode]) s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
-  s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
-
-  if (donorType === "MBD") {
-    addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
-    const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
-    if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
-    addBagCounts(s.fieldDonation[category], bagCounts);
-
-    const detail = {
-      name: smartName,
-      place: smartPlace || "",
-      date: formatDateForDisplay(getDonorDate(r)),
-      rawDate: getDonorDate(r),
-      totalDonors: 1,
-      "450 cc S": bagCounts.S,
-      "450 cc D": bagCounts.D,
-      "450 cc T": bagCounts.T,
-      "450 cc Q": bagCounts.Q,
-      bloodTypeCounts: createBloodTypeCounter()
+    const firebaseConfig = {
+        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+        authDomain: "galloners-club.firebaseapp.com",
+        databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "galloners-club",
+        storageBucket: "galloners-club.firebasestorage.app",
+        messagingSenderId: "213049860421",
+        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+        measurementId: "G-XYXJH9JNXJ"
     };
-    detail.bloodTypeCounts[bt] = (detail.bloodTypeCounts[bt] || 0) + 1;
 
-    if (category === "Group") s.fieldDetails.group.push(detail);
-    else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
-    else if (category === "Pledge 25") s.fieldDetails.pledge25.push(detail);
-    else s.fieldDetails.unmapped.push(detail);
-  } else if (donorType === "Walk-in") {
-    addBagCounts(s.officeBleeding["Walk-in"], bagCounts);
-  } else if (donorType === "Patient Directed") {
-    addBagCounts(s.officeBleeding["Patient Directed"], bagCounts);
-  }
-
-  const prep = getPreparedComponentsFromBag(r);
-  Object.keys(prep).forEach(component => {
-    const qty = Number(prep[component] || 0);
-    s.components[component] += qty;
-    if (qty > 0) s.componentBloodType[component][bt] = (s.componentBloodType[component][bt] || 0) + qty;
-  });
-
-  const sex = normalizeSex(r.sex || r.gender || "");
-  if (sex === "Male" || sex === "Female") s.sex[sex]++;
-
-  const donorCategory = normalizeDonorCategory(r.donorCategory || r.typeOfDonor || r.donorStatus || "");
-  if (donorCategory === "New") s.frequency["First-time donors"]++;
-  else if (donorCategory === "Lapse") s.frequency["Repeat non-regular"]++;
-  else if (donorCategory === "Repeat") s.frequency["Repeat regular"]++;
-  s.frequency["Total"]++;
-
-  const age = getAge(r);
-  const ageGroup = getAgeGroup(age);
-  if (ageGroup) {
-    s.age[ageGroup] = (s.age[ageGroup] || 0) + 1;
-    s.age["Total"]++;
-  }
-
-  const agePictureGroup = getAgeGroupPicture(age);
-  if (agePictureGroup) {
-    s.agePicture[agePictureGroup] = (s.agePicture[agePictureGroup] || 0) + 1;
-    s.agePicture["Total donations"]++;
-  }
-
-  if (age != null && age >= 16 && age <= 25) {
-    if (sex === "Male") s.youth1625Sex["Male"]++;
-    if (sex === "Female") s.youth1625Sex["Female"]++;
-    s.youth1625Sex["Total"]++;
-  }
-}
-
-function normalizeRequestComponent(v){
-  const s = String(v || "").toUpperCase().trim();
-  if (s === "WB" || s === "WHOLE BLOOD" || s === "450CC" || s === "450 CC" || s === "450S" || s === "450 S") return "450 cc";
-  if (s === "PRBC") return "PRBC";
-  if (s === "FFP") return "FFP";
-  if (s === "PC" || s === "PLATELET CONCENTRATE") return "PC";
-  if (s === "CRYO") return "CRYO";
-  return "";
-}
-
-function pushPanelItems(items, p){
-  if (p.WB != null) items.push({ component:"WB", quantity:p.WB });
-  if (p.wb != null) items.push({ component:"WB", quantity:p.wb });
-  if (p.PRBC != null) items.push({ component:"PRBC", quantity:p.PRBC });
-  if (p.prbc != null) items.push({ component:"PRBC", quantity:p.prbc });
-  if (p.FFP != null) items.push({ component:"FFP", quantity:p.FFP });
-  if (p.ffp != null) items.push({ component:"FFP", quantity:p.ffp });
-  if (p.PC != null) items.push({ component:"PC", quantity:p.PC });
-  if (p.pc != null) items.push({ component:"PC", quantity:p.pc });
-  if (p.CRYO != null) items.push({ component:"CRYO", quantity:p.CRYO });
-  if (p.cryo != null) items.push({ component:"CRYO", quantity:p.cryo });
-}
-
-function getRequestedItemsOnly(r){
-  const items = [];
-  if (Array.isArray(r.requests)) {
-    r.requests.forEach(x => {
-      items.push({
-        component: x.component || x.product || x.type || x.name || "",
-        quantity: x.quantity || x.qty || x.units || x.count || x.value || 0
-      });
-    });
-  }
-  if (r.requestedPanel && typeof r.requestedPanel === "object") pushPanelItems(items, r.requestedPanel);
-  if (r.requestedBlood && typeof r.requestedBlood === "object") pushPanelItems(items, r.requestedBlood);
-  if (r.bloodRequest && typeof r.bloodRequest === "object") pushPanelItems(items, r.bloodRequest);
-  if (r.request && typeof r.request === "object") pushPanelItems(items, r.request);
-  return items;
-}
-
-function applyRequestedOnly(s, r){
-  const items = getRequestedItemsOnly(r);
-  items.forEach(item => {
-    const key = normalizeRequestComponent(item.component);
-    const qty = Number(item.quantity) || 0;
-    if (!key || !qty) return;
-    s.requests[key] += qty;
-  });
-}
-
-function getFilteredDonors(){
-  const y = document.getElementById("filterYear").value;
-  const m = document.getElementById("filterMonth").value;
-  const q = String(document.getElementById("searchText").value || "").trim().toLowerCase();
-
-  return donorRecords.filter(r => {
-    const d = parseDate(getDonorDate(r));
-    const p = getDateParts(d);
-    const partner = String(getPartnerName(r) || "").toLowerCase();
-    const donorType = String(getDonorType(r) || "").toLowerCase();
-    const smartGroup = smartGroupDisplayName(getPartnerName(r) || "").toLowerCase();
-
-    if (y !== "ALL" && String(p.year) !== y) return false;
-    if (m !== "ALL" && String(p.month) !== m) return false;
-    if (q && !partner.includes(q) && !donorType.includes(q) && !smartGroup.includes(q)) return false;
-    return true;
-  });
-}
-
-function getFilteredReleasing(){
-  const y = document.getElementById("filterYear").value;
-  const m = document.getElementById("filterMonth").value;
-  return releasingRecords.filter(r => {
-    const d = parseDate(getReleaseDate(r));
-    const p = getDateParts(d);
-    if (y !== "ALL" && String(p.year) !== y) return false;
-    if (m !== "ALL" && String(p.month) !== m) return false;
-    return true;
-  });
-}
-
-function sumVals(obj){
-  return Object.values(obj).reduce((a,b)=>a + (Number(b)||0), 0);
-}
-
-function sumDetailField(rows, field){
-  return (rows || []).reduce((a,b)=>a + (Number(b[field])||0), 0);
-}
-
-function sumBagTypeColumn(s, code){
-  return Number(s.officeBleeding["Walk-in"][code] || 0) +
-         Number(s.officeBleeding["Patient Directed"][code] || 0) +
-         Number(s.fieldDonation["Total MBD"][code] || 0);
-}
-
-function num(v){
-  return Number(v || 0).toLocaleString();
-}
-
-function csvEscape(v){
-  const s = String(v ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function escapeJs(str){
-  return String(str ?? "")
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "");
-}
-
-function escapeHtml(str){
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function combineSmartGroupRows(rows){
-  const map = {};
-  rows.forEach(r => {
-    const key = normalizeAliasKey(r.name || "");
-    const display = key || (r.name || "");
-    if (!map[key || display]) {
-      map[key || display] = {
-        name: display,
-        place: r.place || "",
-        date: r.date || "",
-        "450 cc S": 0,
-        "450 cc D": 0,
-        "450 cc T": 0,
-        "450 cc Q": 0
-      };
-    }
-    map[key || display]["450 cc S"] += Number(r["450 cc S"] || 0);
-    map[key || display]["450 cc D"] += Number(r["450 cc D"] || 0);
-    map[key || display]["450 cc T"] += Number(r["450 cc T"] || 0);
-    map[key || display]["450 cc Q"] += Number(r["450 cc Q"] || 0);
-    if (!map[key || display].place && r.place) map[key || display].place = r.place;
-    if (!map[key || display].date && r.date) map[key || display].date = r.date;
-  });
-  return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
-}
-
-function flattenMonths(grouped){
-  const rows = [];
-  Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(year => {
-    Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
-      rows.push(grouped[year][key]);
-    });
-  });
-  return rows;
-}
-
-function getMonthLabel(meta){
-  return `${MONTHS[(meta.month || 1) - 1]} ${meta.year || ""}`.trim();
-}
-
-function buildDailyDropdown(monthKey, s){
-  const dailyCounts = s.dailyCounts || {};
-  const keys = Object.keys(dailyCounts).sort((a,b) => a.localeCompare(b));
-
-  if (!keys.length) {
-    return `
-      <div class="daily-dropdown-wrap">
-        <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
-          <span>Daily Count of Donors</span>
-          <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
-        </button>
-        <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
-          <div class="daily-empty">No daily donor counts found.</div>
-        </div>
-      </div>
-    `;
-  }
-
-  const rows = keys.map(dayKey => {
-    const d = parseDate(dayKey);
-    const label = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
-    return `
-      <div class="daily-row">
-        <div class="daily-row-date">${escapeHtml(label)}</div>
-        <div class="daily-row-count">${num(dailyCounts[dayKey])}</div>
-      </div>
-    `;
-  }).join("");
-
-  return `
-    <div class="daily-dropdown-wrap">
-      <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
-        <span>Daily Count of Donors</span>
-        <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
-      </button>
-      <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
-        <div class="daily-dropdown-list">${rows}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderOverview(grouped){
-  const container = document.getElementById("summaryContainer");
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-
-  if (!years.length) {
-    container.innerHTML = `<div class="empty">No monthly overview found for the selected filter.</div>`;
-    return;
-  }
-
-  container.innerHTML = years.map((year, yi) => {
-    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="summary-year-block">
-        <div class="summary-year-head" onclick="toggleNext(this)">
-          <span>${year}</span>
-          <span>${monthKeys.length} month(s)</span>
-        </div>
-        <div class="summary-year-content ${yi === 0 ? "open" : ""}">
-          <div class="summary-grid">
-            ${monthKeys.map(key => {
-              const s = grouped[year][key];
-              return `
-                <div class="summary-box">
-                  <div class="label">${escapeHtml(getMonthLabel(s._meta || {}))}</div>
-                  <div class="value">${num(s.totalDonors)}</div>
-                  <div class="sub">Total Donor Entries</div>
-                  <div class="sub">Office: ${num(sumBagGroup(s.officeBleeding["Walk-in"]) + sumBagGroup(s.officeBleeding["Patient Directed"]))}</div>
-                  <div class="sub">Field: ${num(sumBagGroup(s.fieldDonation["Total MBD"]))}</div>
-                  <div class="sub">Prepared: ${num(sumVals(s.components))}</div>
-                  <div class="sub">Requested: ${num(sumVals(s.requests))}</div>
-                  ${buildDailyDropdown(key, s)}
-                </div>
-              `;
-            }).join("")}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderMonthlySexTable(grouped){
-  const months = flattenMonths(grouped);
-  const el = document.getElementById("sexMonthlyContainer");
-
-  if (!months.length) {
-    el.innerHTML = `<div class="empty">No male / female data found for the selected filter.</div>`;
-    return;
-  }
-
-  el.innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <tr>
-          <th>Month</th>
-          <th>Male</th>
-          <th>Female</th>
-          <th>Total</th>
-        </tr>
-        ${months.map(s => `
-          <tr>
-            <td>${escapeHtml(getMonthLabel(s._meta || {}))}</td>
-            <td>${num(s.sex["Male"])}</td>
-            <td>${num(s.sex["Female"])}</td>
-            <td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td>
-          </tr>
-        `).join("")}
-      </table>
-    </div>
-  `;
-}
-
-function aggregateSearchRows(details, query){
-  const q = String(query || "").trim().toLowerCase();
-  const all = [
-    ...(details.group || []),
-    ...(details.rc143 || []),
-    ...(details.pledge25 || []),
-    ...(details.unmapped || [])
-  ];
-
-  const map = {};
-  all.forEach(row => {
-    const name = String(row.name || "").trim();
-    const nameLower = name.toLowerCase();
-    if (q && !nameLower.includes(q)) return;
-
-    const dateDisplay = row.date || "";
-    const key = `${normalizeAliasKey(name)}__${dateDisplay}`;
-
-    if (!map[key]) {
-      map[key] = {
-        name,
-        date: dateDisplay,
-        rawDate: parseDate(row.rawDate || row.date),
-        totalDonors: 0
-      };
-    }
-    map[key].totalDonors += Number(row.totalDonors || 0);
-  });
-
-  return Object.values(map).sort((a,b) => {
-    const at = a.rawDate ? a.rawDate.getTime() : 0;
-    const bt = b.rawDate ? b.rawDate.getTime() : 0;
-    return bt - at || a.name.localeCompare(b.name);
-  });
-}
-
-function renderSearchGroupReport(grouped, query){
-  const container = document.getElementById("searchResultsContainer");
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-
-  if (!query) {
-    container.innerHTML = `<div class="empty">Type a group name in Search Group to see results here.</div>`;
-    return;
-  }
-
-  if (!years.length) {
-    container.innerHTML = `<div class="empty">No statistics found for the selected filter.</div>`;
-    return;
-  }
-
-  container.innerHTML = years.map((year, yi) => {
-    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="year-block">
-        <div class="year-head" onclick="toggleNext(this)">
-          <span>${year}</span>
-          <span>${monthKeys.length} month group(s)</span>
-        </div>
-        <div class="year-content ${yi === 0 ? "open" : ""}">
-          ${monthKeys.map((key, mi) => {
-            const s = grouped[year][key];
-            const monthName = MONTHS[(s._meta.month || 1) - 1];
-            const rows = aggregateSearchRows(s.fieldDetails, query);
-            return `
-              <div class="month-block">
-                <div class="month-head" onclick="toggleNext(this)">
-                  <span>${monthName}</span>
-                  <span>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))} donor(s)</span>
-                </div>
-                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
-                  ${
-                    rows.length ? `
-                    <div class="table-wrap">
-                      <table>
-                        <tr>
-                          <th>Group</th>
-                          <th>Date</th>
-                          <th>Total Donors</th>
-                        </tr>
-                        ${rows.map(r => `
-                          <tr>
-                            <td>${escapeHtml(r.name || "")}</td>
-                            <td>${escapeHtml(r.date || "")}</td>
-                            <td>${num(r.totalDonors)}</td>
-                          </tr>
-                        `).join("")}
-                        <tr class="subheader">
-                          <td colspan="2">Total</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))}</td>
-                        </tr>
-                      </table>
-                    </div>
-                    ` : `<div class="empty">No matching group entries for this month.</div>`
-                  }
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderFieldCategoryTable(title, label, rows){
-  const safeRows = rows.length ? rows : [{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
-  return `
-    <div class="table-wrap" style="margin-bottom:10px;">
-      <table>
-        <tr class="subheader"><td colspan="7">${title}</td></tr>
-        <tr>
-          <th>${label === "Group" ? "Group" : "Municipality"}</th>
-          <th>${label === "Pledge 25" ? "School or Barangay street (location)" : "Place"}</th>
-          <th>Date</th>
-          <th>450 cc S</th>
-          <th>450 cc D</th>
-          <th>450 cc T</th>
-          <th>450 cc Q</th>
-        </tr>
-        ${safeRows.map(r => `
-          <tr>
-            <td>${escapeHtml(r.name || "")}</td>
-            <td>${escapeHtml(r.place || "")}</td>
-            <td>${escapeHtml(r.date || "")}</td>
-            <td>${num(r["450 cc S"])}</td>
-            <td>${num(r["450 cc D"])}</td>
-            <td>${num(r["450 cc T"])}</td>
-            <td>${num(r["450 cc Q"])}</td>
-          </tr>
-        `).join("")}
-        <tr class="subheader">
-          <td colspan="3">Sub total</td>
-          <td>${num(sumDetailField(safeRows, "450 cc S"))}</td>
-          <td>${num(sumDetailField(safeRows, "450 cc D"))}</td>
-          <td>${num(sumDetailField(safeRows, "450 cc T"))}</td>
-          <td>${num(sumDetailField(safeRows, "450 cc Q"))}</td>
-        </tr>
-      </table>
-    </div>
-  `;
-}
-
-function aggregateGroupMonthlyStats(rows){
-  const map = {};
-  (rows || []).forEach(r => {
-    const name = String(r.name || "").trim() || "UNSPECIFIED";
-    const date = String(r.date || "").trim();
-    const key = `${normalizeAliasKey(name)}__${date}`;
-
-    if (!map[key]) {
-      map[key] = {
-        name,
-        date,
-        rawDate: parseDate(r.rawDate || r.date),
-        totalDonors: 0,
-        bags: { S:0, D:0, T:0, Q:0 },
-        bloodTypes: createBloodTypeCounter()
-      };
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
     }
 
-    map[key].totalDonors += Number(r.totalDonors || 0);
-    map[key].bags.S += Number(r["450 cc S"] || 0);
-    map[key].bags.D += Number(r["450 cc D"] || 0);
-    map[key].bags.T += Number(r["450 cc T"] || 0);
-    map[key].bags.Q += Number(r["450 cc Q"] || 0);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    const counters = r.bloodTypeCounts || {};
-    Object.keys(map[key].bloodTypes).forEach(bt => {
-      map[key].bloodTypes[bt] += Number(counters[bt] || 0);
-    });
-  });
+    const donorForm = document.getElementById("donorForm");
+    const entryDate = document.getElementById("entryDate");
+    const birthday = document.getElementById("birthday");
+    const age = document.getElementById("age");
+    const donorCategory = document.getElementById("donorCategory");
+    const numberOfDonations = document.getElementById("numberOfDonations");
+    const typeHelperBox = document.getElementById("typeHelperBox");
+    const statusMessage = document.getElementById("statusMessage");
+    const authIndicator = document.getElementById("authIndicator");
+    const saveDonorBtn = document.getElementById("saveDonorBtn");
+    const reloadPageBtn = document.getElementById("reloadPageBtn");
 
-  return Object.values(map).sort((a,b) => {
-    const at = a.rawDate ? a.rawDate.getTime() : 0;
-    const bt = b.rawDate ? b.rawDate.getTime() : 0;
-    return bt - at || a.name.localeCompare(b.name);
-  });
-}
+    const donorTypeRadios = document.querySelectorAll('input[name="donorType"]');
+    const patientDirectedBox = document.getElementById("patientDirectedBox");
+    const patientDirectedDetails = document.getElementById("patientDirectedDetails");
+    const walkInBox = document.getElementById("walkInBox");
+    const walkInCount = document.getElementById("walkInCount");
+    const startWalkInGroupBtn = document.getElementById("startWalkInGroupBtn");
+    const mbdBox = document.getElementById("mbdBox");
+    const mbdDetails = document.getElementById("mbdDetails");
+    const mbdCount = document.getElementById("mbdCount");
+    const startMbdGroupBtn = document.getElementById("startMbdGroupBtn");
+    const groupInfoBox = document.getElementById("groupInfoBox");
+    const endGroupBtn = document.getElementById("endGroupBtn");
 
-function renderGroupMonthlyStatistics(grouped){
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-  const container = document.getElementById("groupStatsContainer");
+    const lookupSearch = document.getElementById("lookupSearch");
+    const lookupResultsBox = document.getElementById("lookupResultsBox");
+    const lookupResultsBody = document.getElementById("lookupResultsBody");
+    const loadedDonorInfo = document.getElementById("loadedDonorInfo");
+    const clearLoadedDonorBtn = document.getElementById("clearLoadedDonorBtn");
 
-  if (!years.length) {
-    container.innerHTML = `<div class="empty">No group monthly statistics found for the selected filter.</div>`;
-    return;
-  }
+    const serialPrefix = document.getElementById("serialPrefix");
+    const serialNumberInput = document.getElementById("serialNumber");
+    const useSerialPrefix = document.getElementById("useSerialPrefix");
+    const serialHelperBox = document.getElementById("serialHelperBox");
 
-  container.innerHTML = years.map((year, yi) => {
-    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="year-block">
-        <div class="year-head" onclick="toggleNext(this)">
-          <span>${year}</span>
-          <span>${monthKeys.length} month group(s)</span>
-        </div>
-        <div class="year-content ${yi === 0 ? "open" : ""}">
-          ${monthKeys.map((key, mi) => {
-            const s = grouped[year][key];
-            const monthName = MONTHS[(s._meta.month || 1) - 1];
-            const rows = aggregateGroupMonthlyStats([
-              ...(s.fieldDetails.group || []),
-              ...(s.fieldDetails.rc143 || []),
-              ...(s.fieldDetails.pledge25 || []),
-              ...(s.fieldDetails.unmapped || [])
-            ]);
+    const serialRangeStart = document.getElementById("serialRangeStart");
+    const serialRangeEnd = document.getElementById("serialRangeEnd");
+    const serialRangeSkip = document.getElementById("serialRangeSkip");
+    const generateSerialRangeBtn = document.getElementById("generateSerialRangeBtn");
+    const nextSerialBtn = document.getElementById("nextSerialBtn");
+    const clearSerialBatchBtn = document.getElementById("clearSerialBatchBtn");
+    const serialRangeToggleBtn = document.getElementById("serialRangeToggleBtn");
+    const serialRangeCollapse = document.getElementById("serialRangeCollapse");
+    const serialBatchInfo = document.getElementById("serialBatchInfo");
+    const serialBatchPreview = document.getElementById("serialBatchPreview");
 
-            return `
-              <div class="month-block">
-                <div class="month-head" onclick="toggleNext(this)">
-                  <span>${monthName}</span>
-                  <span>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))} group donor(s)</span>
-                </div>
-                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
-                  ${rows.length ? `
-                    <div class="table-wrap">
-                      <table>
-                        <tr>
-                          <th>Group</th>
-                          <th>Date</th>
-                          <th>Total</th>
-                          <th>S</th>
-                          <th>D</th>
-                          <th>T</th>
-                          <th>Q</th>
-                          <th>O+</th>
-                          <th>A+</th>
-                          <th>B+</th>
-                          <th>AB+</th>
-                          <th>O-</th>
-                          <th>A-</th>
-                          <th>B-</th>
-                          <th>AB-</th>
-                          <th>Unknown</th>
-                        </tr>
-                        ${rows.map(r => `
-                          <tr>
-                            <td>${escapeHtml(r.name || "")}</td>
-                            <td>${escapeHtml(r.date || "")}</td>
-                            <td>${num(r.totalDonors)}</td>
-                            <td>${num(r.bags.S)}</td>
-                            <td>${num(r.bags.D)}</td>
-                            <td>${num(r.bags.T)}</td>
-                            <td>${num(r.bags.Q)}</td>
-                            <td>${num(r.bloodTypes["O+"])}</td>
-                            <td>${num(r.bloodTypes["A+"])}</td>
-                            <td>${num(r.bloodTypes["B+"])}</td>
-                            <td>${num(r.bloodTypes["AB+"])}</td>
-                            <td>${num(r.bloodTypes["O-"])}</td>
-                            <td>${num(r.bloodTypes["A-"])}</td>
-                            <td>${num(r.bloodTypes["B-"])}</td>
-                            <td>${num(r.bloodTypes["AB-"])}</td>
-                            <td>${num(r.bloodTypes["Unknown"])}</td>
-                          </tr>
-                        `).join("")}
-                        <tr class="subheader">
-                          <td colspan="2">Monthly Total</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.S || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.D || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.T || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bags.Q || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["O+"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["A+"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["B+"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["AB+"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["O-"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["A-"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["B-"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["AB-"] || 0), 0))}</td>
-                          <td>${num(rows.reduce((a,b)=>a + Number(b.bloodTypes["Unknown"] || 0), 0))}</td>
-                        </tr>
-                      </table>
-                    </div>
-                  ` : `<div class="empty">No group records found for this month.</div>`}
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
+    const rangeDonorTypeRadios = document.querySelectorAll('input[name="rangeDonorType"]');
+    const rangeMbdBox = document.getElementById("rangeMbdBox");
+    const rangeMbdDetails = document.getElementById("rangeMbdDetails");
+    const rangePatientBox = document.getElementById("rangePatientBox");
+    const rangePatientDetails = document.getElementById("rangePatientDetails");
+    const rangeTypeInfo = document.getElementById("rangeTypeInfo");
 
-function renderDetailReport(grouped){
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-  const container = document.getElementById("reportContainer");
+    const timeStartedInput = document.getElementById("timeStarted");
+    const timeEndedInput = document.getElementById("timeEnded");
+    const timeHelperBox = document.getElementById("timeHelperBox");
 
-  if (!years.length) {
-    container.innerHTML = `<div class="empty">No statistics found for the selected filter.</div>`;
-    return;
-  }
+    let currentUser = null;
+    let authReady = false;
+    let loadedDonorRecord = null;
+    let donorLookupResults = [];
+    let autoTypeSuggestion = "";
+    let autoTypeReason = "";
+    let isSaving = false;
+    let donorSearchDebounce = null;
 
-  container.innerHTML = years.map((year, yi) => {
-    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="year-block">
-        <div class="year-head" onclick="toggleNext(this)">
-          <span>${year}</span>
-          <span>${monthKeys.length} month group(s)</span>
-        </div>
-        <div class="year-content ${yi === 0 ? "open" : ""}">
-          ${monthKeys.map((key, mi) => {
-            const s = grouped[year][key];
-            const monthName = MONTHS[(s._meta.month || 1) - 1];
-            return `
-              <div class="month-block">
-                <div class="month-head" onclick="toggleNext(this)">
-                  <span>${monthName}</span>
-                  <span>${num(s.totalDonors)} donor entries</span>
-                </div>
-                <div class="month-content ${yi === 0 && mi === 0 ? "open" : ""}">
+    const ACTIVE_GROUP_STORAGE_KEY = "donorEntryActiveGroup";
+    const SERIAL_BATCH_STORAGE_KEY = "donorEntrySerialBatch";
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-a">A. Office Bleeding</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                        <tr><td>1. Walk-in</td><td>${num(s.officeBleeding["Walk-in"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q)}</td></tr>
-                        <tr><td>2. Patient-directed</td><td>${num(s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.officeBleeding["Walk-in"].S + s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D + s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T + s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+    function setTodayDate() {
+        entryDate.value = new Date().toISOString().split("T")[0];
+        updateSerialPrefixByDate();
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-b">B. Field Donation</div>
-                    ${renderFieldCategoryTable("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
-                    ${renderFieldCategoryTable("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
-                    ${renderFieldCategoryTable("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
-                    ${renderFieldCategoryTable("Unmapped / Others", "Group", combineSmartGroupRows(s.fieldDetails.unmapped))}
-                  </div>
+    function computeAge() {
+        if (!birthday.value) {
+            age.value = "";
+            return;
+        }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-c">C. Blood Type Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Blood Type</th><th>Total</th></tr>
-                        ${Object.entries(s.bloodType).map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td>${num(v)}</td></tr>`).join("")}
-                      </table>
-                    </div>
-                  </div>
+        const birthDate = new Date(birthday.value);
+        const today = new Date();
+        let years = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-d">D. Blood Bag Type by Blood Type</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr>
-                          <th>Bag Type</th>
-                          <th>O+</th><th>A+</th><th>B+</th><th>AB+</th>
-                          <th>O-</th><th>A-</th><th>B-</th><th>AB-</th>
-                          <th>Unknown</th>
-                        </tr>
-                        ${["S","D","T","Q"].map(code => `
-                          <tr>
-                            <td>${code}</td>
-                            <td>${num(s.bagTypeBloodType[code]["O+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["A+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["B+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["AB+"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["O-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["A-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["B-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["AB-"])}</td>
-                            <td>${num(s.bagTypeBloodType[code]["Unknown"])}</td>
-                          </tr>
-                        `).join("")}
-                      </table>
-                    </div>
-                  </div>
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            years--;
+        }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-e">E. Component Preparation</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Component</th><th>Total</th></tr>
-                        <tr><td>450 cc</td><td>${num(s.components["450 cc"])}</td></tr>
-                        <tr><td>PRBC</td><td>${num(s.components["PRBC"])}</td></tr>
-                        <tr><td>FFP</td><td>${num(s.components["FFP"])}</td></tr>
-                        <tr><td>PC</td><td>${num(s.components["PC"])}</td></tr>
-                        <tr><td>CRYO</td><td>${num(s.components["CRYO"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+        age.value = years >= 0 ? years : "";
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-f">F. Requested Blood Components</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Component</th><th>Total Requested</th></tr>
-                        <tr><td>450 cc</td><td>${num(s.requests["450 cc"])}</td></tr>
-                        <tr><td>PRBC</td><td>${num(s.requests["PRBC"])}</td></tr>
-                        <tr><td>FFP</td><td>${num(s.requests["FFP"])}</td></tr>
-                        <tr><td>PC</td><td>${num(s.requests["PC"])}</td></tr>
-                        <tr><td>CRYO</td><td>${num(s.requests["CRYO"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+    function showMessage(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = "status-message";
+        statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-g">G. Sex Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Sex</th><th>Total</th></tr>
-                        <tr><td>Male</td><td>${num(s.sex["Male"])}</td></tr>
-                        <tr><td>Female</td><td>${num(s.sex["Female"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+    function clearMessage() {
+        statusMessage.textContent = "";
+        statusMessage.className = "status-message";
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-h">H. Donor Frequency</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Type</th><th>Total</th></tr>
-                        <tr><td>First-time donors</td><td>${num(s.frequency["First-time donors"])}</td></tr>
-                        <tr><td>Repeat non-regular</td><td>${num(s.frequency["Repeat non-regular"])}</td></tr>
-                        <tr><td>Repeat regular</td><td>${num(s.frequency["Repeat regular"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.frequency["Total"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+    function setAuthIndicator(text, ok) {
+        authIndicator.textContent = text;
+        authIndicator.style.background = ok ? "rgba(30,95,35,0.35)" : "rgba(255,255,255,0.15)";
+        authIndicator.style.borderColor = ok ? "rgba(183,223,185,0.75)" : "rgba(255,255,255,0.28)";
+        authIndicator.style.color = "#fff";
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-i">I. Age Distribution</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Age Group</th><th>Total</th></tr>
-                        <tr><td>16-17</td><td>${num(s.age["16-17"])}</td></tr>
-                        <tr><td>18-20</td><td>${num(s.age["18-20"])}</td></tr>
-                        <tr><td>21-30</td><td>${num(s.age["21-30"])}</td></tr>
-                        <tr><td>31-40</td><td>${num(s.age["31-40"])}</td></tr>
-                        <tr><td>41-50</td><td>${num(s.age["41-50"])}</td></tr>
-                        <tr><td>51-60</td><td>${num(s.age["51-60"])}</td></tr>
-                        <tr><td>60-65</td><td>${num(s.age["60-65"])}</td></tr>
-                        <tr><td>66 & above</td><td>${num(s.age["66 & above"])}</td></tr>
-                        <tr class="subheader"><td>Total</td><td>${num(s.age["Total"])}</td></tr>
-                      </table>
-                    </div>
-                  </div>
+    function setSavingState(saving) {
+        isSaving = saving;
+        saveDonorBtn.disabled = saving;
+        saveDonorBtn.textContent = saving ? "Saving..." : "Save Donor Entry";
+    }
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
-                        <tr>
-                          <td>16-25 Years Old</td>
-                          <td>${num(s.youth1625Sex["Male"])}</td>
-                          <td>${num(s.youth1625Sex["Female"])}</td>
-                          <td>${num(s.youth1625Sex["Total"])}</td>
-                        </tr>
-                      </table>
-                    </div>
-                  </div>
+    function getSelectedDonorType() {
+        const selected = document.querySelector('input[name="donorType"]:checked');
+        return selected ? selected.value : "";
+    }
 
-                </div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function buildStatistics(){
-  try{
-    const donors = getFilteredDonors();
-    const releases = getFilteredReleasing();
-    const grouped = {};
-
-    donors.forEach(r => {
-      const d = parseDate(getDonorDate(r));
-      const p = getDateParts(d);
-      if (!p.year || !p.month) return;
-
-      const y = String(p.year);
-      const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
-      if (!grouped[y]) grouped[y] = {};
-      if (!grouped[y][k]) grouped[y][k] = emptyStats();
-
-      grouped[y][k]._meta = { year:p.year, month:p.month };
-      applyDonor(grouped[y][k], r);
-    });
-
-    releases.forEach(r => {
-      const d = parseDate(getReleaseDate(r));
-      const p = getDateParts(d);
-      if (!p.year || !p.month) return;
-
-      const y = String(p.year);
-      const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
-
-      if (!grouped[y]) grouped[y] = {};
-      if (!grouped[y][k]) grouped[y][k] = emptyStats();
-
-      grouped[y][k]._meta = { year:p.year, month:p.month };
-      applyRequestedOnly(grouped[y][k], r);
-    });
-
-    groupedCache = grouped;
-    renderOverview(grouped);
-    renderMonthlySexTable(grouped);
-    renderDetailReport(grouped);
-    renderGroupMonthlyStatistics(grouped);
-
-    const q = String(document.getElementById("searchText").value || "").trim();
-    renderSearchGroupReport(grouped, q);
-
-    setStatus("Statistics loaded successfully.", "ok");
-  }catch(error){
-    console.error(error);
-    document.getElementById("summaryContainer").innerHTML = `<div class="empty">Failed to build overview.</div>`;
-    document.getElementById("sexMonthlyContainer").innerHTML = `<div class="empty">Failed to build male / female table.</div>`;
-    document.getElementById("searchResultsContainer").innerHTML = `<div class="empty">Failed to build search results.</div>`;
-    document.getElementById("reportContainer").innerHTML = `<div class="empty">Failed to build detailed statistics.</div>`;
-    document.getElementById("groupStatsContainer").innerHTML = `<div class="empty">Failed to build group monthly statistics.</div>`;
-    setStatus("Failed to build statistics: " + (error.message || error), "error");
-  }
-}
-
-function toggleDailyDropdown(monthKey){
-  const box = document.getElementById(`dailyDropdown-${monthKey}`);
-  const arrow = document.getElementById(`dailyArrow-${monthKey}`);
-  if (!box) return;
-  box.classList.toggle("open");
-  if (arrow) arrow.textContent = box.classList.contains("open") ? "▲" : "▼";
-}
-
-function toggleNext(el){
-  const next = el.nextElementSibling;
-  if (next) next.classList.toggle("open");
-}
-
-function toggleSectionBody(bodyId, badgeId){
-  const body = document.getElementById(bodyId);
-  const badge = document.getElementById(badgeId);
-  body.classList.toggle("open");
-  badge.textContent = body.classList.contains("open") ? "Expanded" : "Collapsed";
-}
-
-async function saveGroupCategory(){
-  const partner = (document.getElementById("mapPartnerName").value || "").trim();
-  const category = document.getElementById("mapCategory").value;
-  const place = (document.getElementById("mapPlace").value || "").trim();
-
-  if (!partner) {
-    alert("Please enter a partner / group name.");
-    return;
-  }
-
-  try{
-    const normalized = normalizeAliasKey(partner);
-
-    if (editingMappingId) {
-      await fs.collection("donorGroupCategories").doc(editingMappingId).update({
-        partnerName: smartGroupDisplayName(partner),
-        category,
-        place,
-        normalizedKey: normalized,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } else {
-      const existing = categoryMappings.find(x =>
-        normalizeAliasKey(x.partnerName || x.name || "") === normalized
-      );
-
-      if (existing) {
-        await fs.collection("donorGroupCategories").doc(existing.id).update({
-          partnerName: smartGroupDisplayName(partner),
-          category,
-          place,
-          normalizedKey: normalized,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    function setSelectedDonorType(value) {
+        donorTypeRadios.forEach(radio => {
+            radio.checked = radio.value === value;
         });
-      } else {
-        await fs.collection("donorGroupCategories").add({
-          partnerName: smartGroupDisplayName(partner),
-          category,
-          place,
-          normalizedKey: normalized,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
+        updateDonorTypeFields();
     }
 
-    clearMappingEditor();
-    await loadCategoryMappings();
-    renderMappings();
-    buildStatistics();
-    alert("Group category saved successfully.");
-  }catch(error){
-    console.error(error);
-    alert("Failed to save mapping: " + (error.message || error));
-  }
-}
+    function updateDonorTypeFields() {
+        const selected = getSelectedDonorType();
+        patientDirectedBox.classList.add("hidden");
+        walkInBox.classList.add("hidden");
+        mbdBox.classList.add("hidden");
 
-async function deleteGroupCategory(id){
-  if (!confirm("Delete this mapping?")) return;
-  try{
-    await fs.collection("donorGroupCategories").doc(id).delete();
-    await loadCategoryMappings();
-    renderMappings();
-    buildStatistics();
-  }catch(error){
-    console.error(error);
-    alert("Failed to delete mapping: " + (error.message || error));
-  }
-}
+        if (selected === "Patient Directed") patientDirectedBox.classList.remove("hidden");
+        if (selected === "Walk-in") walkInBox.classList.remove("hidden");
+        if (selected === "MBD") mbdBox.classList.remove("hidden");
+    }
 
-function fillMappingForEdit(id){
-  document.querySelectorAll(".mapping-row").forEach(row => row.classList.remove("editing"));
-  const row = document.getElementById("mappingRow_" + id);
-  if (row) row.classList.add("editing");
-}
+    function getSelectedRangeDonorType() {
+        const selected = document.querySelector('input[name="rangeDonorType"]:checked');
+        return selected ? selected.value : "";
+    }
 
-function clearMappingEditor(){
-  editingMappingId = null;
-  document.getElementById("mapPartnerName").value = "";
-  document.getElementById("mapCategory").value = "Group";
-  document.getElementById("mapPlace").value = "";
-  const saveBtn = document.getElementById("saveMappingBtn");
-  if (saveBtn) saveBtn.textContent = "Save Mapping";
-  document.querySelectorAll(".mapping-row").forEach(row => row.classList.remove("editing"));
-}
+    function updateRangeDonorTypeFields() {
+        const selected = getSelectedRangeDonorType();
+        rangeMbdBox.classList.add("hidden");
+        rangePatientBox.classList.add("hidden");
 
-async function saveInlineMapping(id){
-  const partner = (document.getElementById("inlinePartner_" + id).value || "").trim();
-  const category = document.getElementById("inlineCategory_" + id).value;
-  const place = (document.getElementById("inlinePlace_" + id).value || "").trim();
+        if (selected === "MBD") {
+            rangeMbdBox.classList.remove("hidden");
+        }
+        if (selected === "Patient Directed") {
+            rangePatientBox.classList.remove("hidden");
+        }
 
-  if (!partner) {
-    alert("Please enter a partner / group name.");
-    return;
-  }
+        if (selected) {
+            let text = `Serial range donor type set to: ${selected}`;
+            if (selected === "MBD" && rangeMbdDetails.value.trim()) {
+                text += ` | ${rangeMbdDetails.value.trim()}`;
+            }
+            if (selected === "Patient Directed" && rangePatientDetails.value.trim()) {
+                text += ` | ${rangePatientDetails.value.trim()}`;
+            }
+            rangeTypeInfo.textContent = text;
+            rangeTypeInfo.classList.remove("hidden");
+        } else {
+            rangeTypeInfo.textContent = "";
+            rangeTypeInfo.classList.add("hidden");
+        }
+    }
 
-  try{
-    const normalized = normalizeAliasKey(partner);
+    function normalizeText(value) {
+        return String(value || "").trim().toLowerCase();
+    }
 
-    await fs.collection("donorGroupCategories").doc(id).update({
-      partnerName: smartGroupDisplayName(partner),
-      category,
-      place,
-      normalizedKey: normalized,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    function normalizeAlpha(value) {
+        return String(value || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function getStrongIdentityKey(record) {
+        return [
+            normalizeAlpha(record.surname),
+            normalizeAlpha(record.firstName),
+            String(record.birthday || "").trim()
+        ].join("|");
+    }
+
+    function calculateAutoDonorCategory(lastEntryDate) {
+        if (!lastEntryDate || !entryDate.value) {
+            return {
+                value: "New",
+                reason: "No previous donation date found, so Auto defaults to New."
+            };
+        }
+
+        const newDate = new Date(entryDate.value + "T00:00:00");
+        const lastDate = new Date(lastEntryDate + "T00:00:00");
+
+        if (isNaN(newDate) || isNaN(lastDate)) {
+            return {
+                value: "New",
+                reason: "Date comparison is incomplete, so Auto defaults to New."
+            };
+        }
+
+        const diffMs = newDate - lastDate;
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+        if (diffDays < 0) {
+            return {
+                value: "New",
+                reason: "Entry date is earlier than last donation date, so Auto is not reliable."
+            };
+        }
+
+        if (diffDays <= 365) {
+            return {
+                value: "Repeat",
+                reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
+            };
+        }
+
+        return {
+            value: "Lapse",
+            reason: `Previous donation is ${Math.floor(diffDays)} day(s) before this entry date.`
+        };
+    }
+
+    function refreshTypeHelper() {
+        const selectedMode = donorCategory.value;
+
+        if (selectedMode === "Auto") {
+            if (autoTypeSuggestion) {
+                typeHelperBox.textContent = `Auto result: ${autoTypeSuggestion}. ${autoTypeReason}`;
+                typeHelperBox.classList.remove("hidden");
+            } else {
+                typeHelperBox.textContent = "Auto result is not available yet.";
+                typeHelperBox.classList.remove("hidden");
+            }
+        } else {
+            typeHelperBox.textContent = `Manual override selected: ${selectedMode}.`;
+            typeHelperBox.classList.remove("hidden");
+        }
+    }
+
+    function updateAutoTypeSuggestion() {
+        if (!loadedDonorRecord) {
+            autoTypeSuggestion = "New";
+            autoTypeReason = "No loaded donor history, so Auto defaults to New.";
+            refreshTypeHelper();
+            return;
+        }
+
+        const result = calculateAutoDonorCategory(loadedDonorRecord.entryDate);
+        autoTypeSuggestion = result.value;
+        autoTypeReason = result.reason;
+        refreshTypeHelper();
+    }
+
+    function getFinalDonorCategoryToSave() {
+        if (donorCategory.value !== "Auto") {
+            return donorCategory.value;
+        }
+        return autoTypeSuggestion || "New";
+    }
+
+    function getSerialPrefixFromYear(year) {
+        const yearText = String(year || "");
+        const twoDigitYear = yearText.slice(-2) || "26";
+        return `PRC2600-${twoDigitYear}00`;
+    }
+
+    function getSelectedEntryYear() {
+        if (entryDate.value) {
+            return Number(entryDate.value.split("-")[0]);
+        }
+        return new Date().getFullYear();
+    }
+
+    function updateSerialPrefixByDate() {
+        const selectedYear = getSelectedEntryYear();
+        serialPrefix.textContent = getSerialPrefixFromYear(selectedYear);
+        updateSerialModeUI();
+        renderSerialBatchInfo();
+    }
+
+    function updateSerialModeUI() {
+        const enabled = useSerialPrefix.checked;
+        const currentPrefix = serialPrefix.textContent.trim();
+
+        serialPrefix.style.display = enabled ? "flex" : "none";
+        serialHelperBox.textContent = enabled
+            ? `Prefix enabled. Saved serial will be ${currentPrefix} + your manual input or scanned value.`
+            : "Prefix disabled. Saved serial will be exactly what you type or scan.";
+    }
+
+    function getFinalSerialNumber() {
+        const raw = serialNumberInput.value.trim();
+        const currentPrefix = serialPrefix.textContent.trim();
+
+        if (!raw) return "";
+        if (!useSerialPrefix.checked) return raw;
+        if (raw.toUpperCase().startsWith(currentPrefix.toUpperCase())) return raw;
+
+        return currentPrefix + raw;
+    }
+
+    function stripPrefixFromPossibleFullSerial(value) {
+        let cleaned = String(value || "").trim();
+        if (!cleaned) return "";
+
+        cleaned = cleaned.replace(/\s+/g, "");
+        cleaned = cleaned.replace(/^PRC2600-\d{4}/i, "");
+        cleaned = cleaned.replace(/^PRC2600-/i, "");
+        cleaned = cleaned.replace(/[^0-9]/g, "");
+        return cleaned;
+    }
+
+    function parseSkipList(skipText) {
+        const rawItems = String(skipText || "")
+            .split(",")
+            .map(item => stripPrefixFromPossibleFullSerial(item))
+            .filter(Boolean);
+
+        return Array.from(new Set(rawItems));
+    }
+
+    function buildSerialListFromRange(startRaw, endRaw, skipText) {
+        const startStr = stripPrefixFromPossibleFullSerial(startRaw);
+        const endStr = stripPrefixFromPossibleFullSerial(endRaw);
+
+        if (!startStr || !endStr) {
+            throw new Error("Please enter both start and end serial numbers.");
+        }
+
+        const startNum = Number(startStr);
+        const endNum = Number(endStr);
+
+        if (Number.isNaN(startNum) || Number.isNaN(endNum)) {
+            throw new Error("Start and end serial numbers must be numeric.");
+        }
+
+        if (endNum < startNum) {
+            throw new Error("End serial number must be greater than or equal to start serial number.");
+        }
+
+        const width = Math.max(startStr.length, endStr.length);
+        const skipSet = new Set(parseSkipList(skipText));
+        const list = [];
+
+        for (let num = startNum; num <= endNum; num++) {
+            const padded = String(num).padStart(width, "0");
+            if (!skipSet.has(padded) && !skipSet.has(String(num))) {
+                list.push(padded);
+            }
+        }
+
+        if (!list.length) {
+            throw new Error("No serial numbers left after applying skipped numbers.");
+        }
+
+        return list;
+    }
+
+    function getLocalSerialBatch() {
+        try {
+            const raw = localStorage.getItem(SERIAL_BATCH_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            if (!Array.isArray(parsed.list)) return null;
+            return parsed;
+        } catch (error) {
+            console.error("Failed to read serial batch:", error);
+            return null;
+        }
+    }
+
+    function setLocalSerialBatch(data) {
+        try {
+            localStorage.setItem(SERIAL_BATCH_STORAGE_KEY, JSON.stringify(data));
+        } catch (error) {
+            console.error("Failed to save serial batch:", error);
+        }
+    }
+
+    function clearLocalSerialBatch() {
+        try {
+            localStorage.removeItem(SERIAL_BATCH_STORAGE_KEY);
+        } catch (error) {
+            console.error("Failed to clear serial batch:", error);
+        }
+    }
+
+    function getSerialBatch() {
+        return getLocalSerialBatch();
+    }
+
+    function setSerialBatch(list) {
+        const batch = {
+            prefix: serialPrefix.textContent.trim(),
+            list: list.slice(),
+            originalCount: list.length,
+            rangeDonorType: getSelectedRangeDonorType(),
+            rangeMbdDetails: rangeMbdDetails.value.trim(),
+            rangePatientDetails: rangePatientDetails.value.trim(),
+            createdAtMs: Date.now()
+        };
+        setLocalSerialBatch(batch);
+        renderSerialBatchInfo();
+        loadNextSerialFromBatch(false);
+    }
+
+    function clearSerialBatch() {
+        clearLocalSerialBatch();
+        renderSerialBatchInfo();
+    }
+
+    function renderSerialBatchInfo() {
+        const batch = getSerialBatch();
+
+        if (!batch || !Array.isArray(batch.list) || !batch.list.length) {
+            serialBatchInfo.classList.add("hidden");
+            serialBatchPreview.classList.add("hidden");
+            serialBatchInfo.textContent = "";
+            serialBatchPreview.textContent = "";
+            return;
+        }
+
+        const prefixText = batch.prefix || serialPrefix.textContent.trim();
+        const next = batch.list[0];
+        const remaining = batch.list.length;
+        const previewItems = batch.list.slice(0, 6).map(item => `${prefixText}${item}`);
+        const moreText = batch.list.length > 6 ? ` ... and ${batch.list.length - 6} more` : "";
+
+        let donorTypeText = batch.rangeDonorType ? ` | Type: ${batch.rangeDonorType}` : "";
+
+        if (batch.rangeDonorType === "MBD" && batch.rangeMbdDetails) {
+            donorTypeText += ` - ${batch.rangeMbdDetails}`;
+        }
+        if (batch.rangeDonorType === "Patient Directed" && batch.rangePatientDetails) {
+            donorTypeText += ` - ${batch.rangePatientDetails}`;
+        }
+
+        serialBatchInfo.textContent = `Active serial list: ${remaining} remaining | Next serial: ${prefixText}${next}${donorTypeText}`;
+        serialBatchPreview.innerHTML = `<b>Preview:</b> ${escapeHtml(previewItems.join(", "))}${escapeHtml(moreText)}`;
+
+        serialBatchInfo.classList.remove("hidden");
+        serialBatchPreview.classList.remove("hidden");
+    }
+
+    function loadNextSerialFromBatch(showStatus = true) {
+        const batch = getSerialBatch();
+
+        if (!batch || !Array.isArray(batch.list) || !batch.list.length) {
+            if (showStatus) showMessage("No active serial list found.", "error");
+            renderSerialBatchInfo();
+            return;
+        }
+
+        const nextSerial = batch.list[0];
+        serialNumberInput.value = nextSerial;
+        renderSerialBatchInfo();
+
+        if (showStatus) {
+            showMessage(`Next serial loaded: ${(batch.prefix || serialPrefix.textContent.trim())}${nextSerial}`, "success");
+        }
+    }
+
+    function consumeSerialBatchAfterSave() {
+        const batch = getSerialBatch();
+        if (!batch || !Array.isArray(batch.list) || !batch.list.length) return { batch: null, completed: false };
+
+        batch.list.shift();
+
+        if (!batch.list.length) {
+            clearLocalSerialBatch();
+            renderSerialBatchInfo();
+            return { batch: null, completed: true };
+        }
+
+        setLocalSerialBatch(batch);
+        renderSerialBatchInfo();
+        return { batch, completed: false };
+    }
+
+
+    function setSerialRangeCollapsed(isOpen) {
+        serialRangeCollapse.classList.toggle("hidden", !isOpen);
+        serialRangeToggleBtn.classList.toggle("open", isOpen);
+        serialRangeToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+
+    serialRangeToggleBtn.addEventListener("click", function() {
+        const shouldOpen = serialRangeCollapse.classList.contains("hidden");
+        setSerialRangeCollapsed(shouldOpen);
     });
 
-    await loadCategoryMappings();
-    renderMappings();
-    buildStatistics();
-    alert("Group category updated successfully.");
-  }catch(error){
-    console.error(error);
-    alert("Failed to update mapping: " + (error.message || error));
-  }
-}
-
-function cancelInlineEdit(id){
-  const row = document.getElementById("mappingRow_" + id);
-  if (row) row.classList.remove("editing");
-}
-
-function handleInlineMappingKey(event, id){
-  if (event.key === "Enter") {
-    event.preventDefault();
-    saveInlineMapping(id);
-  }
-  if (event.key === "Escape") {
-    event.preventDefault();
-    cancelInlineEdit(id);
-  }
-}
-
-function renderMappings(){
-  const list = document.getElementById("mappingList");
-  if (!categoryMappings.length){
-    list.innerHTML = `<div class="empty">No group category mappings yet.</div>`;
-    return;
-  }
-
-  const sorted = categoryMappings.slice().sort((a,b) => {
-    const an = (a.partnerName || a.name || "").toLowerCase();
-    const bn = (b.partnerName || b.name || "").toLowerCase();
-    return an.localeCompare(bn);
-  });
-
-  list.innerHTML = `
-    <div class="mapping-head">
-      <div>Partner / Alias / Group Name</div>
-      <div>Category</div>
-      <div>Place Override</div>
-      <div>Actions</div>
-    </div>
-    ${sorted.map(item => `
-      <div class="mapping-row" id="mappingRow_${item.id}">
-        <div class="mapping-view">
-          <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
-          <div>${escapeHtml(item.category || "Unmapped")}</div>
-          <div>${escapeHtml(item.place || "")}</div>
-          <div class="mapping-actions">
-            <button class="btn-blue" onclick="fillMappingForEdit('${item.id}')">Edit</button>
-            <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
-          </div>
-        </div>
-
-        <div class="mapping-edit">
-          <input
-            class="mapping-inline-input"
-            id="inlinePartner_${item.id}"
-            type="text"
-            value="${escapeHtml(item.partnerName || item.name || "")}"
-            onkeydown="handleInlineMappingKey(event,'${item.id}')"
-          >
-
-          <select
-            class="mapping-inline-select"
-            id="inlineCategory_${item.id}"
-            onkeydown="handleInlineMappingKey(event,'${item.id}')"
-          >
-            <option value="Group" ${(item.category || "Group") === "Group" ? "selected" : ""}>Group</option>
-            <option value="RC143 / BRGY Base" ${(item.category || "") === "RC143 / BRGY Base" ? "selected" : ""}>RC143 / BRGY Base</option>
-            <option value="Pledge 25" ${(item.category || "") === "Pledge 25" ? "selected" : ""}>Pledge 25</option>
-          </select>
-
-          <input
-            class="mapping-inline-input"
-            id="inlinePlace_${item.id}"
-            type="text"
-            value="${escapeHtml(item.place || "")}"
-            onkeydown="handleInlineMappingKey(event,'${item.id}')"
-          >
-
-          <div class="mapping-actions">
-            <button class="btn-red" onclick="saveInlineMapping('${item.id}')">Save</button>
-            <button class="btn-gray" onclick="cancelInlineEdit('${item.id}')">Cancel</button>
-          </div>
-        </div>
-      </div>
-    `).join("")}
-  `;
-}
-
-function populateFilters(){
-  const yearEl = document.getElementById("filterYear");
-  const monthEl = document.getElementById("filterMonth");
-  const keepYear = yearEl.value || "ALL";
-  const keepMonth = monthEl.value || "ALL";
-
-  const years = [...new Set(
-    donorRecords
-      .map(r => parseDate(getDonorDate(r)))
-      .filter(Boolean)
-      .map(d => String(d.getFullYear()))
-  )].sort((a,b) => b.localeCompare(a));
-
-  yearEl.innerHTML = `<option value="ALL">All Years</option>`;
-  years.forEach(y => yearEl.innerHTML += `<option value="${y}">${y}</option>`);
-  if ([...yearEl.options].some(o => o.value === keepYear)) yearEl.value = keepYear;
-
-  monthEl.innerHTML = `<option value="ALL">All Months</option>`;
-  MONTHS.forEach((m, i) => monthEl.innerHTML += `<option value="${i+1}">${m}</option>`);
-  if ([...monthEl.options].some(o => o.value === keepMonth)) monthEl.value = keepMonth;
-}
-
-async function reloadStatistics(){
-  await initializePage();
-}
-
-function exportCSV(){
-  if (!groupedCache) {
-    alert("No statistics available yet.");
-    return;
-  }
-
-  const rows = [[
-    "Year","Month",
-    "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
-    "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
-    "Total MBD S","Total MBD D","Total MBD T","Total MBD Q",
-    "Prepared 450cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO",
-    "Male","Female",
-    "Age 16-17","Age 18-20","Age 21-30","Age 31-40","Age 41-50","Age 51-60","Age 60-65","Age 66+"
-  ]];
-
-  Object.keys(groupedCache).sort((a,b)=>b-a).forEach(year => {
-    Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
-      const s = groupedCache[year][key];
-      rows.push([
-        year,
-        MONTHS[(s._meta.month || 1)-1],
-        s.officeBleeding["Walk-in"].S,
-        s.officeBleeding["Walk-in"].D,
-        s.officeBleeding["Walk-in"].T,
-        s.officeBleeding["Walk-in"].Q,
-        s.officeBleeding["Patient Directed"].S,
-        s.officeBleeding["Patient Directed"].D,
-        s.officeBleeding["Patient Directed"].T,
-        s.officeBleeding["Patient Directed"].Q,
-        s.fieldDonation["Total MBD"].S,
-        s.fieldDonation["Total MBD"].D,
-        s.fieldDonation["Total MBD"].T,
-        s.fieldDonation["Total MBD"].Q,
-        s.components["450 cc"],
-        s.components["PRBC"],
-        s.components["FFP"],
-        s.components["PC"],
-        s.components["CRYO"],
-        s.sex["Male"],
-        s.sex["Female"],
-        s.age["16-17"],
-        s.age["18-20"],
-        s.age["21-30"],
-        s.age["31-40"],
-        s.age["41-50"],
-        s.age["51-60"],
-        s.age["60-65"],
-        s.age["66 & above"]
-      ]);
+    reloadPageBtn.addEventListener("click", function() {
+        window.location.reload();
     });
-  });
 
-  const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
-  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "donor-database-statistics.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+    function parseFlexibleTime(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+
+        const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return null;
+
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+        if (hours < 0 || hours > 23) return null;
+        if (minutes < 0 || minutes > 59) return null;
+
+        return {
+            raw,
+            normalized: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+            totalMinutes: (hours * 60) + minutes
+        };
+    }
+
+    function buildTimeFromDigits(digits) {
+        const cleanDigits = String(digits || "").replace(/\D/g, "").slice(0, 4);
+        if (!cleanDigits) return "";
+
+        if (cleanDigits.length === 1) {
+            return cleanDigits;
+        }
+
+        if (cleanDigits.length === 2) {
+            const hourOnly = Number(cleanDigits);
+            if (!Number.isNaN(hourOnly) && hourOnly <= 23) {
+                return cleanDigits;
+            }
+            return `0${cleanDigits.charAt(0)}:${cleanDigits.charAt(1)}`;
+        }
+
+        if (cleanDigits.length === 3) {
+            return `0${cleanDigits.charAt(0)}:${cleanDigits.slice(1)}`;
+        }
+
+        return `${cleanDigits.slice(0, 2)}:${cleanDigits.slice(2, 4)}`;
+    }
+
+    function formatTimeInputValue(value) {
+        const raw = String(value || "").replace(/[^\d:]/g, "");
+        if (!raw) return "";
+
+        if (raw.includes(":")) {
+            const parts = raw.split(":");
+            const hourPart = (parts[0] || "").replace(/\D/g, "").slice(0, 2);
+            const minutePart = (parts[1] || "").replace(/\D/g, "").slice(0, 2);
+
+            if (!hourPart && !minutePart) return "";
+            if (raw.endsWith(":") && hourPart && !minutePart) return `${hourPart}:`;
+            if (minutePart) return `${hourPart}:${minutePart}`;
+            return hourPart;
+        }
+
+        return buildTimeFromDigits(raw);
+    }
+
+    function normalizeTimeInputField(input) {
+        const raw = String(input.value || "").trim();
+        if (!raw) {
+            input.value = "";
+            return "";
+        }
+
+        let formatted = formatTimeInputValue(raw);
+
+        if (!formatted.includes(":")) {
+            const digits = formatted.replace(/\D/g, "");
+            if (digits.length === 1) {
+                formatted = `0${digits}:00`;
+            } else if (digits.length === 2) {
+                const hourOnly = Number(digits);
+                if (!Number.isNaN(hourOnly) && hourOnly <= 23) {
+                    formatted = `${digits.padStart(2, "0")}:00`;
+                }
+            }
+        } else {
+            const parts = formatted.split(":");
+            const hourDigits = (parts[0] || "").replace(/\D/g, "");
+            const minuteDigits = (parts[1] || "").replace(/\D/g, "");
+
+            if (hourDigits && minuteDigits.length === 1) {
+                formatted = `${hourDigits}:${minuteDigits}0`;
+            }
+        }
+
+        const parsed = parseFlexibleTime(formatted);
+        if (parsed) {
+            input.value = parsed.normalized;
+            return parsed.normalized;
+        }
+
+        input.value = formatTimeInputValue(raw);
+        return "";
+    }
+
+    function handleTimeInputAutoFormat(event) {
+        const input = event.target;
+        const before = String(input.value || "");
+        const caretAtEnd = input.selectionStart === before.length;
+        const formatted = formatTimeInputValue(before);
+
+        input.value = formatted;
+
+        if (caretAtEnd) {
+            const nextPos = input.value.length;
+            try {
+                input.setSelectionRange(nextPos, nextPos);
+            } catch (error) {}
+        }
+
+        const parsed = parseFlexibleTime(input.value);
+        validateAndDescribeTimes();
+
+        if (parsed) {
+            const digits = input.value.replace(/\D/g, "");
+            const typedWithColon = before.includes(":");
+            if (typedWithColon || digits.length >= 3) {
+                focusNextField(input);
+            }
+        }
+    }
+
+    function handleTimeInputBlur(event) {
+        normalizeTimeInputField(event.target);
+        validateAndDescribeTimes();
+    }
+
+    function formatMinutesToHoursMinutes(totalMinutes) {
+        const hrs = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        if (hrs > 0 && mins > 0) return `${hrs} hr ${mins} min`;
+        if (hrs > 0) return `${hrs} hr`;
+        return `${mins} min`;
+    }
+
+    function validateAndDescribeTimes() {
+        const started = timeStartedInput.value.trim();
+        const ended = timeEndedInput.value.trim();
+
+        if (!started && !ended) {
+            timeHelperBox.classList.add("hidden");
+            timeHelperBox.textContent = "";
+            return {
+                valid: true,
+                durationMinutes: null,
+                overnight: false,
+                normalizedStarted: "",
+                normalizedEnded: ""
+            };
+        }
+
+        if ((started && !ended) || (!started && ended)) {
+            timeHelperBox.textContent = "Please complete both Time Started and Time Ended.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false };
+        }
+
+        const startParsed = parseFlexibleTime(started);
+        const endParsed = parseFlexibleTime(ended);
+
+        if (!startParsed || !endParsed) {
+            timeHelperBox.textContent = "Invalid time input. Please use 24-hour format like 07:30 or 19:30.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false };
+        }
+
+        let duration = endParsed.totalMinutes - startParsed.totalMinutes;
+        let overnight = false;
+
+        if (duration < 0) {
+            duration += 24 * 60;
+            overnight = true;
+        }
+
+        if (duration === 0) {
+            timeHelperBox.textContent = "Time Started and Time Ended cannot be exactly the same.";
+            timeHelperBox.classList.remove("hidden");
+            return { valid: false };
+        }
+
+        timeHelperBox.textContent = overnight
+            ? `Accepted. Duration: ${formatMinutesToHoursMinutes(duration)} (crossed midnight).`
+            : `Accepted. Duration: ${formatMinutesToHoursMinutes(duration)}.`;
+        timeHelperBox.classList.remove("hidden");
+
+        return {
+            valid: true,
+            durationMinutes: duration,
+            overnight,
+            normalizedStarted: startParsed.normalized,
+            normalizedEnded: endParsed.normalized
+        };
+    }
+
+    function getLocalActiveGroup() {
+        try {
+            const raw = localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            return parsed;
+        } catch (error) {
+            console.error("Failed to read active group from localStorage:", error);
+            return null;
+        }
+    }
+
+    function setLocalActiveGroup(data) {
+        try {
+            localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, JSON.stringify(data));
+        } catch (error) {
+            console.error("Failed to write active group to localStorage:", error);
+            throw new Error("Unable to save active group in this browser.");
+        }
+    }
+
+    function clearLocalActiveGroup() {
+        try {
+            localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY);
+        } catch (error) {
+            console.error("Failed to clear active group from localStorage:", error);
+        }
+    }
+
+    function getActiveGroup() {
+        return getLocalActiveGroup();
+    }
+
+    function setActiveGroup(data) {
+        setLocalActiveGroup(data);
+    }
+
+    function clearActiveGroup() {
+        clearLocalActiveGroup();
+    }
+
+    function renderActiveGroup() {
+        const activeGroup = getActiveGroup();
+
+        if (!activeGroup || !activeGroup.remaining || activeGroup.remaining <= 0) {
+            groupInfoBox.classList.add("hidden");
+            groupInfoBox.textContent = "";
+            return;
+        }
+
+        const originalCount = Number(activeGroup.originalCount || activeGroup.remaining || 0);
+        const remaining = Number(activeGroup.remaining || 0);
+        const currentNumber = Math.max(1, originalCount - remaining + 1);
+        const progressText = originalCount > 0
+            ? `Current donor in group: ${currentNumber} of ${originalCount} | Remaining donors after this entry: ${remaining}`
+            : `Remaining donors: ${remaining}`;
+
+        if (activeGroup.entryDate !== entryDate.value) {
+            groupInfoBox.textContent = `Saved active group found for ${activeGroup.entryDate}. ${progressText}`;
+            groupInfoBox.classList.remove("hidden");
+            return;
+        }
+
+        if (activeGroup.donorType === "Walk-in") {
+            groupInfoBox.textContent = `Active Group: Walk-in | Date: ${activeGroup.entryDate} | ${progressText}`;
+            setSelectedDonorType("Walk-in");
+        } else if (activeGroup.donorType === "MBD") {
+            groupInfoBox.textContent = `Active Group: MBD - ${activeGroup.organization} | Date: ${activeGroup.entryDate} | ${progressText}`;
+            setSelectedDonorType("MBD");
+            mbdDetails.value = activeGroup.organization || "";
+        } else if (activeGroup.donorType === "Patient Directed") {
+            groupInfoBox.textContent = `Active Group: Patient Directed - ${activeGroup.organization || activeGroup.details || ""} | Date: ${activeGroup.entryDate} | ${progressText}`;
+            setSelectedDonorType("Patient Directed");
+            patientDirectedDetails.value = activeGroup.details || "";
+        }
+
+        groupInfoBox.classList.remove("hidden");
+    }
+
+    function consumeGroupEntry() {
+        const activeGroup = getActiveGroup();
+        if (!activeGroup) return { group: null, completed: false };
+
+        const remaining = Number(activeGroup.remaining || 0) - 1;
+
+        if (remaining <= 0) {
+            clearActiveGroup();
+            return { group: null, completed: true };
+        }
+
+        const updatedGroup = {
+            ...activeGroup,
+            remaining: remaining,
+            updatedAtMs: Date.now()
+        };
+
+        setActiveGroup(updatedGroup);
+        return { group: updatedGroup, completed: false };
+    }
+
+    function getFocusableFields() {
+        return Array.from(
+            donorForm.querySelectorAll("input, select, textarea")
+        ).filter(el => {
+            if (el.type === "hidden") return false;
+            if (el.disabled) return false;
+            if (el.offsetParent === null) return false;
+            return true;
+        });
+    }
+
+    function focusNextField(currentElement) {
+        const fields = getFocusableFields();
+        const index = fields.indexOf(currentElement);
+        if (index === -1) return;
+
+        for (let i = index + 1; i < fields.length; i++) {
+            const next = fields[i];
+            if (!next.disabled && next.offsetParent !== null) {
+                next.focus();
+                if (typeof next.select === "function" && next.tagName.toLowerCase() === "input" && next.type !== "date") {
+                    next.select();
+                }
+                break;
+            }
+        }
+    }
+
+    donorForm.addEventListener("keydown", function(e) {
+        const target = e.target;
+        const tag = target.tagName.toLowerCase();
+
+        if (e.key !== "Enter") return;
+        if (tag === "textarea") return;
+        if (target.type === "button" || target.type === "submit" || target.type === "reset") return;
+
+        e.preventDefault();
+        focusNextField(target);
+    });
+
+    donorTypeRadios.forEach(radio => radio.addEventListener("change", updateDonorTypeFields));
+    rangeDonorTypeRadios.forEach(radio => radio.addEventListener("change", updateRangeDonorTypeFields));
+    rangeMbdDetails.addEventListener("input", updateRangeDonorTypeFields);
+    rangePatientDetails.addEventListener("input", updateRangeDonorTypeFields);
+
+    birthday.addEventListener("change", computeAge);
+    entryDate.addEventListener("change", () => {
+        updateAutoTypeSuggestion();
+        renderActiveGroup();
+        updateSerialPrefixByDate();
+    });
+    donorCategory.addEventListener("change", refreshTypeHelper);
+    useSerialPrefix.addEventListener("change", updateSerialModeUI);
+    timeStartedInput.addEventListener("input", handleTimeInputAutoFormat);
+    timeEndedInput.addEventListener("input", handleTimeInputAutoFormat);
+    timeStartedInput.addEventListener("blur", handleTimeInputBlur);
+    timeEndedInput.addEventListener("blur", handleTimeInputBlur);
+
+    generateSerialRangeBtn.addEventListener("click", function() {
+        try {
+            const selectedRangeType = getSelectedRangeDonorType();
+
+            if (!selectedRangeType) {
+                showMessage("Please select the Range Donor Type.", "error");
+                return;
+            }
+
+            if (selectedRangeType === "MBD" && !rangeMbdDetails.value.trim()) {
+                showMessage("Please enter the Range MBD site or organization.", "error");
+                return;
+            }
+
+            if (selectedRangeType === "Patient Directed" && !rangePatientDetails.value.trim()) {
+                showMessage("Please enter the Range patient directed details.", "error");
+                return;
+            }
+
+            const list = buildSerialListFromRange(
+                serialRangeStart.value,
+                serialRangeEnd.value,
+                serialRangeSkip.value
+            );
+            setSerialBatch(list);
+            showMessage(`Serial list generated successfully. ${list.length} serial number(s) ready.`, "success");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+
+    nextSerialBtn.addEventListener("click", function() {
+        loadNextSerialFromBatch(true);
+    });
+
+    clearSerialBatchBtn.addEventListener("click", function() {
+        clearSerialBatch();
+        showMessage("Serial list cleared.", "success");
+    });
+
+    function renderLookupResults(results) {
+        donorLookupResults = results;
+
+        if (!results.length) {
+            lookupResultsBox.classList.add("hidden");
+            lookupResultsBody.innerHTML = "";
+            showMessage("No existing donor matched your search.", "error");
+            return;
+        }
+
+        lookupResultsBody.innerHTML = results.map((record, index) => `
+            <tr>
+                <td><button type="button" class="small-btn blue-btn" onclick="loadExistingDonor(${index})">Load</button></td>
+                <td>${escapeHtml(record.surname || "")}</td>
+                <td>${escapeHtml(record.firstName || "")}</td>
+                <td>${escapeHtml(record.middleName || "")}</td>
+                <td>${escapeHtml(record.birthday || "")}</td>
+                <td>${escapeHtml(record.bloodType || "")}</td>
+                <td>${escapeHtml(record.entryDate || "")}</td>
+                <td>${escapeHtml(record.donorCategory || "New")}</td>
+                <td>${escapeHtml(record.numberOfDonations || 0)}</td>
+            </tr>
+        `).join("");
+
+        lookupResultsBox.classList.remove("hidden");
+    }
+
+    async function searchExistingDonors() {
+        try {
+            clearMessage();
+
+            const keyword = normalizeText(lookupSearch.value);
+
+            if (!keyword) {
+                donorLookupResults = [];
+                lookupResultsBody.innerHTML = "";
+                lookupResultsBox.classList.add("hidden");
+                return;
+            }
+
+            const snapshot = await db.collection("donorDatabase").orderBy("entryDate", "desc").get();
+            const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const groupedLatest = {};
+            allRecords.forEach(record => {
+                const donorKey = getStrongIdentityKey(record);
+
+                if (!groupedLatest[donorKey]) {
+                    groupedLatest[donorKey] = record;
+                } else {
+                    const existing = groupedLatest[donorKey];
+                    const existingDate = existing.entryDate || "";
+                    const newDate = record.entryDate || "";
+                    if (newDate > existingDate) {
+                        groupedLatest[donorKey] = record;
+                    }
+                }
+            });
+
+            let uniqueRecords = Object.values(groupedLatest);
+
+            uniqueRecords = uniqueRecords.filter(record => {
+                const searchable = [
+                    record.suffix,
+                    record.surname,
+                    record.firstName,
+                    record.middleName,
+                    record.birthday,
+                    record.bloodType
+                ].join(" ").toLowerCase();
+
+                const keywordMatch = !keyword || searchable.includes(keyword);
+
+                return keywordMatch;
+            });
+
+            uniqueRecords.sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
+            renderLookupResults(uniqueRecords);
+
+            if (uniqueRecords.length) {
+                showMessage(`${uniqueRecords.length} donor match(es) found.`, "success");
+            } else {
+                showMessage("No existing donor matched your search.", "error");
+            }
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to search existing donors: " + error.message, "error");
+        }
+    }
+
+    window.loadExistingDonor = function(index) {
+        const donor = donorLookupResults[index];
+        if (!donor) return;
+
+        loadedDonorRecord = donor;
+
+        document.getElementById("suffix").value = donor.suffix || "";
+        document.getElementById("surname").value = donor.surname || "";
+        document.getElementById("firstName").value = donor.firstName || "";
+        document.getElementById("middleName").value = donor.middleName || "";
+        document.getElementById("birthday").value = donor.birthday || "";
+        computeAge();
+        document.getElementById("civilStatus").value = donor.civilStatus || "";
+        document.getElementById("sex").value = donor.sex || "";
+        document.getElementById("address").value = donor.address || "";
+        document.getElementById("cityProvince").value = donor.cityProvince || "";
+        document.getElementById("contactNumber").value = donor.contactNumber || "";
+        document.getElementById("occupation").value = donor.occupation || "";
+        document.getElementById("bloodType").value = donor.bloodType || "";
+
+        const previousCount = parseInt(donor.numberOfDonations || "0");
+        numberOfDonations.value = previousCount;
+
+        donorCategory.value = "Auto";
+        updateAutoTypeSuggestion();
+
+        loadedDonorInfo.textContent =
+            `Loaded donor identity only: ${donor.surname || ""}, ${donor.firstName || ""} ${donor.middleName || ""} | ` +
+            `Last donation date: ${donor.entryDate || "-"} | Previous donations: ${donor.numberOfDonations || 0} | ` +
+            `Old donor type/group was preserved in past record and not copied into this new donation entry.`;
+        loadedDonorInfo.classList.remove("hidden");
+
+        showMessage("Existing donor loaded for autofill only. New donation details were kept unchanged.", "success");
+    };
+
+    function clearLoadedDonor() {
+        loadedDonorRecord = null;
+        loadedDonorInfo.classList.add("hidden");
+        loadedDonorInfo.textContent = "";
+        donorCategory.value = "Auto";
+        numberOfDonations.value = "0";
+        updateAutoTypeSuggestion();
+    }
+
+    function clearEntryOnlyFieldsAfterSave() {
+        document.getElementById("suffix").value = "";
+        document.getElementById("surname").value = "";
+        document.getElementById("firstName").value = "";
+        document.getElementById("middleName").value = "";
+        document.getElementById("birthday").value = "";
+        document.getElementById("age").value = "";
+        document.getElementById("civilStatus").selectedIndex = 0;
+        document.getElementById("sex").selectedIndex = 0;
+        document.getElementById("address").value = "";
+        document.getElementById("cityProvince").value = "";
+        document.getElementById("contactNumber").value = "";
+        document.getElementById("occupation").value = "";
+        document.getElementById("bloodType").selectedIndex = 0;
+        document.getElementById("bloodBagBrand").selectedIndex = 0;
+        document.getElementById("bloodBagType").selectedIndex = 0;
+        document.getElementById("amount").selectedIndex = 0;
+        document.getElementById("timeStarted").value = "";
+        document.getElementById("timeEnded").value = "";
+        document.getElementById("remarks").value = "";
+        donorCategory.value = "Auto";
+        numberOfDonations.value = "0";
+        timeHelperBox.classList.add("hidden");
+        timeHelperBox.textContent = "";
+    }
+
+    function triggerLiveDonorSearch() {
+        clearTimeout(donorSearchDebounce);
+        donorSearchDebounce = setTimeout(() => {
+            searchExistingDonors();
+        }, 300);
+    }
+
+    lookupSearch.addEventListener("input", triggerLiveDonorSearch);
+    clearLoadedDonorBtn.addEventListener("click", clearLoadedDonor);
+
+    startWalkInGroupBtn.addEventListener("click", function() {
+        try {
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first.", "error");
+                return;
+            }
+
+            const count = parseInt(walkInCount.value || "0");
+            if (count <= 0) {
+                showMessage("Please enter a valid number of walk-in donors.", "error");
+                return;
+            }
+
+            setActiveGroup({
+                entryDate: entryDate.value,
+                donorType: "Walk-in",
+                organization: "",
+                details: "",
+                remaining: count,
+                originalCount: count,
+                createdBy: currentUser.uid,
+                createdAtMs: Date.now(),
+                updatedAtMs: Date.now()
+            });
+
+            setSelectedDonorType("Walk-in");
+            renderActiveGroup();
+            showMessage(`Walk-in group started for ${count} donors.`, "success");
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to start Walk-in group: " + error.message, "error");
+        }
+    });
+
+    startMbdGroupBtn.addEventListener("click", function() {
+        try {
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first.", "error");
+                return;
+            }
+
+            const org = mbdDetails.value.trim();
+            const count = parseInt(mbdCount.value || "0");
+
+            if (!org) {
+                showMessage("Please enter MBD site / organization.", "error");
+                return;
+            }
+
+            if (count <= 0) {
+                showMessage("Please enter a valid number of MBD donors.", "error");
+                return;
+            }
+
+            setActiveGroup({
+                entryDate: entryDate.value,
+                donorType: "MBD",
+                organization: org,
+                details: "",
+                remaining: count,
+                originalCount: count,
+                createdBy: currentUser.uid,
+                createdAtMs: Date.now(),
+                updatedAtMs: Date.now()
+            });
+
+            setSelectedDonorType("MBD");
+            renderActiveGroup();
+            showMessage(`MBD group started for ${count} donors under ${org}.`, "success");
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to start MBD group: " + error.message, "error");
+        }
+    });
+
+    endGroupBtn.addEventListener("click", function() {
+        clearActiveGroup();
+        renderActiveGroup();
+        showMessage("Active group ended manually.", "success");
+    });
+
+    donorForm.addEventListener("submit", async function(e) {
+        e.preventDefault();
+
+        if (isSaving) return false;
+
+        try {
+            clearMessage();
+
+            if (!authReady || !currentUser) {
+                showMessage("You must be logged in first before saving donor data.", "error");
+                return false;
+            }
+
+            const finalSerialNumber = getFinalSerialNumber();
+            const donorTypeValue = getSelectedDonorType();
+            const patientDirectedValue = patientDirectedDetails.value.trim();
+            const mbdValue = mbdDetails.value.trim();
+            const activeGroup = getActiveGroup();
+            const serialBatch = getSerialBatch();
+
+            const timeValidation = validateAndDescribeTimes();
+            if (!timeValidation.valid) {
+                return false;
+            }
+
+            let hasMatchingActiveGroup = false;
+
+            if (activeGroup && activeGroup.entryDate === entryDate.value && activeGroup.remaining > 0) {
+                if (activeGroup.donorType === "Walk-in") {
+                    hasMatchingActiveGroup = true;
+                    if (!donorTypeValue) setSelectedDonorType("Walk-in");
+                } else if (activeGroup.donorType === "MBD") {
+                    hasMatchingActiveGroup = true;
+                    setSelectedDonorType("MBD");
+                    if (!mbdDetails.value.trim()) mbdDetails.value = activeGroup.organization || "";
+                } else if (activeGroup.donorType === "Patient Directed") {
+                    hasMatchingActiveGroup = true;
+                    setSelectedDonorType("Patient Directed");
+                    if (!patientDirectedDetails.value.trim()) patientDirectedDetails.value = activeGroup.details || "";
+                }
+            }
+
+            const rangeType = serialBatch ? (serialBatch.rangeDonorType || "") : "";
+            if (rangeType && !donorTypeValue) {
+                setSelectedDonorType(rangeType);
+
+                if (rangeType === "MBD" && serialBatch.rangeMbdDetails) {
+                    mbdDetails.value = serialBatch.rangeMbdDetails;
+                }
+                if (rangeType === "Patient Directed" && serialBatch.rangePatientDetails) {
+                    patientDirectedDetails.value = serialBatch.rangePatientDetails;
+                }
+            }
+
+            if (!entryDate.value) {
+                showMessage("Please enter date.", "error");
+                return false;
+            }
+
+            if (!finalSerialNumber) {
+                showMessage("Please enter serial number.", "error");
+                return false;
+            }
+
+            if (!getSelectedDonorType()) {
+                showMessage("Please select donor type.", "error");
+                return false;
+            }
+
+            if (getSelectedDonorType() === "Patient Directed" && !patientDirectedDetails.value.trim()) {
+                showMessage("Please enter patient directed details.", "error");
+                return false;
+            }
+
+            if (getSelectedDonorType() === "MBD" && !mbdDetails.value.trim()) {
+                showMessage("Please enter MBD site / organization.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("surname").value.trim()) {
+                showMessage("Please enter surname.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("firstName").value.trim()) {
+                showMessage("Please enter first name.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("birthday").value) {
+                showMessage("Please enter birthday.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("civilStatus").value) {
+                showMessage("Please select civil status.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("sex").value) {
+                showMessage("Please select sex.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("address").value.trim()) {
+                showMessage("Please enter address.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("cityProvince").value.trim()) {
+                showMessage("Please enter city / province.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodType").value) {
+                showMessage("Please select blood type.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodBagBrand").value) {
+                showMessage("Please select blood bag brand.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("bloodBagType").value) {
+                showMessage("Please select blood bag type.", "error");
+                return false;
+            }
+
+            if (!document.getElementById("amount").value) {
+                showMessage("Please select amount.", "error");
+                return false;
+            }
+
+            updateAutoTypeSuggestion();
+            setSavingState(true);
+
+            const donorData = {
+                entryDate: entryDate.value,
+                serialNumber: finalSerialNumber,
+                serialPrefixEnabled: useSerialPrefix.checked,
+                serialPrefixValue: serialPrefix.textContent.trim(),
+                donorType: donorTypeValue,
+                patientDirectedDetails: donorTypeValue === "Patient Directed" ? patientDirectedValue : "",
+                mbdDetails: donorTypeValue === "MBD" ? mbdValue : "",
+                suffix: document.getElementById("suffix").value.trim(),
+                surname: document.getElementById("surname").value.trim(),
+                firstName: document.getElementById("firstName").value.trim(),
+                middleName: document.getElementById("middleName").value.trim(),
+                birthday: document.getElementById("birthday").value,
+                age: parseInt(document.getElementById("age").value || "0"),
+                civilStatus: document.getElementById("civilStatus").value,
+                sex: document.getElementById("sex").value,
+                address: document.getElementById("address").value.trim(),
+                cityProvince: document.getElementById("cityProvince").value.trim(),
+                contactNumber: document.getElementById("contactNumber").value.trim(),
+                occupation: document.getElementById("occupation").value.trim(),
+                donorCategoryMode: donorCategory.value,
+                donorCategory: getFinalDonorCategoryToSave(),
+                donorCategoryAutoSuggestion: autoTypeSuggestion || "",
+                donorCategoryAutoReason: autoTypeReason || "",
+                numberOfDonations: parseInt(numberOfDonations.value || "0"),
+                bloodType: document.getElementById("bloodType").value,
+                bloodBagBrand: document.getElementById("bloodBagBrand").value,
+                bloodBagType: document.getElementById("bloodBagType").value,
+                amount: document.getElementById("amount").value,
+                timeStarted: timeValidation.normalizedStarted || "",
+                timeEnded: timeValidation.normalizedEnded || "",
+                timeStartedNormalized: timeValidation.normalizedStarted || "",
+                timeEndedNormalized: timeValidation.normalizedEnded || "",
+                timeDurationMinutes: timeValidation.durationMinutes,
+                timeCrossedMidnight: timeValidation.overnight,
+                remarks: document.getElementById("remarks").value.trim(),
+                loadedFromRecordId: loadedDonorRecord ? loadedDonorRecord.id : "",
+                lastDonationDateReference: loadedDonorRecord ? (loadedDonorRecord.entryDate || "") : "",
+                groupedEntryApplied: hasMatchingActiveGroup,
+                groupedEntryType: hasMatchingActiveGroup ? activeGroup.donorType : "",
+                groupedEntryOrganization: hasMatchingActiveGroup ? (activeGroup.organization || "") : "",
+                serialBatchActive: !!getSerialBatch(),
+                serialBatchAssignedType: serialBatch ? (serialBatch.rangeDonorType || "") : "",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: currentUser.uid
+            };
+
+            await db.collection("donorDatabase").add(donorData);
+
+            let groupResult = { group: null, completed: false };
+            if (hasMatchingActiveGroup) {
+                groupResult = consumeGroupEntry();
+            }
+
+            const serialResult = consumeSerialBatchAfterSave();
+
+            clearLoadedDonor();
+            clearEntryOnlyFieldsAfterSave();
+
+            const refreshedGroup = getActiveGroup();
+
+            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
+                if (refreshedGroup.donorType === "Walk-in") {
+                    setSelectedDonorType("Walk-in");
+                } else if (refreshedGroup.donorType === "MBD") {
+                    setSelectedDonorType("MBD");
+                    mbdDetails.value = refreshedGroup.organization || "";
+                } else if (refreshedGroup.donorType === "Patient Directed") {
+                    setSelectedDonorType("Patient Directed");
+                    patientDirectedDetails.value = refreshedGroup.details || "";
+                }
+            }
+
+            renderActiveGroup();
+            updateAutoTypeSuggestion();
+            updateSerialPrefixByDate();
+
+            if (serialResult.batch && serialResult.batch.list && serialResult.batch.list.length) {
+                serialNumberInput.value = serialResult.batch.list[0];
+            } else {
+                serialNumberInput.value = "";
+            }
+
+            serialNumberInput.focus();
+
+            let successParts = ["Donor record saved successfully."];
+
+            if (serialResult.batch && serialResult.batch.list && serialResult.batch.list.length) {
+                successParts.push(`Next serial loaded automatically. Remaining serials: ${serialResult.batch.list.length}.`);
+            }
+
+            if (serialResult.completed) {
+                successParts.push("Serial range completed.");
+            }
+
+            if (refreshedGroup && refreshedGroup.entryDate === entryDate.value && refreshedGroup.remaining > 0) {
+                successParts.push(`Active ${refreshedGroup.donorType} group remaining: ${refreshedGroup.remaining}.`);
+            }
+
+            if (groupResult.completed) {
+                successParts.push("Group completed.");
+                walkInCount.value = "";
+                mbdCount.value = "";
+            }
+
+            if (!refreshedGroup && !groupResult.completed) {
+                walkInCount.value = "";
+                mbdCount.value = "";
+            }
+
+            showMessage(successParts.join(" "), "success");
+            return false;
+
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to save donor record: " + error.message, "error");
+            return false;
+        } finally {
+            setSavingState(false);
+        }
+    });
+
+    donorForm.addEventListener("reset", function() {
+        setTimeout(() => {
+            clearLoadedDonor();
+            setTodayDate();
+            age.value = "";
+            donorCategory.value = "Auto";
+            numberOfDonations.value = "0";
+            patientDirectedBox.classList.add("hidden");
+            walkInBox.classList.add("hidden");
+            mbdBox.classList.add("hidden");
+            clearMessage();
+            timeHelperBox.classList.add("hidden");
+            timeHelperBox.textContent = "";
+            updateSerialModeUI();
+            renderActiveGroup();
+            renderSerialBatchInfo();
+            updateAutoTypeSuggestion();
+
+            const batch = getSerialBatch();
+            if (batch && batch.list && batch.list.length) {
+                serialNumberInput.value = batch.list[0];
+            }
+        }, 50);
+    });
+
+    auth.onAuthStateChanged((user) => {
+        authReady = true;
+        currentUser = user;
+
+        if (user) {
+            setAuthIndicator(`Logged in as: ${user.email || user.uid}`, true);
+            renderActiveGroup();
+        } else {
+            setAuthIndicator("No logged in user detected on this page.", false);
+        }
+    });
+
+    setTodayDate();
+    donorCategory.value = "Auto";
+    numberOfDonations.value = "0";
+    updateAutoTypeSuggestion();
+    updateSerialModeUI();
+    validateAndDescribeTimes();
+    renderActiveGroup();
+    renderSerialBatchInfo();
+    updateRangeDonorTypeFields();
+    setSerialRangeCollapsed(false);
+
+    const existingBatch = getSerialBatch();
+    if (existingBatch && existingBatch.list && existingBatch.list.length) {
+        serialNumberInput.value = existingBatch.list[0];
+
+        if (existingBatch.rangeDonorType) {
+            rangeDonorTypeRadios.forEach(radio => {
+                radio.checked = radio.value === existingBatch.rangeDonorType;
+            });
+        }
+
+        rangeMbdDetails.value = existingBatch.rangeMbdDetails || "";
+        rangePatientDetails.value = existingBatch.rangePatientDetails || "";
+        updateRangeDonorTypeFields();
+    }
 </script>
+
 </body>
 </html>
