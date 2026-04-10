@@ -839,8 +839,13 @@
                         <input type="text" id="cityProvince" required>
                     </div>
 
-                    <div class="field-group span-12">
-                        <label for="occupation">13. Occupation</label>
+                    <div class="field-group span-6">
+                        <label for="contactNumber">13. Contact Number</label>
+                        <input type="text" id="contactNumber">
+                    </div>
+
+                    <div class="field-group span-6">
+                        <label for="occupation">14. Occupation</label>
                         <input type="text" id="occupation">
                     </div>
 
@@ -1506,53 +1511,27 @@
     }
 
     function formatTimeInputValue(value) {
-        const raw = String(value || "");
-        const hasColon = raw.includes(":");
+        const raw = String(value || "").replace(/[^\d:]/g, "");
+        if (!raw) return "";
 
-        if (hasColon) {
-            const cleaned = raw.replace(/[^\d:]/g, "");
-            const parts = cleaned.split(":");
-            const hourPart = (parts[0] || "").slice(0, 2);
-            const minutePart = (parts[1] || "").slice(0, 2);
-
-            if (cleaned.endsWith(":") && parts.length === 2 && parts[1] === "") {
-                return hourPart ? `${hourPart}:` : "";
-            }
-
-            if (parts.length === 1) {
-                return hourPart;
-            }
-
+        if (raw.includes(":")) {
+            const parts = raw.split(":");
+            const hourPart = (parts[0] || "").replace(/\D/g, "").slice(0, 2);
+            const minutePart = (parts[1] || "").replace(/\D/g, "").slice(0, 2);
             return `${hourPart}:${minutePart}`;
         }
 
         const digits = raw.replace(/\D/g, "").slice(0, 4);
         if (!digits) return "";
-
-        if (digits.length <= 2) {
-            return digits;
-        }
-
-        if (digits.length === 3) {
-            return `${digits.charAt(0)}:${digits.slice(1)}`;
-        }
-
+        if (digits.length === 1) return `${digits}:`;
+        if (digits.length === 2) return `${digits}:`;
+        if (digits.length === 3) return `${digits.charAt(0)}:${digits.slice(1)}`;
         return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
     }
 
     function normalizeTimeInputField(input) {
         let formatted = formatTimeInputValue(input.value);
         input.value = formatted;
-
-        if (/^\d{1,2}$/.test(formatted)) {
-            return "";
-        }
-
-        if (/^\d{1,2}:\d{1}$/.test(formatted)) {
-            const [h, m] = formatted.split(":");
-            formatted = `${h}:${m}0`;
-            input.value = formatted;
-        }
 
         const parsed = parseFlexibleTime(formatted);
         if (parsed) {
@@ -1565,17 +1544,19 @@
 
     function handleTimeInputAutoFormat(event) {
         const input = event.target;
-        const previousValue = input.value;
-        input.value = formatTimeInputValue(input.value);
+        const currentValue = String(input.value || "");
+        const digitCount = currentValue.replace(/\D/g, "").length;
+        const hadColon = currentValue.includes(":");
+
+        input.value = formatTimeInputValue(currentValue);
 
         const parsed = parseFlexibleTime(input.value);
-        if (parsed && input.value !== previousValue) {
-            input.value = parsed.normalized;
-        }
 
-        if (parsed && input.value.length >= 4) {
+        if (parsed) {
             validateAndDescribeTimes();
-            focusNextField(input);
+            if (hadColon || digitCount >= 3) {
+                focusNextField(input);
+            }
             return;
         }
 
@@ -1959,6 +1940,7 @@
         document.getElementById("sex").value = donor.sex || "";
         document.getElementById("address").value = donor.address || "";
         document.getElementById("cityProvince").value = donor.cityProvince || "";
+        document.getElementById("contactNumber").value = donor.contactNumber || "";
         document.getElementById("occupation").value = donor.occupation || "";
         document.getElementById("bloodType").value = donor.bloodType || "";
 
@@ -1997,6 +1979,7 @@
         document.getElementById("sex").selectedIndex = 0;
         document.getElementById("address").value = "";
         document.getElementById("cityProvince").value = "";
+        document.getElementById("contactNumber").value = "";
         document.getElementById("occupation").value = "";
         document.getElementById("bloodType").selectedIndex = 0;
         document.getElementById("bloodBagBrand").selectedIndex = 0;
@@ -2257,8 +2240,8 @@
                 sex: document.getElementById("sex").value,
                 address: document.getElementById("address").value.trim(),
                 cityProvince: document.getElementById("cityProvince").value.trim(),
+                contactNumber: document.getElementById("contactNumber").value.trim(),
                 occupation: document.getElementById("occupation").value.trim(),
-                contactNumber: "",
                 donorCategoryMode: donorCategory.value,
                 donorCategory: getFinalDonorCategoryToSave(),
                 donorCategoryAutoSuggestion: autoTypeSuggestion || "",
