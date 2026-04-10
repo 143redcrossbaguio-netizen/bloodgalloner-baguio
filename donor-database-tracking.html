@@ -1269,6 +1269,90 @@
         return `<input class="edit-input" type="${type}" value="${escapeHtml(value || "")}">`;
     }
 
+    function getMonthLabel(monthValue) {
+        const labelParts = monthValue.split("-");
+        return `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
+    }
+
+    function buildPrintGroupBlocks(records) {
+        const donorTypeGroups = [
+            { label: "MBD", type: "MBD" },
+            { label: "Walk-in", type: "Walk-in" },
+            { label: "Patient-Directed", type: "Patient Directed" }
+        ];
+
+        return donorTypeGroups.map(group => {
+            const groupRecords = records.filter(record => record.donorType === group.type);
+            if (!groupRecords.length) return "";
+
+            const rows = groupRecords.map(record => {
+                const donorKey = buildDonorKey(record);
+                const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+                const groupDisplay = getCategoryDisplay(record);
+
+                return `
+                    <tr>
+                        <td>${escapeHtml(record._resolvedEntryDate)}</td>
+                        <td>${escapeHtml(groupDisplay)}</td>
+                        <td>${escapeHtml(record.surname)}</td>
+                        <td>${escapeHtml(record.firstName)}</td>
+                        <td>${escapeHtml(record.middleName)}</td>
+                        <td>${escapeHtml(record._resolvedBirthday)}</td>
+                        <td>${escapeHtml(record.age)}</td>
+                        <td>${escapeHtml(record.sex)}</td>
+                        <td>${escapeHtml(record.contactNumber)}</td>
+                        <td>${escapeHtml(record.address)}</td>
+                        <td>${escapeHtml(record.cityProvince)}</td>
+                        <td>${escapeHtml(record.donorCategory || "")}</td>
+                        <td>${escapeHtml(latestTotal)}</td>
+                        <td>${escapeHtml(record.bloodType)}</td>
+                        <td>${escapeHtml(record.serialNumber)}</td>
+                        <td>${escapeHtml(record.amount)}</td>
+                        <td>${escapeHtml(record.bloodBagBrand)}</td>
+                        <td>${escapeHtml(record.bloodBagType)}</td>
+                        <td>${escapeHtml(record._resolvedTimeStarted)}</td>
+                        <td>${escapeHtml(record._resolvedTimeEnded)}</td>
+                        <td>${escapeHtml(record.remarks)}</td>
+                    </tr>
+                `;
+            }).join("");
+
+            return `
+                <section class="print-group">
+                    <div class="print-group-title">${escapeHtml(group.label)} (${groupRecords.length})</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Entry Date</th>
+                                <th>${escapeHtml(group.label)}</th>
+                                <th>Surname</th>
+                                <th>Given Name</th>
+                                <th>Middle Name</th>
+                                <th>Birthday</th>
+                                <th>Age</th>
+                                <th>Sex</th>
+                                <th>Contact Number</th>
+                                <th>House Number/Purok/Street Name</th>
+                                <th>Barangay/City</th>
+                                <th>Type of Donor</th>
+                                <th># of Donations</th>
+                                <th>Blood Type</th>
+                                <th>Serial Number</th>
+                                <th>Amount</th>
+                                <th>Blood Bag Used</th>
+                                <th>Type of Blood Bag</th>
+                                <th>Time Started</th>
+                                <th>Time Ended</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </section>
+            `;
+        }).join("");
+    }
+
     window.startEdit = function(id) {
         hideDuplicateBox();
 
@@ -1407,37 +1491,7 @@
     }
 
     function buildPrintableTable(records, monthLabel) {
-        const rows = records.map(record => {
-            const donorKey = buildDonorKey(record);
-            const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
-
-            return `
-                <tr>
-                    <td>${escapeHtml(record.donorType === "MBD" ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeHtml(record.donorType === "Walk-in" ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeHtml(record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeHtml(record.surname)}</td>
-                    <td>${escapeHtml(record.firstName)}</td>
-                    <td>${escapeHtml(record.middleName)}</td>
-                    <td>${escapeHtml(record._resolvedBirthday)}</td>
-                    <td>${escapeHtml(record.age)}</td>
-                    <td>${escapeHtml(record.sex)}</td>
-                    <td>${escapeHtml(record.contactNumber)}</td>
-                    <td>${escapeHtml(record.address)}</td>
-                    <td>${escapeHtml(record.cityProvince)}</td>
-                    <td>${escapeHtml(record.donorCategory || "")}</td>
-                    <td>${escapeHtml(latestTotal)}</td>
-                    <td>${escapeHtml(record.bloodType)}</td>
-                    <td>${escapeHtml(record.serialNumber)}</td>
-                    <td>${escapeHtml(record.amount)}</td>
-                    <td>${escapeHtml(record.bloodBagBrand)}</td>
-                    <td>${escapeHtml(record.bloodBagType)}</td>
-                    <td>${escapeHtml(record._resolvedTimeStarted)}</td>
-                    <td>${escapeHtml(record._resolvedTimeEnded)}</td>
-                    <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                </tr>
-            `;
-        }).join("");
+        const groupBlocks = buildPrintGroupBlocks(records);
 
         return `
             <!DOCTYPE html>
@@ -1445,53 +1499,175 @@
             <head>
                 <title>Print ${monthLabel}</title>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    h2 { margin: 0 0 10px 0; color: #8b0000; }
-                    .sub { margin-bottom: 12px; color: #555; font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-                    th, td { border: 1px solid #bbb; padding: 6px 7px; text-align: center; white-space: nowrap; }
-                    th { background: #efefef; }
-                    .mbd { background: #e7c1a7; }
-                    .walk { background: #b9d2f0; }
-                    .patient { background: #bcd796; }
-                    .donorcat { background: #efe6ff; }
+                    @page {
+                        size: landscape;
+                        margin: 10mm;
+                    }
+                    * { box-sizing: border-box; }
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 0;
+                        color: #111827;
+                    }
+                    .print-page {
+                        page-break-after: always;
+                        break-after: page;
+                        min-height: 100vh;
+                        padding: 10px 0;
+                    }
+                    .print-page:last-child {
+                        page-break-after: auto;
+                        break-after: auto;
+                    }
+                    h2 {
+                        margin: 0 0 6px 0;
+                        color: #8b0000;
+                        font-size: 20px;
+                    }
+                    .sub {
+                        margin-bottom: 10px;
+                        color: #555;
+                        font-weight: bold;
+                        font-size: 13px;
+                    }
+                    .print-group {
+                        width: 100%;
+                    }
+                    .print-group-title {
+                        margin: 0 0 8px 0;
+                        padding: 8px 10px;
+                        background: #eef4f9;
+                        border: 1px solid #dbe3ec;
+                        font-weight: bold;
+                        font-size: 13px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        table-layout: auto;
+                        font-size: 10px;
+                    }
+                    th, td {
+                        border: 1px solid #bbb;
+                        padding: 4px 5px;
+                        text-align: center;
+                        white-space: nowrap;
+                    }
+                    th {
+                        background: #efefef;
+                    }
+                    thead {
+                        display: table-header-group;
+                    }
+                    tfoot {
+                        display: table-footer-group;
+                    }
+                    tr, td, th {
+                        page-break-inside: avoid;
+                    }
                 </style>
             </head>
-            <body>
-                <h2>Donor Database Tracking</h2>
-                <div class="sub">${monthLabel}</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="mbd">MBD</th>
-                            <th class="walk">Walk-in</th>
-                            <th class="patient">Patient-Directed</th>
-                            <th>Surname</th>
-                            <th>Given Name</th>
-                            <th>Middle Name</th>
-                            <th>Birthday</th>
-                            <th>Age</th>
-                            <th>Sex</th>
-                            <th>Contact Number</th>
-                            <th>House Number/Purok/Street Name</th>
-                            <th>Barangay/City</th>
-                            <th class="donorcat">Type of Donor</th>
-                            <th># of Donations</th>
-                            <th>Blood Type</th>
-                            <th>Serial Number</th>
-                            <th>Amount</th>
-                            <th>Blood Bag Used</th>
-                            <th>Type of Blood Bag</th>
-                            <th>Time Started</th>
-                            <th>Time Ended</th>
-                            <th>Entry Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </body>
+            <body>${groupBlocks.split("</section>").filter(Boolean).map(block => `
+                <div class="print-page">
+                    <h2>Donor Database Tracking</h2>
+                    <div class="sub">${monthLabel}</div>
+                    ${block}</section>
+                </div>
+            `).join("")}</body>
             </html>
         `;
+    }
+
+    function buildGroupedCsv(records) {
+        const grouped = groupDonors(records);
+        const sortedYears = Object.keys(grouped).sort((a, b) => {
+            if (a === "No Year") return 1;
+            if (b === "No Year") return -1;
+            return Number(b) - Number(a);
+        });
+
+        const lines = [];
+
+        sortedYears.forEach(year => {
+            lines.push([`Year: ${year}`]);
+            const sortedMonths = Object.keys(grouped[year]).sort((a, b) => Number(b) - Number(a));
+
+            sortedMonths.forEach(month => {
+                const monthBlock = grouped[year][month];
+                const recordsInMonth = monthBlock.records;
+
+                lines.push([`Month: ${monthBlock.monthName} ${year}`]);
+                lines.push([
+                    `Entries: ${recordsInMonth.length}`,
+                    `MBD: ${countType(recordsInMonth, "MBD")}`,
+                    `Walk-in: ${countType(recordsInMonth, "Walk-in")}`,
+                    `Patient-Directed: ${countType(recordsInMonth, "Patient Directed")}`,
+                    `New: ${recordsInMonth.filter(r => r.donorCategory === "New").length}`,
+                    `Repeat: ${recordsInMonth.filter(r => r.donorCategory === "Repeat").length}`,
+                    `Lapse: ${recordsInMonth.filter(r => r.donorCategory === "Lapse").length}`
+                ]);
+                lines.push([
+                    "Entry Date",
+                    "MBD",
+                    "Walk-in",
+                    "Patient-Directed",
+                    "Surname",
+                    "Given Name",
+                    "Middle Name",
+                    "Birthday",
+                    "Age",
+                    "Sex",
+                    "Contact Number",
+                    "House Number/Purok/Street Name",
+                    "Barangay/City",
+                    "Type of Donor",
+                    "# of Donations",
+                    "Blood Type",
+                    "Serial Number",
+                    "Amount",
+                    "Blood Bag Used",
+                    "Type of Blood Bag",
+                    "Time Started",
+                    "Time Ended",
+                    "Remarks"
+                ]);
+
+                recordsInMonth.forEach(record => {
+                    const donorKey = buildDonorKey(record);
+                    const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+
+                    lines.push([
+                        record._resolvedEntryDate || "",
+                        record.donorType === "MBD" ? getCategoryDisplay(record) : "",
+                        record.donorType === "Walk-in" ? getCategoryDisplay(record) : "",
+                        record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "",
+                        record.surname || "",
+                        record.firstName || "",
+                        record.middleName || "",
+                        record._resolvedBirthday || "",
+                        record.age || "",
+                        record.sex || "",
+                        record.contactNumber || "",
+                        record.address || "",
+                        record.cityProvince || "",
+                        record.donorCategory || "",
+                        latestTotal,
+                        record.bloodType || "",
+                        record.serialNumber || "",
+                        record.amount || "",
+                        record.bloodBagBrand || "",
+                        record.bloodBagType || "",
+                        record._resolvedTimeStarted || "",
+                        record._resolvedTimeEnded || "",
+                        record.remarks || ""
+                    ]);
+                });
+
+                lines.push([]);
+            });
+        });
+
+        return lines.map(row => row.map(csvEscape).join(",")).join("\n");
     }
 
     function exportCsv(records, fileLabel) {
@@ -1500,68 +1676,7 @@
             return;
         }
 
-        const header = [
-            "MBD",
-            "Walk-in",
-            "Patient-Directed",
-            "Surname",
-            "Given Name",
-            "Middle Name",
-            "Birthday",
-            "Age",
-            "Sex",
-            "Contact Number",
-            "House Number/Purok/Street Name",
-            "Barangay/City",
-            "Type of Donor",
-            "# of Donations",
-            "Blood Type",
-            "Serial Number",
-            "Amount",
-            "Blood Bag Used",
-            "Type of Blood Bag",
-            "Time Started",
-            "Time Ended",
-            "Entry Date",
-            "Remarks"
-        ];
-
-        const rows = records.map(record => {
-            const donorKey = buildDonorKey(record);
-            const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
-
-            return [
-                record.donorType === "MBD" ? getCategoryDisplay(record) : "",
-                record.donorType === "Walk-in" ? getCategoryDisplay(record) : "",
-                record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "",
-                record.surname || "",
-                record.firstName || "",
-                record.middleName || "",
-                record._resolvedBirthday || "",
-                record.age || "",
-                record.sex || "",
-                record.contactNumber || "",
-                record.address || "",
-                record.cityProvince || "",
-                record.donorCategory || "",
-                latestTotal,
-                record.bloodType || "",
-                record.serialNumber || "",
-                record.amount || "",
-                record.bloodBagBrand || "",
-                record.bloodBagType || "",
-                record._resolvedTimeStarted || "",
-                record._resolvedTimeEnded || "",
-                record._resolvedEntryDate || "",
-                record.remarks || ""
-            ];
-        });
-
-        const csvContent = [
-            header.map(csvEscape).join(","),
-            ...rows.map(row => row.map(csvEscape).join(","))
-        ].join("\n");
-
+        const csvContent = buildGroupedCsv(records);
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -1571,6 +1686,7 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
     window.printOneMonth = function(monthValue) {
@@ -1580,9 +1696,7 @@
             return;
         }
 
-        const labelParts = monthValue.split("-");
-        const monthLabel = `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
-
+        const monthLabel = getMonthLabel(monthValue);
         const printWindow = window.open("", "_blank");
         printWindow.document.write(buildPrintableTable(records, monthLabel));
         printWindow.document.close();
