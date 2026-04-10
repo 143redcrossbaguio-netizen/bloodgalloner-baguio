@@ -305,6 +305,101 @@
       min-width:0;
     }
 
+    @media print{
+      @page{
+        size: landscape;
+        margin: 10mm;
+      }
+      body{
+        background:#fff;
+        color:#111827;
+      }
+      header{
+        position:static;
+        box-shadow:none;
+        margin-bottom:12px;
+        page-break-after:avoid;
+      }
+      .page{
+        width:100%;
+        margin:0;
+      }
+      .card{
+        box-shadow:none;
+        border:1px solid #d6dde6;
+        break-inside:avoid;
+        page-break-inside:avoid;
+      }
+      .toolbar,
+      .helper-note,
+      .panel-buttons,
+      .status,
+      .mapping-form,
+      .mapping-actions button,
+      .daily-dropdown-btn{
+        display:none !important;
+      }
+      .panel{
+        display:none !important;
+      }
+      .panel.active{
+        display:block !important;
+      }
+      .summary-year-content,
+      .year-content,
+      .month-content,
+      .section-body{
+        display:block !important;
+      }
+      .summary-year-block,
+      .summary-box,
+      .year-block,
+      .month-block,
+      .sheet-block,
+      .table-wrap,
+      table,
+      tr,
+      td,
+      th{
+        break-inside:avoid;
+        page-break-inside:avoid;
+      }
+      .summary-year-block,
+      .year-block,
+      .month-block{
+        page-break-before:auto;
+      }
+      .sheet-block{
+        page-break-before:always;
+      }
+      .sheet-block:first-child{
+        page-break-before:auto;
+      }
+      .details-layout{
+        display:block;
+      }
+      .details-column + .details-column{
+        margin-top:16px;
+        page-break-before:always;
+      }
+      .daily-dropdown-content{
+        display:block !important;
+      }
+      .table-wrap{
+        overflow:visible;
+      }
+      table{
+        min-width:0;
+        width:100%;
+      }
+      th{
+        background:#f3f4f6 !important;
+      }
+      button:hover{
+        transform:none;
+      }
+    }
+
     @media (max-width:1200px){
       .details-layout{grid-template-columns:1fr}
       .toolbar,.mapping-form,.summary-grid{grid-template-columns:1fr 1fr}
@@ -338,7 +433,7 @@
         <input id="searchText" type="text" placeholder="Search group / partner">
       </div>
       <button class="btn-red" onclick="reloadStatistics()">Reload Statistics</button>
-      <button class="btn-blue" onclick="window.print()">Print</button>
+      <button class="btn-blue" onclick="printStatistics()">Print</button>
       <button class="btn-green" onclick="exportCSV()">Export CSV</button>
     </div>
     <div class="helper-note">
@@ -2111,60 +2206,265 @@ async function reloadStatistics(){
   await initializePage();
 }
 
+function printStatistics(){
+  window.print();
+}
+
+function buildStatisticsCsv(){
+  if (!groupedCache) return "";
+
+  const lines = [];
+  const years = Object.keys(groupedCache).sort((a,b)=>b.localeCompare(a));
+  const query = String(document.getElementById("searchText").value || "").trim();
+
+  lines.push(["Donor Database Statistics"]);
+  lines.push([
+    `Year Filter: ${document.getElementById("filterYear").value === "ALL" ? "All Years" : document.getElementById("filterYear").value}`,
+    `Month Filter: ${document.getElementById("filterMonth").value === "ALL" ? "All Months" : MONTHS[Number(document.getElementById("filterMonth").value) - 1] || "All Months"}`,
+    `Search Group: ${query || "None"}`
+  ]);
+  lines.push([]);
+
+  lines.push(["Monthly Overview"]);
+  lines.push(["Year","Month","Total Donors","Office","Field","Prepared","Requested"]);
+  years.forEach(year => {
+    Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
+      const s = groupedCache[year][key];
+      lines.push([
+        year,
+        getMonthLabel(s._meta || {}),
+        s.totalDonors,
+        sumBagGroup(s.officeBleeding["Walk-in"]) + sumBagGroup(s.officeBleeding["Patient Directed"]),
+        sumBagGroup(s.fieldDonation["Total MBD"]),
+        sumVals(s.components),
+        sumVals(s.requests)
+      ]);
+
+      const dailyKeys = Object.keys(s.dailyCounts || {}).sort((a,b)=>a.localeCompare(b));
+      if (dailyKeys.length) {
+        lines.push(["Daily Count of Donors"]);
+        lines.push(["Date","Count"]);
+        dailyKeys.forEach(dayKey => {
+          const d = parseDate(dayKey);
+          const label = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
+          lines.push([label, s.dailyCounts[dayKey]]);
+        });
+      }
+      lines.push([]);
+    });
+  });
+
+  lines.push(["Male / Female Per Month"]);
+  lines.push(["Month","Male","Female","Total"]);
+  flattenMonths(groupedCache).forEach(s => {
+    lines.push([
+      getMonthLabel(s._meta || {}),
+      s.sex["Male"],
+      s.sex["Female"],
+      (s.sex["Male"] || 0) + (s.sex["Female"] || 0)
+    ]);
+  });
+  lines.push([]);
+
+  if (query) {
+    lines.push(["Group Search Results"]);
+    years.forEach(year => {
+      Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
+        const s = groupedCache[year][key];
+        const rows = aggregateSearchRows(s.fieldDetails, query);
+        lines.push([`${year} - ${MONTHS[(s._meta.month || 1) - 1]}`]);
+        if (!rows.length) {
+          lines.push(["No matching group entries for this month."]);
+        } else {
+          lines.push(["Group","Date","Total Donors"]);
+          rows.forEach(r => lines.push([r.name || "", r.date || "", r.totalDonors || 0]));
+          lines.push(["Total","", rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0)]);
+        }
+        lines.push([]);
+      });
+    });
+  }
+
+  lines.push(["Detailed Statistics"]);
+  years.forEach(year => {
+    Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
+      const s = groupedCache[year][key];
+      lines.push([`${year} - ${MONTHS[(s._meta.month || 1) - 1]}`]);
+
+      lines.push(["A. Office Bleeding"]);
+      lines.push(["Type","450 cc S","450 cc D","450 cc T","450 cc Q"]);
+      lines.push(["Walk-in", s.officeBleeding["Walk-in"].S, s.officeBleeding["Walk-in"].D, s.officeBleeding["Walk-in"].T, s.officeBleeding["Walk-in"].Q]);
+      lines.push(["Patient-directed", s.officeBleeding["Patient Directed"].S, s.officeBleeding["Patient Directed"].D, s.officeBleeding["Patient Directed"].T, s.officeBleeding["Patient Directed"].Q]);
+      lines.push(["Total",
+        s.officeBleeding["Walk-in"].S + s.officeBleeding["Patient Directed"].S,
+        s.officeBleeding["Walk-in"].D + s.officeBleeding["Patient Directed"].D,
+        s.officeBleeding["Walk-in"].T + s.officeBleeding["Patient Directed"].T,
+        s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q
+      ]);
+      lines.push([]);
+
+      lines.push(["B. Field Donation"]);
+      [
+        ["Group", combineSmartGroupRows(s.fieldDetails.group)],
+        ["RC143 or Brgy base", combineSmartGroupRows(s.fieldDetails.rc143)],
+        ["Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25)],
+        ["Unmapped / Others", combineSmartGroupRows(s.fieldDetails.unmapped)]
+      ].forEach(([title, rows]) => {
+        lines.push([title]);
+        lines.push(["Name","Place","Date","450 cc S","450 cc D","450 cc T","450 cc Q"]);
+        if (rows.length) {
+          rows.forEach(r => lines.push([r.name || "", r.place || "", r.date || "", r["450 cc S"] || 0, r["450 cc D"] || 0, r["450 cc T"] || 0, r["450 cc Q"] || 0]));
+          lines.push(["Sub total","","", sumDetailField(rows, "450 cc S"), sumDetailField(rows, "450 cc D"), sumDetailField(rows, "450 cc T"), sumDetailField(rows, "450 cc Q")]);
+        } else {
+          lines.push(["","","",0,0,0,0]);
+        }
+      });
+      lines.push([]);
+
+      lines.push(["C. Blood Type Distribution"]);
+      lines.push(["Blood Type","Total"]);
+      Object.entries(s.bloodType).forEach(([k,v]) => lines.push([k, v]));
+      lines.push([]);
+
+      lines.push(["D. Blood Bag Type by Blood Type"]);
+      lines.push(["Bag Type","O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"]);
+      ["S","D","T","Q"].forEach(code => {
+        lines.push([
+          code,
+          s.bagTypeBloodType[code]["O+"],
+          s.bagTypeBloodType[code]["A+"],
+          s.bagTypeBloodType[code]["B+"],
+          s.bagTypeBloodType[code]["AB+"],
+          s.bagTypeBloodType[code]["O-"],
+          s.bagTypeBloodType[code]["A-"],
+          s.bagTypeBloodType[code]["B-"],
+          s.bagTypeBloodType[code]["AB-"],
+          s.bagTypeBloodType[code]["Unknown"]
+        ]);
+      });
+      lines.push([]);
+
+      lines.push(["E. Component Preparation"]);
+      lines.push(["Component","Total"]);
+      lines.push(["450 cc", s.components["450 cc"]]);
+      lines.push(["PRBC", s.components["PRBC"]]);
+      lines.push(["FFP", s.components["FFP"]]);
+      lines.push(["PC", s.components["PC"]]);
+      lines.push(["CRYO", s.components["CRYO"]]);
+      lines.push([]);
+
+      lines.push(["F. Requested Blood Components"]);
+      lines.push(["Component","Total Requested"]);
+      lines.push(["450 cc", s.requests["450 cc"]]);
+      lines.push(["PRBC", s.requests["PRBC"]]);
+      lines.push(["FFP", s.requests["FFP"]]);
+      lines.push(["PC", s.requests["PC"]]);
+      lines.push(["CRYO", s.requests["CRYO"]]);
+      lines.push([]);
+
+      lines.push(["G. Sex Distribution"]);
+      lines.push(["Sex","Total"]);
+      lines.push(["Male", s.sex["Male"]]);
+      lines.push(["Female", s.sex["Female"]]);
+      lines.push(["Total", (s.sex["Male"] || 0) + (s.sex["Female"] || 0)]);
+      lines.push([]);
+
+      lines.push(["H. Donor Frequency"]);
+      lines.push(["Type","Total"]);
+      lines.push(["First-time donors", s.frequency["First-time donors"]]);
+      lines.push(["Repeat non-regular", s.frequency["Repeat non-regular"]]);
+      lines.push(["Repeat regular", s.frequency["Repeat regular"]]);
+      lines.push(["Total", s.frequency["Total"]]);
+      lines.push([]);
+
+      lines.push(["I. Age Distribution"]);
+      lines.push(["Age Group","Total"]);
+      lines.push(["16-17", s.age["16-17"]]);
+      lines.push(["18-20", s.age["18-20"]]);
+      lines.push(["21-30", s.age["21-30"]]);
+      lines.push(["31-40", s.age["31-40"]]);
+      lines.push(["41-50", s.age["41-50"]]);
+      lines.push(["51-60", s.age["51-60"]]);
+      lines.push(["60-65", s.age["60-65"]]);
+      lines.push(["66 & above", s.age["66 & above"]]);
+      lines.push(["Total", s.age["Total"]]);
+      lines.push([]);
+
+      lines.push(["IX. Monthly Donors Aged 16-25 Years Old"]);
+      lines.push(["Group","Male","Female","Total"]);
+      lines.push(["16-25 Years Old", s.youth1625Sex["Male"], s.youth1625Sex["Female"], s.youth1625Sex["Total"]]);
+      lines.push([]);
+    });
+  });
+
+  lines.push(["Group Monthly Statistics"]);
+  years.forEach(year => {
+    Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
+      const s = groupedCache[year][key];
+      const rows = aggregateGroupMonthlyStats([
+        ...(s.fieldDetails.group || []),
+        ...(s.fieldDetails.rc143 || []),
+        ...(s.fieldDetails.pledge25 || []),
+        ...(s.fieldDetails.unmapped || [])
+      ]);
+      lines.push([`${year} - ${MONTHS[(s._meta.month || 1) - 1]}`]);
+      lines.push(["Group","Date","Total","S","D","T","Q","O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"]);
+      if (rows.length) {
+        rows.forEach(r => {
+          lines.push([
+            r.name || "",
+            r.date || "",
+            r.totalDonors || 0,
+            r.bags.S || 0,
+            r.bags.D || 0,
+            r.bags.T || 0,
+            r.bags.Q || 0,
+            r.bloodTypes["O+"] || 0,
+            r.bloodTypes["A+"] || 0,
+            r.bloodTypes["B+"] || 0,
+            r.bloodTypes["AB+"] || 0,
+            r.bloodTypes["O-"] || 0,
+            r.bloodTypes["A-"] || 0,
+            r.bloodTypes["B-"] || 0,
+            r.bloodTypes["AB-"] || 0,
+            r.bloodTypes["Unknown"] || 0
+          ]);
+        });
+        lines.push([
+          "Monthly Total",
+          "",
+          rows.reduce((a,b)=>a + Number(b.totalDonors || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bags.S || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bags.D || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bags.T || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bags.Q || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["O+"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["A+"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["B+"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["AB+"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["O-"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["A-"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["B-"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["AB-"] || 0), 0),
+          rows.reduce((a,b)=>a + Number(b.bloodTypes["Unknown"] || 0), 0)
+        ]);
+      } else {
+        lines.push(["No group records found for this month."]);
+      }
+      lines.push([]);
+    });
+  });
+
+  return lines.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
 function exportCSV(){
   if (!groupedCache) {
     alert("No statistics available yet.");
     return;
   }
 
-  const rows = [[
-    "Year","Month",
-    "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
-    "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
-    "Total MBD S","Total MBD D","Total MBD T","Total MBD Q",
-    "Prepared 450cc","Prepared PRBC","Prepared FFP","Prepared PC","Prepared CRYO",
-    "Male","Female",
-    "Age 16-17","Age 18-20","Age 21-30","Age 31-40","Age 41-50","Age 51-60","Age 60-65","Age 66+"
-  ]];
-
-  Object.keys(groupedCache).sort((a,b)=>b-a).forEach(year => {
-    Object.keys(groupedCache[year]).sort((a,b)=>b.localeCompare(a)).forEach(key => {
-      const s = groupedCache[year][key];
-      rows.push([
-        year,
-        MONTHS[(s._meta.month || 1)-1],
-        s.officeBleeding["Walk-in"].S,
-        s.officeBleeding["Walk-in"].D,
-        s.officeBleeding["Walk-in"].T,
-        s.officeBleeding["Walk-in"].Q,
-        s.officeBleeding["Patient Directed"].S,
-        s.officeBleeding["Patient Directed"].D,
-        s.officeBleeding["Patient Directed"].T,
-        s.officeBleeding["Patient Directed"].Q,
-        s.fieldDonation["Total MBD"].S,
-        s.fieldDonation["Total MBD"].D,
-        s.fieldDonation["Total MBD"].T,
-        s.fieldDonation["Total MBD"].Q,
-        s.components["450 cc"],
-        s.components["PRBC"],
-        s.components["FFP"],
-        s.components["PC"],
-        s.components["CRYO"],
-        s.sex["Male"],
-        s.sex["Female"],
-        s.age["16-17"],
-        s.age["18-20"],
-        s.age["21-30"],
-        s.age["31-40"],
-        s.age["41-50"],
-        s.age["51-60"],
-        s.age["60-65"],
-        s.age["66 & above"]
-      ]);
-    });
-  });
-
-  const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
+  const csv = buildStatisticsCsv();
   const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
