@@ -2298,6 +2298,70 @@ function buildPrintShell(contentHtml){
           font-size: 11px;
           font-weight: 700;
         }
+        .detail-flow-page .print-head {
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+        }
+        .detail-flow-page .print-title {
+          font-size: 21px;
+        }
+        .detail-flow-page .print-subtitle {
+          font-size: 12px;
+          margin-top: 4px;
+        }
+        .detail-flow-page .month-label {
+          font-size: 16px;
+          margin-bottom: 2px;
+        }
+        .detail-flow-page .month-note {
+          font-size: 10px;
+          margin-bottom: 8px;
+        }
+        .detail-flow-page .print-section {
+          margin-bottom: 8px;
+          break-inside: auto;
+          page-break-inside: auto;
+        }
+        .detail-flow-page .print-section-title {
+          padding: 6px 8px;
+          font-size: 11px;
+        }
+        .detail-flow-page .print-section-body {
+          padding: 6px;
+        }
+        .detail-flow-page table {
+          font-size: 9px;
+          page-break-inside: auto;
+        }
+        .detail-flow-page tr {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .detail-flow-page th,
+        .detail-flow-page td {
+          padding: 3px 4px;
+        }
+        .detail-flow-page .wide-table table {
+          font-size: 8px;
+        }
+        .detail-flow-page .compact-table table {
+          font-size: 7px;
+        }
+        .detail-month-block {
+          margin-bottom: 12px;
+          padding-bottom: 10px;
+          border-bottom: 2px dashed #d6dde6;
+        }
+        .detail-month-block:last-of-type {
+          margin-bottom: 0;
+          padding-bottom: 0;
+          border-bottom: none;
+        }
+        .detail-appendix {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 2px solid #b30000;
+        }
         .ab-page .print-head {
           margin-bottom: 8px;
           padding-bottom: 6px;
@@ -2833,6 +2897,64 @@ function buildGroupMonthlyStatisticsPrintSection(s){
   );
 }
 
+function buildDetailedMonthFlowBlock(s){
+  const monthLabel = getMonthLabel(s._meta || {});
+  return `
+    <div class="detail-month-block">
+      <h2 class="month-label">${escapeHtml(monthLabel)}</h2>
+      <div class="month-note">Detailed sections continue automatically across pages to reduce wasted print space.</div>
+      ${buildOfficeBleedingPrintSection(s, true)}
+      ${buildFieldDonationPrintSection(s, true)}
+      ${buildBloodTypeDistributionPrintSection(s)}
+      ${buildBagTypeBloodTypePrintSection(s)}
+      ${buildComponentPreparationPrintSection(s)}
+      ${buildRequestedComponentsPrintSection(s)}
+      ${buildSexDistributionPrintSection(s)}
+      ${buildFrequencyPrintSection(s)}
+      ${buildAgeDistributionPrintSection(s)}
+      ${buildYouthPrintSection(s)}
+      ${buildGroupMonthlyStatisticsPrintSection(s)}
+    </div>
+  `;
+}
+
+function buildDetailedAppendixFlow(grouped){
+  const months = flattenMonths(grouped);
+
+  const youthContent = months.length
+    ? buildPrintTable(
+        ["Month","Male","Female","Total"],
+        months.map(s => [
+          getMonthLabel(s._meta || {}),
+          num(s.youth1625Sex["Male"]),
+          num(s.youth1625Sex["Female"]),
+          num(s.youth1625Sex["Total"])
+        ])
+      )
+    : `<div class="empty-box">No monthly 16-25 data found for the selected filter.</div>`;
+
+  const sexContent = months.length
+    ? buildPrintTable(
+        ["Month","Male","Female","Total"],
+        months.map(s => [
+          getMonthLabel(s._meta || {}),
+          num(s.sex["Male"]),
+          num(s.sex["Female"]),
+          num((s.sex["Male"] || 0) + (s.sex["Female"] || 0))
+        ])
+      )
+    : `<div class="empty-box">No male / female data found for the selected filter.</div>`;
+
+  return `
+    <div class="detail-appendix">
+      <h2 class="month-label">Summary Appendix</h2>
+      <div class="month-note">Monthly donor summaries continue here without repeating the Detailed Statistics page header.</div>
+      ${buildPrintSection("IX. Monthly Donors Aged 16-25 Years Old", youthContent)}
+      ${buildPrintSection("Male / Female Per Month", sexContent)}
+    </div>
+  `;
+}
+
 function buildMaleFemaleAppendixPrintPage(grouped){
   const months = flattenMonths(grouped);
   const content = months.length
@@ -2898,83 +3020,23 @@ function buildDetailedPrintContent(grouped){
     return buildPrintPage("Detailed Statistics", "No data available for the current filter", `<div class="empty-box">No statistics found for the selected filter.</div>`);
   }
 
-  const pages = [];
+  const blocks = [];
   years.forEach(year => {
     const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
     monthKeys.forEach(key => {
       const s = grouped[year][key];
-      const monthLabel = getMonthLabel(s._meta || {});
-
-      pages.push(buildPrintPage(
-        "Detailed Statistics",
-        `${monthLabel} • Sections A-B`,
-        [
-          `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
-          `<div class="month-note">Clean print view with only the requested Detailed Statistics sections.</div>`,
-          `<div class="ab-layout">`,
-          buildOfficeBleedingPrintSection(s, true),
-          buildFieldDonationPrintSection(s, true),
-          `</div>`
-        ].join(""),
-        "ab-page"
-      ));
-
-      pages.push(buildPrintPage(
-        "Detailed Statistics",
-        `${monthLabel} • Sections C-D`,
-        [
-          `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
-          `<div class="month-note">Sections C and D grouped on one print page.</div>`,
-          buildBloodTypeDistributionPrintSection(s),
-          buildBagTypeBloodTypePrintSection(s)
-        ].join("")
-      ));
-
-      pages.push(buildPrintPage(
-        "Detailed Statistics",
-        `${monthLabel} • Sections E-F-G`,
-        [
-          `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
-          `<div class="month-note">Sections E, F, and G grouped on one print page.</div>`,
-          buildComponentPreparationPrintSection(s),
-          buildRequestedComponentsPrintSection(s),
-          buildSexDistributionPrintSection(s)
-        ].join("")
-      ));
-
-      pages.push(buildPrintPage(
-        "Detailed Statistics",
-        `${monthLabel} • Sections H-I`,
-        [
-          `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
-          `<div class="month-note">Sections H and I grouped on one print page.</div>`,
-          buildFrequencyPrintSection(s),
-          buildAgeDistributionPrintSection(s)
-        ].join("")
-      ));
+      blocks.push(buildDetailedMonthFlowBlock(s));
     });
   });
 
-  pages.push(buildIXAndMaleFemalePrintPage(grouped));
+  blocks.push(buildDetailedAppendixFlow(grouped));
 
-  years.forEach(year => {
-    const monthKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    monthKeys.forEach(key => {
-      const s = grouped[year][key];
-      const monthLabel = getMonthLabel(s._meta || {});
-      pages.push(buildPrintPage(
-        "Detailed Statistics",
-        `${monthLabel} • Group Monthly Statistics`,
-        [
-          `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
-          `<div class="month-note">Group Monthly Statistics is printed last as requested.</div>`,
-          buildGroupMonthlyStatisticsPrintSection(s)
-        ].join("")
-      ));
-    });
-  });
-
-  return pages.join("");
+  return buildPrintPage(
+    "Detailed Statistics",
+    "Continuous compact print layout",
+    blocks.join(""),
+    "detail-flow-page"
+  );
 }
 
 function buildSexPrintContent(grouped){
