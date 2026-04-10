@@ -2298,6 +2298,70 @@ function buildPrintShell(contentHtml){
           font-size: 11px;
           font-weight: 700;
         }
+        .ab-page .print-head {
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+        }
+        .ab-page .print-title {
+          font-size: 21px;
+        }
+        .ab-page .print-subtitle {
+          font-size: 12px;
+          margin-top: 4px;
+        }
+        .ab-page .month-label {
+          font-size: 16px;
+          margin-bottom: 2px;
+        }
+        .ab-page .month-note {
+          font-size: 10px;
+          margin-bottom: 8px;
+        }
+        .ab-layout {
+          display: grid;
+          grid-template-columns: 0.9fr 2.1fr;
+          gap: 8px;
+          align-items: start;
+        }
+        .compact-section {
+          margin-bottom: 6px;
+        }
+        .compact-section .print-section-title {
+          padding: 6px 8px;
+          font-size: 11px;
+        }
+        .compact-section .print-section-body {
+          padding: 6px;
+        }
+        .compact-table table {
+          font-size: 7px;
+        }
+        .compact-table th,
+        .compact-table td {
+          padding: 2px 3px;
+        }
+        .field-donation-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .compact-card {
+          border: 1px solid #d6dde6;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #fff;
+        }
+        .compact-card-title {
+          padding: 5px 6px;
+          font-size: 10px;
+          font-weight: 800;
+          color: #7f1d1d;
+          background: linear-gradient(90deg, #fff1f2, #fff7ed);
+          border-bottom: 1px solid #ead5d8;
+        }
+        .compact-card-body {
+          padding: 4px;
+        }
       </style>
     </head>
     <body>
@@ -2322,9 +2386,9 @@ function openPrintDocument(contentHtml){
   setTimeout(() => printWindow.print(), 300);
 }
 
-function buildPrintPage(sectionTitle, subtitle, contentHtml){
+function buildPrintPage(sectionTitle, subtitle, contentHtml, pageClass = ""){
   return `
-    <section class="print-page">
+    <section class="print-page ${pageClass}">
       <div class="print-head">
         <div class="print-kicker">Donor Database Statistics</div>
         <h1 class="print-title">${escapeHtml(sectionTitle)}</h1>
@@ -2438,7 +2502,7 @@ function buildOverviewPrintContent(grouped){
   return pages.join("");
 }
 
-function buildOfficeBleedingPrintSection(s){
+function buildOfficeBleedingPrintSection(s, compact = false){
   return buildPrintSection(
     "A. Office Bleeding",
     buildPrintTable(
@@ -2453,8 +2517,10 @@ function buildOfficeBleedingPrintSection(s){
           num(s.officeBleeding["Walk-in"].Q + s.officeBleeding["Patient Directed"].Q)
         ]
       ],
-      [2]
-    )
+      [2],
+      compact ? "compact-table" : ""
+    ),
+    compact ? "compact-section compact-table" : ""
   );
 }
 
@@ -2497,7 +2563,71 @@ function buildFieldCategoryPrintTable(title, label, rows){
   );
 }
 
-function buildFieldDonationPrintSection(s){
+function buildCompactCard(title, bodyHtml){
+  return `
+    <div class="compact-card">
+      <div class="compact-card-title">${escapeHtml(title)}</div>
+      <div class="compact-card-body">${bodyHtml}</div>
+    </div>
+  `;
+}
+
+function buildFieldCategoryCompactPrintCard(title, label, rows){
+  const safeRows = rows.length ? rows : [{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+  return buildCompactCard(
+    title,
+    buildPrintTable(
+      [
+        label === "Group" ? "Group" : "Municipality",
+        label === "Pledge 25" ? "School / Barangay street" : "Place",
+        "Date",
+        "S",
+        "D",
+        "T",
+        "Q"
+      ],
+      [
+        ...safeRows.map(r => [
+          r.name || "",
+          r.place || "",
+          r.date || "",
+          num(r["450 cc S"]),
+          num(r["450 cc D"]),
+          num(r["450 cc T"]),
+          num(r["450 cc Q"])
+        ]),
+        [
+          "Sub total",
+          "",
+          "",
+          num(sumDetailField(safeRows, "450 cc S")),
+          num(sumDetailField(safeRows, "450 cc D")),
+          num(sumDetailField(safeRows, "450 cc T")),
+          num(sumDetailField(safeRows, "450 cc Q"))
+        ]
+      ],
+      [safeRows.length],
+      "compact-table"
+    )
+  );
+}
+
+function buildFieldDonationPrintSection(s, compact = false){
+  if (compact) {
+    return buildPrintSection(
+      "B. Field Donation",
+      `
+        <div class="field-donation-grid">
+          ${buildFieldCategoryCompactPrintCard("Group", "Group", combineSmartGroupRows(s.fieldDetails.group))}
+          ${buildFieldCategoryCompactPrintCard("RC143 or Brgy base", "RC143 / BRGY Base", combineSmartGroupRows(s.fieldDetails.rc143))}
+          ${buildFieldCategoryCompactPrintCard("Pledge 25", "Pledge 25", combineSmartGroupRows(s.fieldDetails.pledge25))}
+          ${buildFieldCategoryCompactPrintCard("Unmapped / Others", "Group", combineSmartGroupRows(s.fieldDetails.unmapped))}
+        </div>
+      `,
+      "compact-section"
+    );
+  }
+
   return buildPrintSection(
     "B. Field Donation",
     [
@@ -2781,9 +2911,12 @@ function buildDetailedPrintContent(grouped){
         [
           `<h2 class="month-label">${escapeHtml(monthLabel)}</h2>`,
           `<div class="month-note">Clean print view with only the requested Detailed Statistics sections.</div>`,
-          buildOfficeBleedingPrintSection(s),
-          buildFieldDonationPrintSection(s)
-        ].join("")
+          `<div class="ab-layout">`,
+          buildOfficeBleedingPrintSection(s, true),
+          buildFieldDonationPrintSection(s, true),
+          `</div>`
+        ].join(""),
+        "ab-page"
       ));
 
       pages.push(buildPrintPage(
