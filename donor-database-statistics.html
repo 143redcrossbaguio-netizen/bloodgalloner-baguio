@@ -33,6 +33,17 @@
     .summary-box .label{font-size:13px;color:#6b7280;font-weight:700;margin-bottom:8px}
     .summary-box .value{font-size:28px;font-weight:800;color:#b30000}
     .summary-box .sub{font-size:12px;color:#6b7280;margin-top:6px;font-weight:700}
+    .daily-dropdown-wrap{margin-top:10px}
+    .daily-dropdown-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #d6dde6;border-radius:10px;background:#f8fafc;color:#8b0000;font-size:12px;font-weight:800;cursor:pointer}
+    .daily-dropdown-btn:hover{transform:none;background:#fff1f2}
+    .daily-dropdown-content{display:none;margin-top:8px;border:1px solid #d6dde6;border-radius:10px;background:#fff;overflow:hidden}
+    .daily-dropdown-content.open{display:block}
+    .daily-dropdown-list{max-height:220px;overflow:auto}
+    .daily-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #eef2f7;font-size:12px;font-weight:700;color:#4b5563}
+    .daily-row:last-child{border-bottom:none}
+    .daily-row-date{text-align:left}
+    .daily-row-count{min-width:28px;text-align:center;padding:4px 8px;border-radius:999px;background:#b30000;color:#fff;font-size:11px;font-weight:800}
+    .daily-empty{padding:10px 12px;font-size:12px;font-weight:700;color:#6b7280;text-align:center}
     .section-head{display:flex;justify-content:space-between;align-items:center;padding:16px;cursor:pointer;border-bottom:1px solid #d6dde6}
     .section-body{display:none;padding:16px}
     .section-body.open{display:block}
@@ -562,6 +573,7 @@ function createBloodTypeCounter(){
 function emptyStats(){
   return {
     totalDonors: 0,
+    dailyCounts: {},
     officeBleeding: {
       "Walk-in": { S:0, D:0, T:0, Q:0 },
       "Patient Directed": { S:0, D:0, T:0, Q:0 }
@@ -660,6 +672,13 @@ function formatDateForDisplay(raw){
 function applyDonor(s, r){
   s.totalDonors++;
 
+  const donorDate = parseDate(getDonorDate(r));
+  const donorParts = getDateParts(donorDate);
+  if (donorParts.year && donorParts.month && donorParts.day) {
+    const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
+    s.dailyCounts[dayKey] = (s.dailyCounts[dayKey] || 0) + 1;
+  }
+
   const donorType = normalizeDonorType(getDonorType(r));
   const partnerName = getPartnerName(r);
   const mapping = getBestMapping(partnerName);
@@ -701,7 +720,7 @@ function applyDonor(s, r){
       place: smartPlace || "",
       date: formatDateForDisplay(getDonorDate(r)),
       rawDate: getDonorDate(r),
-      totalDonors: bagCounts.S + bagCounts.D + bagCounts.T + bagCounts.Q,
+      totalDonors: 1,
       "450 cc S": bagCounts.S,
       "450 cc D": bagCounts.D,
       "450 cc T": bagCounts.T,
@@ -917,6 +936,48 @@ function getMonthLabel(meta){
   return `${MONTHS[(meta.month || 1) - 1]} ${meta.year || ""}`.trim();
 }
 
+function buildDailyDropdown(monthKey, s){
+  const dailyCounts = s.dailyCounts || {};
+  const keys = Object.keys(dailyCounts).sort((a,b) => a.localeCompare(b));
+
+  if (!keys.length) {
+    return `
+      <div class="daily-dropdown-wrap">
+        <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
+          <span>Daily Count of Donors</span>
+          <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
+        </button>
+        <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
+          <div class="daily-empty">No daily donor counts found.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const rows = keys.map(dayKey => {
+    const d = parseDate(dayKey);
+    const label = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
+    return `
+      <div class="daily-row">
+        <div class="daily-row-date">${escapeHtml(label)}</div>
+        <div class="daily-row-count">${num(dailyCounts[dayKey])}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="daily-dropdown-wrap">
+      <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${escapeJs(monthKey)}')">
+        <span>Daily Count of Donors</span>
+        <span id="dailyArrow-${escapeHtml(monthKey)}">▼</span>
+      </button>
+      <div id="dailyDropdown-${escapeHtml(monthKey)}" class="daily-dropdown-content">
+        <div class="daily-dropdown-list">${rows}</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderMonthlySummary(grouped){
   const months = flattenMonths(grouped);
   const el = document.getElementById("summaryGrid");
@@ -926,7 +987,9 @@ function renderMonthlySummary(grouped){
     return;
   }
 
-  el.innerHTML = months.map(s => `
+  el.innerHTML = months.map(s => {
+    const monthKey = `${s._meta?.year || ""}-${String(s._meta?.month || "").padStart(2, "0")}`;
+    return `
     <div class="summary-box">
       <div class="label">${escapeHtml(getMonthLabel(s._meta || {}))}</div>
       <div class="value">${num(s.totalDonors)}</div>
@@ -935,8 +998,9 @@ function renderMonthlySummary(grouped){
       <div class="sub">Field: ${num(sumBagGroup(s.fieldDonation["Total MBD"]))}</div>
       <div class="sub">Prepared: ${num(sumVals(s.components))}</div>
       <div class="sub">Requested: ${num(sumVals(s.requests))}</div>
+      ${buildDailyDropdown(monthKey, s)}
     </div>
-  `).join("");
+  `}).join("");
 }
 
 function renderMonthlySexTable(grouped){
@@ -1387,6 +1451,14 @@ function buildStatistics(){
     document.getElementById("sexMonthlyContainer").innerHTML = `<div class="empty">Failed to build male / female monthly table.</div>`;
     setStatus("Failed to build statistics.", "error");
   }
+}
+
+function toggleDailyDropdown(monthKey){
+  const content = document.getElementById(`dailyDropdown-${monthKey}`);
+  const arrow = document.getElementById(`dailyArrow-${monthKey}`);
+  if (!content || !arrow) return;
+  content.classList.toggle("open");
+  arrow.textContent = content.classList.contains("open") ? "▲" : "▼";
 }
 
 function toggleNext(el){
