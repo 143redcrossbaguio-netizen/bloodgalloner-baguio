@@ -32,6 +32,33 @@
             margin-bottom: 16px;
         }
 
+        .summary-toggle-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #f8fafc;
+            color: #334155;
+            border: 1px solid #dbe3ec;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .summary-toggle-btn .chevron {
+            transition: transform 0.2s ease;
+        }
+
+        .summary-toggle-btn.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .summary-collapse.hidden {
+            display: none;
+        }
+
         .summary-grid {
             display: flex;
             flex-direction: column;
@@ -514,6 +541,11 @@
 
 <div class="page-wrap">
     <div class="top-summary">
+        <button type="button" id="topSummaryToggleBtn" class="summary-toggle-btn open" aria-expanded="true">
+            <span>Search / Filter / Buttons</span>
+            <span class="chevron">▼</span>
+        </button>
+        <div id="topSummaryCollapse" class="summary-collapse">
         <div class="summary-grid">
             <div class="top-controls-row">
                 <div class="field-group">
@@ -547,6 +579,7 @@
                     <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -650,6 +683,8 @@
     const duplicateTitle = document.getElementById("duplicateTitle");
     const duplicateNote = document.getElementById("duplicateNote");
     const duplicateBody = document.getElementById("duplicateBody");
+    const topSummaryToggleBtn = document.getElementById("topSummaryToggleBtn");
+    const topSummaryCollapse = document.getElementById("topSummaryCollapse");
     const missingInfoBox = document.getElementById("missingInfoBox");
     const missingInfoTitle = document.getElementById("missingInfoTitle");
     const missingInfoNote = document.getElementById("missingInfoNote");
@@ -672,6 +707,12 @@
         bloodBagType: "",
         serialSort: ""
     };
+
+    function setTopSummaryCollapsed(collapsed) {
+        topSummaryCollapse.classList.toggle("hidden", collapsed);
+        topSummaryToggleBtn.classList.toggle("open", !collapsed);
+        topSummaryToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
 
     function showMessage(message, type) {
         statusMessage.textContent = message;
@@ -1312,6 +1353,7 @@
                             <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
                             <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
                             <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
+                            <button class="small-btn purple-btn" onclick="renderMissingInfoMonthView('${monthValueForPrint}')">Missing Infos This Month</button>
                         </div>
 
                         <div class="subtotal-bar">
@@ -2060,6 +2102,13 @@
         hideMissingInfoBox();
         renderDuplicateMonthView(printMonthSelect.value);
     });
+
+    topSummaryToggleBtn.addEventListener("click", function() {
+        const shouldCollapse = !topSummaryCollapse.classList.contains("hidden");
+        setTopSummaryCollapsed(shouldCollapse);
+    });
+
+    setTopSummaryCollapsed(false);
 
     auth.onAuthStateChanged(user => {
         if (user) {
