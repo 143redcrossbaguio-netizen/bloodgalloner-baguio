@@ -194,6 +194,59 @@
             background: #f7f7f7;
         }
 
+
+        .missing-box {
+            display: none;
+            margin-bottom: 12px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid #dbe3ec;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .missing-box.show {
+            display: block;
+        }
+
+        .missing-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #8b0000;
+            margin-bottom: 10px;
+        }
+
+        .missing-note {
+            font-size: 13px;
+            color: #475569;
+            margin-bottom: 12px;
+        }
+
+        .missing-wrap {
+            overflow: auto;
+            width: 100%;
+        }
+
+        .missing-table {
+            width: 100%;
+            min-width: 2200px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .missing-table th,
+        .missing-table td {
+            border: 1px solid #d7d7d7;
+            padding: 7px 8px;
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .missing-table th {
+            background: #f7f7f7;
+        }
+
         .year-group,
         .month-group {
             background: white;
@@ -381,7 +434,7 @@
 
         @media print {
             body { background: white; }
-            .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox { display: none !important; }
+            .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox, #missingInfoBox { display: none !important; }
             .page-wrap { padding: 0; }
             .year-group, .month-group, .table-wrap {
                 box-shadow: none;
@@ -488,6 +541,47 @@
         </div>
     </div>
 
+    <div id="missingInfoBox" class="missing-box">
+        <div class="missing-title" id="missingInfoTitle">Missing Infos</div>
+        <div class="missing-note" id="missingInfoNote"></div>
+        <div class="missing-wrap">
+            <table class="missing-table">
+                <thead>
+                    <tr>
+                        <th>Missing Fields</th>
+                        <th>Entry Date</th>
+                        <th>MBD</th>
+                        <th>Walk-in</th>
+                        <th>Patient-Directed</th>
+                        <th>Surname</th>
+                        <th>Given Name</th>
+                        <th>Middle Name</th>
+                        <th>Birthday</th>
+                        <th>Age</th>
+                        <th>Sex</th>
+                        <th>Contact Number</th>
+                        <th>House Number/Purok/Street Name</th>
+                        <th>Barangay/City</th>
+                        <th>Type of Donor</th>
+                        <th># of Donations</th>
+                        <th>Blood Type</th>
+                        <th>Serial Number</th>
+                        <th>Amount</th>
+                        <th>Blood Bag Used</th>
+                        <th>Type of Blood Bag</th>
+                        <th>Time Started</th>
+                        <th>Time Ended</th>
+                        <th>Remarks</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="missingInfoBody">
+                    <tr><td colspan="25">No missing infos found.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <main class="content-panel">
         <div id="trackingContainer"></div>
     </main>
@@ -527,6 +621,10 @@
     const duplicateTitle = document.getElementById("duplicateTitle");
     const duplicateNote = document.getElementById("duplicateNote");
     const duplicateBody = document.getElementById("duplicateBody");
+    const missingInfoBox = document.getElementById("missingInfoBox");
+    const missingInfoTitle = document.getElementById("missingInfoTitle");
+    const missingInfoNote = document.getElementById("missingInfoNote");
+    const missingInfoBody = document.getElementById("missingInfoBody");
 
     let allDonors = [];
     let filteredDonors = [];
@@ -555,11 +653,25 @@
         duplicateBody.innerHTML = `<tr><td colspan="11">No duplicate data found.</td></tr>`;
     }
 
+    function hideMissingInfoBox() {
+        missingInfoBox.classList.remove("show");
+        missingInfoTitle.textContent = "Missing Infos";
+        missingInfoNote.textContent = "";
+        missingInfoBody.innerHTML = `<tr><td colspan="25">No missing infos found.</td></tr>`;
+    }
+
     function showDuplicateBox(title, note, rowsHtml) {
         duplicateTitle.textContent = title;
         duplicateNote.textContent = note;
         duplicateBody.innerHTML = rowsHtml;
         duplicateBox.classList.add("show");
+    }
+
+    function showMissingInfoBox(title, note, rowsHtml) {
+        missingInfoTitle.textContent = title;
+        missingInfoNote.textContent = note;
+        missingInfoBody.innerHTML = rowsHtml;
+        missingInfoBox.classList.add("show");
     }
 
     function escapeHtml(text) {
@@ -1014,6 +1126,41 @@
         `;
     }
 
+
+    function isMissingValue(value) {
+        if (value === null || value === undefined) return true;
+        return String(value).trim() === "";
+    }
+
+    function getMissingFieldLabels(record) {
+        const missing = [];
+
+        if (isMissingValue(record._resolvedEntryDate)) missing.push("Entry Date");
+        if (isMissingValue(record.surname)) missing.push("Surname");
+        if (isMissingValue(record.firstName)) missing.push("Given Name");
+        if (isMissingValue(record._resolvedBirthday)) missing.push("Birthday");
+        if (isMissingValue(record.age)) missing.push("Age");
+        if (isMissingValue(record.sex)) missing.push("Sex");
+        if (isMissingValue(record.contactNumber)) missing.push("Contact Number");
+        if (isMissingValue(record.address)) missing.push("House Number/Purok/Street Name");
+        if (isMissingValue(record.cityProvince)) missing.push("Barangay/City");
+        if (isMissingValue(record.donorCategory)) missing.push("Type of Donor");
+        if (isMissingValue(record.numberOfDonations)) missing.push("# of Donations");
+        if (isMissingValue(record.bloodType)) missing.push("Blood Type");
+        if (isMissingValue(record.serialNumber)) missing.push("Serial Number");
+        if (isMissingValue(record.amount)) missing.push("Amount");
+        if (isMissingValue(record.bloodBagBrand)) missing.push("Blood Bag Used");
+        if (isMissingValue(record.bloodBagType)) missing.push("Type of Blood Bag");
+        if (isMissingValue(record._resolvedTimeStarted)) missing.push("Time Started");
+        if (isMissingValue(record._resolvedTimeEnded)) missing.push("Time Ended");
+
+        return missing;
+    }
+
+    function isRecordMissingInfo(record) {
+        return getMissingFieldLabels(record).length > 0;
+    }
+
     function buildDuplicateKey(record) {
         return [
             normalizeText(record._resolvedEntryDate),
@@ -1096,6 +1243,78 @@
         );
     }
 
+
+    function getMissingInfoRecordsForMonth(monthValue) {
+        return allDonors.filter(record => {
+            const { monthKey } = getYearMonth(record._resolvedEntryDate);
+            return monthKey === monthValue && isRecordMissingInfo(record);
+        });
+    }
+
+    function renderMissingInfoMonthView(monthValue) {
+        if (!monthValue) {
+            showMessage("Please select a month first for Missing Infos.", "error");
+            return;
+        }
+
+        const records = getMissingInfoRecordsForMonth(monthValue);
+        const parts = monthValue.split("-");
+        const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
+
+        if (!records.length) {
+            showMissingInfoBox(
+                `Missing Infos - ${monthLabel}`,
+                "No missing infos found for this month.",
+                `<tr><td colspan="25">No missing infos found for this month.</td></tr>`
+            );
+            return;
+        }
+
+        let rowsHtml = "";
+
+        records.forEach(record => {
+            const missingLabels = getMissingFieldLabels(record);
+
+            rowsHtml += `
+                <tr id="missing-row-${record.id}">
+                    <td>${escapeHtml(missingLabels.join(", "))}</td>
+                    <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
+                    <td>${buildEditInput(record.mbdDetails || "")}</td>
+                    <td>${buildEditSelect(["", "Walk-in"], record.donorType === "Walk-in" ? "Walk-in" : "")}</td>
+                    <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
+                    <td>${buildEditInput(record.surname || "")}</td>
+                    <td>${buildEditInput(record.firstName || "")}</td>
+                    <td>${buildEditInput(record.middleName || "")}</td>
+                    <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
+                    <td>${buildEditInput(record.age || "", "number")}</td>
+                    <td>${buildEditSelect(["", "Male", "Female"], record.sex || "")}</td>
+                    <td>${buildEditInput(record.contactNumber || "")}</td>
+                    <td>${buildEditInput(record.address || "")}</td>
+                    <td>${buildEditInput(record.cityProvince || "")}</td>
+                    <td>${buildEditSelect(["", "New", "Repeat", "Lapse"], record.donorCategory || "")}</td>
+                    <td>${buildEditInput(record.numberOfDonations || "", "number")}</td>
+                    <td>${buildEditSelect(["", "A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], record.bloodType || "")}</td>
+                    <td>${buildEditInput(record.serialNumber || "")}</td>
+                    <td>${buildEditSelect(["", "450 ml", "QNS", "UB"], record.amount || "")}</td>
+                    <td>${buildEditSelect(["", "KARMI", "TERUMO"], record.bloodBagBrand || "")}</td>
+                    <td>${buildEditSelect(["", "Single", "Double", "Triple", "Quadruple"], record.bloodBagType || "")}</td>
+                    <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
+                    <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
+                    <td>${buildEditInput(record.remarks || "")}</td>
+                    <td class="actions-cell">
+                        <button class="small-btn save-btn" onclick="saveMissingInfo('${record.id}', '${monthValue}')">Save</button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        showMissingInfoBox(
+            `Missing Infos - ${monthLabel}`,
+            `Records with missing infos: ${records.length}`,
+            rowsHtml
+        );
+    }
+
     function renderTracking() {
         const keyword = searchInput.value.trim();
 
@@ -1158,6 +1377,7 @@
                             <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
                             <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
                             <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
+                            <button class="small-btn purple-btn" onclick="renderMissingInfoMonthView('${monthValueForPrint}')">Missing Infos This Month</button>
                         </div>
 
                         <div class="subtotal-bar">
@@ -1463,6 +1683,61 @@
         }
     };
 
+
+    window.saveMissingInfo = async function(id, monthValue) {
+        const row = document.getElementById(`missing-row-${id}`);
+        if (!row) return;
+
+        const fields = row.querySelectorAll("input, select");
+
+        const mbdDetails = fields[1].value.trim();
+        const walkInValue = fields[2].value;
+        const patientDirectedDetails = fields[3].value.trim();
+
+        let donorType = "";
+        if (mbdDetails) donorType = "MBD";
+        else if (patientDirectedDetails) donorType = "Patient Directed";
+        else if (walkInValue === "Walk-in") donorType = "Walk-in";
+
+        const numberOfDonationsValue = fields[14].value.trim();
+
+        const updatedData = {
+            entryDate: fields[0].value,
+            mbdDetails: mbdDetails,
+            patientDirectedDetails: patientDirectedDetails,
+            donorType: donorType,
+            surname: fields[4].value.trim(),
+            firstName: fields[5].value.trim(),
+            middleName: fields[6].value.trim(),
+            birthday: fields[7].value,
+            age: fields[8].value.trim() === "" ? "" : parseInt(fields[8].value || "0"),
+            sex: fields[9].value,
+            contactNumber: fields[10].value.trim(),
+            address: fields[11].value.trim(),
+            cityProvince: fields[12].value.trim(),
+            donorCategory: fields[13].value,
+            numberOfDonations: numberOfDonationsValue === "" ? "" : parseInt(numberOfDonationsValue || "0"),
+            bloodType: fields[15].value,
+            serialNumber: fields[16].value.trim(),
+            amount: fields[17].value,
+            bloodBagBrand: fields[18].value,
+            bloodBagType: fields[19].value,
+            timeStarted: fields[20].value,
+            timeEnded: fields[21].value,
+            remarks: fields[22].value.trim()
+        };
+
+        try {
+            await db.collection("donorDatabase").doc(id).update(updatedData);
+            showMessage("Missing info saved successfully.", "success");
+            await loadDonors();
+            renderMissingInfoMonthView(monthValue);
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to save missing info: " + error.message, "error");
+        }
+    };
+
     window.deleteDonor = async function(id) {
         const confirmed = confirm("Delete this donor record?");
         if (!confirmed) return;
@@ -1761,6 +2036,8 @@
             } else {
                 hideDuplicateBox();
             }
+
+            hideMissingInfoBox();
         } catch (error) {
             console.error(error);
             trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
@@ -1770,17 +2047,20 @@
 
     reloadBtn.addEventListener("click", async function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         await loadDonors();
         showMessage("Tracking data reloaded.", "success");
     });
 
     searchInput.addEventListener("input", function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         renderTracking();
     });
 
     groupMonthFilter.addEventListener("change", function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         renderTracking();
     });
 
@@ -1821,6 +2101,7 @@
     });
 
     duplicateDataBtn.addEventListener("click", function() {
+        hideMissingInfoBox();
         renderDuplicateMonthView(printMonthSelect.value);
     });
 
