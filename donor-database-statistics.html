@@ -52,6 +52,7 @@
     .mapping-list{border:1px solid #d6dde6;border-radius:12px;overflow:hidden}
     .mapping-row{display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec}
     .mapping-row:last-child{border-bottom:none}
+    .mapping-row.editing{align-items:end;background:#fff7ed}
     .year-block,.month-block,.sheet-block{border:1px solid #d6dde6;border-radius:12px;overflow:hidden;margin-bottom:14px;background:#fff}
     .year-head,.month-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;font-weight:700}
     .year-head{background:linear-gradient(90deg,#fdf2f8,#fff1f2);color:#8b0000}
@@ -183,7 +184,7 @@ let releasingRecords = [];
 let categoryMappings = [];
 let groupedCache = null;
 let eventsAttached = false;
-let editingMappingId = null;
+let inlineEditingMappingId = null;
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -1485,9 +1486,12 @@ async function saveGroupCategory(){
 
   try{
     const normalized = normalizeAliasKey(partner);
+    const existing = categoryMappings.find(x =>
+      normalizeAliasKey(x.partnerName || x.name || "") === normalized
+    );
 
-    if (editingMappingId) {
-      await fs.collection("donorGroupCategories").doc(editingMappingId).update({
+    if (existing) {
+      await fs.collection("donorGroupCategories").doc(existing.id).update({
         partnerName: smartGroupDisplayName(partner),
         category,
         place,
@@ -1495,44 +1499,63 @@ async function saveGroupCategory(){
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } else {
-      const existing = categoryMappings.find(x =>
-        normalizeAliasKey(x.partnerName || x.name || "") === normalized
-      );
-
-      if (existing) {
-        await fs.collection("donorGroupCategories").doc(existing.id).update({
-          partnerName: smartGroupDisplayName(partner),
-          category,
-          place,
-          normalizedKey: normalized,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        await fs.collection("donorGroupCategories").add({
-          partnerName: smartGroupDisplayName(partner),
-          category,
-          place,
-          normalizedKey: normalized,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
+      await fs.collection("donorGroupCategories").add({
+        partnerName: smartGroupDisplayName(partner),
+        category,
+        place,
+        normalizedKey: normalized,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
     }
 
+    inlineEditingMappingId = null;
     clearMappingEditor();
     await loadCategoryMappings();
     renderMappings();
     buildStatistics();
-    alert("Group category saved successfully.");
+    alert(existing ? "Group category updated successfully." : "Group category saved successfully.");
   }catch(error){
     console.error(error);
     alert("Failed to save mapping: " + (error.message || error));
   }
 }
 
+async function saveInlineGroupCategory(id){
+  const partner = (document.getElementById("inlineEditPartnerName").value || "").trim();
+  const category = document.getElementById("inlineEditCategory").value;
+  const place = (document.getElementById("inlineEditPlace").value || "").trim();
+
+  if (!partner) {
+    alert("Please enter a partner / group name.");
+    return;
+  }
+
+  try{
+    const normalized = normalizeAliasKey(partner);
+    await fs.collection("donorGroupCategories").doc(id).update({
+      partnerName: smartGroupDisplayName(partner),
+      category,
+      place,
+      normalizedKey: normalized,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    inlineEditingMappingId = null;
+    await loadCategoryMappings();
+    renderMappings();
+    buildStatistics();
+    alert("Group category updated successfully.");
+  }catch(error){
+    console.error(error);
+    alert("Failed to update mapping: " + (error.message || error));
+  }
+}
+
 async function deleteGroupCategory(id){
   if (!confirm("Delete this mapping?")) return;
   try{
+    if (inlineEditingMappingId === id) inlineEditingMappingId = null;
     await fs.collection("donorGroupCategories").doc(id).delete();
     await loadCategoryMappings();
     renderMappings();
@@ -1543,23 +1566,31 @@ async function deleteGroupCategory(id){
   }
 }
 
-function fillMappingForEdit(id, name, category, place){
-  editingMappingId = id || null;
-  document.getElementById("mapPartnerName").value = name || "";
-  document.getElementById("mapCategory").value = category || "Group";
-  document.getElementById("mapPlace").value = place || "";
+function fillMappingForEdit(id){
+  inlineEditingMappingId = id || null;
 
   const body = document.getElementById("mappingBody");
   const badge = document.getElementById("mappingBadge");
   if (!body.classList.contains("open")) body.classList.add("open");
   badge.textContent = "Expanded";
 
-  const saveBtn = document.getElementById("saveMappingBtn");
-  if (saveBtn) saveBtn.textContent = "Update Mapping";
+  renderMappings();
+
+  requestAnimationFrame(() => {
+    const input = document.getElementById("inlineEditPartnerName");
+    if (input) {
+      input.focus({ preventScroll: true });
+      input.select();
+    }
+  });
+}
+
+function cancelInlineEdit(){
+  inlineEditingMappingId = null;
+  renderMappings();
 }
 
 function clearMappingEditor(){
-  editingMappingId = null;
   document.getElementById("mapPartnerName").value = "";
   document.getElementById("mapCategory").value = "Group";
   document.getElementById("mapPlace").value = "";
@@ -1580,17 +1611,46 @@ function renderMappings(){
     return an.localeCompare(bn);
   });
 
-  list.innerHTML = sorted.map(item => `
-    <div class="mapping-row">
-      <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
-      <div>${escapeHtml(item.category || "Unmapped")}</div>
-      <div>${escapeHtml(item.place || "")}</div>
-      <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-        <button class="btn-blue" onclick="fillMappingForEdit('${item.id}','${escapeJs(item.partnerName || item.name || "")}','${escapeJs(item.category || "Group")}','${escapeJs(item.place || "")}')">Edit</button>
-        <button class="btn-gray" onclick="deleteGroupCategory('${item.id}')">Delete</button>
+  list.innerHTML = sorted.map(item => {
+    if (inlineEditingMappingId === item.id) {
+      return `
+        <div class="mapping-row editing">
+          <div class="field">
+            <label>Partner / Alias / Group Name</label>
+            <input type="text" id="inlineEditPartnerName" value="${escapeHtml(item.partnerName || item.name || "")}">
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select id="inlineEditCategory">
+              <option value="Group" ${(item.category || "Group") === "Group" ? "selected" : ""}>Group</option>
+              <option value="RC143 / BRGY Base" ${(item.category || "") === "RC143 / BRGY Base" ? "selected" : ""}>RC143 / BRGY Base</option>
+              <option value="Pledge 25" ${(item.category || "") === "Pledge 25" ? "selected" : ""}>Pledge 25</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Place Override</label>
+            <input type="text" id="inlineEditPlace" value="${escapeHtml(item.place || "")}">
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+            <button class="btn-red" onclick="saveInlineGroupCategory('${escapeJs(item.id)}')">Update</button>
+            <button class="btn-gray" onclick="cancelInlineEdit()">Cancel</button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="mapping-row">
+        <div><strong>${escapeHtml(item.partnerName || item.name || "")}</strong></div>
+        <div>${escapeHtml(item.category || "Unmapped")}</div>
+        <div>${escapeHtml(item.place || "")}</div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+          <button class="btn-blue" onclick="fillMappingForEdit('${escapeJs(item.id)}')">Edit</button>
+          <button class="btn-gray" onclick="deleteGroupCategory('${escapeJs(item.id)}')">Delete</button>
+        </div>
       </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function populateFilters(){
