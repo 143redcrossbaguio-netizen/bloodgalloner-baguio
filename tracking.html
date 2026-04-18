@@ -257,6 +257,8 @@ var db = firebase.firestore();
 
 let donorsData = [];
 let filteredDonorsData = [];
+let donorDatabaseLoaded = false;
+let donorDatabaseError = "";
 let categoryLimits = {galloner:8, bronze:28, silver:46, gold:70};
 let isLoading = false;
 let debugVisible = false;
@@ -600,44 +602,66 @@ if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.name
 return aggregateToResult(null, "No Match");
 }
 
-function buildMergedDonorList(donorsDocs, donorDatabaseDocs){
-let aggregates = aggregateDonorDatabase(donorDatabaseDocs);
-let mergedList = [];
-let usedFullKeys = new Set();
+function buildBaseDonorList(donorsDocs){
+let list = [];
 
 for(let i=0;i<donorsDocs.length;i++){
 let data = donorsDocs[i];
 let firstName = getPossibleFirstName(data);
 let middleName = getPossibleMiddleName(data);
 let surname = getPossibleSurname(data);
-let birthday = getPossibleBirthday(data);
-
-let aggregateResult = getAggregateResultForDonor(data, aggregates);
 let serialCount = inferDonationCountFromSerials(data.serials);
-let smartDonationCount = Math.max(aggregateResult.countFromDatabase || 0, serialCount || 0);
 
-mergedList.push({
+list.push({
 id: data.id || "",
 sourceType: "donors",
 firstName: safeText(firstName),
 middleName: safeText(middleName),
 surname: safeText(surname),
-birthday: birthday || "",
-bloodType: safeText(data.bloodType || aggregateResult.bloodType || ""),
-rhFactor: safeText(data.rhFactor || aggregateResult.rhFactor || ""),
-contact: safeText(data.contact || aggregateResult.contact || ""),
+birthday: getPossibleBirthday(data) || "",
+bloodType: safeText(data.bloodType || ""),
+rhFactor: safeText(data.rhFactor || ""),
+contact: safeText(data.contact || ""),
 serials: Array.isArray(data.serials) ? data.serials : [],
 serialCount: serialCount,
 remarks: safeText(data.remarks || ""),
-smartDonationCount: smartDonationCount,
-smartMatchSource: aggregateResult.source,
-smartMatchedRows: aggregateResult.matchedRows || 0,
-badgeLevel: getBadgeLevel(smartDonationCount),
+smartDonationCount: serialCount,
+smartMatchSource: serialCount > 0 ? "Serial Count" : "No Match",
+smartMatchedRows: 0,
+badgeLevel: getBadgeLevel(serialCount),
 canEdit: !!data.id,
 canDelete: !!data.id
 });
 
-usedFullKeys.add(buildFullKey(firstName,surname,birthday,middleName));
+}
+
+return list;
+}
+
+function mergeDonorDatabaseIntoDonors(currentDonors, donorDatabaseDocs){
+let aggregates = aggregateDonorDatabase(donorDatabaseDocs);
+let mergedList = [];
+let usedFullKeys = new Set();
+
+for(let i=0;i<currentDonors.length;i++){
+let donor = currentDonors[i];
+let aggregateResult = getAggregateResultForDonor(donor, aggregates);
+let serialCount = inferDonationCountFromSerials(donor.serials);
+let smartDonationCount = Math.max(aggregateResult.countFromDatabase || 0, serialCount || 0);
+
+mergedList.push({
+...donor,
+bloodType: safeText(donor.bloodType || aggregateResult.bloodType || ""),
+rhFactor: safeText(donor.rhFactor || aggregateResult.rhFactor || ""),
+contact: safeText(donor.contact || aggregateResult.contact || ""),
+serialCount: serialCount,
+smartDonationCount: smartDonationCount,
+smartMatchSource: aggregateResult.countFromDatabase > 0 ? aggregateResult.source : (serialCount > 0 ? "Serial Count" : "No Match"),
+smartMatchedRows: aggregateResult.matchedRows || 0,
+badgeLevel: getBadgeLevel(smartDonationCount)
+});
+
+usedFullKeys.add(buildFullKey(donor.firstName, donor.surname, donor.birthday, donor.middleName));
 }
 
 Object.keys(aggregates.fullMap).forEach(key=>{
@@ -672,19 +696,19 @@ canDelete: false
 return mergedList;
 }
 
-async function safeGetCollection(collectionName){
-try{
-let snap = await db.collection(collectionName).get();
-let docs = [];
-snap.forEach(doc=>{
-let data = doc.data() || {};
-data.id = doc.id;
-docs.push(data);
+function timeoutPromise(ms, label){
+return new Promise((_, reject)=>{
+setTimeout(()=>{
+reject(new Error(label + " timed out after " + ms + "ms"));
+}, ms);
 });
-return { ok:true, name:collectionName, docs:docs, count:docs.length, error:"" };
-}catch(error){
-return { ok:false, name:collectionName, docs:[], count:0, error:(error && error.message) ? error.message : String(error) };
 }
+
+async function getCollectionWithTimeout(collectionName, timeoutMs){
+return Promise.race([
+db.collection(collectionName).get(),
+timeoutPromise(timeoutMs, collectionName)
+]);
 }
 
 async function fetchDonors(){
@@ -697,55 +721,87 @@ return;
 }
 
 isLoading = true;
-setStatus("Loading donor tracking data...", "loading");
+donorDatabaseLoaded = false;
+donorDatabaseError = "";
+setStatus("Loading donors...", "loading");
 
 try{
-let donorsResult = await safeGetCollection("donors");
-let donorDatabaseResult = await safeGetCollection("donorDatabase");
+let donorsSnap = await getCollectionWithTimeout("donors", 12000);
+let donorsDocs = [];
+donorsSnap.forEach(doc=>{
+let data = doc.data() || {};
+data.id = doc.id;
+donorsDocs.push(data);
+});
 
-let debugLines = [];
-debugLines.push("Collection loading result:");
-debugLines.push(`- donors: ${donorsResult.ok ? "OK" : "FAILED"} (${donorsResult.count})`);
-debugLines.push(`- donorDatabase: ${donorDatabaseResult.ok ? "OK" : "FAILED"} (${donorDatabaseResult.count})`);
-
-if(!donorsResult.ok){
-debugLines.push(`- donors error: ${donorsResult.error}`);
-}
-if(!donorDatabaseResult.ok){
-debugLines.push(`- donorDatabase error: ${donorDatabaseResult.error}`);
-}
-
-if(donorsResult.docs.length > 0){
-debugLines.push("");
-debugLines.push("Sample donors fields:");
-debugLines.push(Object.keys(donorsResult.docs[0]).join(", "));
-}
-if(donorDatabaseResult.docs.length > 0){
-debugLines.push("");
-debugLines.push("Sample donorDatabase fields:");
-debugLines.push(Object.keys(donorDatabaseResult.docs[0]).join(", "));
-}
-
-donorsData = buildMergedDonorList(donorsResult.docs, donorDatabaseResult.docs);
-setDebug(debugLines.join("\n"));
-
+donorsData = buildBaseDonorList(donorsDocs);
 applyFiltersAndRender();
 
-if(!donorsResult.ok && !donorDatabaseResult.ok){
-setStatus("Both collections failed to load. Check Firestore rules or collection names.", "error");
-}else if(!donorsResult.ok || !donorDatabaseResult.ok){
-setStatus("One collection failed to load. Open Debug to see which one.", "error");
-}else if(donorsData.length === 0){
-setStatus("Loaded successfully, but no donor records were found.", "success");
-}else{
-setStatus(`Loaded successfully. donors: ${donorsResult.count}, donorDatabase: ${donorDatabaseResult.count}`, "success");
+let debugLines = [];
+debugLines.push("Stage 1:");
+debugLines.push("donors loaded: " + donorsDocs.length);
+if(donorsDocs.length > 0){
+debugLines.push("sample donors fields: " + Object.keys(donorsDocs[0]).join(", "));
 }
+setDebug(debugLines.join("\n"));
+
+setStatus("Donors loaded. Now loading donorDatabase in background...", "loading");
+
+try{
+let donorDatabaseSnap = await getCollectionWithTimeout("donorDatabase", 15000);
+let donorDatabaseDocs = [];
+donorDatabaseSnap.forEach(doc=>{
+let data = doc.data() || {};
+data.id = doc.id;
+donorDatabaseDocs.push(data);
+});
+
+donorsData = mergeDonorDatabaseIntoDonors(donorsData, donorDatabaseDocs);
+donorDatabaseLoaded = true;
+applyFiltersAndRender();
+
+let debugLines2 = [];
+debugLines2.push("Stage 1:");
+debugLines2.push("donors loaded: " + donorsDocs.length);
+debugLines2.push("");
+debugLines2.push("Stage 2:");
+debugLines2.push("donorDatabase loaded: " + donorDatabaseDocs.length);
+if(donorsDocs.length > 0){
+debugLines2.push("sample donors fields: " + Object.keys(donorsDocs[0]).join(", "));
+}
+if(donorDatabaseDocs.length > 0){
+debugLines2.push("sample donorDatabase fields: " + Object.keys(donorDatabaseDocs[0]).join(", "));
+}
+setDebug(debugLines2.join("\n"));
+
+setStatus("Loaded successfully. donorDatabase counts are now applied.", "success");
+
+}catch(error2){
+console.error("donorDatabase load error:", error2);
+donorDatabaseError = (error2 && error2.message) ? error2.message : String(error2);
+
+let debugLines3 = [];
+debugLines3.push("Stage 1:");
+debugLines3.push("donors loaded: " + donorsDocs.length);
+debugLines3.push("");
+debugLines3.push("Stage 2:");
+debugLines3.push("donorDatabase failed");
+debugLines3.push("error: " + donorDatabaseError);
+if(donorsDocs.length > 0){
+debugLines3.push("sample donors fields: " + Object.keys(donorsDocs[0]).join(", "));
+}
+setDebug(debugLines3.join("\n"));
+
+setStatus("Donors loaded, but donorDatabase failed or timed out. Table is showing serial-based counts only. Open Debug.", "error");
+}
+
 }catch(error){
-console.error("Fetch donors error:", error);
-setStatus("Unexpected loading error. Open browser console.", "error");
-setDebug("Unexpected error:\n" + ((error && error.message) ? error.message : String(error)));
-document.getElementById("donorTable").innerHTML = "";
-document.getElementById("emptyBox").style.display = "block";
+console.error("donors load error:", error);
+let msg = (error && error.message) ? error.message : String(error);
+setDebug("donors failed\nerror: " + msg);
+setStatus("Failed to load donors collection. Open Debug.", "error");
+donorsData = [];
+applyFiltersAndRender();
 }finally{
 isLoading = false;
 }
