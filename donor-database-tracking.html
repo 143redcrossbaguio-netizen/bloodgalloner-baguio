@@ -784,6 +784,11 @@
         );
     }
 
+    function resolveDonationCountValue(value) {
+        const text = String(value ?? "").trim();
+        return text === "" ? "0" : text;
+    }
+
     function attachResolvedFields(record) {
         return {
             ...record,
@@ -791,7 +796,8 @@
             _resolvedEntryDate: resolveEntryDate(record),
             _resolvedBirthday: resolveBirthday(record),
             _resolvedTimeStarted: resolveTimeStarted(record),
-            _resolvedTimeEnded: resolveTimeEnded(record)
+            _resolvedTimeEnded: resolveTimeEnded(record),
+            _resolvedNumberOfDonations: resolveDonationCountValue(record.numberOfDonations)
         };
     }
 
@@ -852,7 +858,7 @@
             record.contactNumber,
             record.address,
             record.cityProvince,
-            record.numberOfDonations,
+            record._resolvedNumberOfDonations,
             record.bloodType,
             record.amount,
             record.bloodBagBrand,
@@ -923,7 +929,7 @@
         sorted.forEach(record => {
             const key = buildDonorKey(record);
             if (totals[key] === undefined) {
-                totals[key] = parseInt(record.numberOfDonations || "0");
+                totals[key] = resolveDonationCountValue(record.numberOfDonations);
             }
         });
 
@@ -1284,8 +1290,8 @@
 
                 records.forEach(record => {
                     const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
-                    const enteredValue = parseInt(record.numberOfDonations || "0");
+                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
+                    const enteredValue = resolveDonationCountValue(record.numberOfDonations);
 
                     html += `
                         <tr id="row-${record.id}">
@@ -1303,9 +1309,9 @@
                             <td>${escapeUpperHtml(record.address)}</td>
                             <td>${escapeUpperHtml(record.cityProvince)}</td>
                             <td>${escapeUpperHtml(record.donorCategory || "")}</td>
-                            <td title="Entered for this record: ${enteredValue}">
-                                <span class="donation-total">${latestTotal}</span>
-                                <span class="donation-entry-note">ENTRY: ${enteredValue}</span>
+                            <td title="Entered for this record: ${escapeHtml(enteredValue)}">
+                                <span class="donation-total">${escapeHtml(latestTotal)}</span>
+                                <span class="donation-entry-note">ENTRY: ${escapeHtml(enteredValue)}</span>
                             </td>
                             <td>${escapeUpperHtml(record.bloodType)}</td>
                             <td>${escapeUpperHtml(record.serialNumber)}</td>
@@ -1374,7 +1380,7 @@
 
             const rows = groupRecords.map(record => {
                 const donorKey = buildDonorKey(record);
-                const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+                const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
                 const groupDisplay = getCategoryDisplay(record);
 
                 return `
@@ -1467,7 +1473,7 @@
             <td>${buildEditInput(record.address || "")}</td>
             <td>${buildEditInput(record.cityProvince || "")}</td>
             <td>${buildEditSelect(["NEW", "REPEAT", "LAPSE"], record.donorCategory || "")}</td>
-            <td>${buildEditInput(record.numberOfDonations || 0, "number")}</td>
+            <td>${buildEditInput(resolveDonationCountValue(record.numberOfDonations), "text")}</td>
             <td>${buildEditSelect(["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"], record.bloodType || "")}</td>
             <td>${buildEditInput(record.serialNumber || "")}</td>
             <td>${buildEditSelect(["450 ML", "QNS", "UB"], record.amount || "")}</td>
@@ -1511,7 +1517,7 @@
             address: toUpperTrim(fields[11].value),
             cityProvince: toUpperTrim(fields[12].value),
             donorCategory: fields[13].value,
-            numberOfDonations: parseInt(fields[14].value || "0"),
+            numberOfDonations: fields[14].value.trim(),
             bloodType: fields[15].value,
             serialNumber: toUpperTrim(fields[16].value),
             amount: fields[17].value,
@@ -1726,7 +1732,7 @@
 
                 recordsInMonth.forEach(record => {
                     const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
 
                     lines.push([
                         record._resolvedEntryDate || "",
