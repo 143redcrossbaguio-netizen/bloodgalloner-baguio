@@ -106,7 +106,7 @@ align-items:center;
 margin-bottom:15px;
 }
 
-input[type="text"], select{
+input[type="text"], input[type="number"], select{
 padding:9px 10px;
 border:1px solid #ccc;
 border-radius:6px;
@@ -135,6 +135,8 @@ font-weight:bold;
 .view-btn{background:#6a1b9a;}
 .remarks-btn{background:#2e7d32;}
 .save-remarks-btn{background:#b30000;}
+.save-award-btn{background:#1565c0;}
+.to-award-btn{background:#ef6c00;}
 
 table{
 width:100%;
@@ -175,6 +177,26 @@ font-weight:bold;
 .badge-bronze{background:#cd7f32;}
 .badge-silver{background:#9e9e9e;}
 .badge-gold{background:#d4af37;color:black;}
+
+.award-pill{
+display:inline-block;
+padding:3px 7px;
+border-radius:999px;
+font-size:11px;
+font-weight:bold;
+}
+
+.award-yes{
+background:#e8f7e8;
+color:#1b5e20;
+border:1px solid #b7dfb9;
+}
+
+.award-no{
+background:#fff4e5;
+color:#8a4b00;
+border:1px solid #f2c48a;
+}
 
 .badge-count-label{
 display:block;
@@ -267,6 +289,7 @@ background:#ffffff;
 border:1px solid #ccc;
 border-radius:6px;
 padding:10px;
+margin-bottom:12px;
 }
 
 .remarks-panel h4{
@@ -301,6 +324,25 @@ display:block;
 line-height:1.4;
 }
 
+.award-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px;
+margin-bottom:10px;
+}
+
+.award-grid label{
+display:block;
+font-size:12px;
+font-weight:bold;
+margin-bottom:4px;
+color:#444;
+}
+
+.award-full{
+grid-column:1 / -1;
+}
+
 .empty-box{
 padding:20px;
 text-align:center;
@@ -322,6 +364,9 @@ align-items:stretch;
 #searchInput{
 width:100%;
 min-width:auto;
+}
+.award-grid{
+grid-template-columns:1fr;
 }
 }
 </style>
@@ -365,6 +410,15 @@ min-width:auto;
 <option value="gold">Gold</option>
 </select>
 
+<select id="awardFilter" onchange="applyFiltersAndRender()">
+<option value="">All Award Status</option>
+<option value="awarded">Awarded</option>
+<option value="not_awarded">Not Awarded</option>
+<option value="to_be_awarded_this_year">To Be Awarded This Year</option>
+</select>
+
+<input type="number" id="yearAwardedFilter" placeholder="Year Awarded" min="1900" max="2999" oninput="applyFiltersAndRender()" style="width:140px;">
+
 <select id="sortFilter" onchange="applyFiltersAndRender()">
 <option value="qualifiedDesc">Sort: Highest Donations</option>
 <option value="qualifiedAsc">Sort: Lowest Donations</option>
@@ -372,6 +426,8 @@ min-width:auto;
 <option value="nameDesc">Sort: Name Z-A</option>
 </select>
 
+<button class="to-award-btn" onclick="showToBeAwardedThisYear()">To Be Awarded This Year</button>
+<button class="top-btn" onclick="clearAwardFilters()">Clear Award Filter</button>
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
 <button class="reload-btn" onclick="fetchEligibleDonors()">Reload</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
@@ -386,6 +442,7 @@ min-width:auto;
 <th>Badge</th>
 <th>Blood</th>
 <th>Contact</th>
+<th>Award</th>
 <th>Serial</th>
 <th>Actions</th>
 </tr>
@@ -422,6 +479,10 @@ bronze:28,
 silver:46,
 gold:70
 };
+
+function currentYear(){
+return new Date().getFullYear();
+}
 
 function goDashboard(){
 window.location.href = "dashboard.html";
@@ -992,6 +1053,8 @@ contact: safeText(data.contact || aggregateResult.contact || ""),
 serials: Array.isArray(data.serials) ? data.serials : [],
 serialCount: donorSide.serialCount || 0,
 remarks: safeText(data.remarks || ""),
+awardStatus: safeText(data.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED",
+yearAwarded: safeText(data.yearAwarded || ""),
 smartDonationCount: finalCount,
 smartMatchedRows: aggregateResult.matchedRows || 0,
 smartMatchSource: sourceLabel,
@@ -1030,6 +1093,8 @@ contact: safeText(bucket.contact || ""),
 serials: [],
 serialCount: 0,
 remarks: "",
+awardStatus: "NOT AWARDED",
+yearAwarded: "",
 smartDonationCount: smartDonationCount,
 smartMatchedRows: matchedRows,
 smartMatchSource: "Donor Database Only",
@@ -1152,9 +1217,53 @@ document.getElementById("summaryAll").classList.add("active");
 }
 }
 
+function showToBeAwardedThisYear(){
+document.getElementById("awardFilter").value = "to_be_awarded_this_year";
+document.getElementById("yearAwardedFilter").value = currentYear();
+applyFiltersAndRender();
+}
+
+function clearAwardFilters(){
+document.getElementById("awardFilter").value = "";
+document.getElementById("yearAwardedFilter").value = "";
+applyFiltersAndRender();
+}
+
+function matchesAwardFilter(donor, awardFilter, yearFilter){
+let status = safeText(donor.awardStatus || "NOT AWARDED").toUpperCase();
+let yearAwarded = safeText(donor.yearAwarded || "");
+let filterYear = safeText(yearFilter || "");
+
+if(awardFilter === "awarded"){
+if(status !== "AWARDED") return false;
+if(filterYear && yearAwarded !== filterYear) return false;
+return true;
+}
+
+if(awardFilter === "not_awarded"){
+return status !== "AWARDED";
+}
+
+if(awardFilter === "to_be_awarded_this_year"){
+let cy = String(currentYear());
+if(filterYear && filterYear !== cy){
+cy = filterYear;
+}
+return donor.smartDonationCount >= categoryLimits.galloner && !(status === "AWARDED" && yearAwarded === cy);
+}
+
+if(filterYear){
+return yearAwarded === filterYear;
+}
+
+return true;
+}
+
 function applyFiltersAndRender(){
 let bloodFilter = document.getElementById("bloodFilter").value;
 let badgeFilter = document.getElementById("badgeFilter").value;
+let awardFilter = document.getElementById("awardFilter").value;
+let yearAwardedFilter = document.getElementById("yearAwardedFilter").value;
 let sortFilter = document.getElementById("sortFilter").value;
 let searchValue = document.getElementById("searchInput").value.toLowerCase().trim();
 
@@ -1166,13 +1275,15 @@ let contactText = String(d.contact || "").toLowerCase();
 let remarksText = String(d.remarks || "").toLowerCase();
 let donationText = String(d.smartDonationCount || 0).toLowerCase();
 let serialText = String(d.serialCount || 0).toLowerCase();
+let awardText = `${d.awardStatus || ""} ${d.yearAwarded || ""}`.toLowerCase();
 
 if(d.smartDonationCount < categoryLimits.galloner) return false;
 if(bloodFilter && donorBlood !== bloodFilter) return false;
 if(badgeFilter && donorBadge !== badgeFilter) return false;
+if(!matchesAwardFilter(d, awardFilter, yearAwardedFilter)) return false;
 
 if(searchValue){
-let searchable = `${nameText} ${contactText} ${remarksText} ${donationText} ${serialText} ${donorBlood}`.toLowerCase();
+let searchable = `${nameText} ${contactText} ${remarksText} ${donationText} ${serialText} ${donorBlood} ${awardText}`.toLowerCase();
 if(!searchable.includes(searchValue)) return false;
 }
 
@@ -1196,6 +1307,15 @@ document.getElementById("gallonerBox").innerText = filteredDonorsData.filter(d =
 document.getElementById("bronzeBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length;
 document.getElementById("silverBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length;
 document.getElementById("goldBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length;
+}
+
+function renderAwardCell(d){
+let status = safeText(d.awardStatus || "NOT AWARDED").toUpperCase();
+let year = safeText(d.yearAwarded || "");
+if(status === "AWARDED"){
+return `<span class="award-pill award-yes">AWARDED${year ? " " + escapeHtml(year) : ""}</span>`;
+}
+return `<span class="award-pill award-no">NOT AWARDED</span>`;
 }
 
 function renderTable(){
@@ -1231,6 +1351,7 @@ ${badge}
 
 <td>${bloodIcon} ${escapeHtml(d.bloodType||"")}${escapeHtml(d.rhFactor||"")}</td>
 <td>${escapeHtml(d.contact||"")}</td>
+<td>${renderAwardCell(d)}</td>
 
 <td>
 ${Number(d.serialCount || 0)}
@@ -1245,7 +1366,7 @@ ${Number(d.serialCount || 0)}
 </tr>
 
 <tr id="serialRow${index}" style="display:none;">
-<td colspan="7">
+<td colspan="8">
 <div class="serial-box" id="serialList${index}"></div>
 </td>
 </tr>
@@ -1288,6 +1409,8 @@ let smartDonationCount = Number(donor.smartDonationCount || 0);
 let serialCount = Number(donor.serialCount || 0);
 let matchedRows = Number(donor.smartMatchedRows || 0);
 let allRows = Array.isArray(donor.detailRows) ? donor.detailRows : [];
+let awardStatus = safeText(donor.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED";
+let yearAwarded = safeText(donor.yearAwarded || "");
 
 let serialRows = "";
 
@@ -1311,6 +1434,29 @@ serialRows = `
 </tr>
 `;
 }
+
+let awardPanel = `
+<div class="remarks-panel">
+<h4>Award Status</h4>
+<div class="award-grid">
+<div>
+<label for="awardStatus${index}">Award Status</label>
+<select id="awardStatus${index}">
+<option value="NOT AWARDED" ${awardStatus === "NOT AWARDED" ? "selected" : ""}>NOT AWARDED</option>
+<option value="AWARDED" ${awardStatus === "AWARDED" ? "selected" : ""}>AWARDED</option>
+</select>
+</div>
+<div>
+<label for="yearAwarded${index}">Year Awarded</label>
+<input type="number" id="yearAwarded${index}" min="1900" max="2999" value="${escapeHtml(yearAwarded)}" placeholder="e.g. ${currentYear()}">
+</div>
+<div class="award-full">
+<button class="save-award-btn" onclick="saveAwardInfo(${index})">Save Award Info</button>
+<span class="detail-note">Example: donor was awarded in 2024. Use the top button to show who should be awarded this year.</span>
+</div>
+</div>
+</div>
+`;
 
 let remarksSection = donor.id ? `
 <div class="remarks-panel">
@@ -1352,9 +1498,101 @@ ${serialRows}
 </table>
 </div>
 
+<div>
+${awardPanel}
 ${remarksSection}
 </div>
+</div>
 `;
+}
+
+async function ensureDonorRecordForAward(index){
+let donor = filteredDonorsData[index];
+
+if(donor.id){
+return donor.id;
+}
+
+let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
+let docRef = await db.collection("donors").add({
+firstName: donor.firstName || "",
+middleName: donor.middleName || "",
+surname: donor.surname || "",
+birthday: donor.birthday || "",
+bloodType: donor.bloodType || "",
+rhFactor: donor.rhFactor || "",
+contact: donor.contact || "",
+remarks: donor.remarks || "",
+awardStatus: donor.awardStatus || "NOT AWARDED",
+yearAwarded: donor.yearAwarded || "",
+serials: serialsToSync,
+createdFrom: "eligible-awardees-tracking",
+createdAt: firebase.firestore.FieldValue.serverTimestamp()
+});
+
+donor.id = docRef.id;
+let mainIndex = donorsData.findIndex(x =>
+normalizeText(getFullName(x)) === normalizeText(getFullName(donor)) &&
+normalizeBirthday(x.birthday) === normalizeBirthday(donor.birthday)
+);
+if(mainIndex > -1){
+donorsData[mainIndex].id = docRef.id;
+}
+return docRef.id;
+}
+
+async function saveAwardInfo(index){
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+let donor = filteredDonorsData[index];
+let statusEl = document.getElementById("awardStatus"+index);
+let yearEl = document.getElementById("yearAwarded"+index);
+
+if(!statusEl || !yearEl) return;
+
+let awardStatus = safeText(statusEl.value || "NOT AWARDED").toUpperCase();
+let yearAwarded = safeText(yearEl.value || "");
+
+if(awardStatus === "NOT AWARDED"){
+yearAwarded = "";
+}
+
+try{
+let donorId = await ensureDonorRecordForAward(index);
+
+await db.collection("donors").doc(donorId).update({
+awardStatus: awardStatus,
+yearAwarded: yearAwarded
+});
+
+let mainIndex = donorsData.findIndex(x => x.id === donorId);
+if(mainIndex > -1){
+donorsData[mainIndex].awardStatus = awardStatus;
+donorsData[mainIndex].yearAwarded = yearAwarded;
+}
+filteredDonorsData[index].awardStatus = awardStatus;
+filteredDonorsData[index].yearAwarded = yearAwarded;
+
+applyFiltersAndRender();
+
+let reopenedIndex = filteredDonorsData.findIndex(x => x.id === donorId || (normalizeText(getFullName(x)) === normalizeText(getFullName(donor)) && normalizeBirthday(x.birthday) === normalizeBirthday(donor.birthday)));
+if(reopenedIndex > -1){
+let reopenedRow = document.getElementById("serialRow"+reopenedIndex);
+if(reopenedRow){
+reopenedRow.style.display = "table-row";
+renderSerialAndRemarks(reopenedIndex);
+}
+}
+
+alert("Award info saved successfully.");
+}catch(error){
+console.error("Save award info error:", error);
+alert("Error saving award info.");
+}
 }
 
 function saveRemarks(index){
@@ -1419,7 +1657,7 @@ let existingData = existingDoc.exists ? (existingDoc.data() || {}) : {};
 let existingSerials = Array.isArray(existingData.serials) ? existingData.serials : [];
 
 let merged = {};
-        for(let i=0;i<existingSerials.length;i++){
+for(let i=0;i<existingSerials.length;i++){
 let s = existingSerials[i] || {};
 let key = [safeText(s.serial), safeText(s.date)].join("|");
 if(key !== "|"){
@@ -1449,6 +1687,8 @@ bloodType: donor.bloodType || "",
 rhFactor: donor.rhFactor || "",
 contact: donor.contact || "",
 remarks: donor.remarks || existingData.remarks || "",
+awardStatus: donor.awardStatus || existingData.awardStatus || "NOT AWARDED",
+yearAwarded: donor.yearAwarded || existingData.yearAwarded || "",
 serials: Object.values(merged)
 });
 
@@ -1465,6 +1705,8 @@ bloodType: donor.bloodType || "",
 rhFactor: donor.rhFactor || "",
 contact: donor.contact || "",
 remarks: donor.remarks || "",
+awardStatus: donor.awardStatus || "NOT AWARDED",
+yearAwarded: donor.yearAwarded || "",
 serials: serialsToSync,
 createdFrom: "eligible-awardees-tracking",
 createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1514,10 +1756,10 @@ alert("Error deleting donor.");
 }
 
 function exportToCSV(){
-let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Matched DonorDatabase Rows,Encoded Serial Count,Badge Level,Source,Remarks\n";
+let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Matched DonorDatabase Rows,Encoded Serial Count,Badge Level,Award Status,Year Awarded,Source,Remarks\n";
 
 filteredDonorsData.forEach(d=>{
-csv += `${escapeCSV(d.bloodType||"")},${escapeCSV(d.rhFactor||"")},${escapeCSV(d.firstName||"")},${escapeCSV(d.middleName||"")},${escapeCSV(d.surname||"")},${escapeCSV(d.contact||"")},${escapeCSV(d.smartDonationCount||0)},${escapeCSV(d.smartMatchedRows||0)},${escapeCSV(d.serialCount||0)},${escapeCSV((d.badgeLevel||"").toUpperCase())},${escapeCSV(d.smartMatchSource||"")},${escapeCSV(d.remarks||"")}\n`;
+csv += `${escapeCSV(d.bloodType||"")},${escapeCSV(d.rhFactor||"")},${escapeCSV(d.firstName||"")},${escapeCSV(d.middleName||"")},${escapeCSV(d.surname||"")},${escapeCSV(d.contact||"")},${escapeCSV(d.smartDonationCount||0)},${escapeCSV(d.smartMatchedRows||0)},${escapeCSV(d.serialCount||0)},${escapeCSV((d.badgeLevel||"").toUpperCase())},${escapeCSV(d.awardStatus||"NOT AWARDED")},${escapeCSV(d.yearAwarded||"")},${escapeCSV(d.smartMatchSource||"")},${escapeCSV(d.remarks||"")}\n`;
 });
 
 let blob = new Blob([csv],{type:"text/csv"});
