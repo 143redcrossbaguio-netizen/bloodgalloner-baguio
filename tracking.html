@@ -9,7 +9,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
 <style>
-
 body{margin:0;font-family:Arial;background:#f4f4f4;}
 
 header{
@@ -54,7 +53,10 @@ min-width:260px;
 flex:1;
 }
 
-table{width:100%;border-collapse:collapse;}
+table{
+width:100%;
+border-collapse:collapse;
+}
 
 th,td{
 padding:8px;
@@ -101,8 +103,8 @@ color:white;
 .view-btn{background:#6a1b9a;}
 .remarks-btn{background:#2e7d32;}
 .save-remarks-btn{background:#b30000;}
-
 .top-btn{background:#b30000;}
+.reload-btn{background:#1565c0;}
 
 .blood-icon{
 width:20px;
@@ -121,7 +123,7 @@ text-align:left;
 
 .serial-detail-layout{
 display:grid;
-grid-template-columns: 1.25fr 1fr;
+grid-template-columns:1.25fr 1fr;
 gap:15px;
 align-items:start;
 }
@@ -235,6 +237,36 @@ display:block;
 margin-top:4px;
 }
 
+.status-bar{
+margin-bottom:12px;
+padding:10px 12px;
+border-radius:8px;
+display:none;
+}
+
+.status-loading{
+display:block;
+background:#eef5ff;
+border:1px solid #cdddf5;
+color:#1f4f8a;
+}
+
+.status-error{
+display:block;
+background:#fff1f1;
+border:1px solid #f0bdbd;
+color:#b30000;
+}
+
+.empty-box{
+padding:20px;
+text-align:center;
+color:#666;
+background:#fafafa;
+border:1px dashed #ccc;
+border-radius:8px;
+}
+
 @media (max-width: 900px){
 .serial-detail-layout{
 grid-template-columns:1fr;
@@ -248,18 +280,19 @@ width:100%;
 min-width:auto;
 }
 }
-
 </style>
 </head>
 
 <body>
 
 <header>
-<img src="images/logo.png" class="logo">
+<img src="images/logo.png" class="logo" onerror="this.style.display='none'">
 <h2>Donor Tracking</h2>
 </header>
 
 <div class="container">
+
+<div id="statusBar" class="status-bar"></div>
 
 <div class="summary-bar">
 <div class="summary-box" id="totalDonorsBox">Total Donors: 0</div>
@@ -297,6 +330,7 @@ min-width:auto;
 </select>
 
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
+<button class="reload-btn" onclick="fetchDonors()">Reload</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
 </div>
 
@@ -312,21 +346,23 @@ min-width:auto;
 <th>Actions</th>
 </tr>
 </thead>
-
 <tbody id="donorTable"></tbody>
 </table>
+
+<div id="emptyBox" class="empty-box" style="display:none;">No donor records found.</div>
 
 </div>
 
 <script>
-
 var firebaseConfig={
 apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
 authDomain:"galloners-club.firebaseapp.com",
 projectId:"galloners-club"
 };
 
+if(!firebase.apps.length){
 firebase.initializeApp(firebaseConfig);
+}
 
 var auth = firebase.auth();
 var db = firebase.firestore();
@@ -334,13 +370,23 @@ var db = firebase.firestore();
 let donorsData = [];
 let filteredDonorsData = [];
 let categoryLimits = {galloner:8, bronze:28, silver:46, gold:70};
-let authReady = false;
+let isLoading = false;
 
 function goDashboard(){
 window.location.href="dashboard.html";
 }
 
-/* BLOOD DROP ICON */
+function setStatus(message,type){
+let el = document.getElementById("statusBar");
+el.className = "status-bar";
+if(!message){
+el.style.display = "none";
+el.innerHTML = "";
+return;
+}
+el.innerHTML = escapeHtml(message);
+el.classList.add(type === "error" ? "status-error" : "status-loading");
+}
 
 function bloodDrop(color, outline=false){
 let stroke = outline ? "#000" : "none";
@@ -352,20 +398,14 @@ d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/>
 `;
 }
 
-/* BLOOD TYPE ICON LOGIC */
-
 function getBloodIcon(type,rh){
-if(rh === "-"){
-return bloodDrop("#a5d6a7");
-}
+if(rh === "-") return bloodDrop("#a5d6a7");
 if(type === "A") return bloodDrop("#1e88e5");
 if(type === "B") return bloodDrop("#ffd600");
 if(type === "AB") return bloodDrop("#ff80ab");
 if(type === "O") return bloodDrop("#ffffff",true);
 return bloodDrop("#ccc");
 }
-
-/* BADGE */
 
 function getBadgeLevel(donationCount){
 if(donationCount >= categoryLimits.gold) return "gold";
@@ -376,33 +416,22 @@ return "none";
 }
 
 function getBadge(donationCount){
-if(donationCount >= categoryLimits.gold)
-return `<span class="badge badge-gold">GOLD</span>`;
-
-if(donationCount >= categoryLimits.silver)
-return `<span class="badge badge-silver">SILVER</span>`;
-
-if(donationCount >= categoryLimits.bronze)
-return `<span class="badge badge-bronze">BRONZE</span>`;
-
-if(donationCount >= categoryLimits.galloner)
-return `<span class="badge badge-galloner">GALLONER</span>`;
-
+if(donationCount >= categoryLimits.gold) return `<span class="badge badge-gold">GOLD</span>`;
+if(donationCount >= categoryLimits.silver) return `<span class="badge badge-silver">SILVER</span>`;
+if(donationCount >= categoryLimits.bronze) return `<span class="badge badge-bronze">BRONZE</span>`;
+if(donationCount >= categoryLimits.galloner) return `<span class="badge badge-galloner">GALLONER</span>`;
 return "";
-}
-
-/* HELPERS */
-
-function normalizeText(value){
-return String(value || "")
-.toLowerCase()
-.trim()
-.replace(/\s+/g," ")
-.replace(/[^a-z0-9 ]/g,"");
 }
 
 function safeText(value){
 return String(value || "").trim();
+}
+
+function normalizeText(value){
+return safeText(value)
+.toLowerCase()
+.replace(/\s+/g," ")
+.replace(/[^a-z0-9 ]/g,"");
 }
 
 function normalizeBirthday(value){
@@ -413,7 +442,7 @@ let date = new Date(value.seconds * 1000);
 return formatDateToYMD(date);
 }
 
-let text = String(value).trim();
+let text = safeText(value);
 if(!text) return "";
 
 let parsed = new Date(text);
@@ -421,12 +450,12 @@ if(!isNaN(parsed.getTime())){
 return formatDateToYMD(parsed);
 }
 
-return text.replace(/\//g,"-").replace(/\./g,"-").trim().toLowerCase();
+return text.replace(/\//g,"-").replace(/\./g,"-").toLowerCase();
 }
 
 function formatDateToYMD(date){
 let y = date.getFullYear();
-let m = String(date.getMonth() + 1).padStart(2,"0");
+let m = String(date.getMonth()+1).padStart(2,"0");
 let d = String(date.getDate()).padStart(2,"0");
 return `${y}-${m}-${d}`;
 }
@@ -519,7 +548,6 @@ for(let i=0;i<possibleFields.length;i++){
 let num = parseDonationNumber(possibleFields[i]);
 if(num > 0) return num;
 }
-
 return 0;
 }
 
@@ -554,44 +582,7 @@ if(!Array.isArray(serials)) return 0;
 return serials.length;
 }
 
-/* AGGREGATE DONORDATABASE FIRST */
-
-function aggregateDonorDatabase(records){
-let mapFull = {};
-let mapNoMiddle = {};
-let mapNameOnly = {};
-
-records.forEach(record=>{
-let firstName = getPossibleFirstName(record);
-let middleName = getPossibleMiddleName(record);
-let surname = getPossibleSurname(record);
-let birthday = getPossibleBirthday(record);
-
-if(!normalizeText(firstName) || !normalizeText(surname)) return;
-
-let fullKey = buildFullKey(firstName,surname,birthday,middleName);
-let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
-let nameOnlyKey = buildNameOnlyKey(firstName,surname);
-
-if(!mapFull[fullKey]){
-mapFull[fullKey] = createAggregateShell(firstName,middleName,surname,birthday);
-}
-if(!mapNoMiddle[noMiddleKey]){
-mapNoMiddle[noMiddleKey] = createAggregateShell(firstName,middleName,surname,birthday);
-}
-if(!mapNameOnly[nameOnlyKey]){
-mapNameOnly[nameOnlyKey] = createAggregateShell(firstName,middleName,surname,birthday);
-}
-
-applyRecordToAggregate(mapFull[fullKey], record);
-applyRecordToAggregate(mapNoMiddle[noMiddleKey], record);
-applyRecordToAggregate(mapNameOnly[nameOnlyKey], record);
-});
-
-return { mapFull, mapNoMiddle, mapNameOnly };
-}
-
-function createAggregateShell(firstName,middleName,surname,birthday){
+function makeAggregate(firstName,middleName,surname,birthday){
 return {
 firstName: safeText(firstName),
 middleName: safeText(middleName),
@@ -601,26 +592,18 @@ bloodType: "",
 rhFactor: "",
 contact: "",
 maxDonationCount: 0,
-uniqueDonationFingerprints: new Set(),
-records: [],
-latestDate: "",
-matchedRows: 0
+fingerprints: new Set()
 };
 }
 
 function applyRecordToAggregate(bucket, record){
-let explicitCount = getRecordDonationCount(record);
-let fingerprint = buildUniqueDonationFingerprint(record);
-let donationDate = normalizeBirthday(getPossibleDonationDate(record));
+let count = getRecordDonationCount(record);
+let fp = buildUniqueDonationFingerprint(record);
+bucket.fingerprints.add(fp);
 
-bucket.records.push(record);
-bucket.uniqueDonationFingerprints.add(fingerprint);
-bucket.matchedRows = bucket.uniqueDonationFingerprints.size;
-
-if(explicitCount > bucket.maxDonationCount){
-bucket.maxDonationCount = explicitCount;
+if(count > bucket.maxDonationCount){
+bucket.maxDonationCount = count;
 }
-
 if(!bucket.bloodType && getPossibleBloodType(record)){
 bucket.bloodType = getPossibleBloodType(record);
 }
@@ -630,9 +613,60 @@ bucket.rhFactor = getPossibleRhFactor(record);
 if(!bucket.contact && getPossibleContact(record)){
 bucket.contact = getPossibleContact(record);
 }
-if(donationDate && (!bucket.latestDate || donationDate > bucket.latestDate)){
-bucket.latestDate = donationDate;
 }
+
+function aggregateDonorDatabase(records){
+let fullMap = {};
+let noMiddleMap = {};
+let nameOnlyMap = {};
+
+for(let i=0;i<records.length;i++){
+let record = records[i];
+let firstName = getPossibleFirstName(record);
+let middleName = getPossibleMiddleName(record);
+let surname = getPossibleSurname(record);
+let birthday = getPossibleBirthday(record);
+
+if(!normalizeText(firstName) || !normalizeText(surname)) continue;
+
+let fullKey = buildFullKey(firstName,surname,birthday,middleName);
+let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
+let nameOnlyKey = buildNameOnlyKey(firstName,surname);
+
+if(!fullMap[fullKey]) fullMap[fullKey] = makeAggregate(firstName,middleName,surname,birthday);
+if(!noMiddleMap[noMiddleKey]) noMiddleMap[noMiddleKey] = makeAggregate(firstName,middleName,surname,birthday);
+if(!nameOnlyMap[nameOnlyKey]) nameOnlyMap[nameOnlyKey] = makeAggregate(firstName,middleName,surname,birthday);
+
+applyRecordToAggregate(fullMap[fullKey], record);
+applyRecordToAggregate(noMiddleMap[noMiddleKey], record);
+applyRecordToAggregate(nameOnlyMap[nameOnlyKey], record);
+}
+
+return { fullMap, noMiddleMap, nameOnlyMap };
+}
+
+function aggregateToResult(bucket, source){
+if(!bucket){
+return {
+source: source,
+matchedRows: 0,
+countFromDatabase: 0,
+bloodType: "",
+rhFactor: "",
+contact: ""
+};
+}
+let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
+let finalCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+
+return {
+source: source,
+matchedRows: matchedRows,
+countFromDatabase: finalCount,
+bloodType: bucket.bloodType || "",
+rhFactor: bucket.rhFactor || "",
+contact: bucket.contact || ""
+};
 }
 
 function getAggregateResultForDonor(donor, aggregates){
@@ -645,45 +679,12 @@ let fullKey = buildFullKey(firstName,surname,birthday,middleName);
 let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
 let nameOnlyKey = buildNameOnlyKey(firstName,surname);
 
-let fullBucket = aggregates.mapFull[fullKey];
-let noMiddleBucket = aggregates.mapNoMiddle[noMiddleKey];
-let nameOnlyBucket = aggregates.mapNameOnly[nameOnlyKey];
+if(aggregates.fullMap[fullKey]) return aggregateToResult(aggregates.fullMap[fullKey], "Exact Match");
+if(aggregates.noMiddleMap[noMiddleKey]) return aggregateToResult(aggregates.noMiddleMap[noMiddleKey], "No Middle Name Match");
+if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.nameOnlyMap[nameOnlyKey], "Name Only Match");
 
-if(fullBucket) return makeAggregateResult(fullBucket,"Exact Match");
-if(noMiddleBucket) return makeAggregateResult(noMiddleBucket,"No Middle Name Match");
-if(nameOnlyBucket) return makeAggregateResult(nameOnlyBucket,"Name Only Match");
-
-return makeAggregateResult(null,"No Match");
+return aggregateToResult(null, "No Match");
 }
-
-function makeAggregateResult(bucket, source){
-if(!bucket){
-return {
-source: source,
-matchedRows: 0,
-countFromDatabase: 0,
-bloodType: "",
-rhFactor: "",
-contact: "",
-records: []
-};
-}
-
-let countFromRows = bucket.uniqueDonationFingerprints ? bucket.uniqueDonationFingerprints.size : 0;
-let finalCount = Math.max(bucket.maxDonationCount || 0, countFromRows || 0);
-
-return {
-source: source,
-matchedRows: countFromRows,
-countFromDatabase: finalCount,
-bloodType: bucket.bloodType || "",
-rhFactor: bucket.rhFactor || "",
-contact: bucket.contact || "",
-records: bucket.records || []
-};
-}
-
-/* MERGE donors + donorDatabase so donors existing only in donorDatabase still appear */
 
 function buildMergedDonorList(donorsSnapshot, donorDatabaseSnapshot){
 let donorDocs = [];
@@ -702,29 +703,22 @@ donorDatabaseRecords.push(data);
 });
 
 let aggregates = aggregateDonorDatabase(donorDatabaseRecords);
+let mergedList = [];
+let usedFullKeys = new Set();
 
-let mergedMap = {};
-let donorDocKeysUsed = new Set();
+for(let i=0;i<donorDocs.length;i++){
+let data = donorDocs[i];
 
-donorDocs.forEach(data=>{
 let firstName = getPossibleFirstName(data);
 let middleName = getPossibleMiddleName(data);
 let surname = getPossibleSurname(data);
 let birthday = getPossibleBirthday(data);
 
-let fullKey = buildFullKey(firstName,surname,birthday,middleName);
-let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
-let fallbackKey = fullKey || noMiddleKey || buildNameOnlyKey(firstName,surname);
-
 let aggregateResult = getAggregateResultForDonor(data, aggregates);
 let serialCount = inferDonationCountFromSerials(data.serials);
+let smartDonationCount = Math.max(aggregateResult.countFromDatabase || 0, serialCount || 0);
 
-let smartDonationCount = Math.max(
-aggregateResult.countFromDatabase || 0,
-serialCount || 0
-);
-
-let merged = {
+mergedList.push({
 id: data.id,
 sourceType: "donors",
 firstName: safeText(firstName),
@@ -735,29 +729,27 @@ bloodType: safeText(data.bloodType || aggregateResult.bloodType || ""),
 rhFactor: safeText(data.rhFactor || aggregateResult.rhFactor || ""),
 contact: safeText(data.contact || aggregateResult.contact || ""),
 serials: Array.isArray(data.serials) ? data.serials : [],
+serialCount: serialCount,
 remarks: safeText(data.remarks || ""),
 smartDonationCount: smartDonationCount,
 smartMatchSource: aggregateResult.source,
 smartMatchedRows: aggregateResult.matchedRows || 0,
 badgeLevel: getBadgeLevel(smartDonationCount),
-dbRecords: aggregateResult.records || [],
 canEdit: true,
 canDelete: true
-};
-
-mergedMap[fallbackKey] = merged;
-donorDocKeysUsed.add(fullKey);
-donorDocKeysUsed.add(noMiddleKey);
 });
 
-Object.keys(aggregates.mapFull).forEach(key=>{
-if(donorDocKeysUsed.has(key)) return;
+usedFullKeys.add(buildFullKey(firstName,surname,birthday,middleName));
+}
 
-let bucket = aggregates.mapFull[key];
-let countFromRows = bucket.uniqueDonationFingerprints ? bucket.uniqueDonationFingerprints.size : 0;
-let smartDonationCount = Math.max(bucket.maxDonationCount || 0, countFromRows || 0);
+Object.keys(aggregates.fullMap).forEach(key=>{
+if(usedFullKeys.has(key)) return;
 
-let merged = {
+let bucket = aggregates.fullMap[key];
+let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
+let smartDonationCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+
+mergedList.push({
 id: "",
 sourceType: "donorDatabaseOnly",
 firstName: safeText(bucket.firstName),
@@ -768,57 +760,55 @@ bloodType: safeText(bucket.bloodType || ""),
 rhFactor: safeText(bucket.rhFactor || ""),
 contact: safeText(bucket.contact || ""),
 serials: [],
+serialCount: 0,
 remarks: "",
 smartDonationCount: smartDonationCount,
 smartMatchSource: "Donor Database Only",
-smartMatchedRows: countFromRows,
+smartMatchedRows: matchedRows,
 badgeLevel: getBadgeLevel(smartDonationCount),
-dbRecords: bucket.records || [],
 canEdit: false,
 canDelete: false
-};
-
-mergedMap[key] = merged;
+});
 });
 
-let finalList = Object.values(mergedMap);
-
-finalList.forEach(item=>{
-let serialCount = inferDonationCountFromSerials(item.serials);
-item.serialCount = serialCount;
-item.smartDonationCount = Math.max(item.smartDonationCount || 0, serialCount || 0);
-item.badgeLevel = getBadgeLevel(item.smartDonationCount);
-});
-
-return finalList;
+return mergedList;
 }
 
-/* FETCH */
+async function fetchDonors(){
+if(isLoading) return;
 
-function fetchDonors(){
-
-if (!auth.currentUser) {
+if(!auth.currentUser){
 alert("You are not logged in.");
 window.location.href = "index.html";
 return;
 }
 
-Promise.all([
+isLoading = true;
+setStatus("Loading donor tracking data...", "loading");
+
+try{
+let results = await Promise.all([
 db.collection("donors").get(),
 db.collection("donorDatabase").get()
-]).then(([donorsSnapshot, donorDatabaseSnapshot])=>{
+]);
 
-donorsData = buildMergedDonorList(donorsSnapshot, donorDatabaseSnapshot);
+donorsData = buildMergedDonorList(results[0], results[1]);
 applyFiltersAndRender();
 
-}).catch(error => {
-console.error("Fetch donors error:", error);
-alert("Error loading donor records.");
-});
-
+if(donorsData.length === 0){
+setStatus("Loaded successfully, but no donor records were found.", "loading");
+}else{
+setStatus("");
 }
-
-/* FILTER / SORT / SUMMARY */
+}catch(error){
+console.error("Fetch donors error:", error);
+setStatus("Error loading donor records. Check your Firestore rules, collection names, and browser console.", "error");
+document.getElementById("donorTable").innerHTML = "";
+document.getElementById("emptyBox").style.display = "block";
+}finally{
+isLoading = false;
+}
+}
 
 function applyFiltersAndRender(){
 let bloodFilter = document.getElementById("bloodFilter").value;
@@ -846,15 +836,9 @@ return true;
 });
 
 filteredDonorsData.sort((a,b)=>{
-if(sortFilter === "qualifiedAsc"){
-return (a.smartDonationCount||0) - (b.smartDonationCount||0);
-}
-if(sortFilter === "nameAsc"){
-return getSortableName(a).localeCompare(getSortableName(b));
-}
-if(sortFilter === "nameDesc"){
-return getSortableName(b).localeCompare(getSortableName(a));
-}
+if(sortFilter === "qualifiedAsc") return (a.smartDonationCount||0) - (b.smartDonationCount||0);
+if(sortFilter === "nameAsc") return getSortableName(a).localeCompare(getSortableName(b));
+if(sortFilter === "nameDesc") return getSortableName(b).localeCompare(getSortableName(a));
 return (b.smartDonationCount||0) - (a.smartDonationCount||0);
 });
 
@@ -870,18 +854,19 @@ document.getElementById("qualifiedSilverBox").innerText = `Silver: ${filteredDon
 document.getElementById("qualifiedGoldBox").innerText = `Gold: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length}`;
 }
 
-/* RENDER */
-
 function renderTable(){
+let table = document.getElementById("donorTable");
+let emptyBox = document.getElementById("emptyBox");
+table.innerHTML = "";
 
-let table=document.getElementById("donorTable");
-table.innerHTML="";
+if(filteredDonorsData.length === 0){
+emptyBox.style.display = "block";
+return;
+}
+emptyBox.style.display = "none";
 
 filteredDonorsData.forEach((d,index)=>{
-
-let serialCount = inferDonationCountFromSerials(d.serials);
-let smartDonationCount = Number(d.smartDonationCount || 0);
-let badge = getBadge(smartDonationCount);
+let badge = getBadge(Number(d.smartDonationCount || 0));
 let bloodIcon = getBloodIcon(d.bloodType,d.rhFactor);
 let hasRemarks = (d.remarks || "").trim() !== "";
 
@@ -898,17 +883,15 @@ ${d.sourceType === "donorDatabaseOnly" ? `<span class="muted-note">Shown from Do
 
 <td>
 ${badge}
-<div class="badge-count-label">${smartDonationCount} Donation${smartDonationCount === 1 ? "" : "s"}</div>
+<div class="badge-count-label">${Number(d.smartDonationCount || 0)} Donation${Number(d.smartDonationCount || 0) === 1 ? "" : "s"}</div>
 </td>
 
-<td>
-${bloodIcon} ${escapeHtml(d.bloodType||"")}${escapeHtml(d.rhFactor||"")}
-</td>
+<td>${bloodIcon} ${escapeHtml(d.bloodType||"")}${escapeHtml(d.rhFactor||"")}</td>
 
 <td>${escapeHtml(d.contact||"")}</td>
 
 <td>
-${serialCount}
+${Number(d.serialCount || 0)}
 <button class="view-btn" onclick="toggleSerial(${index})">View</button>
 </td>
 
@@ -926,44 +909,35 @@ ${d.canDelete ? `<button class="delete-btn" onclick="deleteDonor('${d.id}')">Del
 </tr>
 `;
 });
-
 }
 
-/* VIEW */
-
 function toggleSerial(index){
-let row=document.getElementById("serialRow"+index);
-
+let row = document.getElementById("serialRow"+index);
 if(!row) return;
 
-if(row.style.display==="none"){
+if(row.style.display === "none"){
 renderSerialAndRemarks(index);
-row.style.display="table-row";
+row.style.display = "table-row";
 }else{
-row.style.display="none";
+row.style.display = "none";
 }
 }
 
 function openRemarksOnly(index){
-let row=document.getElementById("serialRow"+index);
-
+let row = document.getElementById("serialRow"+index);
 if(!row) return;
 
-if(row.style.display==="none"){
-row.style.display="table-row";
+if(row.style.display === "none"){
+row.style.display = "table-row";
 }
-
 renderSerialAndRemarks(index);
 
-let remarksBox=document.getElementById("remarksText"+index);
-if(remarksBox){
-remarksBox.focus();
-}
+let remarksBox = document.getElementById("remarksText"+index);
+if(remarksBox) remarksBox.focus();
 }
 
 function renderSerialAndRemarks(index){
-
-let container=document.getElementById("serialList"+index);
+let container = document.getElementById("serialList"+index);
 if(!container) return;
 
 let donor = filteredDonorsData[index];
@@ -972,7 +946,7 @@ let remarks = donor.remarks || "";
 let smartDonationCount = Number(donor.smartDonationCount || 0);
 let smartMatchedRows = Number(donor.smartMatchedRows || 0);
 let smartMatchSource = donor.smartMatchSource || "No Match";
-let serialCount = inferDonationCountFromSerials(serials);
+let serialCount = Number(donor.serialCount || 0);
 
 let serialRows = "";
 
@@ -1010,7 +984,6 @@ ${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</spa
 
 container.innerHTML = `
 <div class="serial-detail-layout">
-
 <div>
 <div class="serial-count-box">Qualified Donation Count: ${smartDonationCount}</div>
 <div class="serial-count-box">Count from Donor Database: ${smartMatchedRows}</div>
@@ -1032,16 +1005,11 @@ ${serialRows}
 </div>
 
 ${remarksSection}
-
 </div>
 `;
-
 }
 
-/* SAVE REMARKS */
-
 function saveRemarks(index){
-
 let donor = filteredDonorsData[index];
 
 if(!donor.canEdit){
@@ -1054,7 +1022,7 @@ if(!textarea) return;
 
 let remarksValue = textarea.value.trim();
 
-if (!auth.currentUser) {
+if(!auth.currentUser){
 alert("You are not logged in.");
 window.location.href = "index.html";
 return;
@@ -1068,14 +1036,13 @@ if(mainIndex > -1){
 donorsData[mainIndex].remarks = remarksValue;
 }
 filteredDonorsData[index].remarks = remarksValue;
-
 applyFiltersAndRender();
 
 let reopenedIndex = filteredDonorsData.findIndex(x => x.id === donor.id);
 if(reopenedIndex > -1){
 let reopenedRow = document.getElementById("serialRow"+reopenedIndex);
 if(reopenedRow){
-reopenedRow.style.display="table-row";
+reopenedRow.style.display = "table-row";
 renderSerialAndRemarks(reopenedIndex);
 }
 }
@@ -1085,66 +1052,51 @@ alert("Remarks saved successfully.");
 console.error("Remarks save error:", error);
 alert("Error saving remarks.");
 });
-
 }
-
-/* SEARCH */
 
 function searchDonor(){
 applyFiltersAndRender();
 }
 
-/* DELETE */
-
 function deleteDonor(id){
-
-if (!auth.currentUser) {
+if(!auth.currentUser){
 alert("You are not logged in.");
 window.location.href = "index.html";
 return;
 }
 
 if(confirm("Delete donor?")){
-
 db.collection("donors").doc(id).delete().then(()=>{
 fetchDonors();
-}).catch(error => {
+}).catch(error=>{
 console.error("Delete error:", error);
 alert("Error deleting donor.");
 });
-
 }
-
 }
-
-/* EDIT */
 
 function editDonor(id){
-window.location.href="donor-entry.html?editId="+id;
+window.location.href = "donor-entry.html?editId=" + id;
 }
 
-/* CSV */
-
 function exportToCSV(){
-
-let csv="Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Badge Level,Match Source,DonorDatabase Rows,Encoded Serial Count,Source Type,Remarks\n";
+let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Badge Level,Match Source,DonorDatabase Rows,Encoded Serial Count,Source Type,Remarks\n";
 
 filteredDonorsData.forEach(d=>{
 csv += `${escapeCSV(d.bloodType||"")},${escapeCSV(d.rhFactor||"")},${escapeCSV(d.firstName||"")},${escapeCSV(d.middleName||"")},${escapeCSV(d.surname||"")},${escapeCSV(d.contact||"")},${escapeCSV(d.smartDonationCount||0)},${escapeCSV((d.badgeLevel||"").toUpperCase())},${escapeCSV(d.smartMatchSource||"")},${escapeCSV(d.smartMatchedRows||0)},${escapeCSV(d.serialCount||0)},${escapeCSV(d.sourceType||"")},${escapeCSV(d.remarks||"")}\n`;
 });
 
-let blob=new Blob([csv],{type:"text/csv"});
-let url=window.URL.createObjectURL(blob);
+let blob = new Blob([csv],{type:"text/csv"});
+let url = window.URL.createObjectURL(blob);
 
-let a=document.createElement("a");
-a.href=url;
-a.download="donors.csv";
+let a = document.createElement("a");
+a.href = url;
+a.download = "donors.csv";
 document.body.appendChild(a);
 a.click();
 document.body.removeChild(a);
 
 window.URL.revokeObjectURL(url);
-
 }
 
 function escapeCSV(value){
@@ -1168,19 +1120,13 @@ return String(text || "")
 .replace(/>/g, "&gt;");
 }
 
-/* AUTH CHECK */
-
 auth.onAuthStateChanged(function(user){
-authReady = true;
-
 if(!user){
-window.location.href="index.html";
+window.location.href = "index.html";
 return;
 }
-
 fetchDonors();
 });
-
 </script>
 
 </body>
