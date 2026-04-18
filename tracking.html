@@ -82,6 +82,20 @@ padding:10px 14px;
 border-radius:8px;
 font-weight:bold;
 color:#b30000;
+cursor:pointer;
+user-select:none;
+transition:all .15s ease;
+}
+
+.summary-box:hover{
+transform:translateY(-1px);
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+.summary-box.active{
+background:#b30000;
+border-color:#b30000;
+color:white;
 }
 
 .controls-row{
@@ -213,7 +227,7 @@ text-align:left;
 
 .serial-detail-layout{
 display:grid;
-grid-template-columns:1.25fr 1fr;
+grid-template-columns:1.3fr 1fr;
 gap:15px;
 align-items:start;
 }
@@ -279,6 +293,14 @@ margin-top:8px;
 display:block;
 }
 
+.detail-note{
+font-size:12px;
+color:#555;
+margin-top:8px;
+display:block;
+line-height:1.4;
+}
+
 .empty-box{
 padding:20px;
 text-align:center;
@@ -317,11 +339,11 @@ min-width:auto;
 <div id="statusBar" class="status-bar"></div>
 
 <div class="summary-bar">
-<div class="summary-box" id="totalEligibleBox">Eligible Donors: 0</div>
-<div class="summary-box" id="gallonerBox">Galloner: 0</div>
-<div class="summary-box" id="bronzeBox">Bronze: 0</div>
-<div class="summary-box" id="silverBox">Silver: 0</div>
-<div class="summary-box" id="goldBox">Gold: 0</div>
+<div class="summary-box active" id="summaryAll" onclick="applySummaryFilter('')">Eligible Donors: <span id="totalEligibleBox">0</span></div>
+<div class="summary-box" id="summaryGalloner" onclick="applySummaryFilter('galloner')">Galloner: <span id="gallonerBox">0</span></div>
+<div class="summary-box" id="summaryBronze" onclick="applySummaryFilter('bronze')">Bronze: <span id="bronzeBox">0</span></div>
+<div class="summary-box" id="summarySilver" onclick="applySummaryFilter('silver')">Silver: <span id="silverBox">0</span></div>
+<div class="summary-box" id="summaryGold" onclick="applySummaryFilter('gold')">Gold: <span id="goldBox">0</span></div>
 </div>
 
 <div class="controls-row">
@@ -335,7 +357,7 @@ min-width:auto;
 <option value="O">O</option>
 </select>
 
-<select id="badgeFilter" onchange="applyFiltersAndRender()">
+<select id="badgeFilter" onchange="syncSummaryFromBadgeFilter(); applyFiltersAndRender();">
 <option value="">All Badges</option>
 <option value="galloner">Galloner</option>
 <option value="bronze">Bronze</option>
@@ -696,7 +718,9 @@ bloodType: "",
 rhFactor: "",
 contact: "",
 maxDonationCount: 0,
-fingerprints: new Set()
+fingerprints: new Set(),
+docIds: [],
+detailRows: []
 };
 }
 
@@ -709,6 +733,18 @@ if(count > bucket.maxDonationCount) bucket.maxDonationCount = count;
 if(!bucket.bloodType && getPossibleBloodType(record)) bucket.bloodType = getPossibleBloodType(record);
 if(!bucket.rhFactor && getPossibleRhFactor(record)) bucket.rhFactor = getPossibleRhFactor(record);
 if(!bucket.contact && getPossibleContact(record)) bucket.contact = getPossibleContact(record);
+
+if(record.id){
+bucket.docIds.push(record.id);
+}
+
+bucket.detailRows.push({
+docId: record.id || "",
+source: "donorDatabase",
+serial: safeText(getPossibleSerialNumber(record)),
+date: safeText(normalizeBirthday(getPossibleDonationDate(record)) || safeText(getPossibleDonationDate(record))),
+count: getRecordDonationCount(record)
+});
 }
 
 function aggregateDonorDatabase(records){
@@ -741,6 +777,36 @@ applyRecordToAggregate(nameOnlyMap[nameOnlyKey], record);
 return { fullMap, noMiddleMap, nameOnlyMap };
 }
 
+function dedupeDetailRows(rows){
+let seen = {};
+let result = [];
+
+for(let i=0;i<rows.length;i++){
+let row = rows[i] || {};
+let key = [
+safeText(row.source),
+safeText(row.docId),
+safeText(row.serial),
+safeText(row.date),
+safeText(row.count)
+].join("|");
+
+if(!seen[key]){
+seen[key] = true;
+result.push(row);
+}
+}
+
+result.sort((a,b)=>{
+let dateA = safeText(a.date);
+let dateB = safeText(b.date);
+if(dateA !== dateB) return dateB.localeCompare(dateA);
+return safeText(a.serial).localeCompare(safeText(b.serial), undefined, { numeric:true, sensitivity:"base" });
+});
+
+return result;
+}
+
 function aggregateToResult(bucket, source){
 if(!bucket){
 return {
@@ -749,7 +815,9 @@ matchedRows: 0,
 countFromDatabase: 0,
 bloodType: "",
 rhFactor: "",
-contact: ""
+contact: "",
+detailRows: [],
+docIds: []
 };
 }
 
@@ -762,7 +830,9 @@ matchedRows: matchedRows,
 countFromDatabase: finalCount,
 bloodType: bucket.bloodType || "",
 rhFactor: bucket.rhFactor || "",
-contact: bucket.contact || ""
+contact: bucket.contact || "",
+detailRows: dedupeDetailRows(bucket.detailRows || []),
+docIds: Array.from(new Set(bucket.docIds || []))
 };
 }
 
@@ -781,6 +851,25 @@ if(aggregates.noMiddleMap[noMiddleKey]) return aggregateToResult(aggregates.noMi
 if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.nameOnlyMap[nameOnlyKey], "Name Only Match");
 
 return aggregateToResult(null, "No Match");
+}
+
+function mergeSerialRowsFromDonors(serials){
+let rows = [];
+
+if(Array.isArray(serials)){
+for(let i=0;i<serials.length;i++){
+let s = serials[i] || {};
+rows.push({
+docId: "",
+source: "donors",
+serial: safeText(s.serial || s.serialNumber || ""),
+date: safeText(s.date || s.entryDate || ""),
+count: 0
+});
+}
+}
+
+return rows;
 }
 
 function mergeBothCollections(donorsDocs, donorDatabaseDocs){
@@ -810,6 +899,11 @@ sourceLabel = "Donor Database";
 sourceLabel = "Serial Count";
 }
 
+let mergedDetailRows = dedupeDetailRows([
+...mergeSerialRowsFromDonors(data.serials),
+...(aggregateResult.detailRows || [])
+]);
+
 let item = {
 id: data.id || "",
 firstName: safeText(firstName),
@@ -826,8 +920,10 @@ smartDonationCount: finalCount,
 smartMatchedRows: aggregateResult.matchedRows || 0,
 smartMatchSource: sourceLabel,
 badgeLevel: getBadgeLevel(finalCount),
-canEdit: !!data.id,
-canDelete: !!data.id
+canEdit: true,
+canDelete: true,
+donorDatabaseDocIds: aggregateResult.docIds || [],
+detailRows: mergedDetailRows
 };
 
 if(item.smartDonationCount >= categoryLimits.galloner){
@@ -862,8 +958,10 @@ smartDonationCount: smartDonationCount,
 smartMatchedRows: matchedRows,
 smartMatchSource: "Donor Database Only",
 badgeLevel: getBadgeLevel(smartDonationCount),
-canEdit: false,
-canDelete: false
+canEdit: true,
+canDelete: true,
+donorDatabaseDocIds: Array.from(new Set(bucket.docIds || [])),
+detailRows: dedupeDetailRows(bucket.detailRows || [])
 });
 });
 
@@ -951,6 +1049,33 @@ isLoading = false;
 }
 }
 
+function applySummaryFilter(level){
+document.getElementById("badgeFilter").value = level;
+syncSummaryFromBadgeFilter();
+applyFiltersAndRender();
+}
+
+function syncSummaryFromBadgeFilter(){
+let value = document.getElementById("badgeFilter").value;
+
+let ids = ["summaryAll","summaryGalloner","summaryBronze","summarySilver","summaryGold"];
+for(let i=0;i<ids.length;i++){
+document.getElementById(ids[i]).classList.remove("active");
+}
+
+if(value === "galloner"){
+document.getElementById("summaryGalloner").classList.add("active");
+}else if(value === "bronze"){
+document.getElementById("summaryBronze").classList.add("active");
+}else if(value === "silver"){
+document.getElementById("summarySilver").classList.add("active");
+}else if(value === "gold"){
+document.getElementById("summaryGold").classList.add("active");
+}else{
+document.getElementById("summaryAll").classList.add("active");
+}
+}
+
 function applyFiltersAndRender(){
 let bloodFilter = document.getElementById("bloodFilter").value;
 let badgeFilter = document.getElementById("badgeFilter").value;
@@ -990,11 +1115,11 @@ renderTable();
 }
 
 function updateSummary(){
-document.getElementById("totalEligibleBox").innerText = `Eligible Donors: ${filteredDonorsData.length}`;
-document.getElementById("gallonerBox").innerText = `Galloner: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner && d.smartDonationCount < categoryLimits.bronze).length}`;
-document.getElementById("bronzeBox").innerText = `Bronze: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length}`;
-document.getElementById("silverBox").innerText = `Silver: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length}`;
-document.getElementById("goldBox").innerText = `Gold: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length}`;
+document.getElementById("totalEligibleBox").innerText = filteredDonorsData.length;
+document.getElementById("gallonerBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner && d.smartDonationCount < categoryLimits.bronze).length;
+document.getElementById("bronzeBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length;
+document.getElementById("silverBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length;
+document.getElementById("goldBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length;
 }
 
 function renderTable(){
@@ -1038,8 +1163,8 @@ ${Number(d.serialCount || 0)}
 
 <td>
 <button class="remarks-btn" onclick="openRemarksOnly(${index})">Remarks</button>
-${d.canEdit ? `<button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>` : ``}
-${d.canDelete ? `<button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>` : ``}
+<button class="edit-btn" onclick="editEligibleDonor(${index})">Edit</button>
+<button class="delete-btn" onclick="deleteEligibleDonor(${index})">Delete</button>
 </td>
 </tr>
 
@@ -1082,43 +1207,48 @@ let container = document.getElementById("serialList"+index);
 if(!container) return;
 
 let donor = filteredDonorsData[index];
-let serials = donor.serials || [];
 let remarks = donor.remarks || "";
 let smartDonationCount = Number(donor.smartDonationCount || 0);
 let serialCount = Number(donor.serialCount || 0);
 let matchedRows = Number(donor.smartMatchedRows || 0);
+let allRows = Array.isArray(donor.detailRows) ? donor.detailRows : [];
 
 let serialRows = "";
 
-if(serials.length){
-serials.forEach((s,i)=>{
+if(allRows.length){
+for(let i=0;i<allRows.length;i++){
+let row = allRows[i] || {};
 serialRows += `
 <tr>
 <td style="text-align:center;">${i+1}</td>
-<td>${escapeHtml(s.serial || "")}</td>
-<td>${escapeHtml(s.date || "")}</td>
+<td>${escapeHtml(row.serial || "-")}</td>
+<td>${escapeHtml(row.date || "-")}</td>
+<td>${escapeHtml(row.source || "")}</td>
+<td>${escapeHtml(row.docId || "")}</td>
 </tr>
 `;
-});
+}
 }else{
 serialRows = `
 <tr>
-<td colspan="3" style="text-align:center;">No serial records found.</td>
+<td colspan="5" style="text-align:center;">No serial or donation rows found.</td>
 </tr>
 `;
 }
 
-let remarksSection = donor.canEdit ? `
+let remarksSection = donor.id ? `
 <div class="remarks-panel">
 <h4>Remarks</h4>
 <textarea id="remarksText${index}" class="remarks-textarea" placeholder="Enter remarks here...">${escapeHtmlToTextarea(remarks)}</textarea>
 <button class="save-remarks-btn" onclick="saveRemarks(${index})">Save Remarks</button>
 ${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</span>` : ``}
+<span class="detail-note">You can edit this donor to add serial numbers from the donor entry page.</span>
 </div>
 ` : `
 <div class="remarks-panel">
 <h4>Remarks</h4>
-<div class="no-remarks-label">This donor is shown from Donor Database only. No donor record yet in the donors collection.</div>
+<div class="no-remarks-label">This donor is currently from Donor Database only.</div>
+<span class="detail-note">Click Edit to auto-create a donors record first, then add serial numbers there.</span>
 </div>
 `;
 
@@ -1135,7 +1265,9 @@ container.innerHTML = `
 <tr>
 <th style="width:70px;">#</th>
 <th>Serial Number</th>
-<th style="width:180px;">Date</th>
+<th style="width:160px;">Date</th>
+<th style="width:120px;">Source</th>
+<th>Record ID</th>
 </tr>
 </thead>
 <tbody>
@@ -1151,8 +1283,8 @@ ${remarksSection}
 
 function saveRemarks(index){
 let donor = filteredDonorsData[index];
-if(!donor.canEdit){
-alert("This donor is from Donor Database only and has no editable donor record yet.");
+if(!donor.id){
+alert("This donor is from Donor Database only. Please click Edit first so a donor record is created.");
 return;
 }
 
@@ -1192,24 +1324,75 @@ alert("Error saving remarks.");
 });
 }
 
-function editDonor(id){
-window.location.href = "donor-entry.html?editId=" + id;
-}
+async function editEligibleDonor(index){
+let donor = filteredDonorsData[index];
 
-function deleteDonor(id){
 if(!auth.currentUser){
 alert("You are not logged in.");
 window.location.href = "index.html";
 return;
 }
 
-if(confirm("Delete donor?")){
-db.collection("donors").doc(id).delete().then(()=>{
-fetchEligibleDonors();
-}).catch(error=>{
-console.error("Delete error:", error);
-alert("Error deleting donor.");
+try{
+if(donor.id){
+window.location.href = "donor-entry.html?editId=" + donor.id;
+return;
+}
+
+let docRef = await db.collection("donors").add({
+firstName: donor.firstName || "",
+middleName: donor.middleName || "",
+surname: donor.surname || "",
+birthday: donor.birthday || "",
+bloodType: donor.bloodType || "",
+rhFactor: donor.rhFactor || "",
+contact: donor.contact || "",
+remarks: donor.remarks || "",
+serials: [],
+createdFrom: "eligible-awardees-tracking",
+createdAt: firebase.firestore.FieldValue.serverTimestamp()
 });
+
+window.location.href = "donor-entry.html?editId=" + docRef.id;
+}catch(error){
+console.error("Create donor record error:", error);
+alert("Error preparing donor for edit.");
+}
+}
+
+async function deleteEligibleDonor(index){
+let donor = filteredDonorsData[index];
+
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+try{
+if(donor.id){
+if(confirm("Delete this donor record from donors collection?")){
+await db.collection("donors").doc(donor.id).delete();
+await fetchEligibleDonors();
+}
+return;
+}
+
+if(Array.isArray(donor.donorDatabaseDocIds) && donor.donorDatabaseDocIds.length){
+if(confirm("Delete all matched donorDatabase records for this donor?")){
+let ids = donor.donorDatabaseDocIds.slice();
+for(let i=0;i<ids.length;i++){
+await db.collection("donorDatabase").doc(ids[i]).delete();
+}
+await fetchEligibleDonors();
+}
+return;
+}
+
+alert("No deletable record found for this donor.");
+}catch(error){
+console.error("Delete eligible donor error:", error);
+alert("Error deleting donor.");
 }
 }
 
