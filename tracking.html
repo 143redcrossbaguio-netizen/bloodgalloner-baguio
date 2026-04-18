@@ -137,6 +137,7 @@ font-weight:bold;
 .save-remarks-btn{background:#b30000;}
 .save-award-btn{background:#1565c0;}
 .to-award-btn{background:#ef6c00;}
+.print-btn{background:#455a64;}
 
 table{
 width:100%;
@@ -428,6 +429,8 @@ grid-template-columns:1fr;
 
 <button class="to-award-btn" onclick="showToBeAwardedThisYear()">To Be Awarded This Year</button>
 <button class="top-btn" onclick="clearAwardFilters()">Clear Award Filter</button>
+<button class="print-btn" onclick="printFilteredView()">Print Filtered</button>
+<button class="print-btn" onclick="printWholeView()">Print Whole</button>
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
 <button class="reload-btn" onclick="fetchEligibleDonors()">Reload</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
@@ -1753,6 +1756,174 @@ alert("No deletable record found for this donor.");
 console.error("Delete eligible donor error:", error);
 alert("Error deleting donor.");
 }
+}
+
+function renderAwardTextForPrint(d){
+let status = safeText(d.awardStatus || "NOT AWARDED").toUpperCase();
+let year = safeText(d.yearAwarded || "");
+if(status === "AWARDED"){
+return `AWARDED${year ? " (" + year + ")" : ""}`;
+}
+return "NOT AWARDED";
+}
+
+function getPrintTitle(filteredMode){
+if(filteredMode){
+return "Eligible Awardees Tracking - Filtered View";
+}
+return "Eligible Awardees Tracking - Whole List";
+}
+
+function getActiveFiltersText(filteredMode){
+if(!filteredMode){
+return "Showing whole eligible list.";
+}
+
+let parts = [];
+let badge = safeText(document.getElementById("badgeFilter").value);
+let blood = safeText(document.getElementById("bloodFilter").value);
+let award = safeText(document.getElementById("awardFilter").value);
+let year = safeText(document.getElementById("yearAwardedFilter").value);
+let search = safeText(document.getElementById("searchInput").value);
+
+if(badge) parts.push("Badge: " + badge.toUpperCase());
+if(blood) parts.push("Blood: " + blood.toUpperCase());
+if(award) parts.push("Award Filter: " + award.replace(/_/g," ").toUpperCase());
+if(year) parts.push("Year Awarded: " + year);
+if(search) parts.push("Search: " + search);
+
+if(!parts.length){
+return "Showing current filtered view with no extra filters applied.";
+}
+
+return parts.join(" | ");
+}
+
+function buildPrintRows(data){
+let rows = "";
+for(let i=0;i<data.length;i++){
+let d = data[i];
+rows += `
+<tr>
+<td>${i+1}</td>
+<td>${escapeHtml(getFullName(d))}</td>
+<td>${escapeHtml((d.badgeLevel || "").toUpperCase())}</td>
+<td>${escapeHtml(String(d.smartDonationCount || 0))}</td>
+<td>${escapeHtml((d.bloodType || "") + (d.rhFactor || ""))}</td>
+<td>${escapeHtml(d.contact || "")}</td>
+<td>${escapeHtml(renderAwardTextForPrint(d))}</td>
+<td>${escapeHtml(String(d.serialCount || 0))}</td>
+<td>${escapeHtml(d.smartMatchSource || "")}</td>
+</tr>
+`;
+}
+return rows;
+}
+
+function printDataSet(data, filteredMode){
+if(!data.length){
+alert("No records to print.");
+return;
+}
+
+let printTitle = getPrintTitle(filteredMode);
+let filterText = getActiveFiltersText(filteredMode);
+let today = new Date();
+let printedOn = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
+
+let html = `
+<!DOCTYPE html>
+<html>
+<head>
+<title>${escapeHtml(printTitle)}</title>
+<style>
+body{
+font-family:Arial,sans-serif;
+margin:20px;
+color:#222;
+}
+h1{
+margin:0 0 6px 0;
+font-size:22px;
+color:#b30000;
+}
+.meta{
+margin-bottom:8px;
+font-size:13px;
+font-weight:bold;
+color:#444;
+}
+.sub{
+margin-bottom:16px;
+font-size:12px;
+color:#555;
+line-height:1.5;
+}
+table{
+width:100%;
+border-collapse:collapse;
+font-size:12px;
+}
+th,td{
+border:1px solid #999;
+padding:7px 8px;
+text-align:center;
+vertical-align:middle;
+}
+th{
+background:#f0f0f0;
+font-weight:bold;
+}
+td:nth-child(2){
+text-align:left;
+}
+@page{
+size:landscape;
+margin:10mm;
+}
+</style>
+</head>
+<body>
+<h1>${escapeHtml(printTitle)}</h1>
+<div class="meta">Printed On: ${escapeHtml(printedOn)}</div>
+<div class="sub">${escapeHtml(filterText)}</div>
+
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Name</th>
+<th>Badge</th>
+<th>Donation Count</th>
+<th>Blood</th>
+<th>Contact</th>
+<th>Award Status</th>
+<th>Serial Count</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+${buildPrintRows(data)}
+</tbody>
+</table>
+</body>
+</html>
+`;
+
+let printWindow = window.open("", "_blank");
+printWindow.document.open();
+printWindow.document.write(html);
+printWindow.document.close();
+printWindow.focus();
+printWindow.print();
+}
+
+function printFilteredView(){
+printDataSet(filteredDonorsData, true);
+}
+
+function printWholeView(){
+printDataSet(donorsData, false);
 }
 
 function exportToCSV(){
