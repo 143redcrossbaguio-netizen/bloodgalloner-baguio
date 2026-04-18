@@ -618,8 +618,24 @@
         return [resolveSuffix(record), String(record.surname || "").trim()].filter(Boolean).join(" ").trim();
     }
 
+    function resolveDonorType(record) {
+        const rawType = normalizeMatchValue(record?.donorType);
+
+        if (rawType === normalizeMatchValue("MBD")) return "MBD";
+        if (rawType === normalizeMatchValue("WALK-IN")) return "WALK-IN";
+        if (rawType === normalizeMatchValue("PATIENT DIRECTED")) return "PATIENT DIRECTED";
+
+        const mbdDetails = String(record?.mbdDetails || "").trim();
+        const patientDirectedDetails = String(record?.patientDirectedDetails || "").trim();
+
+        if (mbdDetails) return "MBD";
+        if (patientDirectedDetails) return "PATIENT DIRECTED";
+
+        return "";
+    }
+
     function isDonorType(record, type) {
-        return normalizeMatchValue(record?.donorType) === normalizeMatchValue(type);
+        return normalizeMatchValue(resolveDonorType(record)) === normalizeMatchValue(type);
     }
 
     function isDonorCategory(record, category) {
@@ -792,6 +808,7 @@
     function attachResolvedFields(record) {
         return {
             ...record,
+            donorType: resolveDonorType(record),
             contactNumber: resolveContactNumber(record),
             _resolvedEntryDate: resolveEntryDate(record),
             _resolvedBirthday: resolveBirthday(record),
@@ -942,7 +959,7 @@
 
         records.forEach(record => {
             const date = record._resolvedEntryDate || "";
-            const donorType = normalizeMatchValue(record.donorType);
+            const donorType = normalizeMatchValue(resolveDonorType(record));
             let typeGroupKey = `${date}|${donorType}`;
 
             if (donorType === normalizeMatchValue("MBD")) {
@@ -1139,7 +1156,7 @@
                         <td>${escapeUpperHtml(record.middleName)}</td>
                         <td>${escapeHtml(record._resolvedBirthday)}</td>
                         <td>${escapeUpperHtml(record.bloodType)}</td>
-                        <td>${escapeUpperHtml(record.donorType)}</td>
+                        <td>${escapeUpperHtml(resolveDonorType(record))}</td>
                         <td>${escapeUpperHtml(record.mbdDetails || record.patientDirectedDetails || "")}</td>
                         <td class="actions-cell">
                             <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
@@ -1211,6 +1228,10 @@
                 const monthCollapsed = isCollapsed(monthKey);
                 const monthValueForPrint = `${year}-${String(month).padStart(2, "0")}`;
 
+                const mbdCount = countType(records, "MBD");
+                const walkInCount = countType(records, "WALK-IN");
+                const patientDirectedCount = countType(records, "PATIENT DIRECTED");
+
                 html += `
                     <div class="month-group">
                         <div class="month-header" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
@@ -1226,9 +1247,9 @@
 
                         <div class="subtotal-bar">
                             <span>Entries: ${records.length}</span>
-                            <span>MBD: ${countType(records, "MBD")}</span>
-                            <span>Walk-in: ${countType(records, "WALK-IN")}</span>
-                            <span>Patient-Directed: ${countType(records, "PATIENT DIRECTED")}</span>
+                            <span>MBD: ${mbdCount}</span>
+                            <span>Walk-in: ${walkInCount}</span>
+                            <span>Patient-Directed: ${patientDirectedCount}</span>
                             <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
                             <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
                             <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
