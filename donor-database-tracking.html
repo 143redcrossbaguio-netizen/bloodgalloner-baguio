@@ -1429,10 +1429,37 @@
             .sort((a, b) => a.localeCompare(b));
 
         if (!validDates.length) return "";
-        return `${validDates[0]} to ${validDates[validDates.length - 1]}`;
+        return `${formatPrintDate(validDates[0])} to ${formatPrintDate(validDates[validDates.length - 1])}`;
     }
 
-    function buildPrintRows(records) {
+    function formatPrintDate(dateText) {
+        const parsed = parseDateFlexible(dateText);
+        if (!parsed || !/^\d{4}-\d{2}-\d{2}$/.test(parsed)) return dateText || "";
+        const [year, month, day] = parsed.split("-");
+        return `${month}-${day}-${year.slice(-2)}`;
+    }
+
+    function abbreviateSex(value) {
+        const v = normalizeMatchValue(value);
+        if (v === "male") return "M";
+        if (v === "female") return "F";
+        return value || "";
+    }
+
+    function abbreviateBloodBagType(value) {
+        const v = normalizeMatchValue(value);
+        if (v === "single") return "S";
+        if (v === "double") return "D";
+        if (v === "triple") return "T";
+        if (v === "quadruple") return "Q";
+        return value || "";
+    }
+
+    function hasPrintableRemarks(records) {
+        return records.some(record => String(record.remarks || "").trim() !== "");
+    }
+
+    function buildPrintRows(records, includeRemarks) {
         const sortedRecords = [...records].sort(compareByEntryDateAsc);
 
         return sortedRecords.map(record => {
@@ -1441,30 +1468,30 @@
 
             return `
                 <tr>
-                    <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                    <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
-                    <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                    <td>${escapeUpperHtml(record.firstName)}</td>
-                    <td>${escapeUpperHtml(record.middleName)}</td>
-                    <td>${escapeHtml(record._resolvedBirthday)}</td>
-                    <td>${escapeHtml(record.age)}</td>
-                    <td>${escapeUpperHtml(record.sex)}</td>
-                    <td>${escapeUpperHtml(record.contactNumber)}</td>
-                    <td class="print-address-cell">${escapeUpperHtml(record.address)}</td>
-                    <td>${escapeUpperHtml(record.cityProvince)}</td>
-                    <td>${escapeUpperHtml(record.occupation)}</td>
-                    <td>${escapeUpperHtml(record.donorCategory || "")}</td>
-                    <td>${escapeHtml(latestTotal)}</td>
-                    <td>${escapeUpperHtml(record.bloodType)}</td>
-                    <td>${escapeUpperHtml(record.serialNumber)}</td>
-                    <td>${escapeUpperHtml(record.amount)}</td>
-                    <td>${escapeUpperHtml(record.bloodBagBrand)}</td>
-                    <td>${escapeUpperHtml(record.bloodBagType)}</td>
-                    <td>${escapeHtml(record._resolvedTimeStarted)}</td>
-                    <td>${escapeHtml(record._resolvedTimeEnded)}</td>
-                    <td>${escapeUpperHtml(record.remarks)}</td>
+                    <td class="col-entry-date">${escapeHtml(formatPrintDate(record._resolvedEntryDate))}</td>
+                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
+                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
+                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
+                    <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
+                    <td class="col-given print-no-wrap">${escapeUpperHtml(record.firstName)}</td>
+                    <td class="col-middle">${escapeUpperHtml(record.middleName)}</td>
+                    <td class="col-bday">${escapeHtml(formatPrintDate(record._resolvedBirthday))}</td>
+                    <td class="col-age">${escapeHtml(record.age)}</td>
+                    <td class="col-sex">${escapeHtml(abbreviateSex(record.sex))}</td>
+                    <td class="col-contact">${escapeUpperHtml(record.contactNumber)}</td>
+                    <td class="col-address print-address-cell">${escapeUpperHtml(record.address)}</td>
+                    <td class="col-city">${escapeUpperHtml(record.cityProvince)}</td>
+                    <td class="col-occ">${escapeUpperHtml(record.occupation)}</td>
+                    <td class="col-donor-type">${escapeUpperHtml(record.donorCategory || "")}</td>
+                    <td class="col-donations">${escapeHtml(latestTotal)}</td>
+                    <td class="col-bt">${escapeUpperHtml(record.bloodType)}</td>
+                    <td class="col-serial print-no-wrap">${escapeUpperHtml(record.serialNumber)}</td>
+                    <td class="col-amt">${escapeUpperHtml(record.amount)}</td>
+                    <td class="col-bbused">${escapeUpperHtml(record.bloodBagBrand)}</td>
+                    <td class="col-bagtype">${escapeHtml(abbreviateBloodBagType(record.bloodBagType))}</td>
+                    <td class="col-ts">${escapeHtml(record._resolvedTimeStarted)}</td>
+                    <td class="col-te">${escapeHtml(record._resolvedTimeEnded)}</td>
+                    ${includeRemarks ? `<td class="col-remarks">${escapeUpperHtml(record.remarks)}</td>` : ""}
                 </tr>
             `;
         }).join("");
@@ -1472,7 +1499,8 @@
 
     function buildPrintableTable(records, monthLabel) {
         const dateRange = getMonthPrintDateRange(records);
-        const rows = buildPrintRows(records);
+        const includeRemarks = hasPrintableRemarks(records);
+        const rows = buildPrintRows(records, includeRemarks);
 
         return `
             <!DOCTYPE html>
@@ -1529,30 +1557,36 @@
                     .print-address-cell {
                         text-align: left;
                     }
+                    .print-no-wrap {
+                        white-space: nowrap !important;
+                        word-break: normal !important;
+                        overflow-wrap: normal !important;
+                    }
+
                     .col-entry-date { width: 5.8%; }
-                    .col-mbd { width: 5.8%; }
-                    .col-walkin { width: 4.7%; }
-                    .col-pd { width: 6.3%; }
-                    .col-surname { width: 7%; }
-                    .col-given { width: 6.5%; }
-                    .col-middle { width: 5.2%; }
-                    .col-bday { width: 5.4%; }
-                    .col-age { width: 2.8%; }
-                    .col-sex { width: 2.9%; }
-                    .col-contact { width: 5.8%; }
-                    .col-address { width: 10.5%; }
-                    .col-city { width: 5.8%; }
-                    .col-occ { width: 5.3%; }
-                    .col-donor-type { width: 4.6%; }
-                    .col-donations { width: 3.5%; }
-                    .col-bt { width: 3%; }
-                    .col-serial { width: 6.8%; }
-                    .col-amt { width: 3%; }
-                    .col-bbused { width: 4.8%; }
-                    .col-bagtype { width: 3.9%; }
-                    .col-ts { width: 3.7%; }
-                    .col-te { width: 3.7%; }
-                    .col-remarks { width: 4.7%; }
+                    .col-mbd { width: 5.4%; }
+                    .col-walkin { width: 4.6%; }
+                    .col-pd { width: 6.1%; }
+                    .col-surname { width: 6.8%; }
+                    .col-given { width: 7.2%; }
+                    .col-middle { width: 4.8%; }
+                    .col-bday { width: 5.2%; }
+                    .col-age { width: 2.7%; }
+                    .col-sex { width: 2.4%; }
+                    .col-contact { width: 5.3%; }
+                    .col-address { width: 11.5%; }
+                    .col-city { width: 5.6%; }
+                    .col-occ { width: 5%; }
+                    .col-donor-type { width: 4.2%; }
+                    .col-donations { width: 3.4%; }
+                    .col-bt { width: 2.9%; }
+                    .col-serial { width: 8.6%; }
+                    .col-amt { width: 2.9%; }
+                    .col-bbused { width: 4.6%; }
+                    .col-bagtype { width: 3.2%; }
+                    .col-ts { width: 3.5%; }
+                    .col-te { width: 3.5%; }
+                    .col-remarks { width: 5.4%; }
 
                     thead {
                         display: table-header-group;
@@ -1574,7 +1608,7 @@
                             <th class="col-walkin">Walk-in</th>
                             <th class="col-pd">Patient-Directed</th>
                             <th class="col-surname">Surname</th>
-                            <th class="col-given">Given Name</th>
+                            <th class="col-given print-no-wrap">Given Name</th>
                             <th class="col-middle">Middle Name</th>
                             <th class="col-bday">Birthday</th>
                             <th class="col-age">Age</th>
@@ -1586,13 +1620,13 @@
                             <th class="col-donor-type">Type</th>
                             <th class="col-donations"># of D</th>
                             <th class="col-bt">BT</th>
-                            <th class="col-serial">Serial No.</th>
+                            <th class="col-serial print-no-wrap">Serial No.</th>
                             <th class="col-amt">AMT</th>
                             <th class="col-bbused">BB USED</th>
-                            <th class="col-bagtype">Bag Type</th>
+                            <th class="col-bagtype">Bag</th>
                             <th class="col-ts">TS</th>
                             <th class="col-te">TE</th>
-                            <th class="col-remarks">Remarks</th>
+                            ${includeRemarks ? `<th class="col-remarks">Remarks</th>` : ""}
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
