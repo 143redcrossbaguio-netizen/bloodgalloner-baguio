@@ -170,6 +170,14 @@ color:#444;
 font-weight:bold;
 }
 
+.source-label{
+display:block;
+font-size:10px;
+margin-top:3px;
+color:#666;
+font-weight:normal;
+}
+
 .remark-indicator{
 display:inline-block;
 margin-left:6px;
@@ -301,7 +309,7 @@ min-width:auto;
 
 <header>
 <img src="images/logo.png" class="logo" onerror="this.style.display='none'">
-<h2>Donor Tracking</h2>
+<h2>Eligible Awardees Tracking</h2>
 </header>
 
 <div class="container">
@@ -309,15 +317,15 @@ min-width:auto;
 <div id="statusBar" class="status-bar"></div>
 
 <div class="summary-bar">
-<div class="summary-box" id="totalDonorsBox">Total Donors: 0</div>
-<div class="summary-box" id="qualifiedGallonersBox">Qualified Galloners: 0</div>
-<div class="summary-box" id="qualifiedBronzeBox">Bronze: 0</div>
-<div class="summary-box" id="qualifiedSilverBox">Silver: 0</div>
-<div class="summary-box" id="qualifiedGoldBox">Gold: 0</div>
+<div class="summary-box" id="totalEligibleBox">Eligible Donors: 0</div>
+<div class="summary-box" id="gallonerBox">Galloner: 0</div>
+<div class="summary-box" id="bronzeBox">Bronze: 0</div>
+<div class="summary-box" id="silverBox">Silver: 0</div>
+<div class="summary-box" id="goldBox">Gold: 0</div>
 </div>
 
 <div class="controls-row">
-<input type="text" id="searchInput" placeholder="Search donor..." onkeyup="applyFiltersAndRender()">
+<input type="text" id="searchInput" placeholder="Search eligible donor..." onkeyup="applyFiltersAndRender()">
 
 <select id="bloodFilter" onchange="applyFiltersAndRender()">
 <option value="">All Blood Types</option>
@@ -333,7 +341,6 @@ min-width:auto;
 <option value="bronze">Bronze</option>
 <option value="silver">Silver</option>
 <option value="gold">Gold</option>
-<option value="none">No Badge</option>
 </select>
 
 <select id="sortFilter" onchange="applyFiltersAndRender()">
@@ -341,12 +348,10 @@ min-width:auto;
 <option value="qualifiedAsc">Sort: Lowest Donations</option>
 <option value="nameAsc">Sort: Name A-Z</option>
 <option value="nameDesc">Sort: Name Z-A</option>
-<option value="serialDesc">Sort: Highest Serial Count</option>
-<option value="serialAsc">Sort: Lowest Serial Count</option>
 </select>
 
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
-<button class="reload-btn" onclick="fetchDonors()">Reload</button>
+<button class="reload-btn" onclick="fetchEligibleDonors()">Reload</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
 </div>
 
@@ -367,7 +372,7 @@ min-width:auto;
 </table>
 </div>
 
-<div id="emptyBox" class="empty-box" style="display:none;">No donor records found.</div>
+<div id="emptyBox" class="empty-box" style="display:none;">No eligible donors found.</div>
 
 </div>
 
@@ -446,6 +451,166 @@ function safeText(value){
 return String(value || "").trim();
 }
 
+function normalizeText(value){
+return safeText(value)
+.toLowerCase()
+.replace(/\s+/g," ")
+.replace(/[^a-z0-9 ]/g,"");
+}
+
+function normalizeBirthday(value){
+if(!value) return "";
+
+if(typeof value === "object" && value.seconds){
+let date = new Date(value.seconds * 1000);
+return formatDateToYMD(date);
+}
+
+let text = safeText(value);
+if(!text) return "";
+
+let parsed = new Date(text);
+if(!isNaN(parsed.getTime())){
+return formatDateToYMD(parsed);
+}
+
+return text.replace(/\//g,"-").replace(/\./g,"-").toLowerCase();
+}
+
+function formatDateToYMD(date){
+let y = date.getFullYear();
+let m = String(date.getMonth() + 1).padStart(2,"0");
+let d = String(date.getDate()).padStart(2,"0");
+return `${y}-${m}-${d}`;
+}
+
+function splitFullName(fullName){
+let txt = safeText(fullName);
+if(!txt) return { firstName:"", middleName:"", surname:"" };
+let parts = txt.split(/\s+/).filter(Boolean);
+if(parts.length === 1) return { firstName:parts[0], middleName:"", surname:"" };
+if(parts.length === 2) return { firstName:parts[0], middleName:"", surname:parts[1] };
+return {
+firstName: parts[0],
+middleName: parts.slice(1, parts.length - 1).join(" "),
+surname: parts[parts.length - 1]
+};
+}
+
+function getPossibleFirstName(data){
+if(data.firstName || data.firstname || data.givenName) return data.firstName || data.firstname || data.givenName || "";
+let split = splitFullName(data.fullName || data.name || data.donorName || "");
+return split.firstName;
+}
+
+function getPossibleMiddleName(data){
+if(data.middleName || data.middlename || data.middle) return data.middleName || data.middlename || data.middle || "";
+let split = splitFullName(data.fullName || data.name || data.donorName || "");
+return split.middleName;
+}
+
+function getPossibleSurname(data){
+if(data.surname || data.lastName || data.lastname || data.familyName) return data.surname || data.lastName || data.lastname || data.familyName || "";
+let split = splitFullName(data.fullName || data.name || data.donorName || "");
+return split.surname;
+}
+
+function getPossibleBirthday(data){
+return data.birthday || data.birthDate || data.dateOfBirth || data.dob || data.birth || "";
+}
+
+function getPossibleDonationDate(data){
+return data.date || data.donationDate || data.collectionDate || data.dateDonated || data.entryDate || data.createdAt || "";
+}
+
+function getPossibleSerialNumber(data){
+return data.serialNumber || data.serial || data.bagSerial || data.bloodBagSerial || data.unitSerial || "";
+}
+
+function getPossibleBloodType(data){
+return data.bloodType || data.blood || data.blood_group || data.type || "";
+}
+
+function getPossibleRhFactor(data){
+return data.rhFactor || data.rh || data.rhesus || "";
+}
+
+function getPossibleContact(data){
+return data.contact || data.contactNumber || data.mobile || data.phone || data.contactNo || "";
+}
+
+function buildFullKey(firstName,surname,birthday,middleName=""){
+return [
+normalizeText(firstName),
+normalizeText(surname),
+normalizeBirthday(birthday),
+normalizeText(middleName)
+].join("|");
+}
+
+function buildNoMiddleKey(firstName,surname,birthday){
+return [
+normalizeText(firstName),
+normalizeText(surname),
+normalizeBirthday(birthday)
+].join("|");
+}
+
+function buildNameOnlyKey(firstName,surname){
+return [
+normalizeText(firstName),
+normalizeText(surname)
+].join("|");
+}
+
+function parseDonationNumber(value){
+if(value === null || value === undefined || value === "") return 0;
+let cleaned = String(value).replace(/[^0-9]/g,"");
+let num = parseInt(cleaned,10);
+return isNaN(num) ? 0 : num;
+}
+
+function getRecordDonationCount(record){
+let possibleFields = [
+record.numberOfDonations,
+record.donationCount,
+record.noOfDonations,
+record.no_of_donations,
+record.donationNo,
+record.donationNumber,
+record.totalDonations,
+record.timesDonated,
+record.donations,
+record.donation_count,
+record.count,
+record.donationNoCount,
+record.noDonation,
+record.numberDonation,
+record.noOfDonation,
+record["No. of Donations"],
+record["No of Donations"],
+record["Donation No"],
+record["Donation Count"],
+record["Times Donated"]
+];
+
+for(let i=0;i<possibleFields.length;i++){
+let num = parseDonationNumber(possibleFields[i]);
+if(num > 0) return num;
+}
+return 0;
+}
+
+function buildUniqueDonationFingerprint(record){
+let donationNo = getRecordDonationCount(record);
+let serial = normalizeText(getPossibleSerialNumber(record));
+let date = normalizeBirthday(getPossibleDonationDate(record));
+let firstName = normalizeText(getPossibleFirstName(record));
+let surname = normalizeText(getPossibleSurname(record));
+let birthday = normalizeBirthday(getPossibleBirthday(record));
+return [firstName,surname,birthday,date,serial,donationNo].join("|");
+}
+
 function getFullName(d){
 return `${safeText(d.firstName)} ${safeText(d.middleName)} ${safeText(d.surname)}`.replace(/\s+/g," ").trim();
 }
@@ -489,7 +654,7 @@ if(count >= categoryLimits.galloner) return `<span class="badge badge-galloner">
 return "";
 }
 
-function inferDonationCount(donor){
+function inferDonorsCollectionCount(donor){
 let serialCount = Array.isArray(donor.serials) ? donor.serials.length : 0;
 
 let possibleCounts = [
@@ -509,17 +674,218 @@ let highestEncodedCount = 0;
 
 for(let i=0;i<possibleCounts.length;i++){
 let raw = possibleCounts[i];
-if(raw === null || raw === undefined || raw === "") continue;
-let num = parseInt(String(raw).replace(/[^0-9]/g,""),10);
-if(!isNaN(num) && num > highestEncodedCount){
+let num = parseDonationNumber(raw);
+if(num > highestEncodedCount){
 highestEncodedCount = num;
 }
 }
 
-return Math.max(serialCount, highestEncodedCount);
+return {
+serialCount: serialCount,
+count: Math.max(serialCount, highestEncodedCount)
+};
 }
 
-async function fetchDonors(){
+function makeAggregate(firstName,middleName,surname,birthday){
+return {
+firstName: safeText(firstName),
+middleName: safeText(middleName),
+surname: safeText(surname),
+birthday: birthday || "",
+bloodType: "",
+rhFactor: "",
+contact: "",
+maxDonationCount: 0,
+fingerprints: new Set()
+};
+}
+
+function applyRecordToAggregate(bucket, record){
+let count = getRecordDonationCount(record);
+let fp = buildUniqueDonationFingerprint(record);
+bucket.fingerprints.add(fp);
+
+if(count > bucket.maxDonationCount) bucket.maxDonationCount = count;
+if(!bucket.bloodType && getPossibleBloodType(record)) bucket.bloodType = getPossibleBloodType(record);
+if(!bucket.rhFactor && getPossibleRhFactor(record)) bucket.rhFactor = getPossibleRhFactor(record);
+if(!bucket.contact && getPossibleContact(record)) bucket.contact = getPossibleContact(record);
+}
+
+function aggregateDonorDatabase(records){
+let fullMap = {};
+let noMiddleMap = {};
+let nameOnlyMap = {};
+
+for(let i=0;i<records.length;i++){
+let record = records[i];
+let firstName = getPossibleFirstName(record);
+let middleName = getPossibleMiddleName(record);
+let surname = getPossibleSurname(record);
+let birthday = getPossibleBirthday(record);
+
+if(!normalizeText(firstName) || !normalizeText(surname)) continue;
+
+let fullKey = buildFullKey(firstName,surname,birthday,middleName);
+let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
+let nameOnlyKey = buildNameOnlyKey(firstName,surname);
+
+if(!fullMap[fullKey]) fullMap[fullKey] = makeAggregate(firstName,middleName,surname,birthday);
+if(!noMiddleMap[noMiddleKey]) noMiddleMap[noMiddleKey] = makeAggregate(firstName,middleName,surname,birthday);
+if(!nameOnlyMap[nameOnlyKey]) nameOnlyMap[nameOnlyKey] = makeAggregate(firstName,middleName,surname,birthday);
+
+applyRecordToAggregate(fullMap[fullKey], record);
+applyRecordToAggregate(noMiddleMap[noMiddleKey], record);
+applyRecordToAggregate(nameOnlyMap[nameOnlyKey], record);
+}
+
+return { fullMap, noMiddleMap, nameOnlyMap };
+}
+
+function aggregateToResult(bucket, source){
+if(!bucket){
+return {
+source: "No Match",
+matchedRows: 0,
+countFromDatabase: 0,
+bloodType: "",
+rhFactor: "",
+contact: ""
+};
+}
+
+let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
+let finalCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+
+return {
+source: source,
+matchedRows: matchedRows,
+countFromDatabase: finalCount,
+bloodType: bucket.bloodType || "",
+rhFactor: bucket.rhFactor || "",
+contact: bucket.contact || ""
+};
+}
+
+function getAggregateResultForDonor(donor, aggregates){
+let firstName = getPossibleFirstName(donor);
+let middleName = getPossibleMiddleName(donor);
+let surname = getPossibleSurname(donor);
+let birthday = getPossibleBirthday(donor);
+
+let fullKey = buildFullKey(firstName,surname,birthday,middleName);
+let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
+let nameOnlyKey = buildNameOnlyKey(firstName,surname);
+
+if(aggregates.fullMap[fullKey]) return aggregateToResult(aggregates.fullMap[fullKey], "Exact Match");
+if(aggregates.noMiddleMap[noMiddleKey]) return aggregateToResult(aggregates.noMiddleMap[noMiddleKey], "No Middle Name Match");
+if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.nameOnlyMap[nameOnlyKey], "Name Only Match");
+
+return aggregateToResult(null, "No Match");
+}
+
+function mergeBothCollections(donorsDocs, donorDatabaseDocs){
+let aggregates = aggregateDonorDatabase(donorDatabaseDocs);
+let mergedList = [];
+let usedFullKeys = new Set();
+
+for(let i=0;i<donorsDocs.length;i++){
+let data = donorsDocs[i];
+
+let firstName = getPossibleFirstName(data);
+let middleName = getPossibleMiddleName(data);
+let surname = getPossibleSurname(data);
+let birthday = getPossibleBirthday(data);
+
+let donorSide = inferDonorsCollectionCount(data);
+let aggregateResult = getAggregateResultForDonor(data, aggregates);
+
+let finalCount = Math.max(donorSide.count || 0, aggregateResult.countFromDatabase || 0);
+
+let sourceLabel = "Donors Only";
+if(aggregateResult.countFromDatabase > 0 && donorSide.count > 0){
+sourceLabel = "Merged";
+}else if(aggregateResult.countFromDatabase > 0){
+sourceLabel = "Donor Database";
+}else if(donorSide.serialCount > 0){
+sourceLabel = "Serial Count";
+}
+
+let item = {
+id: data.id || "",
+firstName: safeText(firstName),
+middleName: safeText(middleName),
+surname: safeText(surname),
+birthday: birthday || "",
+bloodType: safeText(data.bloodType || aggregateResult.bloodType || ""),
+rhFactor: safeText(data.rhFactor || aggregateResult.rhFactor || ""),
+contact: safeText(data.contact || aggregateResult.contact || ""),
+serials: Array.isArray(data.serials) ? data.serials : [],
+serialCount: donorSide.serialCount || 0,
+remarks: safeText(data.remarks || ""),
+smartDonationCount: finalCount,
+smartMatchedRows: aggregateResult.matchedRows || 0,
+smartMatchSource: sourceLabel,
+badgeLevel: getBadgeLevel(finalCount),
+canEdit: !!data.id,
+canDelete: !!data.id
+};
+
+if(item.smartDonationCount >= categoryLimits.galloner){
+mergedList.push(item);
+}
+
+usedFullKeys.add(buildFullKey(firstName,surname,birthday,middleName));
+}
+
+Object.keys(aggregates.fullMap).forEach(key=>{
+if(usedFullKeys.has(key)) return;
+
+let bucket = aggregates.fullMap[key];
+let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
+let smartDonationCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+
+if(smartDonationCount < categoryLimits.galloner) return;
+
+mergedList.push({
+id: "",
+firstName: safeText(bucket.firstName),
+middleName: safeText(bucket.middleName),
+surname: safeText(bucket.surname),
+birthday: bucket.birthday || "",
+bloodType: safeText(bucket.bloodType || ""),
+rhFactor: safeText(bucket.rhFactor || ""),
+contact: safeText(bucket.contact || ""),
+serials: [],
+serialCount: 0,
+remarks: "",
+smartDonationCount: smartDonationCount,
+smartMatchedRows: matchedRows,
+smartMatchSource: "Donor Database Only",
+badgeLevel: getBadgeLevel(smartDonationCount),
+canEdit: false,
+canDelete: false
+});
+});
+
+return mergedList;
+}
+
+function timeoutPromise(ms, label){
+return new Promise((_, reject)=>{
+setTimeout(()=>{
+reject(new Error(label + " timed out after " + ms + "ms"));
+}, ms);
+});
+}
+
+async function getCollectionWithTimeout(collectionName, timeoutMs){
+return Promise.race([
+db.collection(collectionName).get(),
+timeoutPromise(timeoutMs, collectionName)
+]);
+}
+
+async function fetchEligibleDonors(){
 if(isLoading) return;
 
 if(!auth.currentUser){
@@ -529,28 +895,57 @@ return;
 }
 
 isLoading = true;
-setStatus("Loading galloner tracking data...", "loading");
+setStatus("Loading eligible awardees from donors and donorDatabase...", "loading");
 
 try{
-let snapshot = await db.collection("donors").get();
+let donorsSnap = await getCollectionWithTimeout("donors", 12000);
+let donorDatabaseSnap;
 
-donorsData = snapshot.docs.map(doc=>{
+try{
+donorDatabaseSnap = await getCollectionWithTimeout("donorDatabase", 15000);
+}catch(innerError){
+console.error("donorDatabase load warning:", innerError);
+donorDatabaseSnap = { docs: [] };
+}
+
+let donorsDocs = [];
+donorsSnap.forEach(doc=>{
 let data = doc.data() || {};
 data.id = doc.id;
-data.serialCount = Array.isArray(data.serials) ? data.serials.length : 0;
-data.smartDonationCount = inferDonationCount(data);
-data.badgeLevel = getBadgeLevel(data.smartDonationCount);
-return data;
+donorsDocs.push(data);
 });
 
+let donorDatabaseDocs = [];
+if(typeof donorDatabaseSnap.forEach === "function"){
+donorDatabaseSnap.forEach(doc=>{
+let data = doc.data() || {};
+data.id = doc.id;
+donorDatabaseDocs.push(data);
+});
+}else if(Array.isArray(donorDatabaseSnap.docs)){
+for(let i=0;i<donorDatabaseSnap.docs.length;i++){
+let doc = donorDatabaseSnap.docs[i];
+if(typeof doc.data === "function"){
+let data = doc.data() || {};
+data.id = doc.id;
+donorDatabaseDocs.push(data);
+}
+}
+}
+
+donorsData = mergeBothCollections(donorsDocs, donorDatabaseDocs);
 applyFiltersAndRender();
 
-setStatus(`Loaded successfully. Donors: ${donorsData.length}`, "success");
+if(donorDatabaseDocs.length > 0){
+setStatus(`Loaded successfully. Eligible donors: ${donorsData.length}. donors: ${donorsDocs.length}, donorDatabase: ${donorDatabaseDocs.length}`, "success");
+}else{
+setStatus(`Loaded donors collection. donorDatabase was unavailable, so only donors-side eligible counts are shown. Eligible donors: ${donorsData.length}`, "error");
+}
 }catch(error){
-console.error("Fetch donors error:", error);
+console.error("Fetch eligible donors error:", error);
 donorsData = [];
 applyFiltersAndRender();
-setStatus("Failed to load donors collection: " + error.message, "error");
+setStatus("Failed to load eligible donors: " + error.message, "error");
 }finally{
 isLoading = false;
 }
@@ -571,6 +966,7 @@ let remarksText = String(d.remarks || "").toLowerCase();
 let donationText = String(d.smartDonationCount || 0).toLowerCase();
 let serialText = String(d.serialCount || 0).toLowerCase();
 
+if(d.smartDonationCount < categoryLimits.galloner) return false;
 if(bloodFilter && donorBlood !== bloodFilter) return false;
 if(badgeFilter && donorBadge !== badgeFilter) return false;
 
@@ -586,8 +982,6 @@ filteredDonorsData.sort((a,b)=>{
 if(sortFilter === "qualifiedAsc") return (a.smartDonationCount||0) - (b.smartDonationCount||0);
 if(sortFilter === "nameAsc") return getSortableName(a).localeCompare(getSortableName(b));
 if(sortFilter === "nameDesc") return getSortableName(b).localeCompare(getSortableName(a));
-if(sortFilter === "serialDesc") return (b.serialCount||0) - (a.serialCount||0);
-if(sortFilter === "serialAsc") return (a.serialCount||0) - (b.serialCount||0);
 return (b.smartDonationCount||0) - (a.smartDonationCount||0);
 });
 
@@ -596,11 +990,11 @@ renderTable();
 }
 
 function updateSummary(){
-document.getElementById("totalDonorsBox").innerText = `Total Donors: ${filteredDonorsData.length}`;
-document.getElementById("qualifiedGallonersBox").innerText = `Qualified Galloners: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner).length}`;
-document.getElementById("qualifiedBronzeBox").innerText = `Bronze: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length}`;
-document.getElementById("qualifiedSilverBox").innerText = `Silver: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length}`;
-document.getElementById("qualifiedGoldBox").innerText = `Gold: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length}`;
+document.getElementById("totalEligibleBox").innerText = `Eligible Donors: ${filteredDonorsData.length}`;
+document.getElementById("gallonerBox").innerText = `Galloner: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner && d.smartDonationCount < categoryLimits.bronze).length}`;
+document.getElementById("bronzeBox").innerText = `Bronze: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length}`;
+document.getElementById("silverBox").innerText = `Silver: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length}`;
+document.getElementById("goldBox").innerText = `Gold: ${filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length}`;
 }
 
 function renderTable(){
@@ -631,6 +1025,7 @@ ${hasRemarks ? `<span class="remark-indicator">REMARK</span>` : ``}
 <td>
 ${badge}
 <div class="badge-count-label">${Number(d.smartDonationCount || 0)} Donation${Number(d.smartDonationCount || 0) === 1 ? "" : "s"}</div>
+<div class="source-label">${escapeHtml(d.smartMatchSource || "")}</div>
 </td>
 
 <td>${bloodIcon} ${escapeHtml(d.bloodType||"")}${escapeHtml(d.rhFactor||"")}</td>
@@ -643,8 +1038,8 @@ ${Number(d.serialCount || 0)}
 
 <td>
 <button class="remarks-btn" onclick="openRemarksOnly(${index})">Remarks</button>
-<button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>
-<button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>
+${d.canEdit ? `<button class="edit-btn" onclick="editDonor('${d.id}')">Edit</button>` : ``}
+${d.canDelete ? `<button class="delete-btn" onclick="deleteDonor('${d.id}')">Delete</button>` : ``}
 </td>
 </tr>
 
@@ -691,6 +1086,7 @@ let serials = donor.serials || [];
 let remarks = donor.remarks || "";
 let smartDonationCount = Number(donor.smartDonationCount || 0);
 let serialCount = Number(donor.serialCount || 0);
+let matchedRows = Number(donor.smartMatchedRows || 0);
 
 let serialRows = "";
 
@@ -712,11 +1108,27 @@ serialRows = `
 `;
 }
 
+let remarksSection = donor.canEdit ? `
+<div class="remarks-panel">
+<h4>Remarks</h4>
+<textarea id="remarksText${index}" class="remarks-textarea" placeholder="Enter remarks here...">${escapeHtmlToTextarea(remarks)}</textarea>
+<button class="save-remarks-btn" onclick="saveRemarks(${index})">Save Remarks</button>
+${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</span>` : ``}
+</div>
+` : `
+<div class="remarks-panel">
+<h4>Remarks</h4>
+<div class="no-remarks-label">This donor is shown from Donor Database only. No donor record yet in the donors collection.</div>
+</div>
+`;
+
 container.innerHTML = `
 <div class="serial-detail-layout">
 <div>
 <div class="serial-count-box">Qualified Donation Count: ${smartDonationCount}</div>
 <div class="serial-count-box">Encoded Serial Records: ${serialCount}</div>
+<div class="serial-count-box">Matched Donor Database Rows: ${matchedRows}</div>
+<div class="serial-count-box">Source: ${escapeHtml(donor.smartMatchSource || "")}</div>
 
 <table class="serial-table">
 <thead>
@@ -732,18 +1144,18 @@ ${serialRows}
 </table>
 </div>
 
-<div class="remarks-panel">
-<h4>Remarks</h4>
-<textarea id="remarksText${index}" class="remarks-textarea" placeholder="Enter remarks here...">${escapeHtmlToTextarea(remarks)}</textarea>
-<button class="save-remarks-btn" onclick="saveRemarks(${index})">Save Remarks</button>
-${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</span>` : ``}
-</div>
+${remarksSection}
 </div>
 `;
 }
 
 function saveRemarks(index){
 let donor = filteredDonorsData[index];
+if(!donor.canEdit){
+alert("This donor is from Donor Database only and has no editable donor record yet.");
+return;
+}
+
 let textarea = document.getElementById("remarksText"+index);
 if(!textarea) return;
 
@@ -793,7 +1205,7 @@ return;
 
 if(confirm("Delete donor?")){
 db.collection("donors").doc(id).delete().then(()=>{
-fetchDonors();
+fetchEligibleDonors();
 }).catch(error=>{
 console.error("Delete error:", error);
 alert("Error deleting donor.");
@@ -802,10 +1214,10 @@ alert("Error deleting donor.");
 }
 
 function exportToCSV(){
-let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Encoded Serial Count,Badge Level,Remarks\n";
+let csv = "Blood Type,Rh Factor,First Name,Middle Name,Surname,Contact,Qualified Donation Count,Matched DonorDatabase Rows,Encoded Serial Count,Badge Level,Source,Remarks\n";
 
 filteredDonorsData.forEach(d=>{
-csv += `${escapeCSV(d.bloodType||"")},${escapeCSV(d.rhFactor||"")},${escapeCSV(d.firstName||"")},${escapeCSV(d.middleName||"")},${escapeCSV(d.surname||"")},${escapeCSV(d.contact||"")},${escapeCSV(d.smartDonationCount||0)},${escapeCSV(d.serialCount||0)},${escapeCSV((d.badgeLevel||"").toUpperCase())},${escapeCSV(d.remarks||"")}\n`;
+csv += `${escapeCSV(d.bloodType||"")},${escapeCSV(d.rhFactor||"")},${escapeCSV(d.firstName||"")},${escapeCSV(d.middleName||"")},${escapeCSV(d.surname||"")},${escapeCSV(d.contact||"")},${escapeCSV(d.smartDonationCount||0)},${escapeCSV(d.smartMatchedRows||0)},${escapeCSV(d.serialCount||0)},${escapeCSV((d.badgeLevel||"").toUpperCase())},${escapeCSV(d.smartMatchSource||"")},${escapeCSV(d.remarks||"")}\n`;
 });
 
 let blob = new Blob([csv],{type:"text/csv"});
@@ -813,7 +1225,7 @@ let url = window.URL.createObjectURL(blob);
 
 let a = document.createElement("a");
 a.href = url;
-a.download = "galloner-tracking.csv";
+a.download = "eligible-awardees-tracking.csv";
 document.body.appendChild(a);
 a.click();
 document.body.removeChild(a);
@@ -826,7 +1238,7 @@ if(!user){
 window.location.href = "index.html";
 return;
 }
-fetchDonors();
+fetchEligibleDonors();
 });
 </script>
 
