@@ -488,6 +488,11 @@ let date = new Date(value.seconds * 1000);
 return formatDateToYMD(date);
 }
 
+if(typeof value === "object" && typeof value.toDate === "function"){
+let date = value.toDate();
+return formatDateToYMD(date);
+}
+
 let text = safeText(value);
 if(!text) return "";
 
@@ -542,11 +547,51 @@ return data.birthday || data.birthDate || data.dateOfBirth || data.dob || data.b
 }
 
 function getPossibleDonationDate(data){
-return data.date || data.donationDate || data.collectionDate || data.dateDonated || data.entryDate || data.createdAt || "";
+let fields = [
+data.date,
+data.donationDate,
+data.collectionDate,
+data.dateDonated,
+data.entryDate,
+data.bleedingDate,
+data.createdAt,
+data.importDate,
+data.dateTested
+];
+
+for(let i=0;i<fields.length;i++){
+let normalized = normalizeBirthday(fields[i]);
+if(normalized) return normalized;
+}
+
+return "";
 }
 
 function getPossibleSerialNumber(data){
-return data.serialNumber || data.serial || data.bagSerial || data.bloodBagSerial || data.unitSerial || "";
+let fields = [
+data.serialNumber,
+data.serial,
+data.bagSerial,
+data.bloodBagSerial,
+data.unitSerial,
+data.unitNumber,
+data.unitNo,
+data.serialNo,
+data.donationSerial,
+data.bagNumber,
+data.bagNo,
+data.bloodBagNumber,
+data.bloodBagNo,
+data.donorSerialNumber,
+data.donationSerialNumber
+];
+
+for(let i=0;i<fields.length;i++){
+let value = safeText(fields[i]);
+if(value) return value;
+}
+
+return "";
 }
 
 function getPossibleBloodType(data){
@@ -626,7 +671,7 @@ return 0;
 function buildUniqueDonationFingerprint(record){
 let donationNo = getRecordDonationCount(record);
 let serial = normalizeText(getPossibleSerialNumber(record));
-let date = normalizeBirthday(getPossibleDonationDate(record));
+let date = getPossibleDonationDate(record);
 let firstName = normalizeText(getPossibleFirstName(record));
 let surname = normalizeText(getPossibleSurname(record));
 let birthday = normalizeBirthday(getPossibleBirthday(record));
@@ -738,13 +783,17 @@ if(record.id){
 bucket.docIds.push(record.id);
 }
 
-bucket.detailRows.push({
+let row = {
 docId: record.id || "",
 source: "donorDatabase",
 serial: safeText(getPossibleSerialNumber(record)),
-date: safeText(normalizeBirthday(getPossibleDonationDate(record)) || safeText(getPossibleDonationDate(record))),
+date: safeText(getPossibleDonationDate(record)),
 count: getRecordDonationCount(record)
-});
+};
+
+if(row.serial || row.date || row.count){
+bucket.detailRows.push(row);
+}
 }
 
 function aggregateDonorDatabase(records){
@@ -859,17 +908,44 @@ let rows = [];
 if(Array.isArray(serials)){
 for(let i=0;i<serials.length;i++){
 let s = serials[i] || {};
+let serial = safeText(s.serial || s.serialNumber || s.unitSerial || "");
+let date = safeText(normalizeBirthday(s.date || s.entryDate || s.donationDate || "") || safeText(s.date || s.entryDate || s.donationDate || ""));
+if(serial || date){
 rows.push({
 docId: "",
 source: "donors",
-serial: safeText(s.serial || s.serialNumber || ""),
-date: safeText(s.date || s.entryDate || ""),
+serial: serial,
+date: date,
 count: 0
 });
 }
 }
+}
 
 return rows;
+}
+
+function buildSerialsArrayFromDetailRows(detailRows){
+let serials = [];
+let seen = {};
+
+for(let i=0;i<detailRows.length;i++){
+let row = detailRows[i] || {};
+let serial = safeText(row.serial);
+let date = safeText(row.date);
+if(!serial && !date) continue;
+
+let key = [serial, date].join("|");
+if(seen[key]) continue;
+seen[key] = true;
+
+serials.push({
+serial: serial,
+date: date
+});
+}
+
+return serials;
 }
 
 function mergeBothCollections(donorsDocs, donorDatabaseDocs){
@@ -1242,13 +1318,13 @@ let remarksSection = donor.id ? `
 <textarea id="remarksText${index}" class="remarks-textarea" placeholder="Enter remarks here...">${escapeHtmlToTextarea(remarks)}</textarea>
 <button class="save-remarks-btn" onclick="saveRemarks(${index})">Save Remarks</button>
 ${remarks.trim() === "" ? `<span class="no-remarks-label">No remarks saved.</span>` : ``}
-<span class="detail-note">You can edit this donor to add serial numbers from the donor entry page.</span>
+<span class="detail-note">Edit will open the donor record and auto-sync detected donorDatabase serial rows into the donors serial list first.</span>
 </div>
 ` : `
 <div class="remarks-panel">
 <h4>Remarks</h4>
 <div class="no-remarks-label">This donor is currently from Donor Database only.</div>
-<span class="detail-note">Click Edit to auto-create a donors record first, then add serial numbers there.</span>
+<span class="detail-note">Click Edit and a donors record will be created automatically with detected serial/date rows copied in.</span>
 </div>
 `;
 
@@ -1334,7 +1410,48 @@ return;
 }
 
 try{
+let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
+
 if(donor.id){
+let donorRef = db.collection("donors").doc(donor.id);
+let existingDoc = await donorRef.get();
+let existingData = existingDoc.exists ? (existingDoc.data() || {}) : {};
+let existingSerials = Array.isArray(existingData.serials) ? existingData.serials : [];
+
+let merged = {};
+        for(let i=0;i<existingSerials.length;i++){
+let s = existingSerials[i] || {};
+let key = [safeText(s.serial), safeText(s.date)].join("|");
+if(key !== "|"){
+merged[key] = {
+serial: safeText(s.serial),
+date: safeText(s.date)
+};
+}
+}
+for(let i=0;i<serialsToSync.length;i++){
+let s = serialsToSync[i] || {};
+let key = [safeText(s.serial), safeText(s.date)].join("|");
+if(key !== "|"){
+merged[key] = {
+serial: safeText(s.serial),
+date: safeText(s.date)
+};
+}
+}
+
+await donorRef.update({
+firstName: donor.firstName || "",
+middleName: donor.middleName || "",
+surname: donor.surname || "",
+birthday: donor.birthday || "",
+bloodType: donor.bloodType || "",
+rhFactor: donor.rhFactor || "",
+contact: donor.contact || "",
+remarks: donor.remarks || existingData.remarks || "",
+serials: Object.values(merged)
+});
+
 window.location.href = "donor-entry.html?editId=" + donor.id;
 return;
 }
@@ -1348,14 +1465,14 @@ bloodType: donor.bloodType || "",
 rhFactor: donor.rhFactor || "",
 contact: donor.contact || "",
 remarks: donor.remarks || "",
-serials: [],
+serials: serialsToSync,
 createdFrom: "eligible-awardees-tracking",
 createdAt: firebase.firestore.FieldValue.serverTimestamp()
 });
 
 window.location.href = "donor-entry.html?editId=" + docRef.id;
 }catch(error){
-console.error("Create donor record error:", error);
+console.error("Create or sync donor record error:", error);
 alert("Error preparing donor for edit.");
 }
 }
