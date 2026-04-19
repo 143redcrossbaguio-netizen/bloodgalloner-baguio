@@ -82,6 +82,7 @@ button{
 .addBtn{background:#2e7d32;color:white}
 .removeBtn{background:#c62828;color:white}
 .discountBtn{background:#1565c0;color:white}
+.waivedBtn{background:#6d4c41;color:white}
 .smallBtn{
     width:auto !important;
     min-width:120px !important;
@@ -353,6 +354,28 @@ button{
 <div class="row">
     <input type="number" id="amountPaid" readonly>
     <button type="button" class="discountBtn smallBtn" onclick="toggleDiscount()">DISCOUNT</button>
+    <button type="button" class="waivedBtn smallBtn" id="waivedBtn" onclick="toggleWaived()">WAIVED</button>
+</div>
+
+<div id="waivedSection" style="display:none;">
+    <div class="row">
+        <div>
+            <label>WAIVED COMPONENT</label>
+            <select id="waivedComponent">
+                <option value="">Select</option>
+                <option>WB</option>
+                <option>PRBC</option>
+                <option>PC</option>
+                <option>FFP</option>
+                <option>CRYO</option>
+                <option>BOX CONTAINER</option>
+            </select>
+        </div>
+        <div>
+            <label>WAIVED UNIT</label>
+            <input type="number" id="waivedUnit" placeholder="Unit">
+        </div>
+    </div>
 </div>
 
 <div id="discountSection" style="display:none;">
@@ -451,6 +474,7 @@ let currentReleasingPriceSnapshot = null;
 let currentAugmentationPriceSnapshot = null;
 let allReleasingEntries = [];
 let selectedLoadedId = editId || null;
+let waivedActive = false;
 
 function buildPriceSnapshot(){
   return {
@@ -678,7 +702,33 @@ window.toggleDiscount = function(){
   section.style.display = section.style.display === "none" ? "block" : "none";
 };
 
+window.toggleWaived = function(forceState = null){
+  waivedActive = forceState === null ? !waivedActive : !!forceState;
+
+  const waivedSection = document.getElementById("waivedSection");
+  const waivedBtn = document.getElementById("waivedBtn");
+
+  waivedSection.style.display = waivedActive ? "block" : "none";
+  waivedBtn.textContent = waivedActive ? "WAIVED ON" : "WAIVED";
+
+  if(waivedActive){
+    document.getElementById("amountPaid").value = "0.00";
+    document.getElementById("discountPrice").value = "";
+    document.getElementById("discountPercent").value = "";
+    document.getElementById("discount").value = "";
+    document.getElementById("discountSection").style.display = "none";
+  }else{
+    computeIssuedTotal();
+  }
+};
+
 function computeIssuedTotal(){
+  if(waivedActive){
+    document.getElementById("amountPaid").value = "0.00";
+    document.getElementById("discount").value = "";
+    return;
+  }
+
   let total = 0;
 
   document.querySelectorAll(".issuedRow").forEach(row => {
@@ -698,6 +748,7 @@ function computeIssuedTotal(){
 }
 
 function computeMainDiscountFromPrice(){
+  if(waivedActive) return;
   const original = Number(document.getElementById("amountPaid").value) || 0;
   const discounted = Number(document.getElementById("discountPrice").value) || 0;
 
@@ -715,6 +766,7 @@ function computeMainDiscountFromPrice(){
 }
 
 function computeMainDiscountFromPercent(){
+  if(waivedActive) return;
   const original = Number(document.getElementById("amountPaid").value) || 0;
   const percent = Number(document.getElementById("discountPercent").value) || 0;
 
@@ -741,6 +793,7 @@ function computeMainDiscountFromPercentOrPrice(){
 function resetForm(){
   currentReleasingPriceSnapshot = null;
   selectedLoadedId = null;
+  waivedActive = false;
 
   document.getElementById("date").value = new Date().toISOString().split("T")[0];
   document.getElementById("facility").value = "";
@@ -755,6 +808,10 @@ function resetForm(){
   document.getElementById("discountPrice").value = "";
   document.getElementById("discountPercent").value = "";
   document.getElementById("discount").value = "";
+  document.getElementById("waivedComponent").value = "";
+  document.getElementById("waivedUnit").value = "";
+  document.getElementById("waivedSection").style.display = "none";
+  document.getElementById("waivedBtn").textContent = "WAIVED";
   document.getElementById("discountSection").style.display = "none";
 
   document.getElementById("requestContainer").innerHTML = `
@@ -879,6 +936,10 @@ function loadEntryIntoForm(id, entry){
   document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
   document.getElementById("amountPaid").value = entry.amountPaid || "";
   document.getElementById("discount").value = entry.discount || "";
+  document.getElementById("waivedComponent").value = entry.waivedComponent || "";
+  document.getElementById("waivedUnit").value = entry.waivedUnit || "";
+
+  toggleWaived(!!entry.waived);
 
   const original = Number(entry.amountPaid || 0);
   const discountAmount = Number(entry.discount || 0);
@@ -955,6 +1016,9 @@ saveBtn.addEventListener("click", async () => {
     issued: issued,
     amountPaid: document.getElementById("amountPaid").value,
     discount: document.getElementById("discount").value || 0,
+    waived: waivedActive,
+    waivedComponent: document.getElementById("waivedComponent").value,
+    waivedUnit: document.getElementById("waivedUnit").value || 0,
     priceSnapshot: priceSnapshotToSave
   };
 
