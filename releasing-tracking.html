@@ -45,6 +45,7 @@ color:white;
 
 .releaseBtn{background:#e65100;}
 .augmentationBtn{background:#1565c0;}
+.waivedBtn{background:#6d4c41;}
 .activeBtn{outline:3px solid #222;}
 
 .controls{
@@ -399,6 +400,7 @@ flex-direction:column;
 <div class="topSwitch">
 <button id="showReleaseBtn" class="switchBtn releaseBtn activeBtn">RELEASING RECORDS</button>
 <button id="showAugmentationBtn" class="switchBtn augmentationBtn">BLOOD AUGMENTATION</button>
+<button id="showWaivedBtn" class="switchBtn waivedBtn">WAIVED</button>
 </div>
 
 <div class="controls">
@@ -481,6 +483,7 @@ const exportBtn = document.getElementById("exportBtn");
 const backBtn = document.getElementById("backBtn");
 const showReleaseBtn = document.getElementById("showReleaseBtn");
 const showAugmentationBtn = document.getElementById("showAugmentationBtn");
+const showWaivedBtn = document.getElementById("showWaivedBtn");
 const uncheckAllBtn = document.getElementById("uncheckAllBtn");
 
 let currentView = "releasing";
@@ -686,11 +689,11 @@ function getAugmentationDuplicateKey(entry){
 }
 
 function getDuplicateGroups(){
-  const source = currentView === "releasing" ? getFilteredReleasingEntries() : getFilteredAugmentationEntries();
+  const source = currentView === "augmentation" ? getFilteredAugmentationEntries() : (currentView === "waived" ? getFilteredWaivedEntries() : getFilteredReleasingEntries());
   const map = {};
 
   source.forEach(entry => {
-    const key = currentView === "releasing" ? getReleasingDuplicateKey(entry) : getAugmentationDuplicateKey(entry);
+    const key = currentView === "augmentation" ? getAugmentationDuplicateKey(entry) : getReleasingDuplicateKey(entry);
     if(!map[key]) map[key] = [];
     map[key].push(entry);
   });
@@ -724,7 +727,7 @@ function refreshDuplicateBox(){
     ${groups.map((group, index) => `
       <div class="duplicateGroup">
         <div class="duplicateGroupTitle">Duplicate Group ${index + 1} (${group.length} entries)</div>
-        ${currentView === "releasing" ? renderDuplicateReleasingGroup(group) : renderDuplicateAugmentationGroup(group)}
+        ${currentView === "augmentation" ? renderDuplicateAugmentationGroup(group) : renderDuplicateReleasingGroup(group)}
       </div>
     `).join("")}
   `;
@@ -743,6 +746,8 @@ function renderDuplicateReleasingGroup(group){
           <th>SEX</th>
           <th>BLOOD</th>
           <th>OR</th>
+          <th>WAIVED COMPONENT</th>
+          <th>WAIVED UNIT</th>
           <th>REQUESTED</th>
           <th>ISSUED</th>
           <th>AMOUNT PAID</th>
@@ -761,6 +766,8 @@ function renderDuplicateReleasingGroup(group){
             <td>${entry.sex || ""}</td>
             <td>${entry.bloodtype || ""}</td>
             <td>${entry.or || ""}</td>
+            <td>${entry.waivedComponent || ""}</td>
+            <td>${entry.waivedUnit || 0}</td>
             <td class="componentBox">${formatComponents(entry.requests)}</td>
             <td class="componentBox">${formatComponents(entry.issued)}</td>
             <td>${entry.amountPaid || ""}</td>
@@ -869,15 +876,21 @@ function setView(view){
   duplicatePanel.classList.remove("show");
   duplicatePanel.innerHTML = "";
 
+  showReleaseBtn.classList.remove("activeBtn");
+  showAugmentationBtn.classList.remove("activeBtn");
+  showWaivedBtn.classList.remove("activeBtn");
+
   if(view === "releasing"){
     showReleaseBtn.classList.add("activeBtn");
-    showAugmentationBtn.classList.remove("activeBtn");
     searchBox.placeholder = "Search Name / Facility";
     uncheckAllBtn.style.display = "inline-block";
-  }else{
+  }else if(view === "augmentation"){
     showAugmentationBtn.classList.add("activeBtn");
-    showReleaseBtn.classList.remove("activeBtn");
     searchBox.placeholder = "Search Facility / Blood Type";
+    uncheckAllBtn.style.display = "none";
+  }else{
+    showWaivedBtn.classList.add("activeBtn");
+    searchBox.placeholder = "Search Name / Facility / Waived Component";
     uncheckAllBtn.style.display = "none";
   }
 
@@ -888,13 +901,17 @@ function setView(view){
 function populateFacilityFilter(){
   let facilities = [];
 
-  if(currentView === "releasing"){
+  if(currentView === "augmentation"){
     facilities = [...new Set(
-      allReleasingEntries.map(e => (e.facility || "").trim()).filter(Boolean)
+      allAugmentationEntries.map(e => (e.facility || "").trim()).filter(Boolean)
+    )].sort();
+  }else if(currentView === "waived"){
+    facilities = [...new Set(
+      getFilteredWaivedEntries(true).map(e => (e.facility || "").trim()).filter(Boolean)
     )].sort();
   }else{
     facilities = [...new Set(
-      allAugmentationEntries.map(e => (e.facility || "").trim()).filter(Boolean)
+      allReleasingEntries.map(e => (e.facility || "").trim()).filter(Boolean)
     )].sort();
   }
 
@@ -988,11 +1005,61 @@ function getFilteredAugmentationEntries(){
   return filtered;
 }
 
+function getFilteredWaivedEntries(ignoreFilters = false){
+  const search = ignoreFilters ? "" : searchBox.value.trim().toUpperCase();
+  const dateValue = ignoreFilters ? "" : filterDate.value;
+  const facilityValue = ignoreFilters ? "" : filterFacility.value;
+
+  let filtered = allReleasingEntries.filter(entry => {
+    const isWaived = !!entry.waived;
+    if(!isWaived) return false;
+
+    const fullName = `${entry.surname || ""} ${entry.firstname || ""}`.toUpperCase();
+    const facility = (entry.facility || "").toUpperCase();
+    const date = entry.date || "";
+    const waivedComponent = (entry.waivedComponent || "").toUpperCase();
+    const waivedUnit = String(entry.waivedUnit || "").toUpperCase();
+
+    const matchSearch =
+      search === "" ||
+      fullName.includes(search) ||
+      facility.includes(search) ||
+      waivedComponent.includes(search) ||
+      waivedUnit.includes(search);
+
+    const matchDate =
+      dateValue === "" ||
+      date === dateValue;
+
+    const matchFacility =
+      facilityValue === "" ||
+      entry.facility === facilityValue;
+
+    return matchSearch && matchDate && matchFacility;
+  });
+
+  filtered.sort((a,b) => {
+    const dateCompare = (b.date || "").localeCompare(a.date || "");
+    if(dateCompare !== 0) return dateCompare;
+
+    const aOr = getOrSortValue(a.or);
+    const bOr = getOrSortValue(b.or);
+
+    if(aOr.empty !== bOr.empty) return aOr.empty - bOr.empty;
+    if(aOr.num !== bOr.num) return aOr.num - bOr.num;
+    return aOr.text.localeCompare(bOr.text);
+  });
+
+  return filtered;
+}
+
 function renderCurrentView(){
   if(currentView === "releasing"){
     renderReleasingTable();
-  }else{
+  }else if(currentView === "augmentation"){
     renderAugmentationTable();
+  }else{
+    renderWaivedTable();
   }
   refreshDuplicateBox();
 }
@@ -1215,6 +1282,117 @@ function renderAugmentationTable(){
               PAID ${isPaid ? 'YES' : 'NO'}
             </button>
             <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
+  });
+}
+
+
+function renderWaivedTable(){
+  const filtered = getFilteredWaivedEntries();
+
+  if(filtered.length === 0){
+    container.innerHTML = '<div class="emptyMessage">No waived records found.</div>';
+    return;
+  }
+
+  const groupedByMonth = {};
+
+  filtered.forEach(entry => {
+    const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
+    if(!groupedByMonth[month]) groupedByMonth[month] = [];
+    groupedByMonth[month].push(entry);
+  });
+
+  container.innerHTML = "";
+
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
+
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
+
+    const groupedByDate = {};
+
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
+    });
+
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>SURNAME</th>
+            <th>FIRST NAME</th>
+            <th>AGE</th>
+            <th>SEX</th>
+            <th>BLOOD</th>
+            <th>OR</th>
+            <th>WAIVED COMPONENT</th>
+            <th>WAIVED UNIT</th>
+            <th>REQUESTED</th>
+            <th>ISSUED</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeReleasingTotal(entry);
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.surname || ""}</td>
+          <td>${entry.firstname || ""}</td>
+          <td>${entry.age || ""}</td>
+          <td>${entry.sex || ""}</td>
+          <td>${entry.bloodtype || ""}</td>
+          <td>${entry.or || ""}</td>
+          <td>${entry.waivedComponent || ""}</td>
+          <td>${entry.waivedUnit || 0}</td>
+          <td class="componentBox">${formatComponents(entry.requests)}</td>
+          <td class="componentBox">${formatComponents(entry.issued)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>${entry.discount || ""}</td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
           </td>
         `;
         tbody.appendChild(row);
@@ -1730,6 +1908,55 @@ function exportAugmentationCSV(){
   document.body.removeChild(link);
 }
 
+
+function exportWaivedCSV(){
+  const filtered = getFilteredWaivedEntries();
+
+  const rows = [
+    ["DATE","FACILITY","SURNAME","FIRSTNAME","AGE","SEX","BLOOD","OR","WAIVED_COMPONENT","WAIVED_UNIT","REQUESTED","ISSUED","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT"]
+  ];
+
+  filtered.forEach(e => {
+    const req = (Array.isArray(e.requests) ? e.requests : [])
+      .map(r => `${r.type || ""}-${r.qty || ""}`)
+      .join("|");
+
+    const iss = (Array.isArray(e.issued) ? e.issued : [])
+      .map(r => `${r.type || ""}-${r.qty || ""}`)
+      .join("|");
+
+    rows.push([
+      e.date || "",
+      e.facility || "",
+      e.surname || "",
+      e.firstname || "",
+      e.age || "",
+      e.sex || "",
+      e.bloodtype || "",
+      e.or || "",
+      e.waivedComponent || "",
+      e.waivedUnit || 0,
+      req,
+      iss,
+      computeReleasingTotal(e),
+      e.amountPaid || "",
+      e.discount || ""
+    ]);
+  });
+
+  const csv = rows.map(row =>
+    row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "waived_records.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function exportCurrentCSV(){
   if(!auth.currentUser){
     alert("You are not logged in.");
@@ -1739,8 +1966,10 @@ function exportCurrentCSV(){
 
   if(currentView === "releasing"){
     exportReleasingCSV();
-  }else{
+  }else if(currentView === "augmentation"){
     exportAugmentationCSV();
+  }else{
+    exportWaivedCSV();
   }
 }
 
@@ -1751,6 +1980,7 @@ filterFacility.addEventListener("change", renderCurrentView);
 
 showReleaseBtn.addEventListener("click", () => setView("releasing"));
 showAugmentationBtn.addEventListener("click", () => setView("augmentation"));
+showWaivedBtn.addEventListener("click", () => setView("waived"));
 
 exportBtn.addEventListener("click", exportCurrentCSV);
 
