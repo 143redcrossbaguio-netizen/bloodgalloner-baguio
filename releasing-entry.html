@@ -711,24 +711,29 @@ window.toggleWaived = function(forceState = null){
   waivedSection.style.display = waivedActive ? "block" : "none";
   waivedBtn.textContent = waivedActive ? "WAIVED ON" : "WAIVED";
 
-  if(waivedActive){
-    document.getElementById("amountPaid").value = "0.00";
-    document.getElementById("discountPrice").value = "";
-    document.getElementById("discountPercent").value = "";
-    document.getElementById("discount").value = "";
-    document.getElementById("discountSection").style.display = "none";
-  }else{
-    computeIssuedTotal();
+  if(!waivedActive){
+    document.getElementById("waivedComponent").value = "";
+    document.getElementById("waivedUnit").value = "";
   }
+
+  computeIssuedTotal();
 };
 
-function computeIssuedTotal(){
-  if(waivedActive){
-    document.getElementById("amountPaid").value = "0.00";
-    document.getElementById("discount").value = "";
-    return;
-  }
+function getIssuedComponentQty(componentType){
+  let qty = 0;
 
+  document.querySelectorAll(".issuedRow").forEach(row => {
+    const type = row.querySelector(".issuedType").value;
+    const rowQty = Number(row.querySelector(".issuedQty").value) || 0;
+    if(type === componentType){
+      qty += rowQty;
+    }
+  });
+
+  return qty;
+}
+
+function computeIssuedTotal(){
   let total = 0;
 
   document.querySelectorAll(".issuedRow").forEach(row => {
@@ -743,12 +748,27 @@ function computeIssuedTotal(){
   const boxContainerQty = Number(document.getElementById("boxContainerQty").value) || 0;
   total += componentPrices.BOXCONTAINER * boxContainerQty;
 
+  if(waivedActive){
+    const waivedComponent = document.getElementById("waivedComponent").value;
+    const enteredWaivedUnit = Number(document.getElementById("waivedUnit").value) || 0;
+    const issuedQtyForComponent = getIssuedComponentQty(waivedComponent);
+    const validWaivedUnit = Math.min(enteredWaivedUnit, issuedQtyForComponent);
+
+    if(String(document.getElementById("waivedUnit").value).trim() !== "" && enteredWaivedUnit !== validWaivedUnit){
+      document.getElementById("waivedUnit").value = validWaivedUnit;
+    }
+
+    const waivedAmount = (componentPrices[waivedComponent] || 0) * validWaivedUnit;
+    total -= waivedAmount;
+  }
+
+  total = Math.max(0, total);
+
   document.getElementById("amountPaid").value = total.toFixed(2);
   computeMainDiscountFromPercentOrPrice();
 }
 
 function computeMainDiscountFromPrice(){
-  if(waivedActive) return;
   const original = Number(document.getElementById("amountPaid").value) || 0;
   const discounted = Number(document.getElementById("discountPrice").value) || 0;
 
@@ -766,7 +786,6 @@ function computeMainDiscountFromPrice(){
 }
 
 function computeMainDiscountFromPercent(){
-  if(waivedActive) return;
   const original = Number(document.getElementById("amountPaid").value) || 0;
   const percent = Number(document.getElementById("discountPercent").value) || 0;
 
@@ -1294,6 +1313,10 @@ document.addEventListener("input", function(e){
 
   if(e.target.id === "discountPercent"){
     computeMainDiscountFromPercent();
+  }
+
+  if(e.target.id === "waivedComponent" || e.target.id === "waivedUnit"){
+    computeIssuedTotal();
   }
 
   if(
