@@ -138,6 +138,31 @@ font-weight:bold;
 .save-award-btn{background:#1565c0;}
 .to-award-btn{background:#ef6c00;}
 .print-btn{background:#455a64;}
+.print-galloner-btn{background:#1e88e5;}
+.print-bronze-btn{background:#cd7f32;}
+.print-silver-btn{background:#757575;}
+.print-gold-btn{background:#b8860b;color:white;}
+.print-not-awarded-btn{background:#c62828;}
+
+.print-group-row{
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+align-items:center;
+margin-bottom:10px;
+padding:10px 12px;
+background:#f9f9f9;
+border:1px solid #e0e0e0;
+border-radius:8px;
+}
+
+.print-group-row label{
+font-size:13px;
+font-weight:bold;
+color:#444;
+margin-right:4px;
+white-space:nowrap;
+}
 
 table{
 width:100%;
@@ -285,6 +310,27 @@ text-align:center;
 position:static;
 }
 
+.serial-table td{
+font-size:13px;
+}
+
+.serial-table td:first-child{
+text-align:center;
+font-weight:bold;
+color:#888;
+width:40px;
+}
+
+.serial-empty-row td{
+text-align:center;
+color:#888;
+font-style:italic;
+}
+
+.serial-highlight{
+background:#fff8e1;
+}
+
 .remarks-panel{
 background:#ffffff;
 border:1px solid #ccc;
@@ -354,6 +400,32 @@ border-radius:8px;
 margin-top:10px;
 }
 
+/* Serial number individual cell formatting */
+.serial-val{
+font-family:monospace;
+font-size:13px;
+font-weight:bold;
+color:#1a237e;
+letter-spacing:0.5px;
+}
+
+.serial-date-val{
+color:#444;
+font-size:12px;
+}
+
+.serial-source-badge{
+display:inline-block;
+padding:2px 6px;
+border-radius:4px;
+font-size:10px;
+font-weight:bold;
+}
+
+.src-donors{background:#e3f2fd;color:#0d47a1;}
+.src-database{background:#fce4ec;color:#880e4f;}
+.src-merged{background:#e8f5e9;color:#1b5e20;}
+
 @media (max-width: 900px){
 .serial-detail-layout{
 grid-template-columns:1fr;
@@ -421,19 +493,29 @@ grid-template-columns:1fr;
 <input type="number" id="yearAwardedFilter" placeholder="Year Awarded" min="1900" max="2999" oninput="applyFiltersAndRender()" style="width:140px;">
 
 <select id="sortFilter" onchange="applyFiltersAndRender()">
-<option value="qualifiedDesc">Sort: Highest Donations</option>
-<option value="qualifiedAsc">Sort: Lowest Donations</option>
 <option value="nameAsc">Sort: Name A-Z</option>
 <option value="nameDesc">Sort: Name Z-A</option>
+<option value="qualifiedDesc">Sort: Highest Donations</option>
+<option value="qualifiedAsc">Sort: Lowest Donations</option>
 </select>
 
 <button class="to-award-btn" onclick="showToBeAwardedThisYear()">To Be Awarded This Year</button>
 <button class="top-btn" onclick="clearAwardFilters()">Clear Award Filter</button>
+<button class="reload-btn" onclick="fetchEligibleDonors()">Reload</button>
+<button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
+</div>
+
+<!-- Print by award type row -->
+<div class="print-group-row">
+<label>Print by Award Type:</label>
+<button class="print-galloner-btn" onclick="printByBadge('galloner')">Print Galloners</button>
+<button class="print-bronze-btn" onclick="printByBadge('bronze')">Print Bronze</button>
+<button class="print-silver-btn" onclick="printByBadge('silver')">Print Silver</button>
+<button class="print-gold-btn" onclick="printByBadge('gold')">Print Gold</button>
+<button class="print-not-awarded-btn" onclick="printNotAwarded()">Print Not Yet Awarded</button>
 <button class="print-btn" onclick="printFilteredView()">Print Filtered</button>
 <button class="print-btn" onclick="printWholeView()">Print Whole</button>
 <button class="top-btn" onclick="exportToCSV()">Export CSV</button>
-<button class="reload-btn" onclick="fetchEligibleDonors()">Reload</button>
-<button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
 </div>
 
 <div class="table-wrap">
@@ -1295,9 +1377,10 @@ return true;
 
 filteredDonorsData.sort((a,b)=>{
 if(sortFilter === "qualifiedAsc") return (a.smartDonationCount||0) - (b.smartDonationCount||0);
-if(sortFilter === "nameAsc") return getSortableName(a).localeCompare(getSortableName(b));
+if(sortFilter === "qualifiedDesc") return (b.smartDonationCount||0) - (a.smartDonationCount||0);
 if(sortFilter === "nameDesc") return getSortableName(b).localeCompare(getSortableName(a));
-return (b.smartDonationCount||0) - (a.smartDonationCount||0);
+// Default: nameAsc
+return getSortableName(a).localeCompare(getSortableName(b));
 });
 
 updateSummary();
@@ -1337,6 +1420,11 @@ let badge = getBadge(Number(d.smartDonationCount || 0));
 let bloodIcon = getBloodIcon(d.bloodType,d.rhFactor);
 let hasRemarks = (d.remarks || "").trim() !== "";
 
+// Count visible serials from detailRows
+let allRows = Array.isArray(d.detailRows) ? d.detailRows : [];
+let serialsWithValue = allRows.filter(r => safeText(r.serial) !== "");
+let serialCountDisplay = serialsWithValue.length > 0 ? serialsWithValue.length : Number(d.serialCount || 0);
+
 table.innerHTML += `
 <tr>
 <td>${index+1}</td>
@@ -1357,8 +1445,8 @@ ${badge}
 <td>${renderAwardCell(d)}</td>
 
 <td>
-${Number(d.serialCount || 0)}
-<button class="view-btn" onclick="toggleSerial(${index})">View</button>
+<div style="font-weight:bold;margin-bottom:4px;">${serialCountDisplay} Serial${serialCountDisplay === 1 ? "" : "s"}</div>
+<button class="view-btn" onclick="toggleSerial(${index})">View Serials</button>
 </td>
 
 <td>
@@ -1402,6 +1490,21 @@ let remarksBox = document.getElementById("remarksText"+index);
 if(remarksBox) remarksBox.focus();
 }
 
+function getSourceClass(source){
+if(!source) return "";
+let s = source.toLowerCase();
+if(s === "donors") return "src-donors";
+if(s === "donordatabase") return "src-database";
+return "src-merged";
+}
+
+function getSourceLabel(source){
+if(!source) return "";
+if(source === "donors") return "Donors";
+if(source === "donorDatabase") return "DB";
+return source;
+}
+
 function renderSerialAndRemarks(index){
 let container = document.getElementById("serialList"+index);
 if(!container) return;
@@ -1415,28 +1518,85 @@ let allRows = Array.isArray(donor.detailRows) ? donor.detailRows : [];
 let awardStatus = safeText(donor.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED";
 let yearAwarded = safeText(donor.yearAwarded || "");
 
+// Build serial rows — show each serial number individually and clearly
 let serialRows = "";
+let serialsWithValues = allRows.filter(r => safeText(r.serial) !== "" || safeText(r.date) !== "");
 
-if(allRows.length){
+if(serialsWithValues.length > 0){
+for(let i=0;i<serialsWithValues.length;i++){
+let row = serialsWithValues[i] || {};
+let serial = safeText(row.serial);
+let date = safeText(row.date);
+let source = safeText(row.source);
+let srcClass = getSourceClass(source);
+let srcLabel = getSourceLabel(source);
+let rowClass = i % 2 === 0 ? "" : "serial-highlight";
+
+serialRows += `
+<tr class="${rowClass}">
+<td>${i+1}</td>
+<td><span class="serial-val">${serial ? escapeHtml(serial) : '<span style="color:#bbb;font-style:italic;">—</span>'}</span></td>
+<td><span class="serial-date-val">${date ? escapeHtml(date) : '<span style="color:#bbb;">—</span>'}</span></td>
+<td>${srcLabel ? `<span class="serial-source-badge ${srcClass}">${escapeHtml(srcLabel)}</span>` : ""}</td>
+<td style="color:#888;font-size:11px;">${escapeHtml(row.docId || "")}</td>
+</tr>
+`;
+}
+} else if(allRows.length > 0){
+// Has rows but no serial values — show what we have
 for(let i=0;i<allRows.length;i++){
 let row = allRows[i] || {};
+let source = safeText(row.source);
+let srcClass = getSourceClass(source);
+let srcLabel = getSourceLabel(source);
+let rowClass = i % 2 === 0 ? "" : "serial-highlight";
 serialRows += `
-<tr>
-<td style="text-align:center;">${i+1}</td>
-<td>${escapeHtml(row.serial || "-")}</td>
-<td>${escapeHtml(row.date || "-")}</td>
-<td>${escapeHtml(row.source || "")}</td>
-<td>${escapeHtml(row.docId || "")}</td>
+<tr class="${rowClass}">
+<td>${i+1}</td>
+<td><span style="color:#bbb;font-style:italic;">No serial</span></td>
+<td><span class="serial-date-val">${escapeHtml(row.date || "—")}</span></td>
+<td>${srcLabel ? `<span class="serial-source-badge ${srcClass}">${escapeHtml(srcLabel)}</span>` : ""}</td>
+<td style="color:#888;font-size:11px;">${escapeHtml(row.docId || "")}</td>
 </tr>
 `;
 }
-}else{
+} else {
 serialRows = `
-<tr>
-<td colspan="5" style="text-align:center;">No serial or donation rows found.</td>
+<tr class="serial-empty-row">
+<td colspan="5">No serial or donation rows found in this record.</td>
 </tr>
 `;
 }
+
+// Also include raw donors serials array if not already in detailRows
+let rawSerials = Array.isArray(donor.serials) ? donor.serials : [];
+let rawSerialRows = "";
+let detailSerialKeys = new Set(allRows.map(r => [safeText(r.serial), safeText(r.date)].join("|")));
+let extraRaw = rawSerials.filter(s => {
+let serial = safeText(s.serial || s.serialNumber || "");
+let date = safeText(s.date || s.entryDate || "");
+let key = [serial, date].join("|");
+return !detailSerialKeys.has(key);
+});
+
+if(extraRaw.length > 0){
+for(let i=0;i<extraRaw.length;i++){
+let s = extraRaw[i] || {};
+let serial = safeText(s.serial || s.serialNumber || "");
+let date = safeText(s.date || s.entryDate || "");
+rawSerialRows += `
+<tr style="background:#f0fff0;">
+<td>${serialsWithValues.length + i + 1}</td>
+<td><span class="serial-val">${serial ? escapeHtml(serial) : '<span style="color:#bbb;font-style:italic;">—</span>'}</span></td>
+<td><span class="serial-date-val">${date ? escapeHtml(date) : '<span style="color:#bbb;">—</span>'}</span></td>
+<td><span class="serial-source-badge src-donors">Donors</span></td>
+<td style="color:#888;font-size:11px;">—</td>
+</tr>
+`;
+}
+}
+
+let totalVisibleSerials = serialsWithValues.length + extraRaw.length;
 
 let awardPanel = `
 <div class="remarks-panel">
@@ -1481,24 +1641,36 @@ container.innerHTML = `
 <div class="serial-detail-layout">
 <div>
 <div class="serial-count-box">Qualified Donation Count: ${smartDonationCount}</div>
+<div class="serial-count-box">Visible Serial Numbers: ${totalVisibleSerials}</div>
 <div class="serial-count-box">Encoded Serial Records: ${serialCount}</div>
 <div class="serial-count-box">Matched Donor Database Rows: ${matchedRows}</div>
 <div class="serial-count-box">Source: ${escapeHtml(donor.smartMatchSource || "")}</div>
 
+<div style="font-weight:bold;color:#b30000;margin-bottom:8px;font-size:13px;">
+Serial Number Detail — Each Row is One Donation
+</div>
+
 <table class="serial-table">
 <thead>
 <tr>
-<th style="width:70px;">#</th>
+<th style="width:50px;">#</th>
 <th>Serial Number</th>
-<th style="width:160px;">Date</th>
-<th style="width:120px;">Source</th>
+<th style="width:140px;">Date</th>
+<th style="width:80px;">Source</th>
 <th>Record ID</th>
 </tr>
 </thead>
 <tbody>
 ${serialRows}
+${rawSerialRows}
 </tbody>
 </table>
+
+<div style="margin-top:8px;font-size:11px;color:#666;">
+<span style="display:inline-block;margin-right:10px;"><span class="serial-source-badge src-donors">Donors</span> = from donors collection</span>
+<span style="display:inline-block;margin-right:10px;"><span class="serial-source-badge src-database">DB</span> = from donorDatabase</span>
+<span style="display:inline-block;"><span style="background:#f0fff0;padding:2px 6px;border:1px solid #c8e6c9;border-radius:4px;font-size:11px;">Green row</span> = extra from donors array</span>
+</div>
 </div>
 
 <div>
@@ -1767,7 +1939,16 @@ return `AWARDED${year ? " (" + year + ")" : ""}`;
 return "NOT AWARDED";
 }
 
-function getPrintTitle(filteredMode){
+function getBadgeLabelForPrint(level){
+if(level === "gold") return "GOLD";
+if(level === "silver") return "SILVER";
+if(level === "bronze") return "BRONZE";
+if(level === "galloner") return "GALLONER";
+return "";
+}
+
+function getPrintTitle(filteredMode, label){
+if(label) return label;
 if(filteredMode){
 return "Eligible Awardees Tracking - Filtered View";
 }
@@ -1807,27 +1988,28 @@ rows += `
 <tr>
 <td>${i+1}</td>
 <td>${escapeHtml(getFullName(d))}</td>
-<td>${escapeHtml((d.badgeLevel || "").toUpperCase())}</td>
+<td>${escapeHtml(getBadgeLabelForPrint(d.badgeLevel || ""))}</td>
 <td>${escapeHtml(String(d.smartDonationCount || 0))}</td>
 <td>${escapeHtml((d.bloodType || "") + (d.rhFactor || ""))}</td>
 <td>${escapeHtml(d.contact || "")}</td>
 <td>${escapeHtml(renderAwardTextForPrint(d))}</td>
 <td>${escapeHtml(String(d.serialCount || 0))}</td>
 <td>${escapeHtml(d.smartMatchSource || "")}</td>
+<td>${escapeHtml(d.remarks || "")}</td>
 </tr>
 `;
 }
 return rows;
 }
 
-function printDataSet(data, filteredMode){
+function printDataSet(data, filteredMode, customTitle, customSubtitle){
 if(!data.length){
 alert("No records to print.");
 return;
 }
 
-let printTitle = getPrintTitle(filteredMode);
-let filterText = getActiveFiltersText(filteredMode);
+let printTitle = getPrintTitle(filteredMode, customTitle);
+let filterText = customSubtitle || getActiveFiltersText(filteredMode);
 let today = new Date();
 let printedOn = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
 
@@ -1877,6 +2059,9 @@ font-weight:bold;
 td:nth-child(2){
 text-align:left;
 }
+td:last-child{
+text-align:left;
+}
 @page{
 size:landscape;
 margin:10mm;
@@ -1885,7 +2070,7 @@ margin:10mm;
 </head>
 <body>
 <h1>${escapeHtml(printTitle)}</h1>
-<div class="meta">Printed On: ${escapeHtml(printedOn)}</div>
+<div class="meta">Printed On: ${escapeHtml(printedOn)} &nbsp;|&nbsp; Total: ${data.length} donor${data.length === 1 ? "" : "s"}</div>
 <div class="sub">${escapeHtml(filterText)}</div>
 
 <table>
@@ -1900,6 +2085,7 @@ margin:10mm;
 <th>Award Status</th>
 <th>Serial Count</th>
 <th>Source</th>
+<th>Remarks</th>
 </tr>
 </thead>
 <tbody>
@@ -1924,6 +2110,42 @@ printDataSet(filteredDonorsData, true);
 
 function printWholeView(){
 printDataSet(donorsData, false);
+}
+
+function printByBadge(level){
+let badgeLabel = getBadgeLabelForPrint(level);
+let subset = donorsData.filter(d => d.badgeLevel === level);
+// Sort alphabetically by surname
+subset.sort((a,b) => getSortableName(a).localeCompare(getSortableName(b)));
+if(!subset.length){
+alert("No " + badgeLabel + " donors found.");
+return;
+}
+printDataSet(
+subset,
+false,
+"Eligible Awardees — " + badgeLabel + " Level",
+"Badge: " + badgeLabel + " | Total: " + subset.length + " donor" + (subset.length === 1 ? "" : "s") + " | Sorted A-Z"
+);
+}
+
+function printNotAwarded(){
+let subset = donorsData.filter(d => {
+let status = safeText(d.awardStatus || "NOT AWARDED").toUpperCase();
+return status !== "AWARDED";
+});
+// Sort alphabetically by surname
+subset.sort((a,b) => getSortableName(a).localeCompare(getSortableName(b)));
+if(!subset.length){
+alert("No not-yet-awarded donors found.");
+return;
+}
+printDataSet(
+subset,
+false,
+"Not Yet Awarded — Eligible Donors",
+"Award Status: NOT AWARDED | Total: " + subset.length + " donor" + (subset.length === 1 ? "" : "s") + " | Sorted A-Z"
+);
 }
 
 function exportToCSV(){
