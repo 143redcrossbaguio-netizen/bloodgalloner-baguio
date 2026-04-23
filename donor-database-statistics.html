@@ -539,41 +539,75 @@ function normalizeBloodType(v){
 
   s = s.replace(/\./g, " ");
   s = s.replace(/\s+/g, " ");
-  s = s.replace(/POSITIVE/g, "POS");
-  s = s.replace(/NEGATIVE/g, "NEG");
-  s = s.replace(/RH/g, "");
-  s = s.replace(/\s+/g, " ").trim();
-  s = s.replace("POS", "+").replace("NEG", "-");
-  s = s.replace(/\s+/g, "");
+  s = s.replace(/TYPE\s*/g, "");
+  s = s.replace(/GROUP\s*/g, "");
+  s = s.replace(/BLOOD\s*/g, "");
+  s = s.replace(/R\/H|RH FACTOR|RH/g, "");
+  s = s.replace(/POSITIVE|\bPOS\b/g, "+");
+  s = s.replace(/NEGATIVE|\bNEG\b/g, "-");
+  s = s.replace(/\s+/g, "").trim();
 
-  if (s === "O+") return "O+";
-  if (s === "A+") return "A+";
-  if (s === "B+") return "B+";
-  if (s === "AB+") return "AB+";
-  if (s === "O-") return "O-";
-  if (s === "A-") return "A-";
-  if (s === "B-") return "B-";
-  if (s === "AB-") return "AB-";
+  const patterns = [
+    { re: /^AB\+/, value: "AB+" },
+    { re: /^AB\-/, value: "AB-" },
+    { re: /^A\+/, value: "A+" },
+    { re: /^A\-/, value: "A-" },
+    { re: /^B\+/, value: "B+" },
+    { re: /^B\-/, value: "B-" },
+    { re: /^O\+/, value: "O+" },
+    { re: /^O\-/, value: "O-" },
+    { re: /^ABPOS/, value: "AB+" },
+    { re: /^ABNEG/, value: "AB-" },
+    { re: /^APOS/, value: "A+" },
+    { re: /^ANEG/, value: "A-" },
+    { re: /^BPOS/, value: "B+" },
+    { re: /^BNEG/, value: "B-" },
+    { re: /^OPOS/, value: "O+" },
+    { re: /^ONEG/, value: "O-" }
+  ];
 
-  if (s === "OPOS") return "O+";
-  if (s === "APOS") return "A+";
-  if (s === "BPOS") return "B+";
-  if (s === "ABPOS") return "AB+";
-  if (s === "ONEG") return "O-";
-  if (s === "ANEG") return "A-";
-  if (s === "BNEG") return "B-";
-  if (s === "ABNEG") return "AB-";
-
-  if (s.startsWith("O+")) return "O+";
-  if (s.startsWith("A+")) return "A+";
-  if (s.startsWith("B+")) return "B+";
-  if (s.startsWith("AB+")) return "AB+";
-  if (s.startsWith("O-")) return "O-";
-  if (s.startsWith("A-")) return "A-";
-  if (s.startsWith("B-")) return "B-";
-  if (s.startsWith("AB-")) return "AB-";
+  for (const item of patterns) {
+    if (item.re.test(s)) return item.value;
+  }
 
   return "Unknown";
+}
+
+function getBloodTypeValue(r){
+  const candidates = [
+    r.bloodType,
+    r.bloodtype,
+    r.aboRh,
+    r.bloodGroup,
+    r.blood_group,
+    r.group,
+    r.abo,
+    r.aboRhType,
+    r.bloodtypeRh,
+    r.bloodTyping,
+    r.typeAndRh,
+    r.bloodTypeRh,
+    r.bloodTypeResult,
+    r.labBloodType,
+    r.extractedBloodType
+  ];
+
+  for (const value of candidates) {
+    const normalized = normalizeBloodType(value);
+    if (normalized !== "Unknown") return normalized;
+  }
+
+  for (const [key, value] of Object.entries(r || {})) {
+    if (!/blood|abo|group|rh/i.test(key)) continue;
+    const normalized = normalizeBloodType(value);
+    if (normalized !== "Unknown") return normalized;
+  }
+
+  return "Unknown";
+}
+
+function hasMeaningfulValue(v){
+  return !(v == null || String(v).trim() === "");
 }
 
 function normalizeSex(v){
@@ -593,16 +627,46 @@ function normalizeDonorCategory(v){
 
 function normalizeBagCode(v){
   const s = String(v || "").toLowerCase().trim();
-  if (!s) return "S";
+  if (!s) return "";
   if (s.includes("quad")) return "Q";
   if (s.includes("triple")) return "T";
   if (s.includes("double")) return "D";
   if (s.includes("single")) return "S";
+  if (s.includes("quadruple")) return "Q";
+  if (s.includes("triple bag")) return "T";
+  if (s.includes("double bag")) return "D";
+  if (s.includes("single bag")) return "S";
   if (s === "4" || s === "q") return "Q";
   if (s === "3" || s === "t") return "T";
   if (s === "2" || s === "d") return "D";
   if (s === "1" || s === "s") return "S";
-  return "S";
+  return "";
+}
+
+function getBagCodeValue(r){
+  const direct = [
+    r.bloodBagType,
+    r.bagType,
+    r.bag,
+    r.bagConfiguration,
+    r.bloodBag,
+    r.bagCode,
+    r.bag_code,
+    r.typeOfBag
+  ];
+
+  for (const value of direct) {
+    const code = normalizeBagCode(value);
+    if (code) return code;
+  }
+
+  for (const [key, value] of Object.entries(r || {})) {
+    if (!/bag/i.test(key)) continue;
+    const code = normalizeBagCode(value);
+    if (code) return code;
+  }
+
+  return "";
 }
 
 function bagCodeToColumnObject(code){
@@ -621,11 +685,12 @@ function sumBagGroup(obj){
 }
 
 function getPreparedComponentsFromBag(r){
-  const code = normalizeBagCode(r.bloodBagType || r.bagType || r.bag || r.bagConfiguration || "");
+  const code = getBagCodeValue(r);
   if (code === "Q") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
   if (code === "T") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
   if (code === "D") return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-  return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
+  if (code === "S") return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
+  return { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
 }
 
 function createBloodTypeCounter(){
@@ -735,80 +800,149 @@ function formatDateForDisplay(raw){
   return `${mm}/${dd}/${yy}`;
 }
 
-function applyDonor(s, r){
-  s.totalDonors++;
+function getNormalizedPersonName(r){
+  const raw = (
+    r.fullName ||
+    r.donorName ||
+    r.name ||
+    [r.lastName, r.firstName, r.middleName].filter(Boolean).join(" ") ||
+    [r.surname, r.givenName, r.middleInitial].filter(Boolean).join(" ")
+  );
+  return String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+}
 
+function getDonationIdentityKey(r){
+  const d = parseDate(getDonorDate(r));
+  const dateKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` : "";
+  const explicitId = String(
+    r.donationId ||
+    r.donorId ||
+    r.donorNo ||
+    r.donorNumber ||
+    r.serialNo ||
+    r.serialNumber ||
+    r.referenceNo ||
+    r.referenceNumber ||
+    r.unitNumber ||
+    r.unitNo ||
+    ""
+  ).trim().toUpperCase();
+
+  const nameKey = getNormalizedPersonName(r);
+  const birthKey = formatDateForDisplay(getBirthdayValue(r));
+  const bagKey = getBagCodeValue(r);
+  const bloodKey = getBloodTypeValue(r);
+  const donorTypeKey = normalizeDonorType(getDonorType(r));
+
+  if (explicitId && dateKey) return `${explicitId}__${dateKey}`;
+  return [nameKey, birthKey, dateKey, donorTypeKey, bagKey, bloodKey].join("__");
+}
+
+function getDedupedDonorRecords(records){
+  const map = new Map();
+
+  (records || []).forEach(record => {
+    if (!isVisibleTrackingRecord(record)) return;
+
+    const d = parseDate(getDonorDate(record));
+    const key = getDonationIdentityKey(record);
+    if (!d || !key || /^_+$/.test(key.replace(/[^_]/g, ""))) return;
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, record);
+      return;
+    }
+
+    const existingScore = getRecordCompletenessScore(existing);
+    const nextScore = getRecordCompletenessScore(record);
+
+    if (nextScore > existingScore) {
+      map.set(key, record);
+      return;
+    }
+
+    const existingTime = parseDate(existing.updatedAt || existing.modifiedAt || existing.createdAt)?.getTime() || 0;
+    const nextTime = parseDate(record.updatedAt || record.modifiedAt || record.createdAt)?.getTime() || 0;
+    if (nextTime > existingTime) map.set(key, record);
+  });
+
+  return Array.from(map.values());
+}
+
+function getRecordCompletenessScore(r){
+  let score = 0;
+  if (parseDate(getDonorDate(r))) score += 10;
+  if (getBagCodeValue(r)) score += 10;
+  if (getBloodTypeValue(r) !== "Unknown") score += 10;
+  if (normalizeSex(r.sex || r.gender || "")) score += 4;
+  if (getAge(r) != null) score += 4;
+  if (hasMeaningfulValue(getPartnerName(r))) score += 2;
+  if (hasMeaningfulValue(getDonorType(r))) score += 2;
+  return score;
+}
+
+function applyDonor(s, r){
   const donorDate = parseDate(getDonorDate(r));
   const donorParts = getDateParts(donorDate);
-  if (donorParts.year && donorParts.month && donorParts.day) {
-    const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
-    s.dailyCounts[dayKey] = (s.dailyCounts[dayKey] || 0) + 1;
-  }
-
   const donorType = normalizeDonorType(getDonorType(r));
   const partnerName = getPartnerName(r);
   const mapping = getBestMapping(partnerName);
   const smartName = mapping ? (mapping.partnerName || partnerName || "Unspecified") : smartGroupDisplayName(partnerName || "Unspecified");
   const smartPlace = mapping && mapping.place ? mapping.place : getPartnerPlace(r);
 
-  const bt = normalizeBloodType(
-    r.bloodType ||
-    r.bloodtype ||
-    r.aboRh ||
-    r.group ||
-    r.blood_group ||
-    r.bloodGroup ||
-    ""
-  );
-
-  const bagCode = normalizeBagCode(
-    r.bloodBagType ||
-    r.bagType ||
-    r.bag ||
-    r.bagConfiguration ||
-    ""
-  );
-
+  const bt = getBloodTypeValue(r);
+  const bagCode = getBagCodeValue(r);
+  const hasRecognizedCollection = !!bagCode;
   const bagCounts = bagCodeToColumnObject(bagCode);
 
-  s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
-  if (!s.bagTypeBloodType[bagCode]) s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
-  s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
+  if (hasRecognizedCollection) {
+    s.totalDonors++;
 
-  if (donorType === "MBD") {
-    addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
-    const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
-    if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
-    addBagCounts(s.fieldDonation[category], bagCounts);
+    if (donorParts.year && donorParts.month && donorParts.day) {
+      const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
+      s.dailyCounts[dayKey] = (s.dailyCounts[dayKey] || 0) + 1;
+    }
 
-    const detail = {
-      name: smartName,
-      place: smartPlace || "",
-      date: formatDateForDisplay(getDonorDate(r)),
-      rawDate: getDonorDate(r),
-      totalDonors: 1,
-      "450 cc S": bagCounts.S,
-      "450 cc D": bagCounts.D,
-      "450 cc T": bagCounts.T,
-      "450 cc Q": bagCounts.Q
-    };
+    s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
+    if (!s.bagTypeBloodType[bagCode]) s.bagTypeBloodType[bagCode] = createBloodTypeCounter();
+    s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
 
-    if (category === "Group") s.fieldDetails.group.push(detail);
-    else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
-    else if (category === "Pledge 25") s.fieldDetails.pledge25.push(detail);
-    else s.fieldDetails.unmapped.push(detail);
-  } else if (donorType === "Walk-in") {
-    addBagCounts(s.officeBleeding["Walk-in"], bagCounts);
-  } else if (donorType === "Patient Directed") {
-    addBagCounts(s.officeBleeding["Patient Directed"], bagCounts);
+    if (donorType === "MBD") {
+      addBagCounts(s.fieldDonation["Total MBD"], bagCounts);
+      const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
+      if (!s.fieldDonation[category]) s.fieldDonation[category] = { S:0, D:0, T:0, Q:0 };
+      addBagCounts(s.fieldDonation[category], bagCounts);
+
+      const detail = {
+        name: smartName,
+        place: smartPlace || "",
+        date: formatDateForDisplay(getDonorDate(r)),
+        rawDate: getDonorDate(r),
+        totalDonors: 1,
+        "450 cc S": bagCounts.S,
+        "450 cc D": bagCounts.D,
+        "450 cc T": bagCounts.T,
+        "450 cc Q": bagCounts.Q
+      };
+
+      if (category === "Group") s.fieldDetails.group.push(detail);
+      else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
+      else if (category === "Pledge 25") s.fieldDetails.pledge25.push(detail);
+      else s.fieldDetails.unmapped.push(detail);
+    } else if (donorType === "Walk-in") {
+      addBagCounts(s.officeBleeding["Walk-in"], bagCounts);
+    } else if (donorType === "Patient Directed") {
+      addBagCounts(s.officeBleeding["Patient Directed"], bagCounts);
+    }
+
+    const prep = getPreparedComponentsFromBag({ ...r, bagType: bagCode });
+    Object.keys(prep).forEach(component => {
+      const qty = Number(prep[component] || 0);
+      s.components[component] += qty;
+      if (qty > 0) s.componentBloodType[component][bt] = (s.componentBloodType[component][bt] || 0) + qty;
+    });
   }
-
-  const prep = getPreparedComponentsFromBag(r);
-  Object.keys(prep).forEach(component => {
-    const qty = Number(prep[component] || 0);
-    s.components[component] += qty;
-    if (qty > 0) s.componentBloodType[component][bt] = (s.componentBloodType[component][bt] || 0) + qty;
-  });
 
   const sex = normalizeSex(r.sex || r.gender || "");
   if (sex === "Male" || sex === "Female") s.sex[sex]++;
@@ -931,9 +1065,8 @@ function sumDetailField(rows, field){
 }
 
 function sumBagTypeColumn(s, code){
-  return Number(s.officeBleeding["Walk-in"][code] || 0) +
-         Number(s.officeBleeding["Patient Directed"][code] || 0) +
-         Number(s.fieldDonation["Total MBD"][code] || 0);
+  const bucket = s.bagTypeBloodType[code] || {};
+  return Object.values(bucket).reduce((a, b) => a + (Number(b) || 0), 0);
 }
 
 function num(v){
@@ -1318,7 +1451,7 @@ function renderReport(grouped){
                     <div class="table-wrap">
                       <table>
                         <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
+                        ${["O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"].map(bt => `
                           <tr>
                             <td>${bt}</td>
                             <td>${num(s.bagTypeBloodType.S[bt] || 0)}</td>
@@ -1488,7 +1621,7 @@ function renderReport(grouped){
 
 function buildStatistics(){
   try{
-    const donors = getFilteredDonors();
+    const donors = getDedupedDonorRecords(getFilteredDonors());
     const releases = getFilteredReleasing();
     const grouped = {};
 
