@@ -324,8 +324,8 @@
             <h3>Import Files</h3>
 
             <div class="row">
-                <label>Select Excel Files</label>
-                <input type="file" id="excelFiles" accept=".xlsx,.xls,.csv" multiple>
+                <label>Select Excel / JSON Files</label>
+                <input type="file" id="excelFiles" accept=".xlsx,.xls,.csv,.json" multiple>
             </div>
 
             <div class="row">
@@ -352,7 +352,8 @@
 
             <div class="note">
                 <b>Optimized for large files:</b><br>
-                • Reads all selected Excel files and sheets<br>
+                • Reads all selected Excel, CSV, and JSON files and sheets<br>
+                • JSON files must be an array of objects (converted from Excel) or a SheetJS-style workbook object<br>
                 • Keeps full analyzed data in memory<br>
                 • Shows only one page at a time for faster loading<br>
                 • Inline edit still works on visible rows<br>
@@ -1072,6 +1073,89 @@ function readSheetRowsWithInheritance(sheet, fileName, sheetName) {
     return parsed;
 }
 
+// ─── JSON IMPORT SUPPORT ──────────────────────────────────────────────────────
+
+/**
+ * Detects the format of a parsed JSON file and returns an array of
+ * { sheetName, objectRows } entries, where each objectRows entry is
+ * { row: Object, sourceRowNumber: Number }.
+ *
+ * Supported JSON shapes:
+ *  1. Plain array of objects  →  [ { ... }, { ... } ]
+ *  2. SheetJS-style workbook  →  { SheetNames: [...], Sheets: { sheetName: { ... } } }
+ *  3. Named-sheet object      →  { "Sheet1": [ {...}, ... ], "Sheet2": [ {...}, ... ] }
+ *  4. Single wrapped object   →  { data: [ {...}, ... ] }  (common export format)
+ */
+function parseJsonFileToSheets(jsonData) {
+    // Shape 1: plain array of objects
+    if (Array.isArray(jsonData)) {
+        return [{
+            sheetName: "Sheet1",
+            objectRows: jsonData.map((row, i) => ({ row: row || {}, sourceRowNumber: i + 2 }))
+        }];
+    }
+
+    if (typeof jsonData !== "object" || jsonData === null) return [];
+
+    // Shape 2: SheetJS workbook object (has SheetNames + Sheets)
+    if (Array.isArray(jsonData.SheetNames) && jsonData.Sheets && typeof jsonData.Sheets === "object") {
+        const result = [];
+        jsonData.SheetNames.forEach(sheetName => {
+            const sheet = jsonData.Sheets[sheetName];
+            if (!sheet) return;
+            // Convert the SheetJS sheet to array-of-objects via XLSX
+            const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+            result.push({
+                sheetName,
+                objectRows: rows.map((row, i) => ({ row, sourceRowNumber: i + 2 }))
+            });
+        });
+        return result;
+    }
+
+    // Shape 3: named-sheet object  { "Sheet1": [...], "Sheet2": [...] }
+    const keys = Object.keys(jsonData);
+    const allArrayValues = keys.length > 0 && keys.every(k => Array.isArray(jsonData[k]));
+    if (allArrayValues) {
+        return keys.map(sheetName => ({
+            sheetName,
+            objectRows: (jsonData[sheetName] || []).map((row, i) => ({ row: row || {}, sourceRowNumber: i + 2 }))
+        }));
+    }
+
+    // Shape 4: single wrapped  { data: [...] }
+    const dataKey = keys.find(k => Array.isArray(jsonData[k]));
+    if (dataKey) {
+        return [{
+            sheetName: dataKey,
+            objectRows: (jsonData[dataKey] || []).map((row, i) => ({ row: row || {}, sourceRowNumber: i + 2 }))
+        }];
+    }
+
+    // Fallback: treat the whole object as a single row
+    return [{
+        sheetName: "Sheet1",
+        objectRows: [{ row: jsonData, sourceRowNumber: 2 }]
+    }];
+}
+
+function readJsonFileRows(jsonData, fileName) {
+    const sheets = parseJsonFileToSheets(jsonData);
+    const parsed = [];
+
+    sheets.forEach(({ sheetName, objectRows }) => {
+        const context = { lastDate: "" };
+        objectRows.forEach(item => {
+            const raw = buildMappedRawFromRow(item.row, fileName, sheetName, item.sourceRowNumber, context);
+            if (!isTrulyBlankMappedRow(raw)) parsed.push(raw);
+        });
+    });
+
+    return parsed;
+}
+
+// ─── END JSON IMPORT SUPPORT ─────────────────────────────────────────────────
+
 function computeImportedFinalCounts(rows) {
     const donorGroups = {};
 
@@ -1457,7 +1541,7 @@ async function loadImportHistory() {
 async function analyzeFiles() {
     const files = document.getElementById("excelFiles").files;
     if (!files.length) {
-        alert("Please select at least one Excel or CSV file.");
+        alert("Please select at least one Excel, CSV, or JSON file.");
         return;
     }
 
@@ -1469,28 +1553,64 @@ async function analyzeFiles() {
         await loadExistingRecords();
 
         const parsedRows = [];
-        let totalSheets = 0;
-        let processedSheets = 0;
+        const totalFiles = files.length;
+        let processedFiles = 0;
 
         for (const file of files) {
-            const buffer = await file.arrayBuffer();
-            const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-            totalSheets += workbook.SheetNames.length;
-        }
+            const fileName = file.name;
+            const isJson = /\.json$/i.test(fileName);
 
-        for (const file of files) {
-            const buffer = await file.arrayBuffer();
-            const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+            if (isJson) {
+                // ── JSON file branch ──────────────────────────────────────────
+                updateAnalysisProgress(
+                    Math.round((processedFiles / totalFiles) * 100),
+                    `Analyzing JSON: ${fileName}`
+                );
+                await new Promise(resolve => setTimeout(resolve, 0));
 
-            for (const sheetName of workbook.SheetNames) {
-                const sheet = workbook.Sheets[sheetName];
-                const rows = readSheetRowsWithInheritance(sheet, file.name, sheetName);
+                const text = await file.text();
+                let jsonData;
+                try {
+                    jsonData = JSON.parse(text);
+                } catch (parseErr) {
+                    console.error(`Failed to parse JSON file "${fileName}":`, parseErr);
+                    alert(`Could not parse JSON file "${fileName}":\n${parseErr.message}\n\nSkipping this file.`);
+                    processedFiles++;
+                    continue;
+                }
+
+                const rows = readJsonFileRows(jsonData, fileName);
                 rows.forEach(r => parsedRows.push(r));
 
-                processedSheets++;
-                const percent = totalSheets ? Math.round((processedSheets / totalSheets) * 100) : 100;
-                updateAnalysisProgress(percent, `Analyzing ${file.name} → ${sheetName} (${processedSheets}/${totalSheets} sheets)`);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                processedFiles++;
+                updateAnalysisProgress(
+                    Math.round((processedFiles / totalFiles) * 100),
+                    `Done: ${fileName} (${rows.length} rows)`
+                );
+            } else {
+                // ── Excel / CSV file branch ───────────────────────────────────
+                const buffer = await file.arrayBuffer();
+                const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+                const totalSheets = workbook.SheetNames.length;
+                let processedSheets = 0;
+
+                for (const sheetName of workbook.SheetNames) {
+                    const sheet = workbook.Sheets[sheetName];
+                    const rows = readSheetRowsWithInheritance(sheet, fileName, sheetName);
+                    rows.forEach(r => parsedRows.push(r));
+
+                    processedSheets++;
+                    const percent = Math.round(
+                        ((processedFiles + processedSheets / totalSheets) / totalFiles) * 100
+                    );
+                    updateAnalysisProgress(
+                        percent,
+                        `Analyzing ${fileName} → ${sheetName} (sheet ${processedSheets}/${totalSheets})`
+                    );
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+
+                processedFiles++;
             }
         }
 
@@ -1757,9 +1877,11 @@ function renderSelectedFiles(files) {
         fileList.textContent = "No files selected.";
         return;
     }
-    fileList.innerHTML = Array.from(files).map(file =>
-        `<div>${escapeHtml(file.name)} <span class="muted">(${Math.round(file.size / 1024)} KB)</span></div>`
-    ).join("");
+    fileList.innerHTML = Array.from(files).map(file => {
+        const isJson = /\.json$/i.test(file.name);
+        const tag = isJson ? ` <span style="background:#e3f2fd;color:#1565c0;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:bold;">JSON</span>` : "";
+        return `<div>${escapeHtml(file.name)}${tag} <span class="muted">(${Math.round(file.size / 1024)} KB)</span></div>`;
+    }).join("");
 }
 
 function setPreviewFilter(filterValue) {
