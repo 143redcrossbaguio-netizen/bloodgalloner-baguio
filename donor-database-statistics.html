@@ -439,20 +439,62 @@ function parseDateFromImportMeta(r){
   return parseDateFromText(sheet) || parseDateFromText(file) || null;
 }
 
-function getDonorDate(r){
+function resolveTrackingEntryDate(r){
   return (
-    r.entryDate ||
-    r.donationDate ||
-    r.date ||
-    r.bleedingDate ||
-    r.collectionDate ||
-    r.dateOfDonation ||
-    r.donation_date ||
-    r.bleedDate ||
-    parseDateFromImportMeta(r) ||
-    r.createdAt ||
-    null
+    parseDateFlexibleValue(r?.entryDate) ||
+    parseDateFlexibleValue(r?.donationDate) ||
+    parseDateFlexibleValue(r?.date) ||
+    parseDateFlexibleValue(r?.bleedingDate) ||
+    parseDateFlexibleValue(r?.collectionDate) ||
+    parseDateFlexibleValue(r?.dateOfDonation) ||
+    parseDateFlexibleValue(r?.donation_date) ||
+    parseDateFlexibleValue(r?.bleedDate) ||
+    parseDateFromText(r?.importMeta?.sourceSheet || "") ||
+    parseDateFromText(r?.importMeta?.sourceFile || "") ||
+    parseDateFlexibleValue(r?.createdAt) ||
+    ""
   );
+}
+
+function parseDateFlexibleValue(raw){
+  const d = parseDate(raw);
+  if (!d || isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function getTrackingDonorTypes(r){
+  const rawType = String(r?.donorType || r?.typeOfDonation || r?.type || r?.donationType || "").trim();
+  const values = [];
+  const seen = new Set();
+
+  rawType.split(/[,|/]+/).forEach(part => {
+    const s = String(part || "").trim().toLowerCase().replace(/[-_]+/g, " ");
+    if (s === "mbd" && !seen.has("MBD")) { seen.add("MBD"); values.push("MBD"); }
+    if ((s === "walk in" || s === "walkin") && !seen.has("Walk-in")) { seen.add("Walk-in"); values.push("Walk-in"); }
+    if ((s === "patient directed" || s === "patientdirected") && !seen.has("Patient Directed")) { seen.add("Patient Directed"); values.push("Patient Directed"); }
+  });
+
+  const mbdDetails = String(r?.mbdDetails || "").trim();
+  const patientDirectedDetails = String(r?.patientDirectedDetails || "").trim();
+  if (mbdDetails && !seen.has("MBD")) { seen.add("MBD"); values.push("MBD"); }
+  if (patientDirectedDetails && !seen.has("Patient Directed")) { seen.add("Patient Directed"); values.push("Patient Directed"); }
+  return values;
+}
+
+function getPrimaryDonorType(r){
+  const types = getTrackingDonorTypes(r);
+  if (types.includes("MBD")) return "MBD";
+  if (types.includes("Walk-in")) return "Walk-in";
+  if (types.includes("Patient Directed")) return "Patient Directed";
+  return normalizeDonorType(getDonorType(r));
+}
+
+function hasCategorizedDonorType(r){
+  return getTrackingDonorTypes(r).length > 0 || normalizeDonorType(getDonorType(r)) !== "Other";
+}
+
+function getDonorDate(r){
+  return resolveTrackingEntryDate(r) || parseDateFromImportMeta(r) || r.createdAt || null;
 }
 
 function getBirthdayValue(r){
@@ -487,7 +529,7 @@ function getDonorType(r){
 }
 
 function getPartnerName(r){
-  return r.mbdDetails || r.groupName || r.partnerName || r.partnerOrganization || r.organization || r.company || r.office || r.school || r.barangay || "";
+  return r.mbdDetails || r.patientDirectedDetails || r.groupName || r.partnerName || r.partnerOrganization || r.organization || r.company || r.office || r.school || r.barangay || "";
 }
 
 function getPartnerPlace(r){
@@ -885,7 +927,7 @@ function getRecordCompletenessScore(r){
 function applyDonor(s, r){
   const donorDate = parseDate(getDonorDate(r));
   const donorParts = getDateParts(donorDate);
-  const donorType = normalizeDonorType(getDonorType(r));
+  const donorType = getPrimaryDonorType(r);
   const partnerName = getPartnerName(r);
   const mapping = getBestMapping(partnerName);
   const smartName = mapping ? (mapping.partnerName || partnerName || "Unspecified") : smartGroupDisplayName(partnerName || "Unspecified");
@@ -896,8 +938,11 @@ function applyDonor(s, r){
   const hasRecognizedCollection = !!bagCode;
   const bagCounts = bagCodeToColumnObject(bagCode);
 
-  if (hasRecognizedCollection) {
+  if (hasCategorizedDonorType(r) || donorDate) {
     s.totalDonors++;
+  }
+
+  if (hasRecognizedCollection) {
 
     if (donorParts.year && donorParts.month && donorParts.day) {
       const dayKey = `${donorParts.year}-${String(donorParts.month).padStart(2, "0")}-${String(donorParts.day).padStart(2, "0")}`;
@@ -1621,7 +1666,7 @@ function renderReport(grouped){
 
 function buildStatistics(){
   try{
-    const donors = getDedupedDonorRecords(getFilteredDonors());
+    const donors = getFilteredDonors();
     const releases = getFilteredReleasing();
     const grouped = {};
 
