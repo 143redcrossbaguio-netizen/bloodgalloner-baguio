@@ -266,7 +266,14 @@ async function loadDonorDatabase(version){
   const localRecords = [];
   const snap = await fs.collection("donorDatabase").get();
   snap.forEach(doc => localRecords.push({ id: doc.id, ...doc.data() }));
-  if (version === initializeVersion) donorRecords = localRecords;
+
+  const visibleTrackingRecords = localRecords.filter(isVisibleTrackingRecord);
+
+  if (version === initializeVersion) donorRecords = visibleTrackingRecords;
+}
+
+function isVisibleTrackingRecord(record){
+  return Boolean(record) && record.isDeleted !== true;
 }
 
 async function loadCategoryMappings(version){
