@@ -257,7 +257,7 @@ button{
 <input type="date" id="date">
 
 <label>FACILITY</label>
-<input type="text" id="facility" list="facilityList" placeholder="Type facility name">
+<input type="text" id="facility" list="facilityList" placeholder="Type facility name" required>
 <datalist id="facilityList"></datalist>
 
 <div class="topButtons">
@@ -358,22 +358,25 @@ button{
 </div>
 
 <div id="waivedSection" style="display:none;">
-    <div class="row">
-        <div>
-            <label>WAIVED COMPONENT</label>
-            <select id="waivedComponent">
-                <option value="">Select</option>
-                <option>WB</option>
-                <option>PRBC</option>
-                <option>PC</option>
-                <option>FFP</option>
-                <option>CRYO</option>
-                <option>BOX CONTAINER</option>
-            </select>
-        </div>
-        <div>
-            <label>WAIVED UNIT</label>
-            <input type="number" id="waivedUnit" placeholder="Unit">
+    <div id="waivedContainer">
+        <div class="row waivedRow">
+            <div>
+                <label>WAIVED COMPONENT</label>
+                <select class="waivedComponent">
+                    <option value="">Select</option>
+                    <option>WB</option>
+                    <option>PRBC</option>
+                    <option>PC</option>
+                    <option>FFP</option>
+                    <option>CRYO</option>
+                    <option>BOX CONTAINER</option>
+                </select>
+            </div>
+            <div>
+                <label>WAIVED UNIT</label>
+                <input type="number" class="waivedUnit" placeholder="Unit">
+            </div>
+            <button type="button" class="addBtn" onclick="addWaived()">+</button>
         </div>
     </div>
 </div>
@@ -402,7 +405,7 @@ button{
     <input type="date" id="augDate">
 
     <label>FACILITY</label>
-    <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name">
+    <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name" required>
 
     <label>BOX CONTAINER</label>
     <input type="number" id="augBoxContainerQty" placeholder="Qty">
@@ -697,6 +700,32 @@ window.addIssued = function(){
   container.appendChild(row);
 };
 
+window.addWaived = function(){
+  const container = document.getElementById("waivedContainer");
+  const row = document.createElement("div");
+  row.className = "row waivedRow";
+  row.innerHTML = `
+    <div>
+        <label>WAIVED COMPONENT</label>
+        <select class="waivedComponent">
+            <option value="">Select</option>
+            <option>WB</option>
+            <option>PRBC</option>
+            <option>PC</option>
+            <option>FFP</option>
+            <option>CRYO</option>
+            <option>BOX CONTAINER</option>
+        </select>
+    </div>
+    <div>
+        <label>WAIVED UNIT</label>
+        <input type="number" class="waivedUnit" placeholder="Unit">
+    </div>
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeIssuedTotal();">-</button>
+  `;
+  container.appendChild(row);
+};
+
 window.toggleDiscount = function(){
   const section = document.getElementById("discountSection");
   section.style.display = section.style.display === "none" ? "block" : "none";
@@ -712,14 +741,71 @@ window.toggleWaived = function(forceState = null){
   waivedBtn.textContent = waivedActive ? "WAIVED ON" : "WAIVED";
 
   if(!waivedActive){
-    document.getElementById("waivedComponent").value = "";
-    document.getElementById("waivedUnit").value = "";
+    resetWaivedRows();
   }
 
   computeIssuedTotal();
 };
 
+function resetWaivedRows(items = null){
+  const waivedContainer = document.getElementById("waivedContainer");
+  waivedContainer.innerHTML = "";
+
+  if(items && Array.isArray(items) && items.length > 0){
+    items.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "row waivedRow";
+      row.innerHTML = `
+        <div>
+            <label>WAIVED COMPONENT</label>
+            <select class="waivedComponent">
+                <option value="">Select</option>
+                <option ${item.component==="WB" ? "selected" : ""}>WB</option>
+                <option ${item.component==="PRBC" ? "selected" : ""}>PRBC</option>
+                <option ${item.component==="PC" ? "selected" : ""}>PC</option>
+                <option ${item.component==="FFP" ? "selected" : ""}>FFP</option>
+                <option ${item.component==="CRYO" ? "selected" : ""}>CRYO</option>
+                <option ${item.component==="BOX CONTAINER" ? "selected" : ""}>BOX CONTAINER</option>
+            </select>
+        </div>
+        <div>
+            <label>WAIVED UNIT</label>
+            <input type="number" class="waivedUnit" placeholder="Unit" value="${item.unit || ""}">
+        </div>
+        <button type="button" class="${index===0 ? "addBtn" : "removeBtn"}" onclick="${index===0 ? "addWaived()" : "this.parentElement.remove(); computeIssuedTotal()"}">${index===0 ? "+" : "-"}</button>
+      `;
+      waivedContainer.appendChild(row);
+    });
+  }else{
+    waivedContainer.innerHTML = `
+      <div class="row waivedRow">
+          <div>
+              <label>WAIVED COMPONENT</label>
+              <select class="waivedComponent">
+                  <option value="">Select</option>
+                  <option>WB</option>
+                  <option>PRBC</option>
+                  <option>PC</option>
+                  <option>FFP</option>
+                  <option>CRYO</option>
+                  <option>BOX CONTAINER</option>
+              </select>
+          </div>
+          <div>
+              <label>WAIVED UNIT</label>
+              <input type="number" class="waivedUnit" placeholder="Unit">
+          </div>
+          <button type="button" class="addBtn" onclick="addWaived()">+</button>
+      </div>
+    `;
+  }
+}
+
 function getIssuedComponentQty(componentType){
+  if(componentType === "BOX CONTAINER"){
+    return Number(document.getElementById("boxContainerQty").value) || 0;
+  }
+
   let qty = 0;
 
   document.querySelectorAll(".issuedRow").forEach(row => {
@@ -749,17 +835,32 @@ function computeIssuedTotal(){
   total += componentPrices.BOXCONTAINER * boxContainerQty;
 
   if(waivedActive){
-    const waivedComponent = document.getElementById("waivedComponent").value;
-    const enteredWaivedUnit = Number(document.getElementById("waivedUnit").value) || 0;
-    const issuedQtyForComponent = getIssuedComponentQty(waivedComponent);
-    const validWaivedUnit = Math.min(enteredWaivedUnit, issuedQtyForComponent);
+    const usedPerComponent = {};
 
-    if(String(document.getElementById("waivedUnit").value).trim() !== "" && enteredWaivedUnit !== validWaivedUnit){
-      document.getElementById("waivedUnit").value = validWaivedUnit;
-    }
+    document.querySelectorAll(".waivedRow").forEach(row => {
+      const componentEl = row.querySelector(".waivedComponent");
+      const unitEl = row.querySelector(".waivedUnit");
 
-    const waivedAmount = (componentPrices[waivedComponent] || 0) * validWaivedUnit;
-    total -= waivedAmount;
+      if(!componentEl || !unitEl) return;
+
+      const waivedComponent = componentEl.value;
+      const enteredWaivedUnit = Number(unitEl.value) || 0;
+      const issuedQtyForComponent = getIssuedComponentQty(waivedComponent);
+      const alreadyUsed = usedPerComponent[waivedComponent] || 0;
+      const remainingAllowed = Math.max(0, issuedQtyForComponent - alreadyUsed);
+      const validWaivedUnit = Math.min(enteredWaivedUnit, remainingAllowed);
+
+      if(String(unitEl.value).trim() !== "" && enteredWaivedUnit !== validWaivedUnit){
+        unitEl.value = validWaivedUnit;
+      }
+
+      const pricePerUnit = waivedComponent === "BOX CONTAINER"
+        ? (componentPrices.BOXCONTAINER || 0)
+        : (componentPrices[waivedComponent] || 0);
+
+      total -= pricePerUnit * validWaivedUnit;
+      usedPerComponent[waivedComponent] = alreadyUsed + validWaivedUnit;
+    });
   }
 
   total = Math.max(0, total);
@@ -827,8 +928,6 @@ function resetForm(){
   document.getElementById("discountPrice").value = "";
   document.getElementById("discountPercent").value = "";
   document.getElementById("discount").value = "";
-  document.getElementById("waivedComponent").value = "";
-  document.getElementById("waivedUnit").value = "";
   document.getElementById("waivedSection").style.display = "none";
   document.getElementById("waivedBtn").textContent = "WAIVED";
   document.getElementById("discountSection").style.display = "none";
@@ -861,6 +960,7 @@ function resetForm(){
     </div>
   `;
 
+  resetWaivedRows();
   computeIssuedTotal();
 }
 
@@ -955,8 +1055,14 @@ function loadEntryIntoForm(id, entry){
   document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
   document.getElementById("amountPaid").value = entry.amountPaid || "";
   document.getElementById("discount").value = entry.discount || "";
-  document.getElementById("waivedComponent").value = entry.waivedComponent || "";
-  document.getElementById("waivedUnit").value = entry.waivedUnit || "";
+
+  const waivedItems = Array.isArray(entry.waivedItems) && entry.waivedItems.length > 0
+    ? entry.waivedItems
+    : (entry.waivedComponent || entry.waivedUnit
+        ? [{ component: entry.waivedComponent || "", unit: entry.waivedUnit || "" }]
+        : null);
+
+  resetWaivedRows(waivedItems);
 
   toggleWaived(!!entry.waived);
 
@@ -1001,6 +1107,13 @@ saveBtn.addEventListener("click", async () => {
     return;
   }
 
+  const facilityValue = document.getElementById("facility").value.trim();
+  if(facilityValue === ""){
+    alert("Facility is required.");
+    document.getElementById("facility").focus();
+    return;
+  }
+
   const requests = [];
   document.querySelectorAll(".requestRow").forEach(row => {
     const type = row.querySelector(".requestType").value;
@@ -1019,11 +1132,22 @@ saveBtn.addEventListener("click", async () => {
     }
   });
 
+  const waivedItems = [];
+  if(waivedActive){
+    document.querySelectorAll(".waivedRow").forEach(row => {
+      const component = row.querySelector(".waivedComponent").value;
+      const unit = row.querySelector(".waivedUnit").value;
+      if(component !== "" && unit !== ""){
+        waivedItems.push({ component, unit });
+      }
+    });
+  }
+
   const priceSnapshotToSave = currentReleasingPriceSnapshot || buildPriceSnapshot();
 
   const entryData = {
     date: document.getElementById("date").value,
-    facility: document.getElementById("facility").value.toUpperCase(),
+    facility: facilityValue.toUpperCase(),
     surname: document.getElementById("surname").value.toUpperCase(),
     firstname: document.getElementById("firstname").value.toUpperCase(),
     age: document.getElementById("age").value,
@@ -1036,8 +1160,9 @@ saveBtn.addEventListener("click", async () => {
     amountPaid: document.getElementById("amountPaid").value,
     discount: document.getElementById("discount").value || 0,
     waived: waivedActive,
-    waivedComponent: document.getElementById("waivedComponent").value,
-    waivedUnit: document.getElementById("waivedUnit").value || 0,
+    waivedItems: waivedItems,
+    waivedComponent: waivedItems[0]?.component || "",
+    waivedUnit: waivedItems[0]?.unit || 0,
     priceSnapshot: priceSnapshotToSave
   };
 
@@ -1233,6 +1358,13 @@ window.saveAugmentation = async function(){
     return;
   }
 
+  const augFacilityValue = document.getElementById("augFacility").value.trim();
+  if(augFacilityValue === ""){
+    alert("Facility is required.");
+    document.getElementById("augFacility").focus();
+    return;
+  }
+
   const cards = document.querySelectorAll(".augmentationCard");
   const bloodTypes = [];
 
@@ -1270,7 +1402,7 @@ window.saveAugmentation = async function(){
 
   const augmentationData = {
     date: document.getElementById("augDate").value,
-    facility: document.getElementById("augFacility").value.toUpperCase(),
+    facility: augFacilityValue.toUpperCase(),
     boxContainerQty: document.getElementById("augBoxContainerQty").value || 0,
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
@@ -1315,7 +1447,10 @@ document.addEventListener("input", function(e){
     computeMainDiscountFromPercent();
   }
 
-  if(e.target.id === "waivedComponent" || e.target.id === "waivedUnit"){
+  if(
+    e.target.classList.contains("waivedComponent") ||
+    e.target.classList.contains("waivedUnit")
+  ){
     computeIssuedTotal();
   }
 
@@ -1360,6 +1495,7 @@ onAuthStateChanged(auth, async (user) => {
   loadFacilities();
   bindLiveSearch();
   loadTrackingSearchData();
+  resetWaivedRows();
   await loadComponentPrices();
   await loadEditEntry();
   computeIssuedTotal();
