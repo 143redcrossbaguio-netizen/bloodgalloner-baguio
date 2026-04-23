@@ -512,6 +512,25 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
+const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
+
+async function backupToGoogleSheets(data) {
+    if (!GOOGLE_SHEETS_BACKUP_URL) return;
+
+    try {
+        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify(data)
+        });
+    } catch (err) {
+        console.error("Google Sheets backup failed:", err);
+    }
+}
+
     const trackingContainer = document.getElementById("trackingContainer");
     const searchInput = document.getElementById("searchInput");
     const groupMonthFilter = document.getElementById("groupMonthFilter");
@@ -1908,6 +1927,15 @@
 
         try {
             await db.collection("donorDatabase").doc(id).update(updatedData);
+
+            backupToGoogleSheets({
+                action: "update",
+                source: "donor-tracking.html",
+                donorId: id,
+                updatedAt: new Date().toISOString(),
+                ...updatedData
+            });
+
             showMessage("Record updated successfully.", "success");
             await loadDonors();
         } catch (error) {
@@ -1926,6 +1954,18 @@
                 deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 deletedFrom: "donor-tracking.html"
             });
+
+            const record = allDonors.find(item => item.id === id) || {};
+            backupToGoogleSheets({
+                action: "soft_delete",
+                source: "donor-tracking.html",
+                donorId: id,
+                deletedAt: new Date().toISOString(),
+                ...record,
+                isDeleted: true,
+                deletedFrom: "donor-tracking.html"
+            });
+
             showMessage("Record deleted successfully.", "success");
             await loadDonors();
         } catch (error) {
