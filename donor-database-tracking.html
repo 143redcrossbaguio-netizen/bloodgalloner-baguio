@@ -368,6 +368,22 @@
             font-size: 12px;
         }
 
+        .edit-checkbox-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 96px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .edit-checkbox {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+
         .empty-box {
             background: white;
             border: 1px solid #dbe3ec;
@@ -512,6 +528,25 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
+const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
+
+async function backupToGoogleSheets(data) {
+    if (!GOOGLE_SHEETS_BACKUP_URL) return;
+
+    try {
+        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify(data)
+        });
+    } catch (err) {
+        console.error("Google Sheets backup failed:", err);
+    }
+}
+
     const trackingContainer = document.getElementById("trackingContainer");
     const searchInput = document.getElementById("searchInput");
     const groupMonthFilter = document.getElementById("groupMonthFilter");
@@ -618,24 +653,48 @@
         return [resolveSuffix(record), String(record.surname || "").trim()].filter(Boolean).join(" ").trim();
     }
 
-    function resolveDonorType(record) {
-        const rawType = normalizeMatchValue(record?.donorType);
+    function getDonorTypes(record) {
+        const rawType = String(record?.donorType || "").trim();
+        const values = [];
+        const seen = new Set();
 
-        if (rawType === normalizeMatchValue("MBD")) return "MBD";
-        if (rawType === normalizeMatchValue("WALK-IN")) return "WALK-IN";
-        if (rawType === normalizeMatchValue("PATIENT DIRECTED")) return "PATIENT DIRECTED";
+        rawType.split(/[,|/]+/).forEach(part => {
+            const normalized = normalizeMatchValue(part);
+            if (normalized === normalizeMatchValue("MBD") && !seen.has("MBD")) {
+                seen.add("MBD");
+                values.push("MBD");
+            }
+            if (normalized === normalizeMatchValue("WALK-IN") && !seen.has("WALK-IN")) {
+                seen.add("WALK-IN");
+                values.push("WALK-IN");
+            }
+            if (normalized === normalizeMatchValue("PATIENT DIRECTED") && !seen.has("PATIENT DIRECTED")) {
+                seen.add("PATIENT DIRECTED");
+                values.push("PATIENT DIRECTED");
+            }
+        });
 
         const mbdDetails = String(record?.mbdDetails || "").trim();
         const patientDirectedDetails = String(record?.patientDirectedDetails || "").trim();
 
-        if (mbdDetails) return "MBD";
-        if (patientDirectedDetails) return "PATIENT DIRECTED";
+        if (mbdDetails && !seen.has("MBD")) {
+            seen.add("MBD");
+            values.push("MBD");
+        }
+        if (patientDirectedDetails && !seen.has("PATIENT DIRECTED")) {
+            seen.add("PATIENT DIRECTED");
+            values.push("PATIENT DIRECTED");
+        }
 
-        return "";
+        return values;
+    }
+
+    function resolveDonorType(record) {
+        return getDonorTypes(record).join(", ");
     }
 
     function isDonorType(record, type) {
-        return normalizeMatchValue(resolveDonorType(record)) === normalizeMatchValue(type);
+        return getDonorTypes(record).includes(type);
     }
 
     function isDonorCategory(record, category) {
@@ -739,6 +798,82 @@
         return "";
     }
 
+
+    function parseDayOnlyDateWithBase(value, baseIsoDate) {
+        const raw = String(value ?? '').trim();
+        if (!raw || !baseIsoDate) return '';
+        const match = raw.match(/^(\d{1,2})$/);
+        if (!match) return '';
+        const day = Number(match[1]);
+        if (!Number.isFinite(day) || day < 1 || day > 31) return '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(baseIsoDate)) return '';
+        const [year, month] = baseIsoDate.split('-');
+        const candidate = `${year}-${month}-${String(day).padStart(2, '0')}`;
+        const d = new Date(candidate + 'T00:00:00');
+        if (isNaN(d.getTime())) return '';
+        if (d.getFullYear() !== Number(year) || d.getMonth() + 1 !== Number(month) || d.getDate() !== day) return '';
+        return candidate;
+    }
+
+    function resolveDirectEntryDate(record) {
+        return (
+            parseDateFlexible(record.entryDate) ||
+            parseDateFlexible(record.donationDate) ||
+            parseDateFlexible(record.date) ||
+            parseDateFlexible(record.bleedingDate) ||
+            ''
+        );
+    }
+
+    function resolveSourceMonthBase(record) {
+        return (
+            parseDateFromText(record?.importMeta?.sourceSheet || '') ||
+            parseDateFromText(record?.importMeta?.sourceFile || '') ||
+            parseCreatedAtDate(record.createdAt) ||
+            ''
+        );
+    }
+
+    function applyImportedDateCarryForward(records) {
+        const grouped = {};
+
+        records.forEach(record => {
+            const batchId = String(record?.importMeta?.batchId || '');
+            const sourceFile = String(record?.importMeta?.sourceFile || '');
+            const sourceSheet = String(record?.importMeta?.sourceSheet || '');
+            const sourceRow = Number(record?.importMeta?.sourceRowNumber || 0);
+            const key = `${batchId}|${sourceFile}|${sourceSheet}`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push({ record, sourceRow });
+        });
+
+        Object.values(grouped).forEach(items => {
+            items.sort((a, b) => a.sourceRow - b.sourceRow || String(a.record.serialNumber || '').localeCompare(String(b.record.serialNumber || ''), undefined, { numeric:true, sensitivity:'base' }));
+            let lastDate = '';
+            items.forEach(({ record }) => {
+                const explicit = resolveDirectEntryDate(record);
+                const base = resolveSourceMonthBase(record);
+                const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
+                const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, lastDate || base);
+
+                if (explicit) {
+                    record._resolvedEntryDate = explicit;
+                    lastDate = explicit;
+                } else if (dayOnly) {
+                    record._resolvedEntryDate = dayOnly;
+                    lastDate = dayOnly;
+                } else if (lastDate) {
+                    record._resolvedEntryDate = lastDate;
+                } else if (!record._resolvedEntryDate && base) {
+                    record._resolvedEntryDate = base;
+                    lastDate = base;
+                } else if (record._resolvedEntryDate) {
+                    lastDate = record._resolvedEntryDate;
+                }
+            });
+        });
+    }
+
     function parseCreatedAtDate(raw) {
         if (!raw) return "";
         if (typeof raw?.toDate === "function") return parseDateFlexible(raw.toDate());
@@ -747,16 +882,15 @@
     }
 
     function resolveEntryDate(record) {
-        return (
-            parseDateFlexible(record.entryDate) ||
-            parseDateFlexible(record.donationDate) ||
-            parseDateFlexible(record.date) ||
-            parseDateFlexible(record.bleedingDate) ||
-            parseDateFromText(record?.importMeta?.sourceSheet || "") ||
-            parseDateFromText(record?.importMeta?.sourceFile || "") ||
-            parseCreatedAtDate(record.createdAt) ||
-            ""
-        );
+        const direct = resolveDirectEntryDate(record);
+        if (direct) return direct;
+
+        const base = resolveSourceMonthBase(record);
+        const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
+        const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, base);
+        if (dayOnly) return dayOnly;
+
+        return base || "";
     }
 
     function resolveBirthday(record) {
@@ -852,16 +986,17 @@
     }
 
     function getGroupLabel(record) {
+        const labels = [];
         if (isDonorType(record, "MBD")) {
-            return toUpperTrim(record.mbdDetails || "MBD");
+            labels.push(toUpperTrim(record.mbdDetails || "MBD"));
         }
         if (isDonorType(record, "WALK-IN")) {
-            return "WALK-IN";
+            labels.push("WALK-IN");
         }
         if (isDonorType(record, "PATIENT DIRECTED")) {
-            return toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
+            labels.push(toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED");
         }
-        return "";
+        return labels.filter(Boolean).join(" | ");
     }
 
     function matchesUnifiedSearch(record, keyword) {
@@ -921,6 +1056,10 @@
     }
 
     function compareSerialNumbers(a, b) {
+        const rowA = Number(a?.importMeta?.sourceRowNumber || 0);
+        const rowB = Number(b?.importMeta?.sourceRowNumber || 0);
+        if (rowA !== rowB) return rowA - rowB;
+
         const serialA = String(a.serialNumber || "");
         const serialB = String(b.serialNumber || "");
         return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
@@ -990,49 +1129,54 @@
 
         records.forEach(record => {
             const date = record._resolvedEntryDate || "";
-            const donorType = normalizeMatchValue(resolveDonorType(record));
-            let typeGroupKey = `${date}|${donorType}`;
+            const donorTypes = getDonorTypes(record);
 
-            if (donorType === normalizeMatchValue("MBD")) {
-                typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
-            } else if (donorType === normalizeMatchValue("PATIENT DIRECTED")) {
-                typeGroupKey += `|patient-directed`;
-            } else if (donorType === normalizeMatchValue("WALK-IN")) {
-                typeGroupKey += `|walk-in`;
-            }
+            donorTypes.forEach(type => {
+                let typeGroupKey = `${date}|${type}`;
 
-            if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
-            grouped[typeGroupKey].push(record);
+                if (type === "MBD") {
+                    typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
+                } else if (type === "PATIENT DIRECTED") {
+                    typeGroupKey += `|${normalizeText(record.patientDirectedDetails || "")}`;
+                } else if (type === "WALK-IN") {
+                    typeGroupKey += `|walk-in`;
+                }
+
+                if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
+                grouped[typeGroupKey].push({ record, type });
+            });
         });
 
         Object.keys(grouped).forEach(groupKey => {
             grouped[groupKey].sort((a, b) => {
-                const serialA = a.serialNumber || "";
-                const serialB = b.serialNumber || "";
+                const serialA = a.record.serialNumber || "";
+                const serialB = b.record.serialNumber || "";
                 return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
             });
 
-            grouped[groupKey].forEach((record, index) => {
-                map[record.id] = index + 1;
+            grouped[groupKey].forEach((item, index) => {
+                if (!map[item.record.id]) map[item.record.id] = {};
+                map[item.record.id][item.type] = index + 1;
             });
         });
 
         return map;
     }
 
-    function getCategoryDisplay(record) {
-        const seq = sequenceMap[record.id] || "";
+    function getCategoryDisplay(record, type) {
+        const typeMap = sequenceMap[record.id] || {};
+        const seq = typeMap[type] || "";
         if (!seq) return "";
 
-        if (isDonorType(record, "WALK-IN")) {
+        if (type === "WALK-IN") {
             return `WALK-IN-${seq}`;
         }
 
-        if (isDonorType(record, "MBD")) {
+        if (type === "MBD") {
             return `${toUpperTrim(record.mbdDetails || "MBD")}-${seq}`;
         }
 
-        if (isDonorType(record, "PATIENT DIRECTED")) {
+        if (type === "PATIENT DIRECTED") {
             const patientName = toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
             return `${patientName}-${seq}`;
         }
@@ -1041,6 +1185,7 @@
     }
 
     function groupDonors(records) {
+
         const grouped = {};
 
         records.forEach(record => {
@@ -1271,23 +1416,23 @@
                             <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
                         </div>
 
-                        <div class="month-tools">
-                            <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
-                            <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
-                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
-                        </div>
-
-                        <div class="subtotal-bar">
-                            <span>Entries: ${realEntriesCount}</span>
-                            <span>MBD: ${mbdCount}</span>
-                            <span>Walk-in: ${walkInCount}</span>
-                            <span>Patient-Directed: ${patientDirectedCount}</span>
-                            <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
-                            <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
-                            <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
-                        </div>
-
                         <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
+                            <div class="month-tools">
+                                <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
+                                <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
+                                <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
+                            </div>
+
+                            <div class="subtotal-bar">
+                                <span>Entries: ${realEntriesCount}</span>
+                                <span>MBD: ${mbdCount}</span>
+                                <span>Walk-in: ${walkInCount}</span>
+                                <span>Patient-Directed: ${patientDirectedCount}</span>
+                                <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
+                                <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
+                                <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
+                            </div>
+
                             <div class="table-wrap">
                                 <table>
                                     <thead>
@@ -1350,9 +1495,9 @@
                     html += `
                         <tr id="row-${record.id}">
                             <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
                             <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
                             <td>${escapeUpperHtml(record.firstName)}</td>
                             <td>${escapeUpperHtml(record.middleName)}</td>
@@ -1469,9 +1614,9 @@
             return `
                 <tr>
                     <td class="col-entry-date">${escapeHtml(formatPrintDate(record._resolvedEntryDate))}</td>
-                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
+                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
+                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
+                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
                     <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
                     <td class="col-given print-no-wrap">${escapeUpperHtml(record.firstName)}</td>
                     <td class="col-middle">${escapeUpperHtml(record.middleName)}</td>
@@ -1793,10 +1938,15 @@
 
             const snapshot = await db.collection("donorDatabase").get();
 
-            allDonors = snapshot.docs.map(doc => attachResolvedFields({
-                id: doc.id,
-                ...doc.data()
-            }));
+            allDonors = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+                .filter(record => record.isDeleted !== true)
+                .map(record => attachResolvedFields(record));
+
+            applyImportedDateCarryForward(allDonors);
 
             allDonors.sort((a, b) => {
                 const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
@@ -1819,6 +1969,25 @@
         }
     }
 
+
+    function buildEditCheckbox(checked, labelText) {
+        return `
+            <label class="edit-checkbox-label">
+                <input type="checkbox" class="edit-checkbox" ${checked ? "checked" : ""}>
+                <span>${escapeHtml(labelText)}</span>
+            </label>
+        `;
+    }
+
+    function updateLocalDonorRecord(id, newRecord) {
+        const index = allDonors.findIndex(item => item.id === id);
+        if (index === -1) return;
+        allDonors[index] = attachResolvedFields({
+            ...allDonors[index],
+            ...newRecord
+        });
+    }
+
     window.startEdit = function(id) {
         hideDuplicateBox();
 
@@ -1834,7 +2003,7 @@
         row.innerHTML = `
             <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
             <td>${buildEditInput(record.mbdDetails || "")}</td>
-            <td>${buildEditSelect(["", "WALK-IN"], isDonorType(record, "WALK-IN") ? "WALK-IN" : "")}</td>
+            <td>${buildEditCheckbox(isDonorType(record, "WALK-IN"), "WALK-IN")}</td>
             <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
             <td>${buildEditInput(record.surname || "")}</td>
             <td>${buildEditInput(record.firstName || "")}</td>
@@ -1868,19 +2037,19 @@
         const fields = row.querySelectorAll("input, select");
 
         const mbdDetails = fields[1].value.trim();
-        const walkInValue = fields[2].value;
+        const walkInChecked = fields[2].checked;
         const patientDirectedDetails = fields[3].value.trim();
 
-        let donorType = "";
-        if (mbdDetails) donorType = "MBD";
-        else if (patientDirectedDetails) donorType = "PATIENT DIRECTED";
-        else if (normalizeMatchValue(walkInValue) === normalizeMatchValue("WALK-IN")) donorType = "WALK-IN";
+        const donorTypes = [];
+        if (mbdDetails) donorTypes.push("MBD");
+        if (walkInChecked) donorTypes.push("WALK-IN");
+        if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
 
         const updatedData = {
             entryDate: fields[0].value,
             mbdDetails: toUpperTrim(mbdDetails),
             patientDirectedDetails: toUpperTrim(patientDirectedDetails),
-            donorType: donorType,
+            donorType: donorTypes.join(", "),
             surname: toUpperTrim(fields[4].value),
             firstName: toUpperTrim(fields[5].value),
             middleName: toUpperTrim(fields[6].value),
@@ -1905,8 +2074,19 @@
 
         try {
             await db.collection("donorDatabase").doc(id).update(updatedData);
+
+            backupToGoogleSheets({
+                action: "update",
+                source: "donor-tracking.html",
+                donorId: id,
+                updatedAt: new Date().toISOString(),
+                ...updatedData
+            });
+
+            updateLocalDonorRecord(id, updatedData);
+            renderTracking();
+
             showMessage("Record updated successfully.", "success");
-            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to update record: " + error.message, "error");
@@ -1914,13 +2094,33 @@
     };
 
     window.deleteDonor = async function(id) {
+
         const confirmed = confirm("Delete this donor record?");
         if (!confirmed) return;
 
         try {
-            await db.collection("donorDatabase").doc(id).delete();
+            await db.collection("donorDatabase").doc(id).update({
+                isDeleted: true,
+                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                deletedFrom: "donor-tracking.html"
+            });
+
+            const record = allDonors.find(item => item.id === id) || {};
+            backupToGoogleSheets({
+                action: "soft_delete",
+                source: "donor-tracking.html",
+                donorId: id,
+                deletedAt: new Date().toISOString(),
+                ...record,
+                isDeleted: true,
+                deletedFrom: "donor-tracking.html"
+            });
+
+            allDonors = allDonors.filter(item => item.id !== id);
+            filteredDonors = filteredDonors.filter(item => item.id !== id);
+            renderTracking();
+
             showMessage("Record deleted successfully.", "success");
-            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to delete record: " + error.message, "error");
