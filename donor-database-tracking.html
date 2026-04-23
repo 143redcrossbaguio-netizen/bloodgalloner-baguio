@@ -411,12 +411,10 @@ function normalizeBloodTypeDisplay(v) {
     let s = String(v).trim().toUpperCase();
     if (!s) return "";
 
-    // Already canonical — return immediately
     const canonical = ["O+","A+","B+","AB+","O-","A-","B-","AB-"];
     if (canonical.includes(s)) return s;
     if (s === "UNKNOWN" || s === "UNK" || s === "UN") return "UNKNOWN";
 
-    // Strip noise words
     s = s.replace(/\./g," ")
          .replace(/POSITIVE/g,"+").replace(/NEGATIVE/g,"-")
          .replace(/\bPOS\b/g,"+").replace(/\bNEG\b/g,"-")
@@ -427,7 +425,6 @@ function normalizeBloodTypeDisplay(v) {
 
     if (canonical.includes(s)) return s;
 
-    // Named patterns like "ABPOS", "ONEG"
     const patterns = [
         [/^AB\+?POS/,"AB+"], [/^AB\-?NEG/,"AB-"],
         [/^A\+?POS/,"A+"],   [/^A\-?NEG/,"A-"],
@@ -437,15 +434,38 @@ function normalizeBloodTypeDisplay(v) {
         [/^APOS$/,"A+"],     [/^ANEG$/,"A-"],
         [/^BPOS$/,"B+"],     [/^BNEG$/,"B-"],
         [/^OPOS$/,"O+"],     [/^ONEG$/,"O-"],
-        // bare letter (no Rh) → assume positive
         [/^AB$/,"AB+"], [/^A$/,"A+"], [/^B$/,"B+"], [/^O$/,"O+"]
     ];
     for (const [re, val] of patterns) {
         if (re.test(s)) return val;
     }
-
-    // Return original trimmed value if nothing matches — don't silently drop it
     return String(v).trim().toUpperCase() || "";
+}
+
+// Try every possible field name a Firestore record might use for blood type.
+// Records imported from different Excel formats may store it under different keys.
+function resolveBloodType(r) {
+    const directFields = [
+        r.bloodType, r.blood_type, r.bloodtype, r.aboRh, r.abo_rh,
+        r.aboRhType, r.bloodGroup, r.blood_group, r.abo, r.group,
+        r.bloodTypeRh, r.bloodTyping, r.bt, r.BT, r.typeAndRh,
+        r.finalBloodType, r.labBloodType, r.bloodTypeResult
+    ];
+    for (const val of directFields) {
+        const norm = normalizeBloodTypeDisplay(val);
+        if (norm) return norm;
+    }
+    // Scan all string/number fields whose key suggests blood type
+    for (const [key, val] of Object.entries(r || {})) {
+        if (typeof val !== "string" && typeof val !== "number") continue;
+        if (key.startsWith("_")) continue;
+        const kl = key.toLowerCase();
+        if (!kl.includes("blood") && !kl.includes("abo") &&
+            !kl.includes("group") && !kl.includes("rh") && kl !== "bt") continue;
+        const norm = normalizeBloodTypeDisplay(val);
+        if (norm) return norm;
+    }
+    return "";
 }
 
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
@@ -680,8 +700,8 @@ function attachResolvedFields(r) {
         _resolvedTimeStarted:     resolveTimeStarted(r),
         _resolvedTimeEnded:       resolveTimeEnded(r),
         _resolvedNumberOfDonations: resolveDonationCountValue(r.numberOfDonations),
-        // Normalize blood type so all variants display correctly
-        _resolvedBloodType:       normalizeBloodTypeDisplay(r.bloodType || "")
+        // Resolve blood type from any possible field name, then normalize
+        _resolvedBloodType:       resolveBloodType(r)
     };
 }
 
@@ -1020,7 +1040,10 @@ function renderTracking() {
                             <span class="donation-total">${escapeHtml(latestTotal)}</span>
                             <span class="donation-entry-note">ENTRY: ${escapeHtml(enteredVal)}</span>
                         </td>
-                        <td>${escapeHtml(r._resolvedBloodType)}</td>
+                        <td>${r._resolvedBloodType
+                            ? `<span style="font-weight:bold;">${escapeHtml(r._resolvedBloodType)}</span>`
+                            : `<span style="color:#b30000;font-weight:bold;font-size:11px;background:#fdeaea;padding:2px 6px;border-radius:4px;cursor:pointer;" onclick="startEdit('${r.id}')" title="Blood type missing — click to edit">?</span>`
+                        }</td>
                         <td>${escapeUpperHtml(r.serialNumber)}</td>
                         <td>${escapeUpperHtml(r.amount)}</td>
                         <td>${escapeUpperHtml(r.bloodBagBrand)}</td>
@@ -1102,7 +1125,7 @@ function updateLocalDonorRecord(id, newData) {
     if (idx === -1) return;
     allDonors[idx] = attachResolvedFields({ ...allDonors[idx], ...newData });
     // Re-resolve blood type after edit
-    allDonors[idx]._resolvedBloodType = normalizeBloodTypeDisplay(allDonors[idx].bloodType || "");
+    allDonors[idx]._resolvedBloodType = resolveBloodType(allDonors[idx]);
 }
 
 window.startEdit = function(id) {
