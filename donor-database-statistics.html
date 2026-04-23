@@ -262,18 +262,38 @@ function setStatus(message, type){
   el.textContent = message;
 }
 
+function isVisibleTrackingRecord(record){
+  if (!record || typeof record !== "object") return false;
+
+  if (record.isDeleted === true) return false;
+  if (record.deleted === true) return false;
+  if (record.hidden === true) return false;
+  if (record.archived === true) return false;
+
+  const deletedAt = record.deletedAt;
+  if (deletedAt && deletedAt !== "" && deletedAt !== null) return false;
+
+  const deletedFrom = String(record.deletedFrom || "").trim();
+  if (deletedFrom) return false;
+
+  const deletedBatchId = String(record.deletedBatchId || "").trim();
+  if (deletedBatchId) return false;
+
+  const status = String(record.status || "").trim().toLowerCase();
+  if (status === "deleted" || status === "inactive" || status === "removed") return false;
+
+  return true;
+}
+
 async function loadDonorDatabase(version){
   const localRecords = [];
   const snap = await fs.collection("donorDatabase").get();
-  snap.forEach(doc => localRecords.push({ id: doc.id, ...doc.data() }));
-
-  const visibleTrackingRecords = localRecords.filter(isVisibleTrackingRecord);
-
-  if (version === initializeVersion) donorRecords = visibleTrackingRecords;
-}
-
-function isVisibleTrackingRecord(record){
-  return Boolean(record) && record.isDeleted !== true;
+  snap.forEach(doc => {
+    const record = { id: doc.id, ...doc.data() };
+    if (!isVisibleTrackingRecord(record)) return;
+    localRecords.push(record);
+  });
+  if (version === initializeVersion) donorRecords = localRecords;
 }
 
 async function loadCategoryMappings(version){
@@ -875,6 +895,8 @@ function getFilteredDonors(){
   const q = String(document.getElementById("searchText").value || "").trim().toLowerCase();
 
   return donorRecords.filter(r => {
+    if (!isVisibleTrackingRecord(r)) return false;
+
     const d = parseDate(getDonorDate(r));
     const p = getDateParts(d);
     const partner = String(getPartnerName(r) || "").toLowerCase();
