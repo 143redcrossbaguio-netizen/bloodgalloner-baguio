@@ -32,6 +32,33 @@
             margin-bottom: 16px;
         }
 
+        .summary-toggle-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #f8fafc;
+            color: #334155;
+            border: 1px solid #dbe3ec;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .summary-toggle-btn .chevron {
+            transition: transform 0.2s ease;
+        }
+
+        .summary-toggle-btn.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .summary-collapse.hidden {
+            display: none;
+        }
+
         .summary-grid {
             display: flex;
             flex-direction: column;
@@ -101,7 +128,6 @@
         .green-btn { background: #2e7d32; color: white; }
         .gray-btn { background: #64748b; color: white; }
         .red-btn { background: #8a1111; color: white; }
-        .purple-btn { background: #6b21a8; color: white; }
         .orange-btn { background: #ef6c00; color: white; }
 
         .toolbar-actions {
@@ -193,6 +219,98 @@
         .duplicate-table th {
             background: #f7f7f7;
         }
+        .missing-box {
+            display: none;
+            margin-bottom: 12px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid #dbe3ec;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .missing-box.show {
+            display: block;
+        }
+
+        .missing-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .missing-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #8b0000;
+            margin: 0;
+        }
+
+        .missing-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .dropdown-toggle-btn {
+            padding: 8px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            background: #6b7280;
+            color: #fff;
+        }
+
+        .dropdown-toggle-btn .chevron {
+            display: inline-block;
+            margin-left: 6px;
+            transition: transform 0.2s ease;
+        }
+
+        .dropdown-toggle-btn.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .missing-content.hidden {
+            display: none;
+        }
+
+        .missing-note {
+            font-size: 13px;
+            color: #475569;
+            margin-bottom: 12px;
+        }
+
+        .missing-wrap {
+            overflow: auto;
+            width: 100%;
+        }
+
+        .missing-table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .missing-table th,
+        .missing-table td {
+            border: 1px solid #d7d7d7;
+            padding: 7px 8px;
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .missing-table th {
+            background: #f7f7f7;
+        }
 
         .year-group,
         .month-group {
@@ -268,7 +386,7 @@
 
         table {
             width: 100%;
-            min-width: 2850px;
+            min-width: 2700px;
             border-collapse: collapse;
             font-size: 12px;
         }
@@ -368,22 +486,6 @@
             font-size: 12px;
         }
 
-        .edit-checkbox-label {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            min-width: 96px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .edit-checkbox {
-            width: 15px;
-            height: 15px;
-            cursor: pointer;
-        }
-
         .empty-box {
             background: white;
             border: 1px solid #dbe3ec;
@@ -397,7 +499,7 @@
 
         @media print {
             body { background: white; }
-            .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox { display: none !important; }
+            .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox, #missingInfoBox { display: none !important; }
             .page-wrap { padding: 0; }
             .year-group, .month-group, .table-wrap {
                 box-shadow: none;
@@ -439,11 +541,16 @@
 
 <div class="page-wrap">
     <div class="top-summary">
+        <button type="button" id="topSummaryToggleBtn" class="summary-toggle-btn open" aria-expanded="true">
+            <span>Search / Filter / Buttons</span>
+            <span class="chevron">▼</span>
+        </button>
+        <div id="topSummaryCollapse" class="summary-collapse">
         <div class="summary-grid">
             <div class="top-controls-row">
                 <div class="field-group">
                     <label for="searchInput">Search</label>
-                    <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, occupation, MBD, Walk-in, Patient Directed, organization">
+                    <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, MBD, Walk-in, Patient Directed, organization">
                 </div>
 
                 <div class="field-group">
@@ -472,6 +579,7 @@
                     <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -504,6 +612,38 @@
         </div>
     </div>
 
+    <div id="missingInfoBox" class="missing-box">
+        <div class="missing-header">
+            <div class="missing-title" id="missingInfoTitle">Missing Infos</div>
+            <div class="missing-header-actions">
+                <button type="button" id="saveAllMissingBtn" class="small-btn green-btn">Save All</button>
+                <button type="button" id="toggleMissingInfoBtn" class="dropdown-toggle-btn" aria-expanded="false">Show Missing Infos <span class="chevron">▼</span></button>
+            </div>
+        </div>
+        <div id="missingInfoContent" class="missing-content hidden">
+            <div class="missing-note" id="missingInfoNote"></div>
+            <div class="missing-wrap">
+                <table class="missing-table">
+                    <thead>
+                        <tr>
+                            <th>Missing Fields</th>
+                            <th>Surname</th>
+                            <th>Given Name</th>
+                            <th>Contact Number</th>
+                            <th>Birthday</th>
+                            <th>Sex</th>
+                            <th>Blood Type</th>
+                            <th>Serial Number</th>
+                        </tr>
+                    </thead>
+                    <tbody id="missingInfoBody">
+                        <tr><td colspan="8">No missing infos found.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <main class="content-panel">
         <div id="trackingContainer"></div>
     </main>
@@ -528,25 +668,6 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
-
-async function backupToGoogleSheets(data) {
-    if (!GOOGLE_SHEETS_BACKUP_URL) return;
-
-    try {
-        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: {
-                "Content-Type": "text/plain;charset=utf-8"
-            },
-            body: JSON.stringify(data)
-        });
-    } catch (err) {
-        console.error("Google Sheets backup failed:", err);
-    }
-}
-
     const trackingContainer = document.getElementById("trackingContainer");
     const searchInput = document.getElementById("searchInput");
     const groupMonthFilter = document.getElementById("groupMonthFilter");
@@ -562,17 +683,23 @@ async function backupToGoogleSheets(data) {
     const duplicateTitle = document.getElementById("duplicateTitle");
     const duplicateNote = document.getElementById("duplicateNote");
     const duplicateBody = document.getElementById("duplicateBody");
+    const topSummaryToggleBtn = document.getElementById("topSummaryToggleBtn");
+    const topSummaryCollapse = document.getElementById("topSummaryCollapse");
+    const missingInfoBox = document.getElementById("missingInfoBox");
+    const missingInfoTitle = document.getElementById("missingInfoTitle");
+    const missingInfoNote = document.getElementById("missingInfoNote");
+    const missingInfoBody = document.getElementById("missingInfoBody");
+    const missingInfoContent = document.getElementById("missingInfoContent");
+    const toggleMissingInfoBtn = document.getElementById("toggleMissingInfoBtn");
+    const saveAllMissingBtn = document.getElementById("saveAllMissingBtn");
 
     let allDonors = [];
     let filteredDonors = [];
     let collapsedGroups = {};
     let currentDonationTotals = {};
     let sequenceMap = {};
+    let currentMissingInfoMonth = "";
     let headerFilters = {
-        entryDate: "",
-        mbd: "",
-        walkIn: "",
-        patientDirected: "",
         sex: "",
         bloodType: "",
         donorCategory: "",
@@ -580,6 +707,12 @@ async function backupToGoogleSheets(data) {
         bloodBagType: "",
         serialSort: ""
     };
+
+    function setTopSummaryCollapsed(collapsed) {
+        topSummaryCollapse.classList.toggle("hidden", collapsed);
+        topSummaryToggleBtn.classList.toggle("open", !collapsed);
+        topSummaryToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
 
     function showMessage(message, type) {
         statusMessage.textContent = message;
@@ -594,11 +727,38 @@ async function backupToGoogleSheets(data) {
         duplicateBody.innerHTML = `<tr><td colspan="11">No duplicate data found.</td></tr>`;
     }
 
+    function hideMissingInfoBox() {
+        missingInfoBox.classList.remove("show");
+        missingInfoTitle.textContent = "Missing Infos";
+        missingInfoNote.textContent = "";
+        missingInfoBody.innerHTML = `<tr><td colspan="8">No missing infos found.</td></tr>`;
+        currentMissingInfoMonth = "";
+        setMissingInfoCollapsed(true);
+    }
+
+    function setMissingInfoCollapsed(collapsed) {
+        missingInfoContent.classList.toggle("hidden", collapsed);
+        toggleMissingInfoBtn.classList.toggle("open", !collapsed);
+        toggleMissingInfoBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        toggleMissingInfoBtn.innerHTML = `${collapsed ? "Show Missing Infos" : "Hide Missing Infos"} <span class="chevron">▼</span>`;
+    }
+
     function showDuplicateBox(title, note, rowsHtml) {
+        hideMissingInfoBox();
         duplicateTitle.textContent = title;
         duplicateNote.textContent = note;
         duplicateBody.innerHTML = rowsHtml;
         duplicateBox.classList.add("show");
+    }
+
+    function showMissingInfoBox(title, note, rowsHtml, monthValue) {
+        hideDuplicateBox();
+        missingInfoTitle.textContent = title;
+        missingInfoNote.textContent = note;
+        missingInfoBody.innerHTML = rowsHtml;
+        missingInfoBox.classList.add("show");
+        currentMissingInfoMonth = monthValue || "";
+        setMissingInfoCollapsed(true);
     }
 
     function escapeHtml(text) {
@@ -620,90 +780,8 @@ async function backupToGoogleSheets(data) {
         return String(value || "").trim().toLowerCase();
     }
 
-    function normalizeMatchValue(value) {
-        return normalizeText(value).replace(/[-_]+/g, " ").replace(/\s+/g, " ");
-    }
-
-    function toUpperTrim(value) {
-        return String(value || "").trim().toUpperCase();
-    }
-
-    function toUpperDisplay(value) {
-        if (value === null || value === undefined) return "";
-        return String(value).toUpperCase();
-    }
-
-    function escapeUpperHtml(text) {
-        return escapeHtml(toUpperDisplay(text));
-    }
-
-    function resolveSuffix(record) {
-        return (
-            String(record.suffix || "").trim() ||
-            String(record.nameSuffix || "").trim() ||
-            String(record.suffixName || "").trim() ||
-            String(record.extensionName || "").trim() ||
-            String(record.extName || "").trim() ||
-            String(record.nameExtension || "").trim() ||
-            ""
-        );
-    }
-
-    function getSurnameWithSuffix(record) {
-        return [resolveSuffix(record), String(record.surname || "").trim()].filter(Boolean).join(" ").trim();
-    }
-
-    function getDonorTypes(record) {
-        const rawType = String(record?.donorType || "").trim();
-        const values = [];
-        const seen = new Set();
-
-        rawType.split(/[,|/]+/).forEach(part => {
-            const normalized = normalizeMatchValue(part);
-            if (normalized === normalizeMatchValue("MBD") && !seen.has("MBD")) {
-                seen.add("MBD");
-                values.push("MBD");
-            }
-            if (normalized === normalizeMatchValue("WALK-IN") && !seen.has("WALK-IN")) {
-                seen.add("WALK-IN");
-                values.push("WALK-IN");
-            }
-            if (normalized === normalizeMatchValue("PATIENT DIRECTED") && !seen.has("PATIENT DIRECTED")) {
-                seen.add("PATIENT DIRECTED");
-                values.push("PATIENT DIRECTED");
-            }
-        });
-
-        const mbdDetails = String(record?.mbdDetails || "").trim();
-        const patientDirectedDetails = String(record?.patientDirectedDetails || "").trim();
-
-        if (mbdDetails && !seen.has("MBD")) {
-            seen.add("MBD");
-            values.push("MBD");
-        }
-        if (patientDirectedDetails && !seen.has("PATIENT DIRECTED")) {
-            seen.add("PATIENT DIRECTED");
-            values.push("PATIENT DIRECTED");
-        }
-
-        return values;
-    }
-
-    function resolveDonorType(record) {
-        return getDonorTypes(record).join(", ");
-    }
-
-    function isDonorType(record, type) {
-        return getDonorTypes(record).includes(type);
-    }
-
-    function isDonorCategory(record, category) {
-        return normalizeMatchValue(record?.donorCategory) === normalizeMatchValue(category);
-    }
-
     function buildDonorKey(record) {
         return [
-            normalizeText(resolveSuffix(record)),
             normalizeText(record.surname),
             normalizeText(record.firstName),
             normalizeText(record.middleName),
@@ -798,82 +876,6 @@ async function backupToGoogleSheets(data) {
         return "";
     }
 
-
-    function parseDayOnlyDateWithBase(value, baseIsoDate) {
-        const raw = String(value ?? '').trim();
-        if (!raw || !baseIsoDate) return '';
-        const match = raw.match(/^(\d{1,2})$/);
-        if (!match) return '';
-        const day = Number(match[1]);
-        if (!Number.isFinite(day) || day < 1 || day > 31) return '';
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(baseIsoDate)) return '';
-        const [year, month] = baseIsoDate.split('-');
-        const candidate = `${year}-${month}-${String(day).padStart(2, '0')}`;
-        const d = new Date(candidate + 'T00:00:00');
-        if (isNaN(d.getTime())) return '';
-        if (d.getFullYear() !== Number(year) || d.getMonth() + 1 !== Number(month) || d.getDate() !== day) return '';
-        return candidate;
-    }
-
-    function resolveDirectEntryDate(record) {
-        return (
-            parseDateFlexible(record.entryDate) ||
-            parseDateFlexible(record.donationDate) ||
-            parseDateFlexible(record.date) ||
-            parseDateFlexible(record.bleedingDate) ||
-            ''
-        );
-    }
-
-    function resolveSourceMonthBase(record) {
-        return (
-            parseDateFromText(record?.importMeta?.sourceSheet || '') ||
-            parseDateFromText(record?.importMeta?.sourceFile || '') ||
-            parseCreatedAtDate(record.createdAt) ||
-            ''
-        );
-    }
-
-    function applyImportedDateCarryForward(records) {
-        const grouped = {};
-
-        records.forEach(record => {
-            const batchId = String(record?.importMeta?.batchId || '');
-            const sourceFile = String(record?.importMeta?.sourceFile || '');
-            const sourceSheet = String(record?.importMeta?.sourceSheet || '');
-            const sourceRow = Number(record?.importMeta?.sourceRowNumber || 0);
-            const key = `${batchId}|${sourceFile}|${sourceSheet}`;
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push({ record, sourceRow });
-        });
-
-        Object.values(grouped).forEach(items => {
-            items.sort((a, b) => a.sourceRow - b.sourceRow || String(a.record.serialNumber || '').localeCompare(String(b.record.serialNumber || ''), undefined, { numeric:true, sensitivity:'base' }));
-            let lastDate = '';
-            items.forEach(({ record }) => {
-                const explicit = resolveDirectEntryDate(record);
-                const base = resolveSourceMonthBase(record);
-                const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
-                const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, lastDate || base);
-
-                if (explicit) {
-                    record._resolvedEntryDate = explicit;
-                    lastDate = explicit;
-                } else if (dayOnly) {
-                    record._resolvedEntryDate = dayOnly;
-                    lastDate = dayOnly;
-                } else if (lastDate) {
-                    record._resolvedEntryDate = lastDate;
-                } else if (!record._resolvedEntryDate && base) {
-                    record._resolvedEntryDate = base;
-                    lastDate = base;
-                } else if (record._resolvedEntryDate) {
-                    lastDate = record._resolvedEntryDate;
-                }
-            });
-        });
-    }
-
     function parseCreatedAtDate(raw) {
         if (!raw) return "";
         if (typeof raw?.toDate === "function") return parseDateFlexible(raw.toDate());
@@ -882,15 +884,16 @@ async function backupToGoogleSheets(data) {
     }
 
     function resolveEntryDate(record) {
-        const direct = resolveDirectEntryDate(record);
-        if (direct) return direct;
-
-        const base = resolveSourceMonthBase(record);
-        const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
-        const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, base);
-        if (dayOnly) return dayOnly;
-
-        return base || "";
+        return (
+            parseDateFlexible(record.entryDate) ||
+            parseDateFlexible(record.donationDate) ||
+            parseDateFlexible(record.date) ||
+            parseDateFlexible(record.bleedingDate) ||
+            parseDateFromText(record?.importMeta?.sourceSheet || "") ||
+            parseDateFromText(record?.importMeta?.sourceFile || "") ||
+            parseCreatedAtDate(record.createdAt) ||
+            ""
+        );
     }
 
     function resolveBirthday(record) {
@@ -910,16 +913,6 @@ async function backupToGoogleSheets(data) {
             String(record.phoneNumber || "").trim() ||
             String(record.phoneNo || "").trim() ||
             String(record.phone || "").trim() ||
-            ""
-        );
-    }
-
-    function resolveOccupation(record) {
-        return (
-            String(record.occupation || "").trim() ||
-            String(record.job || "").trim() ||
-            String(record.work || "").trim() ||
-            String(record.profession || "").trim() ||
             ""
         );
     }
@@ -944,22 +937,14 @@ async function backupToGoogleSheets(data) {
         );
     }
 
-    function resolveDonationCountValue(value) {
-        const text = String(value ?? "").trim();
-        return text === "" ? "0" : text;
-    }
-
     function attachResolvedFields(record) {
         return {
             ...record,
-            donorType: resolveDonorType(record),
             contactNumber: resolveContactNumber(record),
-            occupation: resolveOccupation(record),
             _resolvedEntryDate: resolveEntryDate(record),
             _resolvedBirthday: resolveBirthday(record),
             _resolvedTimeStarted: resolveTimeStarted(record),
-            _resolvedTimeEnded: resolveTimeEnded(record),
-            _resolvedNumberOfDonations: resolveDonationCountValue(record.numberOfDonations)
+            _resolvedTimeEnded: resolveTimeEnded(record)
         };
     }
 
@@ -986,17 +971,16 @@ async function backupToGoogleSheets(data) {
     }
 
     function getGroupLabel(record) {
-        const labels = [];
-        if (isDonorType(record, "MBD")) {
-            labels.push(toUpperTrim(record.mbdDetails || "MBD"));
+        if (record.donorType === "MBD") {
+            return String(record.mbdDetails || "MBD").trim();
         }
-        if (isDonorType(record, "WALK-IN")) {
-            labels.push("WALK-IN");
+        if (record.donorType === "Walk-in") {
+            return "Walk-in";
         }
-        if (isDonorType(record, "PATIENT DIRECTED")) {
-            labels.push(toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED");
+        if (record.donorType === "Patient Directed") {
+            return String(record.patientDirectedDetails || "Patient Directed").trim() || "Patient Directed";
         }
-        return labels.filter(Boolean).join(" | ");
+        return "";
     }
 
     function matchesUnifiedSearch(record, keyword) {
@@ -1010,8 +994,6 @@ async function backupToGoogleSheets(data) {
             record.patientDirectedDetails,
             record.mbdDetails,
             getGroupLabel(record),
-            resolveSuffix(record),
-            getSurnameWithSuffix(record),
             record.surname,
             record.firstName,
             record.middleName,
@@ -1021,8 +1003,7 @@ async function backupToGoogleSheets(data) {
             record.contactNumber,
             record.address,
             record.cityProvince,
-            record.occupation,
-            record._resolvedNumberOfDonations,
+            record.numberOfDonations,
             record.bloodType,
             record.amount,
             record.bloodBagBrand,
@@ -1043,34 +1024,15 @@ async function backupToGoogleSheets(data) {
     }
 
     function matchesHeaderFilters(record) {
-        if (headerFilters.entryDate && record._resolvedEntryDate !== headerFilters.entryDate) return false;
-        if (headerFilters.mbd && !isDonorType(record, "MBD")) return false;
-        if (headerFilters.walkIn && !isDonorType(record, "WALK-IN")) return false;
-        if (headerFilters.patientDirected && !isDonorType(record, "PATIENT DIRECTED")) return false;
         if (headerFilters.sex && normalizeText(record.sex) !== normalizeText(headerFilters.sex)) return false;
         if (headerFilters.bloodType && normalizeText(record.bloodType) !== normalizeText(headerFilters.bloodType)) return false;
-        if (headerFilters.donorCategory && !isDonorCategory(record, headerFilters.donorCategory)) return false;
+        if (headerFilters.donorCategory && normalizeText(record.donorCategory) !== normalizeText(headerFilters.donorCategory)) return false;
         if (headerFilters.amount && normalizeText(record.amount) !== normalizeText(headerFilters.amount)) return false;
         if (headerFilters.bloodBagType && normalizeText(record.bloodBagType) !== normalizeText(headerFilters.bloodBagType)) return false;
         return true;
     }
 
     function compareSerialNumbers(a, b) {
-        const rowA = Number(a?.importMeta?.sourceRowNumber || 0);
-        const rowB = Number(b?.importMeta?.sourceRowNumber || 0);
-        if (rowA !== rowB) return rowA - rowB;
-
-        const serialA = String(a.serialNumber || "");
-        const serialB = String(b.serialNumber || "");
-        return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
-    }
-
-    function compareByEntryDateAsc(a, b) {
-        const dateA = a._resolvedEntryDate || "";
-        const dateB = b._resolvedEntryDate || "";
-        const dateCompare = dateA.localeCompare(dateB);
-        if (dateCompare !== 0) return dateCompare;
-
         const serialA = String(a.serialNumber || "");
         const serialB = String(b.serialNumber || "");
         return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
@@ -1094,15 +1056,7 @@ async function backupToGoogleSheets(data) {
     }
 
     function countType(records, type) {
-        return records.filter(r => isDonorType(r, type)).length;
-    }
-
-    function getCategorizedEntryCount(records) {
-        return records.filter(r =>
-            isDonorType(r, "MBD") ||
-            isDonorType(r, "WALK-IN") ||
-            isDonorType(r, "PATIENT DIRECTED")
-        ).length;
+        return records.filter(r => r.donorType === type).length;
     }
 
     function computeCurrentDonationTotals(records) {
@@ -1116,7 +1070,7 @@ async function backupToGoogleSheets(data) {
         sorted.forEach(record => {
             const key = buildDonorKey(record);
             if (totals[key] === undefined) {
-                totals[key] = resolveDonationCountValue(record.numberOfDonations);
+                totals[key] = parseInt(record.numberOfDonations || "0");
             }
         });
 
@@ -1129,55 +1083,50 @@ async function backupToGoogleSheets(data) {
 
         records.forEach(record => {
             const date = record._resolvedEntryDate || "";
-            const donorTypes = getDonorTypes(record);
+            const donorType = record.donorType || "";
+            let typeGroupKey = `${date}|${donorType}`;
 
-            donorTypes.forEach(type => {
-                let typeGroupKey = `${date}|${type}`;
+            if (donorType === "MBD") {
+                typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
+            } else if (donorType === "Patient Directed") {
+                typeGroupKey += `|patient-directed`;
+            } else if (donorType === "Walk-in") {
+                typeGroupKey += `|walk-in`;
+            }
 
-                if (type === "MBD") {
-                    typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
-                } else if (type === "PATIENT DIRECTED") {
-                    typeGroupKey += `|${normalizeText(record.patientDirectedDetails || "")}`;
-                } else if (type === "WALK-IN") {
-                    typeGroupKey += `|walk-in`;
-                }
-
-                if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
-                grouped[typeGroupKey].push({ record, type });
-            });
+            if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
+            grouped[typeGroupKey].push(record);
         });
 
         Object.keys(grouped).forEach(groupKey => {
             grouped[groupKey].sort((a, b) => {
-                const serialA = a.record.serialNumber || "";
-                const serialB = b.record.serialNumber || "";
+                const serialA = a.serialNumber || "";
+                const serialB = b.serialNumber || "";
                 return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
             });
 
-            grouped[groupKey].forEach((item, index) => {
-                if (!map[item.record.id]) map[item.record.id] = {};
-                map[item.record.id][item.type] = index + 1;
+            grouped[groupKey].forEach((record, index) => {
+                map[record.id] = index + 1;
             });
         });
 
         return map;
     }
 
-    function getCategoryDisplay(record, type) {
-        const typeMap = sequenceMap[record.id] || {};
-        const seq = typeMap[type] || "";
+    function getCategoryDisplay(record) {
+        const seq = sequenceMap[record.id] || "";
         if (!seq) return "";
 
-        if (type === "WALK-IN") {
-            return `WALK-IN-${seq}`;
+        if (record.donorType === "Walk-in") {
+            return `Walk-in-${seq}`;
         }
 
-        if (type === "MBD") {
-            return `${toUpperTrim(record.mbdDetails || "MBD")}-${seq}`;
+        if (record.donorType === "MBD") {
+            return `${record.mbdDetails || "MBD"}-${seq}`;
         }
 
-        if (type === "PATIENT DIRECTED") {
-            const patientName = toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
+        if (record.donorType === "Patient Directed") {
+            const patientName = String(record.patientDirectedDetails || "Patient Directed").trim() || "Patient Directed";
             return `${patientName}-${seq}`;
         }
 
@@ -1185,7 +1134,6 @@ async function backupToGoogleSheets(data) {
     }
 
     function groupDonors(records) {
-
         const grouped = {};
 
         records.forEach(record => {
@@ -1254,111 +1202,101 @@ async function backupToGoogleSheets(data) {
     }
 
     function renderHeaderFilterSelect(filterKey, options, selectedValue, placeholderLabel) {
-        const normalizedSelected = normalizeMatchValue(selectedValue);
         return `
             <div class="header-filter-wrap">
                 <span>${escapeHtml(placeholderLabel)}</span>
                 <select onchange="setHeaderFilter('${filterKey}', this.value)">
                     <option value="">All</option>
-                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${normalizeMatchValue(opt) === normalizedSelected ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
+                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === selectedValue ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
                 </select>
             </div>
         `;
     }
 
-    function getEntryDateFilterOptions(records) {
-        return [...new Set(records.map(record => record._resolvedEntryDate).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+
+    function isMissingValue(value) {
+        if (value === null || value === undefined) return true;
+        return String(value).trim() === "";
     }
 
-    function buildDuplicateKey(record) {
-        return [
-            normalizeText(record.serialNumber),
-            normalizeText(record.surname),
-            normalizeText(record.firstName),
-            normalizeText(record.middleName),
-            normalizeText(record._resolvedBirthday)
-        ].join("|");
+    function getMissingFieldLabels(record) {
+        const missing = [];
+
+        if (isMissingValue(record.surname)) missing.push("Surname");
+        if (isMissingValue(record.firstName)) missing.push("Given Name");
+        if (isMissingValue(record.contactNumber)) missing.push("Contact Number");
+        if (isMissingValue(record._resolvedBirthday)) missing.push("Birthday");
+        if (isMissingValue(record.sex)) missing.push("Sex");
+        if (isMissingValue(record.bloodType)) missing.push("Blood Type");
+        if (isMissingValue(record.serialNumber)) missing.push("Serial Number");
+
+        return missing;
     }
 
-    function getDuplicateRecordsForMonth(monthValue) {
-        const monthRecords = allDonors.filter(record => {
+    function isRecordMissingInfo(record) {
+        return getMissingFieldLabels(record).length > 0;
+    }
+
+    function getMissingInfoRecordsForMonth(monthValue) {
+        return allDonors.filter(record => {
             const { monthKey } = getYearMonth(record._resolvedEntryDate);
-            return monthKey === monthValue;
+            return monthKey === monthValue && isRecordMissingInfo(record);
         });
-
-        const grouped = {};
-        monthRecords.forEach(record => {
-            const key = buildDuplicateKey(record);
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(record);
-        });
-
-        return Object.values(grouped).filter(group => group.length > 1);
     }
 
-    function renderDuplicateMonthView(monthValue) {
+    function renderMissingInfoMonthView(monthValue) {
         if (!monthValue) {
-            showMessage("Please select a month first for Duplicate Data.", "error");
+            showMessage("Please select a month first for Missing Infos.", "error");
             return;
         }
 
-        const duplicateGroups = getDuplicateRecordsForMonth(monthValue);
+        const records = getMissingInfoRecordsForMonth(monthValue);
         const parts = monthValue.split("-");
         const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
 
-        if (!duplicateGroups.length) {
-            showDuplicateBox(
-                `Duplicate Data - ${monthLabel}`,
-                "No duplicate data found for this month.",
-                `<tr><td colspan="11">No duplicate data found for this month.</td></tr>`
+        if (!records.length) {
+            showMissingInfoBox(
+                `Missing Infos - ${monthLabel}`,
+                "No missing infos found for this month.",
+                `<tr><td colspan="8">No missing infos found for this month.</td></tr>`,
+                monthValue
             );
             return;
         }
 
         let rowsHtml = "";
-        let groupCounter = 1;
-        let totalRows = 0;
 
-        duplicateGroups.forEach(group => {
-            group.forEach((record, index) => {
-                totalRows++;
-                rowsHtml += `
-                    <tr>
-                        <td>${index === 0 ? `Duplicate ${groupCounter} (${group.length})` : ""}</td>
-                        <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                        <td>${escapeUpperHtml(record.serialNumber)}</td>
-                        <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                        <td>${escapeUpperHtml(record.firstName)}</td>
-                        <td>${escapeUpperHtml(record.middleName)}</td>
-                        <td>${escapeHtml(record._resolvedBirthday)}</td>
-                        <td>${escapeUpperHtml(record.bloodType)}</td>
-                        <td>${escapeUpperHtml(resolveDonorType(record))}</td>
-                        <td>${escapeUpperHtml(record.mbdDetails || record.patientDirectedDetails || "")}</td>
-                        <td class="actions-cell">
-                            <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
-                            <button class="small-btn delete-btn" onclick="deleteDonor('${record.id}')">Delete</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            groupCounter++;
+        records.forEach(record => {
+            const missingLabels = getMissingFieldLabels(record);
+
+            rowsHtml += `
+                <tr id="missing-row-${record.id}">
+                    <td>${escapeHtml(missingLabels.join(", "))}</td>
+                    <td>${buildEditInput(record.surname || "")}</td>
+                    <td>${buildEditInput(record.firstName || "")}</td>
+                    <td>${buildEditInput(record.contactNumber || "")}</td>
+                    <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
+                    <td>${buildEditSelect(["", "Male", "Female"], record.sex || "")}</td>
+                    <td>${buildEditSelect(["", "A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], record.bloodType || "")}</td>
+                    <td>${buildEditInput(record.serialNumber || "")}</td>
+                </tr>
+            `;
         });
 
-        showDuplicateBox(
-            `Duplicate Data - ${monthLabel}`,
-            `Duplicate groups found: ${duplicateGroups.length} | Duplicate rows: ${totalRows}`,
-            rowsHtml
+        showMissingInfoBox(
+            `Missing Infos - ${monthLabel}`,
+            `Records with missing infos: ${records.length} | Focus fields: Surname, Given Name, Contact Number, Birthday, Sex, Blood Type, Serial Number.`,
+            rowsHtml,
+            monthValue
         );
     }
 
     function renderTracking() {
         const keyword = searchInput.value.trim();
-        const baseDonors = allDonors
-            .filter(record => matchesUnifiedSearch(record, keyword))
-            .filter(record => matchesMonthFilter(record));
-        const entryDateOptions = getEntryDateFilterOptions(baseDonors);
 
-        filteredDonors = baseDonors
+        filteredDonors = allDonors
+            .filter(record => matchesUnifiedSearch(record, keyword))
+            .filter(record => matchesMonthFilter(record))
             .filter(record => matchesHeaderFilters(record));
 
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
@@ -1404,79 +1342,66 @@ async function backupToGoogleSheets(data) {
                 const monthCollapsed = isCollapsed(monthKey);
                 const monthValueForPrint = `${year}-${String(month).padStart(2, "0")}`;
 
-                const mbdCount = countType(records, "MBD");
-                const walkInCount = countType(records, "WALK-IN");
-                const patientDirectedCount = countType(records, "PATIENT DIRECTED");
-                const realEntriesCount = getCategorizedEntryCount(records);
-
                 html += `
                     <div class="month-group">
                         <div class="month-header" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
-                            <span>${escapeHtml(monthBlock.monthName)} (${realEntriesCount})</span>
+                            <span>${escapeHtml(monthBlock.monthName)} (${records.length})</span>
                             <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
                         </div>
 
+                        <div class="month-tools">
+                            <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
+                            <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
+                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
+                            <button class="small-btn purple-btn" onclick="renderMissingInfoMonthView('${monthValueForPrint}')">Missing Infos This Month</button>
+                        </div>
+
+                        <div class="subtotal-bar">
+                            <span>Entries: ${records.length}</span>
+                            <span>MBD: ${countType(records, "MBD")}</span>
+                            <span>Walk-in: ${countType(records, "Walk-in")}</span>
+                            <span>Patient-Directed: ${countType(records, "Patient Directed")}</span>
+                            <span>New: ${records.filter(r => r.donorCategory === "New").length}</span>
+                            <span>Repeat: ${records.filter(r => r.donorCategory === "Repeat").length}</span>
+                            <span>Lapse: ${records.filter(r => r.donorCategory === "Lapse").length}</span>
+                        </div>
+
                         <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
-                            <div class="month-tools">
-                                <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
-                                <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
-                                <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
-                            </div>
-
-                            <div class="subtotal-bar">
-                                <span>Entries: ${realEntriesCount}</span>
-                                <span>MBD: ${mbdCount}</span>
-                                <span>Walk-in: ${walkInCount}</span>
-                                <span>Patient-Directed: ${patientDirectedCount}</span>
-                                <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
-                                <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
-                                <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
-                            </div>
-
                             <div class="table-wrap">
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th class="col-entrydate">
-                                                ${renderHeaderFilterSelect("entryDate", entryDateOptions, headerFilters.entryDate, "Entry Date")}
-                                            </th>
-                                            <th class="col-mbd">
-                                                ${renderHeaderFilterSelect("mbd", ["MBD"], headerFilters.mbd, "MBD")}
-                                            </th>
-                                            <th class="col-walkin">
-                                                ${renderHeaderFilterSelect("walkIn", ["WALK-IN"], headerFilters.walkIn, "Walk-in")}
-                                            </th>
-                                            <th class="col-patient">
-                                                ${renderHeaderFilterSelect("patientDirected", ["PATIENT DIRECTED"], headerFilters.patientDirected, "Patient-Directed")}
-                                            </th>
+                                            <th class="col-entrydate">Entry Date</th>
+                                            <th class="col-mbd">MBD</th>
+                                            <th class="col-walkin">Walk-in</th>
+                                            <th class="col-patient">Patient-Directed</th>
                                             <th class="col-normal">Surname</th>
                                             <th class="col-normal">Given Name</th>
                                             <th class="col-normal">Middle Name</th>
                                             <th class="col-normal">Birthday</th>
                                             <th class="col-normal">Age</th>
                                             <th class="col-normal">
-                                                ${renderHeaderFilterSelect("sex", ["MALE", "FEMALE"], headerFilters.sex, "Sex")}
+                                                ${renderHeaderFilterSelect("sex", ["Male", "Female"], headerFilters.sex, "Sex")}
                                             </th>
                                             <th class="col-normal">Contact Number</th>
                                             <th class="col-normal">House Number/Purok/Street Name</th>
                                             <th class="col-normal">Barangay/City</th>
-                                            <th class="col-normal">Occupation</th>
                                             <th class="col-donorcat">
-                                                ${renderHeaderFilterSelect("donorCategory", ["NEW", "REPEAT", "LAPSE"], headerFilters.donorCategory, "Type of Donor")}
+                                                ${renderHeaderFilterSelect("donorCategory", ["New", "Repeat", "Lapse"], headerFilters.donorCategory, "Type of Donor")}
                                             </th>
                                             <th class="col-normal"># of Donations</th>
                                             <th class="col-bloodtype">
-                                                ${renderHeaderFilterSelect("bloodType", ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"], headerFilters.bloodType, "Blood Type")}
+                                                ${renderHeaderFilterSelect("bloodType", ["A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], headerFilters.bloodType, "Blood Type")}
                                             </th>
                                             <th class="col-serial">
                                                 ${renderHeaderFilterSelect("serialSort", ["asc", "desc"], headerFilters.serialSort, "Serial Number")}
                                             </th>
                                             <th class="col-amount">
-                                                ${renderHeaderFilterSelect("amount", ["450 ML", "QNS", "UB"], headerFilters.amount, "Amount")}
+                                                ${renderHeaderFilterSelect("amount", ["450 ml", "QNS", "UB"], headerFilters.amount, "Amount")}
                                             </th>
                                             <th class="col-normal">Blood Bag Used</th>
                                             <th class="col-normal">
-                                                ${renderHeaderFilterSelect("bloodBagType", ["SINGLE", "DOUBLE", "TRIPLE", "QUADRUPLE"], headerFilters.bloodBagType, "Type of Blood Bag")}
+                                                ${renderHeaderFilterSelect("bloodBagType", ["Single", "Double", "Triple", "Quadruple"], headerFilters.bloodBagType, "Type of Blood Bag")}
                                             </th>
                                             <th class="col-normal col-time-start">Time Started</th>
                                             <th class="col-normal col-time-end">Time Ended</th>
@@ -1489,38 +1414,37 @@ async function backupToGoogleSheets(data) {
 
                 records.forEach(record => {
                     const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
-                    const enteredValue = resolveDonationCountValue(record.numberOfDonations);
+                    const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+                    const enteredValue = parseInt(record.numberOfDonations || "0");
 
                     html += `
                         <tr id="row-${record.id}">
                             <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
-                            <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                            <td>${escapeUpperHtml(record.firstName)}</td>
-                            <td>${escapeUpperHtml(record.middleName)}</td>
+                            <td>${escapeHtml(record.donorType === "MBD" ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeHtml(record.donorType === "Walk-in" ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeHtml(record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeHtml(record.surname)}</td>
+                            <td>${escapeHtml(record.firstName)}</td>
+                            <td>${escapeHtml(record.middleName)}</td>
                             <td>${escapeHtml(record._resolvedBirthday)}</td>
                             <td>${escapeHtml(record.age)}</td>
-                            <td>${escapeUpperHtml(record.sex)}</td>
-                            <td>${escapeUpperHtml(record.contactNumber)}</td>
-                            <td>${escapeUpperHtml(record.address)}</td>
-                            <td>${escapeUpperHtml(record.cityProvince)}</td>
-                            <td>${escapeUpperHtml(record.occupation)}</td>
-                            <td>${escapeUpperHtml(record.donorCategory || "")}</td>
-                            <td title="Entered for this record: ${escapeHtml(enteredValue)}">
-                                <span class="donation-total">${escapeHtml(latestTotal)}</span>
-                                <span class="donation-entry-note">ENTRY: ${escapeHtml(enteredValue)}</span>
+                            <td>${escapeHtml(record.sex)}</td>
+                            <td>${escapeHtml(record.contactNumber)}</td>
+                            <td>${escapeHtml(record.address)}</td>
+                            <td>${escapeHtml(record.cityProvince)}</td>
+                            <td>${escapeHtml(record.donorCategory || "")}</td>
+                            <td title="Entered for this record: ${enteredValue}">
+                                <span class="donation-total">${latestTotal}</span>
+                                <span class="donation-entry-note">entry: ${enteredValue}</span>
                             </td>
-                            <td>${escapeUpperHtml(record.bloodType)}</td>
-                            <td>${escapeUpperHtml(record.serialNumber)}</td>
-                            <td>${escapeUpperHtml(record.amount)}</td>
-                            <td>${escapeUpperHtml(record.bloodBagBrand)}</td>
-                            <td>${escapeUpperHtml(record.bloodBagType)}</td>
+                            <td>${escapeHtml(record.bloodType)}</td>
+                            <td>${escapeHtml(record.serialNumber)}</td>
+                            <td>${escapeHtml(record.amount)}</td>
+                            <td>${escapeHtml(record.bloodBagBrand)}</td>
+                            <td>${escapeHtml(record.bloodBagType)}</td>
                             <td class="col-time-start">${escapeHtml(record._resolvedTimeStarted)}</td>
                             <td class="col-time-end">${escapeHtml(record._resolvedTimeEnded)}</td>
-                            <td>${escapeUpperHtml(record.remarks)}</td>
+                            <td>${escapeHtml(record.remarks)}</td>
                             <td class="actions-cell">
                                 <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
                                 <button class="small-btn delete-btn" onclick="deleteDonor('${record.id}')">Delete</button>
@@ -1548,18 +1472,15 @@ async function backupToGoogleSheets(data) {
     }
 
     function buildEditSelect(options, selectedValue) {
-        const normalizedSelected = normalizeMatchValue(selectedValue);
         return `
             <select class="edit-select">
-                ${options.map(opt => `<option value="${escapeHtml(opt)}" ${normalizeMatchValue(opt) === normalizedSelected ? "selected" : ""}>${escapeHtml(opt ? String(opt).toUpperCase() : "")}</option>`).join("")}
+                ${options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === selectedValue ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
             </select>
         `;
     }
 
     function buildEditInput(value, type = "text") {
-        const isUppercaseField = type === "text";
-        const safeValue = isUppercaseField ? toUpperDisplay(value || "") : (value || "");
-        return `<input class="edit-input" type="${type}" value="${escapeHtml(safeValue)}"${isUppercaseField ? ' data-uppercase="true" style="text-transform: uppercase;"' : ""}>`;
+        return `<input class="edit-input" type="${type}" value="${escapeHtml(value || "")}">`;
     }
 
     function getMonthLabel(monthValue) {
@@ -1567,85 +1488,290 @@ async function backupToGoogleSheets(data) {
         return `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
     }
 
-    function getMonthPrintDateRange(records) {
-        const validDates = records
-            .map(r => r._resolvedEntryDate)
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b));
+    function buildPrintGroupBlocks(records) {
+        const donorTypeGroups = [
+            { label: "MBD", type: "MBD" },
+            { label: "Walk-in", type: "Walk-in" },
+            { label: "Patient-Directed", type: "Patient Directed" }
+        ];
 
-        if (!validDates.length) return "";
-        return `${formatPrintDate(validDates[0])} to ${formatPrintDate(validDates[validDates.length - 1])}`;
-    }
+        return donorTypeGroups.map(group => {
+            const groupRecords = records.filter(record => record.donorType === group.type);
+            if (!groupRecords.length) return "";
 
-    function formatPrintDate(dateText) {
-        const parsed = parseDateFlexible(dateText);
-        if (!parsed || !/^\d{4}-\d{2}-\d{2}$/.test(parsed)) return dateText || "";
-        const [year, month, day] = parsed.split("-");
-        return `${month}-${day}-${year.slice(-2)}`;
-    }
+            const rows = groupRecords.map(record => {
+                const donorKey = buildDonorKey(record);
+                const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
+                const groupDisplay = getCategoryDisplay(record);
 
-    function abbreviateSex(value) {
-        const v = normalizeMatchValue(value);
-        if (v === "male") return "M";
-        if (v === "female") return "F";
-        return value || "";
-    }
-
-    function abbreviateBloodBagType(value) {
-        const v = normalizeMatchValue(value);
-        if (v === "single") return "S";
-        if (v === "double") return "D";
-        if (v === "triple") return "T";
-        if (v === "quadruple") return "Q";
-        return value || "";
-    }
-
-    function hasPrintableRemarks(records) {
-        return records.some(record => String(record.remarks || "").trim() !== "");
-    }
-
-    function buildPrintRows(records, includeRemarks) {
-        const sortedRecords = [...records].sort(compareByEntryDateAsc);
-
-        return sortedRecords.map(record => {
-            const donorKey = buildDonorKey(record);
-            const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
+                return `
+                    <tr>
+                        <td>${escapeHtml(record._resolvedEntryDate)}</td>
+                        <td>${escapeHtml(groupDisplay)}</td>
+                        <td>${escapeHtml(record.surname)}</td>
+                        <td>${escapeHtml(record.firstName)}</td>
+                        <td>${escapeHtml(record.middleName)}</td>
+                        <td>${escapeHtml(record._resolvedBirthday)}</td>
+                        <td>${escapeHtml(record.age)}</td>
+                        <td>${escapeHtml(record.sex)}</td>
+                        <td>${escapeHtml(record.contactNumber)}</td>
+                        <td>${escapeHtml(record.address)}</td>
+                        <td>${escapeHtml(record.cityProvince)}</td>
+                        <td>${escapeHtml(record.donorCategory || "")}</td>
+                        <td>${escapeHtml(latestTotal)}</td>
+                        <td>${escapeHtml(record.bloodType)}</td>
+                        <td>${escapeHtml(record.serialNumber)}</td>
+                        <td>${escapeHtml(record.amount)}</td>
+                        <td>${escapeHtml(record.bloodBagBrand)}</td>
+                        <td>${escapeHtml(record.bloodBagType)}</td>
+                        <td>${escapeHtml(record._resolvedTimeStarted)}</td>
+                        <td>${escapeHtml(record._resolvedTimeEnded)}</td>
+                        <td>${escapeHtml(record.remarks)}</td>
+                    </tr>
+                `;
+            }).join("");
 
             return `
-                <tr>
-                    <td class="col-entry-date">${escapeHtml(formatPrintDate(record._resolvedEntryDate))}</td>
-                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
-                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
-                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
-                    <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                    <td class="col-given print-no-wrap">${escapeUpperHtml(record.firstName)}</td>
-                    <td class="col-middle">${escapeUpperHtml(record.middleName)}</td>
-                    <td class="col-bday">${escapeHtml(formatPrintDate(record._resolvedBirthday))}</td>
-                    <td class="col-age">${escapeHtml(record.age)}</td>
-                    <td class="col-sex">${escapeHtml(abbreviateSex(record.sex))}</td>
-                    <td class="col-contact">${escapeUpperHtml(record.contactNumber)}</td>
-                    <td class="col-address print-address-cell">${escapeUpperHtml(record.address)}</td>
-                    <td class="col-city">${escapeUpperHtml(record.cityProvince)}</td>
-                    <td class="col-occ">${escapeUpperHtml(record.occupation)}</td>
-                    <td class="col-donor-type">${escapeUpperHtml(record.donorCategory || "")}</td>
-                    <td class="col-donations">${escapeHtml(latestTotal)}</td>
-                    <td class="col-bt">${escapeUpperHtml(record.bloodType)}</td>
-                    <td class="col-serial print-no-wrap">${escapeUpperHtml(record.serialNumber)}</td>
-                    <td class="col-amt">${escapeUpperHtml(record.amount)}</td>
-                    <td class="col-bbused">${escapeUpperHtml(record.bloodBagBrand)}</td>
-                    <td class="col-bagtype">${escapeHtml(abbreviateBloodBagType(record.bloodBagType))}</td>
-                    <td class="col-ts">${escapeHtml(record._resolvedTimeStarted)}</td>
-                    <td class="col-te">${escapeHtml(record._resolvedTimeEnded)}</td>
-                    ${includeRemarks ? `<td class="col-remarks">${escapeUpperHtml(record.remarks)}</td>` : ""}
-                </tr>
+                <section class="print-group">
+                    <div class="print-group-title">${escapeHtml(group.label)} (${groupRecords.length})</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Entry Date</th>
+                                <th>${escapeHtml(group.label)}</th>
+                                <th>Surname</th>
+                                <th>Given Name</th>
+                                <th>Middle Name</th>
+                                <th>Birthday</th>
+                                <th>Age</th>
+                                <th>Sex</th>
+                                <th>Contact Number</th>
+                                <th>House Number/Purok/Street Name</th>
+                                <th>Barangay/City</th>
+                                <th>Type of Donor</th>
+                                <th># of Donations</th>
+                                <th>Blood Type</th>
+                                <th>Serial Number</th>
+                                <th>Amount</th>
+                                <th>Blood Bag Used</th>
+                                <th>Type of Blood Bag</th>
+                                <th>Time Started</th>
+                                <th>Time Ended</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </section>
             `;
         }).join("");
     }
 
+    window.startEdit = function(id) {
+        hideDuplicateBox();
+        hideMissingInfoBox();
+
+        const record = allDonors.find(item => item.id === id);
+        if (!record) return;
+
+        const row = document.getElementById(`row-${id}`);
+        if (!row) {
+            showMessage("Record is not visible in the current table view. Clear filters or expand the month, then edit again.", "error");
+            return;
+        }
+
+        row.innerHTML = `
+            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
+            <td>${buildEditInput(record.mbdDetails || "")}</td>
+            <td>${buildEditSelect(["", "Walk-in"], record.donorType === "Walk-in" ? "Walk-in" : "")}</td>
+            <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
+            <td>${buildEditInput(record.surname || "")}</td>
+            <td>${buildEditInput(record.firstName || "")}</td>
+            <td>${buildEditInput(record.middleName || "")}</td>
+            <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
+            <td>${buildEditInput(record.age || "", "number")}</td>
+            <td>${buildEditSelect(["Male", "Female"], record.sex || "")}</td>
+            <td>${buildEditInput(record.contactNumber || "")}</td>
+            <td>${buildEditInput(record.address || "")}</td>
+            <td>${buildEditInput(record.cityProvince || "")}</td>
+            <td>${buildEditSelect(["New", "Repeat", "Lapse"], record.donorCategory || "")}</td>
+            <td>${buildEditInput(record.numberOfDonations || 0, "number")}</td>
+            <td>${buildEditSelect(["A+","A-","B+","B-","AB+","AB-","O+","O-","Unknown"], record.bloodType || "")}</td>
+            <td>${buildEditInput(record.serialNumber || "")}</td>
+            <td>${buildEditSelect(["450 ml", "QNS", "UB"], record.amount || "")}</td>
+            <td>${buildEditSelect(["KARMI", "TERUMO"], record.bloodBagBrand || "")}</td>
+            <td>${buildEditSelect(["Single", "Double", "Triple", "Quadruple"], record.bloodBagType || "")}</td>
+            <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
+            <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
+            <td>${buildEditInput(record.remarks || "")}</td>
+            <td class="actions-cell">
+                <button class="small-btn save-btn" onclick="saveEdit('${id}')">Save</button>
+                <button class="small-btn cancel-btn" onclick="renderTracking()">Cancel</button>
+            </td>
+        `;
+    };
+
+    window.saveEdit = async function(id) {
+        const row = document.getElementById(`row-${id}`);
+        const fields = row.querySelectorAll("input, select");
+
+        const mbdDetails = fields[1].value.trim();
+        const walkInValue = fields[2].value;
+        const patientDirectedDetails = fields[3].value.trim();
+
+        let donorType = "";
+        if (mbdDetails) donorType = "MBD";
+        else if (patientDirectedDetails) donorType = "Patient Directed";
+        else if (walkInValue === "Walk-in") donorType = "Walk-in";
+
+        const updatedData = {
+            entryDate: fields[0].value,
+            mbdDetails: mbdDetails,
+            patientDirectedDetails: patientDirectedDetails,
+            donorType: donorType,
+            surname: fields[4].value.trim(),
+            firstName: fields[5].value.trim(),
+            middleName: fields[6].value.trim(),
+            birthday: fields[7].value,
+            age: parseInt(fields[8].value || "0"),
+            sex: fields[9].value,
+            contactNumber: fields[10].value.trim(),
+            address: fields[11].value.trim(),
+            cityProvince: fields[12].value.trim(),
+            donorCategory: fields[13].value,
+            numberOfDonations: parseInt(fields[14].value || "0"),
+            bloodType: fields[15].value,
+            serialNumber: fields[16].value.trim(),
+            amount: fields[17].value,
+            bloodBagBrand: fields[18].value,
+            bloodBagType: fields[19].value,
+            timeStarted: fields[20].value,
+            timeEnded: fields[21].value,
+            remarks: fields[22].value.trim()
+        };
+
+        try {
+            await db.collection("donorDatabase").doc(id).update(updatedData);
+            showMessage("Record updated successfully.", "success");
+            await loadDonors();
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to update record: " + error.message, "error");
+        }
+    };
+
+
+        function getMissingInfoRowData(id) {
+        const row = document.getElementById(`missing-row-${id}`);
+        if (!row) return null;
+
+        const fields = row.querySelectorAll("input, select");
+        return {
+            surname: fields[0].value.trim(),
+            firstName: fields[1].value.trim(),
+            contactNumber: fields[2].value.trim(),
+            birthday: fields[3].value,
+            sex: fields[4].value,
+            bloodType: fields[5].value,
+            serialNumber: fields[6].value.trim()
+        };
+    }
+
+    window.saveAllMissingInfos = async function(monthValue) {
+        if (!monthValue) {
+            showMessage("No month selected for Missing Infos.", "error");
+            return;
+        }
+
+        const records = getMissingInfoRecordsForMonth(monthValue);
+        if (!records.length) {
+            showMessage("No missing infos found for this month.", "error");
+            return;
+        }
+
+        saveAllMissingBtn.disabled = true;
+        saveAllMissingBtn.textContent = "Saving...";
+
+        try {
+            const updates = [];
+
+            records.forEach(record => {
+                const rowData = getMissingInfoRowData(record.id);
+                if (!rowData) return;
+
+                updates.push(
+                    db.collection("donorDatabase").doc(record.id).update({
+                        surname: rowData.surname,
+                        firstName: rowData.firstName,
+                        contactNumber: rowData.contactNumber,
+                        birthday: rowData.birthday,
+                        sex: rowData.sex,
+                        bloodType: rowData.bloodType,
+                        serialNumber: rowData.serialNumber
+                    })
+                );
+            });
+
+            await Promise.all(updates);
+            showMessage("Missing infos saved successfully.", "success");
+            await loadDonors();
+            renderMissingInfoMonthView(monthValue);
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to save missing infos: " + error.message, "error");
+        } finally {
+            saveAllMissingBtn.disabled = false;
+            saveAllMissingBtn.textContent = "Save All";
+        }
+    };
+
+    window.deleteDonor = async function(id) {
+        const confirmed = confirm("Delete this donor record?");
+        if (!confirmed) return;
+
+        try {
+            await db.collection("donorDatabase").doc(id).delete();
+            showMessage("Record deleted successfully.", "success");
+            await loadDonors();
+        } catch (error) {
+            console.error(error);
+            showMessage("Failed to delete record: " + error.message, "error");
+        }
+    };
+
+    window.toggleGroup = function(groupKey, bodyId, iconId) {
+        const body = document.getElementById(bodyId);
+        const icon = document.getElementById(iconId);
+
+        if (!body || !icon) return;
+
+        const willHide = !body.classList.contains("hidden");
+
+        if (willHide) {
+            body.classList.add("hidden");
+            icon.textContent = "+";
+            collapsedGroups[groupKey] = true;
+        } else {
+            body.classList.remove("hidden");
+            icon.textContent = "−";
+            collapsedGroups[groupKey] = false;
+        }
+    };
+
+    window.setHeaderFilter = function(filterKey, value) {
+        headerFilters[filterKey] = value;
+        renderTracking();
+    };
+
+    function getRecordsForMonth(monthValue) {
+        return filteredDonors.filter(record => {
+            const { monthKey } = getYearMonth(record._resolvedEntryDate);
+            return monthKey === monthValue;
+        });
+    }
+
     function buildPrintableTable(records, monthLabel) {
-        const dateRange = getMonthPrintDateRange(records);
-        const includeRemarks = hasPrintableRemarks(records);
-        const rows = buildPrintRows(records, includeRemarks);
+        const groupBlocks = buildPrintGroupBlocks(records);
 
         return `
             <!DOCTYPE html>
@@ -1654,8 +1780,8 @@ async function backupToGoogleSheets(data) {
                 <title>Print ${monthLabel}</title>
                 <style>
                     @page {
-                        size: 8.5in 13in landscape;
-                        margin: 6mm;
+                        size: landscape;
+                        margin: 10mm;
                     }
                     * { box-sizing: border-box; }
                     body {
@@ -1663,121 +1789,71 @@ async function backupToGoogleSheets(data) {
                         margin: 0;
                         color: #111827;
                     }
+                    .print-page {
+                        page-break-after: always;
+                        break-after: page;
+                        min-height: 100vh;
+                        padding: 10px 0;
+                    }
+                    .print-page:last-child {
+                        page-break-after: auto;
+                        break-after: auto;
+                    }
                     h2 {
-                        margin: 0 0 4px 0;
+                        margin: 0 0 6px 0;
                         color: #8b0000;
-                        font-size: 15px;
+                        font-size: 20px;
                     }
                     .sub {
-                        margin-bottom: 4px;
+                        margin-bottom: 10px;
                         color: #555;
                         font-weight: bold;
-                        font-size: 10px;
+                        font-size: 13px;
                     }
-                    .date-range {
-                        margin-bottom: 6px;
-                        color: #7a2e00;
+                    .print-group {
+                        width: 100%;
+                    }
+                    .print-group-title {
+                        margin: 0 0 8px 0;
+                        padding: 8px 10px;
+                        background: #eef4f9;
+                        border: 1px solid #dbe3ec;
                         font-weight: bold;
-                        font-size: 9px;
+                        font-size: 13px;
                     }
                     table {
                         width: 100%;
                         border-collapse: collapse;
-                        table-layout: fixed;
-                        font-size: 7px;
+                        table-layout: auto;
+                        font-size: 10px;
                     }
                     th, td {
-                        border: 1px solid #999;
-                        padding: 2px 2px;
+                        border: 1px solid #bbb;
+                        padding: 4px 5px;
                         text-align: center;
-                        vertical-align: middle;
-                        white-space: normal;
-                        word-break: break-word;
-                        overflow-wrap: break-word;
-                        line-height: 1.05;
+                        white-space: nowrap;
                     }
                     th {
                         background: #efefef;
-                        font-size: 6.8px;
                     }
-                    .print-address-cell {
-                        text-align: left;
-                    }
-                    .print-no-wrap {
-                        white-space: nowrap !important;
-                        word-break: normal !important;
-                        overflow-wrap: normal !important;
-                    }
-
-                    .col-entry-date { width: 5.2%; }
-                    .col-mbd { width: 5.0%; }
-                    .col-walkin { width: 4.2%; }
-                    .col-pd { width: 5.4%; }
-                    .col-surname { width: 7.0%; }
-                    .col-given { width: 10.5%; }
-                    .col-middle { width: 6.4%; }
-                    .col-bday { width: 5.0%; }
-                    .col-age { width: 2.5%; }
-                    .col-sex { width: 2.0%; }
-                    .col-contact { width: 5.0%; }
-                    .col-address { width: 10.8%; }
-                    .col-city { width: 4.8%; }
-                    .col-occ { width: 4.5%; }
-                    .col-donor-type { width: 4.0%; }
-                    .col-donations { width: 3.0%; }
-                    .col-bt { width: 2.4%; }
-                    .col-serial { width: 11.0%; }
-                    .col-amt { width: 2.4%; }
-                    .col-bbused { width: 4.0%; }
-                    .col-bagtype { width: 2.6%; }
-                    .col-ts { width: 3.0%; }
-                    .col-te { width: 3.0%; }
-                    .col-remarks { width: 4.7%; }
-
                     thead {
                         display: table-header-group;
+                    }
+                    tfoot {
+                        display: table-footer-group;
                     }
                     tr, td, th {
                         page-break-inside: avoid;
                     }
                 </style>
             </head>
-            <body>
-                <h2>Donor Database Tracking</h2>
-                <div class="sub">${monthLabel}</div>
-                <div class="date-range">${escapeHtml(dateRange)}</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="col-entry-date">Entry Date</th>
-                            <th class="col-mbd">MBD</th>
-                            <th class="col-walkin">Walk-in</th>
-                            <th class="col-pd">Patient-Directed</th>
-                            <th class="col-surname">Surname</th>
-                            <th class="col-given print-no-wrap">Given Name</th>
-                            <th class="col-middle">Middle Name</th>
-                            <th class="col-bday">Birthday</th>
-                            <th class="col-age">Age</th>
-                            <th class="col-sex">Sex</th>
-                            <th class="col-contact">Contact No.</th>
-                            <th class="col-address">Address</th>
-                            <th class="col-city">Brgy/City</th>
-                            <th class="col-occ">Occupation</th>
-                            <th class="col-donor-type">Type</th>
-                            <th class="col-donations"># of D</th>
-                            <th class="col-bt">BT</th>
-                            <th class="col-serial print-no-wrap">Serial No.</th>
-                            <th class="col-amt">AMT</th>
-                            <th class="col-bbused">BB USED</th>
-                            <th class="col-bagtype">Bag</th>
-                            <th class="col-ts">TS</th>
-                            <th class="col-te">TE</th>
-                            ${includeRemarks ? `<th class="col-remarks">Remarks</th>` : ""}
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </body>
+            <body>${groupBlocks.split("</section>").filter(Boolean).map(block => `
+                <div class="print-page">
+                    <h2>Donor Database Tracking</h2>
+                    <div class="sub">${monthLabel}</div>
+                    ${block}</section>
+                </div>
+            `).join("")}</body>
             </html>
         `;
     }
@@ -1799,17 +1875,16 @@ async function backupToGoogleSheets(data) {
             sortedMonths.forEach(month => {
                 const monthBlock = grouped[year][month];
                 const recordsInMonth = monthBlock.records;
-                const realEntriesCount = getCategorizedEntryCount(recordsInMonth);
 
                 lines.push([`Month: ${monthBlock.monthName} ${year}`]);
                 lines.push([
-                    `Entries: ${realEntriesCount}`,
+                    `Entries: ${recordsInMonth.length}`,
                     `MBD: ${countType(recordsInMonth, "MBD")}`,
-                    `Walk-in: ${countType(recordsInMonth, "WALK-IN")}`,
-                    `Patient-Directed: ${countType(recordsInMonth, "PATIENT DIRECTED")}`,
-                    `New: ${recordsInMonth.filter(r => isDonorCategory(r, "NEW")).length}`,
-                    `Repeat: ${recordsInMonth.filter(r => isDonorCategory(r, "REPEAT")).length}`,
-                    `Lapse: ${recordsInMonth.filter(r => isDonorCategory(r, "LAPSE")).length}`
+                    `Walk-in: ${countType(recordsInMonth, "Walk-in")}`,
+                    `Patient-Directed: ${countType(recordsInMonth, "Patient Directed")}`,
+                    `New: ${recordsInMonth.filter(r => r.donorCategory === "New").length}`,
+                    `Repeat: ${recordsInMonth.filter(r => r.donorCategory === "Repeat").length}`,
+                    `Lapse: ${recordsInMonth.filter(r => r.donorCategory === "Lapse").length}`
                 ]);
                 lines.push([
                     "Entry Date",
@@ -1825,7 +1900,6 @@ async function backupToGoogleSheets(data) {
                     "Contact Number",
                     "House Number/Purok/Street Name",
                     "Barangay/City",
-                    "Occupation",
                     "Type of Donor",
                     "# of Donations",
                     "Blood Type",
@@ -1840,33 +1914,32 @@ async function backupToGoogleSheets(data) {
 
                 recordsInMonth.forEach(record => {
                     const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
+                    const latestTotal = currentDonationTotals[donorKey] ?? parseInt(record.numberOfDonations || "0");
 
                     lines.push([
                         record._resolvedEntryDate || "",
-                        isDonorType(record, "MBD") ? getCategoryDisplay(record) : "",
-                        isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "",
-                        isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "",
-                        toUpperDisplay(getSurnameWithSuffix(record)),
-                        toUpperDisplay(record.firstName || ""),
-                        toUpperDisplay(record.middleName || ""),
+                        record.donorType === "MBD" ? getCategoryDisplay(record) : "",
+                        record.donorType === "Walk-in" ? getCategoryDisplay(record) : "",
+                        record.donorType === "Patient Directed" ? getCategoryDisplay(record) : "",
+                        record.surname || "",
+                        record.firstName || "",
+                        record.middleName || "",
                         record._resolvedBirthday || "",
                         record.age || "",
-                        toUpperDisplay(record.sex || ""),
-                        toUpperDisplay(record.contactNumber || ""),
-                        toUpperDisplay(record.address || ""),
-                        toUpperDisplay(record.cityProvince || ""),
-                        toUpperDisplay(record.occupation || ""),
-                        toUpperDisplay(record.donorCategory || ""),
+                        record.sex || "",
+                        record.contactNumber || "",
+                        record.address || "",
+                        record.cityProvince || "",
+                        record.donorCategory || "",
                         latestTotal,
-                        toUpperDisplay(record.bloodType || ""),
-                        toUpperDisplay(record.serialNumber || ""),
-                        toUpperDisplay(record.amount || ""),
-                        toUpperDisplay(record.bloodBagBrand || ""),
-                        toUpperDisplay(record.bloodBagType || ""),
+                        record.bloodType || "",
+                        record.serialNumber || "",
+                        record.amount || "",
+                        record.bloodBagBrand || "",
+                        record.bloodBagType || "",
                         record._resolvedTimeStarted || "",
                         record._resolvedTimeEnded || "",
-                        toUpperDisplay(record.remarks || "")
+                        record.remarks || ""
                     ]);
                 });
 
@@ -1921,13 +1994,6 @@ async function backupToGoogleSheets(data) {
         showMessage("Selected month CSV exported successfully.", "success");
     };
 
-    function getRecordsForMonth(monthValue) {
-        return filteredDonors.filter(record => {
-            const { monthKey } = getYearMonth(record._resolvedEntryDate);
-            return monthKey === monthValue;
-        });
-    }
-
     async function loadDonors() {
         try {
             const user = auth.currentUser;
@@ -1938,15 +2004,10 @@ async function backupToGoogleSheets(data) {
 
             const snapshot = await db.collection("donorDatabase").get();
 
-            allDonors = snapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
-                .filter(record => record.isDeleted !== true)
-                .map(record => attachResolvedFields(record));
-
-            applyImportedDateCarryForward(allDonors);
+            allDonors = snapshot.docs.map(doc => attachResolvedFields({
+                id: doc.id,
+                ...doc.data()
+            }));
 
             allDonors.sort((a, b) => {
                 const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
@@ -1962,6 +2023,8 @@ async function backupToGoogleSheets(data) {
             } else {
                 hideDuplicateBox();
             }
+
+            hideMissingInfoBox();
         } catch (error) {
             console.error(error);
             trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
@@ -1969,206 +2032,22 @@ async function backupToGoogleSheets(data) {
         }
     }
 
-
-    function buildEditCheckbox(checked, labelText) {
-        return `
-            <label class="edit-checkbox-label">
-                <input type="checkbox" class="edit-checkbox" ${checked ? "checked" : ""}>
-                <span>${escapeHtml(labelText)}</span>
-            </label>
-        `;
-    }
-
-    function updateLocalDonorRecord(id, newRecord) {
-        const index = allDonors.findIndex(item => item.id === id);
-        if (index === -1) return;
-        allDonors[index] = attachResolvedFields({
-            ...allDonors[index],
-            ...newRecord
-        });
-    }
-
-    window.startEdit = function(id) {
-        hideDuplicateBox();
-
-        const record = allDonors.find(item => item.id === id);
-        if (!record) return;
-
-        const row = document.getElementById(`row-${id}`);
-        if (!row) {
-            showMessage("Record is not visible in the current table view. Clear filters or expand the month, then edit again.", "error");
-            return;
-        }
-
-        row.innerHTML = `
-            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
-            <td>${buildEditInput(record.mbdDetails || "")}</td>
-            <td>${buildEditCheckbox(isDonorType(record, "WALK-IN"), "WALK-IN")}</td>
-            <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
-            <td>${buildEditInput(record.surname || "")}</td>
-            <td>${buildEditInput(record.firstName || "")}</td>
-            <td>${buildEditInput(record.middleName || "")}</td>
-            <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
-            <td>${buildEditInput(record.age || "", "number")}</td>
-            <td>${buildEditSelect(["MALE", "FEMALE"], record.sex || "")}</td>
-            <td>${buildEditInput(record.contactNumber || "")}</td>
-            <td>${buildEditInput(record.address || "")}</td>
-            <td>${buildEditInput(record.cityProvince || "")}</td>
-            <td>${buildEditInput(record.occupation || "")}</td>
-            <td>${buildEditSelect(["NEW", "REPEAT", "LAPSE"], record.donorCategory || "")}</td>
-            <td>${buildEditInput(resolveDonationCountValue(record.numberOfDonations), "text")}</td>
-            <td>${buildEditSelect(["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"], record.bloodType || "")}</td>
-            <td>${buildEditInput(record.serialNumber || "")}</td>
-            <td>${buildEditSelect(["450 ML", "QNS", "UB"], record.amount || "")}</td>
-            <td>${buildEditSelect(["KARMI", "TERUMO"], record.bloodBagBrand || "")}</td>
-            <td>${buildEditSelect(["SINGLE", "DOUBLE", "TRIPLE", "QUADRUPLE"], record.bloodBagType || "")}</td>
-            <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
-            <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
-            <td>${buildEditInput(record.remarks || "")}</td>
-            <td class="actions-cell">
-                <button class="small-btn save-btn" onclick="saveEdit('${id}')">Save</button>
-                <button class="small-btn cancel-btn" onclick="renderTracking()">Cancel</button>
-            </td>
-        `;
-    };
-
-    window.saveEdit = async function(id) {
-        const row = document.getElementById(`row-${id}`);
-        const fields = row.querySelectorAll("input, select");
-
-        const mbdDetails = fields[1].value.trim();
-        const walkInChecked = fields[2].checked;
-        const patientDirectedDetails = fields[3].value.trim();
-
-        const donorTypes = [];
-        if (mbdDetails) donorTypes.push("MBD");
-        if (walkInChecked) donorTypes.push("WALK-IN");
-        if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
-
-        const updatedData = {
-            entryDate: fields[0].value,
-            mbdDetails: toUpperTrim(mbdDetails),
-            patientDirectedDetails: toUpperTrim(patientDirectedDetails),
-            donorType: donorTypes.join(", "),
-            surname: toUpperTrim(fields[4].value),
-            firstName: toUpperTrim(fields[5].value),
-            middleName: toUpperTrim(fields[6].value),
-            birthday: fields[7].value,
-            age: parseInt(fields[8].value || "0"),
-            sex: fields[9].value,
-            contactNumber: toUpperTrim(fields[10].value),
-            address: toUpperTrim(fields[11].value),
-            cityProvince: toUpperTrim(fields[12].value),
-            occupation: toUpperTrim(fields[13].value),
-            donorCategory: fields[14].value,
-            numberOfDonations: fields[15].value.trim(),
-            bloodType: fields[16].value,
-            serialNumber: toUpperTrim(fields[17].value),
-            amount: fields[18].value,
-            bloodBagBrand: fields[19].value,
-            bloodBagType: fields[20].value,
-            timeStarted: fields[21].value,
-            timeEnded: fields[22].value,
-            remarks: toUpperTrim(fields[23].value)
-        };
-
-        try {
-            await db.collection("donorDatabase").doc(id).update(updatedData);
-
-            backupToGoogleSheets({
-                action: "update",
-                source: "donor-tracking.html",
-                donorId: id,
-                updatedAt: new Date().toISOString(),
-                ...updatedData
-            });
-
-            updateLocalDonorRecord(id, updatedData);
-            renderTracking();
-
-            showMessage("Record updated successfully.", "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to update record: " + error.message, "error");
-        }
-    };
-
-    window.deleteDonor = async function(id) {
-
-        const confirmed = confirm("Delete this donor record?");
-        if (!confirmed) return;
-
-        try {
-            await db.collection("donorDatabase").doc(id).update({
-                isDeleted: true,
-                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                deletedFrom: "donor-tracking.html"
-            });
-
-            const record = allDonors.find(item => item.id === id) || {};
-            backupToGoogleSheets({
-                action: "soft_delete",
-                source: "donor-tracking.html",
-                donorId: id,
-                deletedAt: new Date().toISOString(),
-                ...record,
-                isDeleted: true,
-                deletedFrom: "donor-tracking.html"
-            });
-
-            allDonors = allDonors.filter(item => item.id !== id);
-            filteredDonors = filteredDonors.filter(item => item.id !== id);
-            renderTracking();
-
-            showMessage("Record deleted successfully.", "success");
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to delete record: " + error.message, "error");
-        }
-    };
-
-    window.toggleGroup = function(groupKey, bodyId, iconId) {
-        const body = document.getElementById(bodyId);
-        const icon = document.getElementById(iconId);
-
-        if (!body || !icon) return;
-
-        const willHide = !body.classList.contains("hidden");
-
-        if (willHide) {
-            body.classList.add("hidden");
-            icon.textContent = "+";
-            collapsedGroups[groupKey] = true;
-        } else {
-            body.classList.remove("hidden");
-            icon.textContent = "−";
-            collapsedGroups[groupKey] = false;
-        }
-    };
-
-    window.setHeaderFilter = function(filterKey, value) {
-        headerFilters[filterKey] = value;
-        if (value && ["mbd", "walkIn", "patientDirected"].includes(filterKey)) {
-            ["mbd", "walkIn", "patientDirected"].forEach(key => {
-                if (key !== filterKey) headerFilters[key] = "";
-            });
-        }
-        renderTracking();
-    };
-
     reloadBtn.addEventListener("click", async function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         await loadDonors();
         showMessage("Tracking data reloaded.", "success");
     });
 
     searchInput.addEventListener("input", function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         renderTracking();
     });
 
     groupMonthFilter.addEventListener("change", function() {
         hideDuplicateBox();
+        hideMissingInfoBox();
         renderTracking();
     });
 
@@ -2208,19 +2087,28 @@ async function backupToGoogleSheets(data) {
         renderTracking();
     });
 
+
+    toggleMissingInfoBtn.addEventListener("click", function() {
+        if (!missingInfoBox.classList.contains("show")) return;
+        const shouldCollapse = !missingInfoContent.classList.contains("hidden");
+        setMissingInfoCollapsed(shouldCollapse);
+    });
+
+    saveAllMissingBtn.addEventListener("click", function() {
+        saveAllMissingInfos(currentMissingInfoMonth);
+    });
+
     duplicateDataBtn.addEventListener("click", function() {
+        hideMissingInfoBox();
         renderDuplicateMonthView(printMonthSelect.value);
     });
 
-    document.addEventListener("input", function(event) {
-        if (!event.target.matches(".edit-input[data-uppercase='true']")) return;
-        const start = event.target.selectionStart;
-        const end = event.target.selectionEnd;
-        event.target.value = event.target.value.toUpperCase();
-        if (start !== null && end !== null) {
-            event.target.setSelectionRange(start, end);
-        }
+    topSummaryToggleBtn.addEventListener("click", function() {
+        const shouldCollapse = !topSummaryCollapse.classList.contains("hidden");
+        setTopSummaryCollapsed(shouldCollapse);
     });
+
+    setTopSummaryCollapsed(false);
 
     auth.onAuthStateChanged(user => {
         if (user) {
