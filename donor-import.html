@@ -529,25 +529,6 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
-
-async function backupToGoogleSheets(data) {
-    if (!GOOGLE_SHEETS_BACKUP_URL) return;
-
-    try {
-        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: {
-                "Content-Type": "text/plain;charset=utf-8"
-            },
-            body: JSON.stringify(data)
-        });
-    } catch (err) {
-        console.error("Google Sheets backup failed:", err);
-    }
-}
-
 let previewRows = [];
 let existingRecords = [];
 let existingDonationKeySet = new Set();
@@ -1766,25 +1747,6 @@ async function importSelectedRows() {
             };
 
             await db.collection("donorDatabase").add(donorPayload);
-
-            backupToGoogleSheets({
-                action: "import",
-                batchId,
-                source: "donor-import.html",
-                importedAt: new Date().toISOString(),
-                ...donorPayload,
-                importMeta: {
-                    batchId,
-                    importedFrom: "donor-import.html",
-                    sourceFile: row.sourceFile || "",
-                    sourceSheet: row.sourceSheet || "",
-                    sourceRowNumber: row.sourceRowNumber || "",
-                    inheritedDateUsed: !!row.inheritedDateUsed,
-                    inheritedGroupUsed: !!row.inheritedGroupUsed,
-                    originalImportStatus: row.importStatus || "",
-                    manualReviewed: !!row.manualReviewed
-                }
-            });
 
             committedCount++;
             document.getElementById("importBtn").textContent = `Importing... ${committedCount}/${rowsToImport.length}`;
