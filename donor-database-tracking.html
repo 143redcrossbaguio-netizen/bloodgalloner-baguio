@@ -1793,10 +1793,13 @@
 
             const snapshot = await db.collection("donorDatabase").get();
 
-            allDonors = snapshot.docs.map(doc => attachResolvedFields({
-                id: doc.id,
-                ...doc.data()
-            }));
+            allDonors = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+                .filter(record => record.isDeleted !== true)
+                .map(record => attachResolvedFields(record));
 
             allDonors.sort((a, b) => {
                 const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
@@ -1918,7 +1921,11 @@
         if (!confirmed) return;
 
         try {
-            await db.collection("donorDatabase").doc(id).delete();
+            await db.collection("donorDatabase").doc(id).update({
+                isDeleted: true,
+                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                deletedFrom: "donor-tracking.html"
+            });
             showMessage("Record deleted successfully.", "success");
             await loadDonors();
         } catch (error) {
