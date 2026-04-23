@@ -812,6 +812,9 @@ async function loadExistingRecords() {
 
     snap.forEach(doc => {
         const data = doc.data() || {};
+
+        if (data.isDeleted === true) return;
+
         const record = {
             id: doc.id,
             surname: data.surname || "",
@@ -1525,8 +1528,12 @@ async function loadImportHistory() {
                     <div><b>Files:</b> ${files.length ? escapeHtml(files.join(", ")) : "-"}</div>
                     <div><b>Created:</b> ${escapeHtml(formatTimestamp(batch.createdAt))}</div>
                     <div><b>Created By:</b> ${escapeHtml(batch.createdByEmail || "Unknown")}</div>
+                    <div><b>Status:</b> ${escapeHtml(batch.status || "active")}</div>
                     <div class="batch-actions">
-                        <button class="btn-danger" onclick="retractBatch('${batch.id}')">Retract This Upload</button>
+                        ${batch.status === "retracted"
+                            ? `<button class="btn-green" onclick="restoreBatch('${batch.id}')">Restore This Upload</button>`
+                            : `<button class="btn-danger" onclick="retractBatch('${batch.id}')">Retract This Upload</button>`
+                        }
                     </div>
                 </div>
             `;
@@ -1720,6 +1727,11 @@ async function importSelectedRows() {
                 donationStrongKey: row._strongKey,
                 donationLooseKey: row._looseKey,
 
+                isDeleted: false,
+                deletedAt: null,
+                deletedBatchId: "",
+                restoredAt: null,
+
                 importMeta: {
                     batchId,
                     importedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1793,13 +1805,13 @@ async function retractBatch(batchId) {
     if (!batchId) return;
 
     const ok = confirm(
-        `Are you sure you want to retract batch ${batchId}?\n\nThis will delete the imported donor records and remove the batch history record too.`
+        `Are you sure you want to retract batch ${batchId}?\n\nThis will mark the imported donor records as deleted, but they can still be restored later.`
     );
     if (!ok) return;
 
     try {
         const batchDocRef = db.collection("donorImportBatches").doc(batchId);
-        let deletedCount = 0;
+        let affectedCount = 0;
 
         while (true) {
             const snap = await db.collection("donorDatabase")
@@ -1810,23 +1822,99 @@ async function retractBatch(batchId) {
             if (snap.empty) break;
 
             const batch = db.batch();
+            let loopCount = 0;
+
             snap.forEach(doc => {
-                batch.delete(doc.ref);
-                deletedCount++;
+                const data = doc.data() || {};
+                if (data.isDeleted === true) return;
+
+                batch.update(doc.ref, {
+                    isDeleted: true,
+                    deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    deletedBatchId: batchId
+                });
+                affectedCount++;
+                loopCount++;
             });
+
+            if (loopCount === 0) break;
+
             await batch.commit();
             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        await batchDocRef.delete();
+        await batchDocRef.set({
+            status: "retracted",
+            retractedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            retractedRowCount: affectedCount
+        }, { merge: true });
 
-        alert(`Batch retracted successfully. Deleted ${deletedCount} imported donor record(s), and removed the batch history record.`);
+        alert(`Batch retracted successfully. ${affectedCount} donor record(s) were marked deleted and can be restored later.`);
         await loadExistingRecords();
         await loadImportHistory();
 
     } catch (error) {
         console.error("Retract failed:", error);
         alert("Retract failed: " + error.message);
+    }
+}
+
+async function restoreBatch(batchId) {
+    if (!batchId) return;
+
+    const ok = confirm(
+        `Restore batch ${batchId}?\n\nThis will bring back donor records previously retracted from this batch.`
+    );
+    if (!ok) return;
+
+    try {
+        const batchDocRef = db.collection("donorImportBatches").doc(batchId);
+        let restoredCount = 0;
+
+        while (true) {
+            const snap = await db.collection("donorDatabase")
+                .where("importMeta.batchId", "==", batchId)
+                .limit(300)
+                .get();
+
+            if (snap.empty) break;
+
+            const batch = db.batch();
+            let loopCount = 0;
+
+            snap.forEach(doc => {
+                const data = doc.data() || {};
+                if (data.isDeleted !== true) return;
+
+                batch.update(doc.ref, {
+                    isDeleted: false,
+                    deletedAt: null,
+                    deletedBatchId: "",
+                    restoredAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                restoredCount++;
+                loopCount++;
+            });
+
+            if (loopCount === 0) break;
+
+            await batch.commit();
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        await batchDocRef.set({
+            status: "active",
+            restoredAt: firebase.firestore.FieldValue.serverTimestamp(),
+            restoredRowCount: restoredCount
+        }, { merge: true });
+
+        alert(`Batch restored successfully. Restored ${restoredCount} donor record(s).`);
+        await loadExistingRecords();
+        await loadImportHistory();
+
+    } catch (error) {
+        console.error("Restore failed:", error);
+        alert("Restore failed: " + error.message);
     }
 }
 
@@ -2014,6 +2102,7 @@ document.getElementById("clearHistoryBtn").addEventListener("click", () => {
 });
 
 window.retractBatch = retractBatch;
+window.restoreBatch = restoreBatch;
 window.setPreviewFilter = setPreviewFilter;
 window.removePreviewRow = removePreviewRow;
 window.restorePreviewRow = restorePreviewRow;
