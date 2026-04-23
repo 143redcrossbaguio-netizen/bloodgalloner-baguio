@@ -554,6 +554,7 @@ async function backupToGoogleSheets(data) {
     let allDonors = [];
     let filteredDonors = [];
     let collapsedGroups = { __initialized: false };
+    let hasManualGroupInteraction = false;
     let currentDonationTotals = {};
     let sequenceMap = {};
     let headerFilters = {
@@ -977,7 +978,11 @@ async function backupToGoogleSheets(data) {
         return collapsedGroups[key] !== false;
     }
 
-    function initializeCollapsedGroups(records) {
+    function initializeCollapsedGroups(records, forceReset = false) {
+        if (forceReset) {
+            collapsedGroups = { __initialized: false };
+        }
+
         if (collapsedGroups.__initialized) return;
 
         const grouped = groupDonors(records);
@@ -1255,7 +1260,12 @@ async function backupToGoogleSheets(data) {
 
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
         sequenceMap = computeSequenceMap(filteredDonors);
-        initializeCollapsedGroups(allDonors);
+
+        if (!hasManualGroupInteraction) {
+            initializeCollapsedGroups(allDonors, true);
+        } else {
+            initializeCollapsedGroups(allDonors);
+        }
 
         populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
         populateGroupMonthOptions(allDonors);
@@ -1845,8 +1855,8 @@ async function backupToGoogleSheets(data) {
                 return (a.serialNumber || "").localeCompare(b.serialNumber || "", undefined, { numeric: true, sensitivity: "base" });
             });
 
-            collapsedGroups = { __initialized: false };
-            initializeCollapsedGroups(allDonors);
+            hasManualGroupInteraction = false;
+            initializeCollapsedGroups(allDonors, true);
             populateGroupMonthOptions(allDonors);
             renderTracking();
 
@@ -2001,6 +2011,7 @@ async function backupToGoogleSheets(data) {
 
         if (!body || !icon) return;
 
+        hasManualGroupInteraction = true;
         const willHide = !body.classList.contains("hidden");
 
         if (willHide) {
