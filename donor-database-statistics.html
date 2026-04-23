@@ -576,39 +576,81 @@ function normalizeDonorType(v){
 }
 
 function normalizeBloodType(v){
+  if (v == null) return "Unknown";
+
+  if (typeof v === "object") {
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        const normalized = normalizeBloodType(item);
+        if (normalized !== "Unknown") return normalized;
+      }
+      return "Unknown";
+    }
+
+    const preferredKeys = [
+      "bloodType","bloodtype","blood_type","bloodGroup","blood_group","aboRh","abo_rh","abo","rh",
+      "bloodTypeResult","bloodTypingResult","finalBloodType","labBloodType","extractedBloodType"
+    ];
+
+    for (const key of preferredKeys) {
+      if (Object.prototype.hasOwnProperty.call(v, key)) {
+        const normalized = normalizeBloodType(v[key]);
+        if (normalized !== "Unknown") return normalized;
+      }
+    }
+
+    for (const value of Object.values(v)) {
+      const normalized = normalizeBloodType(value);
+      if (normalized !== "Unknown") return normalized;
+    }
+    return "Unknown";
+  }
+
   let s = String(v || "").toUpperCase().trim();
   if (!s) return "Unknown";
 
+  s = s.replace(/[\[\]{}()]/g, " ");
+  s = s.replace(/[,:;|]/g, " ");
   s = s.replace(/\./g, " ");
   s = s.replace(/_/g, " ");
   s = s.replace(/\s+/g, " ");
   s = s.replace(/TYPE\s*/g, "");
-  s = s.replace(/GROUP\s*/g, "");
+  s = s.replace(/BLOOD\s*TYPE\s*/g, "");
+  s = s.replace(/BLOOD\s*GROUP\s*/g, "");
   s = s.replace(/BLOOD\s*/g, "");
-  s = s.replace(/R\/H|RH FACTOR|RH TYPE|RH/g, "");
-  s = s.replace(/POSITIVE|\bPOS\b|\bPOSITIVE\b/g, "+");
-  s = s.replace(/NEGATIVE|\bNEG\b|\bNEGATIVE\b/g, "-");
+  s = s.replace(/GROUP\s*/g, "");
+  s = s.replace(/R\/H|RH FACTOR|RH TYPE|RH/g, " ");
+  s = s.replace(/POSITIVE|\bPOS\b/g, "+");
+  s = s.replace(/NEGATIVE|\bNEG\b/g, "-");
   s = s.replace(/PLUS/g, "+");
   s = s.replace(/MINUS/g, "-");
   s = s.replace(/\s+/g, "").trim();
 
   const patterns = [
-    { re: /^AB\+/, value: "AB+" },
-    { re: /^AB\-/, value: "AB-" },
-    { re: /^A\+/, value: "A+" },
-    { re: /^A\-/, value: "A-" },
-    { re: /^B\+/, value: "B+" },
-    { re: /^B\-/, value: "B-" },
-    { re: /^O\+/, value: "O+" },
-    { re: /^O\-/, value: "O-" },
-    { re: /^ABPOS/, value: "AB+" },
-    { re: /^ABNEG/, value: "AB-" },
-    { re: /^APOS/, value: "A+" },
-    { re: /^ANEG/, value: "A-" },
-    { re: /^BPOS/, value: "B+" },
-    { re: /^BNEG/, value: "B-" },
-    { re: /^OPOS/, value: "O+" },
-    { re: /^ONEG/, value: "O-" },
+    { re: /^AB\+$/, value: "AB+" },
+    { re: /^AB\-$/, value: "AB-" },
+    { re: /^A\+$/, value: "A+" },
+    { re: /^A\-$/, value: "A-" },
+    { re: /^B\+$/, value: "B+" },
+    { re: /^B\-$/, value: "B-" },
+    { re: /^O\+$/, value: "O+" },
+    { re: /^O\-$/, value: "O-" },
+    { re: /^ABPOS$/, value: "AB+" },
+    { re: /^ABNEG$/, value: "AB-" },
+    { re: /^APOS$/, value: "A+" },
+    { re: /^ANEG$/, value: "A-" },
+    { re: /^BPOS$/, value: "B+" },
+    { re: /^BNEG$/, value: "B-" },
+    { re: /^OPOS$/, value: "O+" },
+    { re: /^ONEG$/, value: "O-" },
+    { re: /^ABPOSITIVE$/, value: "AB+" },
+    { re: /^ABNEGATIVE$/, value: "AB-" },
+    { re: /^APOSITIVE$/, value: "A+" },
+    { re: /^ANEGATIVE$/, value: "A-" },
+    { re: /^BPOSITIVE$/, value: "B+" },
+    { re: /^BNEGATIVE$/, value: "B-" },
+    { re: /^OPOSITIVE$/, value: "O+" },
+    { re: /^ONEGATIVE$/, value: "O-" },
     { re: /^AB$/, value: "AB+" },
     { re: /^A$/, value: "A+" },
     { re: /^B$/, value: "B+" },
@@ -617,6 +659,59 @@ function normalizeBloodType(v){
 
   for (const item of patterns) {
     if (item.re.test(s)) return item.value;
+  }
+
+  const compact = s.replace(/[^ABO\+\-]/g, "");
+  if (["O+","O-","A+","A-","B+","B-","AB+","AB-"].includes(compact)) return compact;
+
+  const orderedTests = [
+    [/(^|[^A-Z])AB\+/, "AB+"],
+    [/(^|[^A-Z])AB\-/, "AB-"],
+    [/(^|[^A-Z])A\+/, "A+"],
+    [/(^|[^A-Z])A\-/, "A-"],
+    [/(^|[^A-Z])B\+/, "B+"],
+    [/(^|[^A-Z])B\-/, "B-"],
+    [/(^|[^A-Z])O\+/, "O+"],
+    [/(^|[^A-Z])O\-/, "O-"]
+  ];
+
+  for (const [re, value] of orderedTests) {
+    if (re.test(s)) return value;
+  }
+
+  return "Unknown";
+}
+
+function getNestedBloodTypeValue(value, visited = new Set()){
+  if (value == null) return "Unknown";
+  if (typeof value !== "object") return normalizeBloodType(value);
+  if (visited.has(value)) return "Unknown";
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = getNestedBloodTypeValue(item, visited);
+      if (normalized !== "Unknown") return normalized;
+    }
+    return "Unknown";
+  }
+
+  const exactPriority = [
+    "bloodType","bloodtype","blood_type","bloodGroup","blood_group","aboRh","abo_rh","abo","rh",
+    "bloodTypeResult","bloodTypingResult","finalBloodType","labBloodType","extractedBloodType"
+  ];
+
+  for (const key of exactPriority) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      const normalized = getNestedBloodTypeValue(value[key], visited);
+      if (normalized !== "Unknown") return normalized;
+    }
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (!/blood|abo|rh/i.test(key)) continue;
+    const normalized = getNestedBloodTypeValue(child, visited);
+    if (normalized !== "Unknown") return normalized;
   }
 
   return "Unknown";
@@ -631,7 +726,6 @@ function getBloodTypeValue(r){
     r.abo_rh,
     r.bloodGroup,
     r.blood_group,
-    r.group,
     r.abo,
     r.aboRhType,
     r.aboRhResult,
@@ -647,13 +741,13 @@ function getBloodTypeValue(r){
   ];
 
   for (const value of candidates) {
-    const normalized = normalizeBloodType(value);
+    const normalized = getNestedBloodTypeValue(value);
     if (normalized !== "Unknown") return normalized;
   }
 
   for (const [key, value] of Object.entries(r || {})) {
-    if (!/blood|abo|group|rh/i.test(key)) continue;
-    const normalized = normalizeBloodType(value);
+    if (!/blood|abo|rh/i.test(key)) continue;
+    const normalized = getNestedBloodTypeValue(value);
     if (normalized !== "Unknown") return normalized;
   }
 
