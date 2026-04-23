@@ -529,6 +529,25 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycby4eA5kzslPQZavsA5TxOB3DjKZOZm4ZtNlbijW7KcCGBnM_SpMDne3t-tdb_d8GSm-/exec";
+
+async function backupToGoogleSheets(data) {
+    if (!GOOGLE_SHEETS_BACKUP_URL) return;
+
+    try {
+        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify(data)
+        });
+    } catch (err) {
+        console.error("Google Sheets backup failed:", err);
+    }
+}
+
 let previewRows = [];
 let existingRecords = [];
 let existingDonationKeySet = new Set();
@@ -1695,7 +1714,7 @@ async function importSelectedRows() {
             const row = rowsToImport[i];
             syncRowComputedFields(row);
 
-            await db.collection("donorDatabase").add({
+            const donorPayload = {
                 mbdDetails: row.mbdDetails || "",
                 patientDirectedDetails: row.patientDirectedDetails || "",
                 donorType: row.donorType || "",
@@ -1735,6 +1754,27 @@ async function importSelectedRows() {
                 importMeta: {
                     batchId,
                     importedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    importedFrom: "donor-import.html",
+                    sourceFile: row.sourceFile || "",
+                    sourceSheet: row.sourceSheet || "",
+                    sourceRowNumber: row.sourceRowNumber || "",
+                    inheritedDateUsed: !!row.inheritedDateUsed,
+                    inheritedGroupUsed: !!row.inheritedGroupUsed,
+                    originalImportStatus: row.importStatus || "",
+                    manualReviewed: !!row.manualReviewed
+                }
+            };
+
+            await db.collection("donorDatabase").add(donorPayload);
+
+            backupToGoogleSheets({
+                action: "import",
+                batchId,
+                source: "donor-import.html",
+                importedAt: new Date().toISOString(),
+                ...donorPayload,
+                importMeta: {
+                    batchId,
                     importedFrom: "donor-import.html",
                     sourceFile: row.sourceFile || "",
                     sourceSheet: row.sourceSheet || "",
