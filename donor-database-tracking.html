@@ -209,7 +209,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            cursor: default;
+            cursor: pointer;
             user-select: none;
             font-weight: bold;
         }
@@ -232,10 +232,6 @@
         .toggle-icon {
             font-size: 18px;
             font-weight: bold;
-            cursor: pointer;
-            padding: 2px 8px;
-            border-radius: 6px;
-            user-select: none;
         }
 
         .group-body.hidden {
@@ -370,6 +366,22 @@
             border: 1px solid #bbb;
             border-radius: 5px;
             font-size: 12px;
+        }
+
+        .edit-checkbox-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 96px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .edit-checkbox {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
         }
 
         .empty-box {
@@ -553,8 +565,7 @@ async function backupToGoogleSheets(data) {
 
     let allDonors = [];
     let filteredDonors = [];
-    let collapsedGroups = { __initialized: false };
-    let hasManualGroupInteraction = false;
+    let collapsedGroups = {};
     let currentDonationTotals = {};
     let sequenceMap = {};
     let headerFilters = {
@@ -642,24 +653,48 @@ async function backupToGoogleSheets(data) {
         return [resolveSuffix(record), String(record.surname || "").trim()].filter(Boolean).join(" ").trim();
     }
 
-    function resolveDonorType(record) {
-        const rawType = normalizeMatchValue(record?.donorType);
+    function getDonorTypes(record) {
+        const rawType = String(record?.donorType || "").trim();
+        const values = [];
+        const seen = new Set();
 
-        if (rawType === normalizeMatchValue("MBD")) return "MBD";
-        if (rawType === normalizeMatchValue("WALK-IN")) return "WALK-IN";
-        if (rawType === normalizeMatchValue("PATIENT DIRECTED")) return "PATIENT DIRECTED";
+        rawType.split(/[,|/]+/).forEach(part => {
+            const normalized = normalizeMatchValue(part);
+            if (normalized === normalizeMatchValue("MBD") && !seen.has("MBD")) {
+                seen.add("MBD");
+                values.push("MBD");
+            }
+            if (normalized === normalizeMatchValue("WALK-IN") && !seen.has("WALK-IN")) {
+                seen.add("WALK-IN");
+                values.push("WALK-IN");
+            }
+            if (normalized === normalizeMatchValue("PATIENT DIRECTED") && !seen.has("PATIENT DIRECTED")) {
+                seen.add("PATIENT DIRECTED");
+                values.push("PATIENT DIRECTED");
+            }
+        });
 
         const mbdDetails = String(record?.mbdDetails || "").trim();
         const patientDirectedDetails = String(record?.patientDirectedDetails || "").trim();
 
-        if (mbdDetails) return "MBD";
-        if (patientDirectedDetails) return "PATIENT DIRECTED";
+        if (mbdDetails && !seen.has("MBD")) {
+            seen.add("MBD");
+            values.push("MBD");
+        }
+        if (patientDirectedDetails && !seen.has("PATIENT DIRECTED")) {
+            seen.add("PATIENT DIRECTED");
+            values.push("PATIENT DIRECTED");
+        }
 
-        return "";
+        return values;
+    }
+
+    function resolveDonorType(record) {
+        return getDonorTypes(record).join(", ");
     }
 
     function isDonorType(record, type) {
-        return normalizeMatchValue(resolveDonorType(record)) === normalizeMatchValue(type);
+        return getDonorTypes(record).includes(type);
     }
 
     function isDonorCategory(record, category) {
@@ -876,16 +911,17 @@ async function backupToGoogleSheets(data) {
     }
 
     function getGroupLabel(record) {
+        const labels = [];
         if (isDonorType(record, "MBD")) {
-            return toUpperTrim(record.mbdDetails || "MBD");
+            labels.push(toUpperTrim(record.mbdDetails || "MBD"));
         }
         if (isDonorType(record, "WALK-IN")) {
-            return "WALK-IN";
+            labels.push("WALK-IN");
         }
         if (isDonorType(record, "PATIENT DIRECTED")) {
-            return toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
+            labels.push(toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED");
         }
-        return "";
+        return labels.filter(Boolean).join(" | ");
     }
 
     function matchesUnifiedSearch(record, keyword) {
@@ -978,24 +1014,6 @@ async function backupToGoogleSheets(data) {
         return collapsedGroups[key] !== false;
     }
 
-    function initializeCollapsedGroups(records, forceReset = false) {
-        if (forceReset) {
-            collapsedGroups = { __initialized: false };
-        }
-
-        if (collapsedGroups.__initialized) return;
-
-        const grouped = groupDonors(records);
-        Object.keys(grouped).forEach(year => {
-            collapsedGroups[getGroupKey("year", year)] = true;
-            Object.keys(grouped[year]).forEach(month => {
-                collapsedGroups[getGroupKey("month", year, month)] = true;
-            });
-        });
-
-        collapsedGroups.__initialized = true;
-    }
-
     function countType(records, type) {
         return records.filter(r => isDonorType(r, type)).length;
     }
@@ -1032,49 +1050,54 @@ async function backupToGoogleSheets(data) {
 
         records.forEach(record => {
             const date = record._resolvedEntryDate || "";
-            const donorType = normalizeMatchValue(resolveDonorType(record));
-            let typeGroupKey = `${date}|${donorType}`;
+            const donorTypes = getDonorTypes(record);
 
-            if (donorType === normalizeMatchValue("MBD")) {
-                typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
-            } else if (donorType === normalizeMatchValue("PATIENT DIRECTED")) {
-                typeGroupKey += `|patient-directed`;
-            } else if (donorType === normalizeMatchValue("WALK-IN")) {
-                typeGroupKey += `|walk-in`;
-            }
+            donorTypes.forEach(type => {
+                let typeGroupKey = `${date}|${type}`;
 
-            if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
-            grouped[typeGroupKey].push(record);
+                if (type === "MBD") {
+                    typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
+                } else if (type === "PATIENT DIRECTED") {
+                    typeGroupKey += `|${normalizeText(record.patientDirectedDetails || "")}`;
+                } else if (type === "WALK-IN") {
+                    typeGroupKey += `|walk-in`;
+                }
+
+                if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
+                grouped[typeGroupKey].push({ record, type });
+            });
         });
 
         Object.keys(grouped).forEach(groupKey => {
             grouped[groupKey].sort((a, b) => {
-                const serialA = a.serialNumber || "";
-                const serialB = b.serialNumber || "";
+                const serialA = a.record.serialNumber || "";
+                const serialB = b.record.serialNumber || "";
                 return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
             });
 
-            grouped[groupKey].forEach((record, index) => {
-                map[record.id] = index + 1;
+            grouped[groupKey].forEach((item, index) => {
+                if (!map[item.record.id]) map[item.record.id] = {};
+                map[item.record.id][item.type] = index + 1;
             });
         });
 
         return map;
     }
 
-    function getCategoryDisplay(record) {
-        const seq = sequenceMap[record.id] || "";
+    function getCategoryDisplay(record, type) {
+        const typeMap = sequenceMap[record.id] || {};
+        const seq = typeMap[type] || "";
         if (!seq) return "";
 
-        if (isDonorType(record, "WALK-IN")) {
+        if (type === "WALK-IN") {
             return `WALK-IN-${seq}`;
         }
 
-        if (isDonorType(record, "MBD")) {
+        if (type === "MBD") {
             return `${toUpperTrim(record.mbdDetails || "MBD")}-${seq}`;
         }
 
-        if (isDonorType(record, "PATIENT DIRECTED")) {
+        if (type === "PATIENT DIRECTED") {
             const patientName = toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
             return `${patientName}-${seq}`;
         }
@@ -1083,6 +1106,7 @@ async function backupToGoogleSheets(data) {
     }
 
     function groupDonors(records) {
+
         const grouped = {};
 
         records.forEach(record => {
@@ -1261,12 +1285,6 @@ async function backupToGoogleSheets(data) {
         currentDonationTotals = computeCurrentDonationTotals(allDonors);
         sequenceMap = computeSequenceMap(filteredDonors);
 
-        if (!hasManualGroupInteraction) {
-            initializeCollapsedGroups(allDonors, true);
-        } else {
-            initializeCollapsedGroups(allDonors);
-        }
-
         populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
         populateGroupMonthOptions(allDonors);
 
@@ -1292,9 +1310,9 @@ async function backupToGoogleSheets(data) {
 
             html += `
                 <div class="year-group">
-                    <div class="year-header">
+                    <div class="year-header" onclick="toggleGroup('${yearKey}', 'year-body-${yearIndex}', 'year-icon-${yearIndex}')">
                         <span>${escapeHtml(year)}</span>
-                        <span id="year-icon-${yearIndex}" class="toggle-icon" onclick="toggleGroup('${yearKey}', 'year-body-${yearIndex}', 'year-icon-${yearIndex}'); event.stopPropagation();">${yearCollapsed ? "+" : "−"}</span>
+                        <span id="year-icon-${yearIndex}" class="toggle-icon">${yearCollapsed ? "+" : "−"}</span>
                     </div>
 
                     <div id="year-body-${yearIndex}" class="group-body ${yearCollapsed ? "hidden" : ""}">
@@ -1314,28 +1332,28 @@ async function backupToGoogleSheets(data) {
 
                 html += `
                     <div class="month-group">
-                        <div class="month-header">
+                        <div class="month-header" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
                             <span>${escapeHtml(monthBlock.monthName)} (${realEntriesCount})</span>
-                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}'); event.stopPropagation();">${monthCollapsed ? "+" : "−"}</span>
-                        </div>
-
-                        <div class="month-tools">
-                            <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
-                            <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
-                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
-                        </div>
-
-                        <div class="subtotal-bar">
-                            <span>Entries: ${realEntriesCount}</span>
-                            <span>MBD: ${mbdCount}</span>
-                            <span>Walk-in: ${walkInCount}</span>
-                            <span>Patient-Directed: ${patientDirectedCount}</span>
-                            <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
-                            <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
-                            <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
+                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
                         </div>
 
                         <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
+                            <div class="month-tools">
+                                <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
+                                <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
+                                <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
+                            </div>
+
+                            <div class="subtotal-bar">
+                                <span>Entries: ${realEntriesCount}</span>
+                                <span>MBD: ${mbdCount}</span>
+                                <span>Walk-in: ${walkInCount}</span>
+                                <span>Patient-Directed: ${patientDirectedCount}</span>
+                                <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
+                                <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
+                                <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
+                            </div>
+
                             <div class="table-wrap">
                                 <table>
                                     <thead>
@@ -1398,9 +1416,9 @@ async function backupToGoogleSheets(data) {
                     html += `
                         <tr id="row-${record.id}">
                             <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
+                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
                             <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
                             <td>${escapeUpperHtml(record.firstName)}</td>
                             <td>${escapeUpperHtml(record.middleName)}</td>
@@ -1517,9 +1535,9 @@ async function backupToGoogleSheets(data) {
             return `
                 <tr>
                     <td class="col-entry-date">${escapeHtml(formatPrintDate(record._resolvedEntryDate))}</td>
-                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
+                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record, "MBD") : "")}</td>
+                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record, "WALK-IN") : "")}</td>
+                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record, "PATIENT DIRECTED") : "")}</td>
                     <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
                     <td class="col-given print-no-wrap">${escapeUpperHtml(record.firstName)}</td>
                     <td class="col-middle">${escapeUpperHtml(record.middleName)}</td>
@@ -1855,8 +1873,6 @@ async function backupToGoogleSheets(data) {
                 return (a.serialNumber || "").localeCompare(b.serialNumber || "", undefined, { numeric: true, sensitivity: "base" });
             });
 
-            hasManualGroupInteraction = false;
-            initializeCollapsedGroups(allDonors, true);
             populateGroupMonthOptions(allDonors);
             renderTracking();
 
@@ -1870,6 +1886,25 @@ async function backupToGoogleSheets(data) {
             trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
             showMessage("Failed to load donor records: " + error.message, "error");
         }
+    }
+
+
+    function buildEditCheckbox(checked, labelText) {
+        return `
+            <label class="edit-checkbox-label">
+                <input type="checkbox" class="edit-checkbox" ${checked ? "checked" : ""}>
+                <span>${escapeHtml(labelText)}</span>
+            </label>
+        `;
+    }
+
+    function updateLocalDonorRecord(id, newRecord) {
+        const index = allDonors.findIndex(item => item.id === id);
+        if (index === -1) return;
+        allDonors[index] = attachResolvedFields({
+            ...allDonors[index],
+            ...newRecord
+        });
     }
 
     window.startEdit = function(id) {
@@ -1887,7 +1922,7 @@ async function backupToGoogleSheets(data) {
         row.innerHTML = `
             <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
             <td>${buildEditInput(record.mbdDetails || "")}</td>
-            <td>${buildEditSelect(["", "WALK-IN"], isDonorType(record, "WALK-IN") ? "WALK-IN" : "")}</td>
+            <td>${buildEditCheckbox(isDonorType(record, "WALK-IN"), "WALK-IN")}</td>
             <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
             <td>${buildEditInput(record.surname || "")}</td>
             <td>${buildEditInput(record.firstName || "")}</td>
@@ -1921,19 +1956,19 @@ async function backupToGoogleSheets(data) {
         const fields = row.querySelectorAll("input, select");
 
         const mbdDetails = fields[1].value.trim();
-        const walkInValue = fields[2].value;
+        const walkInChecked = fields[2].checked;
         const patientDirectedDetails = fields[3].value.trim();
 
-        let donorType = "";
-        if (mbdDetails) donorType = "MBD";
-        else if (patientDirectedDetails) donorType = "PATIENT DIRECTED";
-        else if (normalizeMatchValue(walkInValue) === normalizeMatchValue("WALK-IN")) donorType = "WALK-IN";
+        const donorTypes = [];
+        if (mbdDetails) donorTypes.push("MBD");
+        if (walkInChecked) donorTypes.push("WALK-IN");
+        if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
 
         const updatedData = {
             entryDate: fields[0].value,
             mbdDetails: toUpperTrim(mbdDetails),
             patientDirectedDetails: toUpperTrim(patientDirectedDetails),
-            donorType: donorType,
+            donorType: donorTypes.join(", "),
             surname: toUpperTrim(fields[4].value),
             firstName: toUpperTrim(fields[5].value),
             middleName: toUpperTrim(fields[6].value),
@@ -1967,8 +2002,10 @@ async function backupToGoogleSheets(data) {
                 ...updatedData
             });
 
+            updateLocalDonorRecord(id, updatedData);
+            renderTracking();
+
             showMessage("Record updated successfully.", "success");
-            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to update record: " + error.message, "error");
@@ -1976,6 +2013,7 @@ async function backupToGoogleSheets(data) {
     };
 
     window.deleteDonor = async function(id) {
+
         const confirmed = confirm("Delete this donor record?");
         if (!confirmed) return;
 
@@ -1997,8 +2035,11 @@ async function backupToGoogleSheets(data) {
                 deletedFrom: "donor-tracking.html"
             });
 
+            allDonors = allDonors.filter(item => item.id !== id);
+            filteredDonors = filteredDonors.filter(item => item.id !== id);
+            renderTracking();
+
             showMessage("Record deleted successfully.", "success");
-            await loadDonors();
         } catch (error) {
             console.error(error);
             showMessage("Failed to delete record: " + error.message, "error");
@@ -2011,7 +2052,6 @@ async function backupToGoogleSheets(data) {
 
         if (!body || !icon) return;
 
-        hasManualGroupInteraction = true;
         const willHide = !body.classList.contains("hidden");
 
         if (willHide) {
