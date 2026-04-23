@@ -1,61 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Donor Database Statistics</title>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
   <style>
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:Arial,sans-serif; background:#f3f4f6; color:#1f2937; }
-    header { background:linear-gradient(135deg,#b30000,#8b0000); color:#fff; text-align:center; padding:20px; font-size:24px; font-weight:700; }
-    .page { width:min(1450px,96%); margin:18px auto; }
-    .card { background:#fff; border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,.08); padding:16px; margin-bottom:16px; }
-    .toolbar { display:grid; grid-template-columns:1fr 1fr 1fr auto auto auto; gap:12px; align-items:end; }
-    .field label { display:block; margin-bottom:6px; font-size:13px; color:#6b7280; font-weight:700; }
-    .field input,.field select { width:100%; padding:10px 12px; border:1px solid #d6dde6; border-radius:10px; font-size:14px; }
-    button { border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-    .btn-red{background:#b30000;color:#fff}
-    .btn-blue{background:#2563eb;color:#fff}
-    .btn-green{background:#15803d;color:#fff}
-    .btn-gray{background:#374151;color:#fff}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,sans-serif;background:#f3f4f6;color:#1f2937}
+    header{background:linear-gradient(135deg,#b30000,#8b0000);color:#fff;text-align:center;padding:20px;font-size:24px;font-weight:700}
+    .page{width:min(1450px,96%);margin:18px auto}
+    .card{background:#fff;border-radius:14px;box-shadow:0 8px 20px rgba(0,0,0,.08);padding:16px;margin-bottom:16px}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr 1fr auto auto auto;gap:12px;align-items:end}
+    .field label{display:block;margin-bottom:6px;font-size:13px;color:#6b7280;font-weight:700}
+    .field input,.field select{width:100%;padding:10px 12px;border:1px solid #d6dde6;border-radius:10px;font-size:14px}
+    button{border:none;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+    .btn-red{background:#b30000;color:#fff}.btn-blue{background:#2563eb;color:#fff}
+    .btn-green{background:#15803d;color:#fff}.btn-gray{background:#374151;color:#fff}
     .status{padding:12px 14px;border-radius:12px;font-weight:700;margin-bottom:12px}
-    .info{background:#eff6ff;color:#1d4ed8}
-    .ok{background:#ecfdf5;color:#15803d}
-    .error{background:#fef2f2;color:#b91c1c}
+    .info{background:#eff6ff;color:#1d4ed8}.ok{background:#ecfdf5;color:#15803d}
+    .warn{background:#fff7ed;color:#92400e}.error{background:#fef2f2;color:#b91c1c}
+    .debug-bar{background:#1e1b4b;color:#a5b4fc;border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:12px;font-family:monospace;line-height:1.7;display:none}
+    .debug-bar.show{display:block}
+    /* summary */
     .summary-grid{display:block}
     .summary-year-block{border:1px solid #d6dde6;border-radius:12px;overflow:hidden;background:#fff;margin-bottom:14px}
     .summary-year-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;font-weight:700;background:linear-gradient(90deg,#fdf2f8,#fff1f2);color:#8b0000}
-    .summary-year-content{display:none}
-    .summary-year-content.open{display:block}
+    .summary-year-content{display:none}.summary-year-content.open{display:block}
     .summary-year-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px}
     .summary-box{border:1px solid #d6dde6;border-radius:12px;padding:14px}
-    .summary-box .label{font-size:13px;color:#6b7280;font-weight:700;margin-bottom:8px}
-    .summary-box .value{font-size:28px;font-weight:800;color:#b30000}
+    .summary-box .lbl{font-size:13px;color:#6b7280;font-weight:700;margin-bottom:8px}
+    .summary-box .val{font-size:28px;font-weight:800;color:#b30000}
     .summary-box .sub{font-size:12px;color:#6b7280;margin-top:6px;font-weight:700}
-    .daily-dropdown-wrap{margin-top:10px}
-    .daily-dropdown-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #d6dde6;border-radius:10px;background:#f8fafc;color:#8b0000;font-size:12px;font-weight:800;cursor:pointer;border:1px solid #d6dde6}
-    .daily-dropdown-btn:hover{background:#fff1f2}
-    .daily-dropdown-content{display:none;margin-top:8px;border:1px solid #d6dde6;border-radius:10px;background:#fff;overflow:hidden}
-    .daily-dropdown-content.open{display:block}
-    .daily-dropdown-list{max-height:220px;overflow:auto}
-    .daily-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #eef2f7;font-size:12px;font-weight:700;color:#4b5563}
+    /* daily dropdown */
+    .daily-wrap{margin-top:10px}
+    .daily-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #d6dde6;border-radius:10px;background:#f8fafc;color:#8b0000;font-size:12px;font-weight:800;cursor:pointer}
+    .daily-btn:hover{background:#fff1f2}
+    .daily-content{display:none;margin-top:8px;border:1px solid #d6dde6;border-radius:10px;background:#fff;overflow:hidden}
+    .daily-content.open{display:block}
+    .daily-list{max-height:220px;overflow:auto}
+    .daily-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #eef2f7;font-size:12px;font-weight:700;color:#4b5563}
     .daily-row:last-child{border-bottom:none}
-    .daily-row-date{text-align:left}
-    .daily-row-count{min-width:28px;text-align:center;padding:4px 8px;border-radius:999px;background:#b30000;color:#fff;font-size:11px;font-weight:800}
-    .daily-empty{padding:10px 12px;font-size:12px;font-weight:700;color:#6b7280;text-align:center}
-    .section-head{display:flex;justify-content:space-between;align-items:center;padding:16px;cursor:pointer;border-bottom:1px solid #d6dde6}
-    .section-body{display:none;padding:16px}
-    .section-body.open{display:block}
+    .daily-count{padding:4px 8px;border-radius:999px;background:#b30000;color:#fff;font-size:11px;font-weight:800}
+    .daily-empty{padding:10px 12px;font-size:12px;color:#6b7280;text-align:center}
+    /* section */
+    .sec-head{display:flex;justify-content:space-between;align-items:center;padding:16px;cursor:pointer;border-bottom:1px solid #d6dde6}
+    .sec-body{display:none;padding:16px}.sec-body.open{display:block}
     .badge{background:#f3e8e8;color:#8b0000;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
-    .mapping-form{display:grid;grid-template-columns:1.1fr .8fr 1.1fr auto;gap:10px;margin-bottom:12px}
-    .mapping-list{border:1px solid #d6dde6;border-radius:12px;overflow:hidden}
-    .mapping-row{display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec}
-    .mapping-row:last-child{border-bottom:none}
-    .mapping-row.editing{align-items:end;background:#fff7ed}
+    /* mapping */
+    .map-form{display:grid;grid-template-columns:1.1fr .8fr 1.1fr auto;gap:10px;margin-bottom:12px}
+    .map-list{border:1px solid #d6dde6;border-radius:12px;overflow:hidden}
+    .map-row{display:grid;grid-template-columns:1.2fr .8fr 1.1fr auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #ececec}
+    .map-row:last-child{border-bottom:none}.map-row.editing{align-items:end;background:#fff7ed}
+    /* report */
     .year-block,.month-block,.sheet-block{border:1px solid #d6dde6;border-radius:12px;overflow:hidden;margin-bottom:14px;background:#fff}
     .year-head,.month-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;font-weight:700}
     .year-head{background:linear-gradient(90deg,#fdf2f8,#fff1f2);color:#8b0000}
@@ -63,1481 +63,979 @@
     .year-content,.month-content{display:none;padding:16px}
     .year-content.open,.month-content.open{display:block}
     .sheet-title{padding:10px 12px;font-weight:800;border-bottom:1px solid #d6dde6}
-    .title-a{background:linear-gradient(90deg,#fee2e2,#fff1f2)}
-    .title-b{background:linear-gradient(90deg,#fef3c7,#fff7ed)}
-    .title-c{background:linear-gradient(90deg,#dcfce7,#ecfdf5)}
-    .title-d{background:linear-gradient(90deg,#dbeafe,#eff6ff)}
-    .title-e{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
-    .title-f{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
-    .title-g{background:linear-gradient(90deg,#fef9c3,#fefce8)}
-    .title-h{background:linear-gradient(90deg,#cffafe,#ecfeff)}
-    .title-i{background:linear-gradient(90deg,#fef3c7,#fefce8)}
-    .title-j{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
+    .ta{background:linear-gradient(90deg,#fee2e2,#fff1f2)}.tb{background:linear-gradient(90deg,#fef3c7,#fff7ed)}
+    .tc{background:linear-gradient(90deg,#dcfce7,#ecfdf5)}.td{background:linear-gradient(90deg,#dbeafe,#eff6ff)}
+    .te{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}.tf{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
+    .tg{background:linear-gradient(90deg,#fef9c3,#fefce8)}.th{background:linear-gradient(90deg,#cffafe,#ecfeff)}
+    .ti{background:linear-gradient(90deg,#fef3c7,#fefce8)}.tj{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}
     .table-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;min-width:760px}
     th,td{border:1px solid #d6dde6;padding:8px 10px;font-size:14px;text-align:center;vertical-align:middle}
     th{background:#f8fafc;font-weight:700}
     td:first-child,th:first-child{text-align:left;font-weight:700}
-    .subheader{background:#f3f4f6!important;font-weight:700}
+    .sub-row{background:#f3f4f6!important;font-weight:700}
     .empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d6dde6;border-radius:10px}
     .search-note{margin:8px 12px;padding:10px 12px;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px}
-    @media (max-width:1200px){.toolbar,.summary-year-grid,.mapping-form,.mapping-row{grid-template-columns:1fr 1fr}}
-    @media (max-width:760px){.toolbar,.summary-year-grid,.mapping-form,.mapping-row{grid-template-columns:1fr}}
+    @media(max-width:1200px){.toolbar,.summary-year-grid,.map-form,.map-row{grid-template-columns:1fr 1fr}}
+    @media(max-width:760px){.toolbar,.summary-year-grid,.map-form,.map-row{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <header>Donor Database Statistics</header>
 <div class="page">
+
   <div class="card">
     <div class="toolbar">
-      <div class="field">
-        <label for="filterYear">Year</label>
-        <select id="filterYear"><option value="ALL">All Years</option></select>
-      </div>
-      <div class="field">
-        <label for="filterMonth">Month</label>
-        <select id="filterMonth"><option value="ALL">All Months</option></select>
-      </div>
-      <div class="field">
-        <label for="searchText">Search Group</label>
-        <input id="searchText" type="text" placeholder="Search group / partner">
-      </div>
-      <button class="btn-red" onclick="reloadStatistics()">Reload Statistics</button>
-      <button class="btn-blue" onclick="window.print()">Print</button>
+      <div class="field"><label for="filterYear">Year</label>
+        <select id="filterYear"><option value="ALL">All Years</option></select></div>
+      <div class="field"><label for="filterMonth">Month</label>
+        <select id="filterMonth"><option value="ALL">All Months</option></select></div>
+      <div class="field"><label for="searchText">Search Group</label>
+        <input id="searchText" type="text" placeholder="Search group / partner"></div>
+      <button class="btn-red"   onclick="reloadStatistics()">Reload Statistics</button>
+      <button class="btn-blue"  onclick="window.print()">Print</button>
       <button class="btn-green" onclick="exportCSV()">Export CSV</button>
     </div>
   </div>
+
   <div id="statusBox" class="status info">Loading statistics...</div>
+  <div id="debugBar" class="debug-bar"></div>
+
   <div class="card">
-    <h3 style="margin-top:0;color:#991b1b;">Monthly Summary</h3>
+    <h3 style="margin-top:0;color:#991b1b">Monthly Summary</h3>
     <div id="summaryGrid" class="summary-grid"></div>
   </div>
   <div class="card">
-    <h3 style="margin-top:0;color:#991b1b;">Male / Female Per Month</h3>
-    <div id="sexMonthlyContainer"></div>
+    <h3 style="margin-top:0;color:#991b1b">Male / Female Per Month</h3>
+    <div id="sexMonthly"></div>
   </div>
   <div class="card">
-    <div class="section-head" onclick="toggleSectionBody('mappingBody','mappingBadge')">
-      <h3 style="margin:0;color:#8b0000;">Group Category Entry</h3>
-      <div id="mappingBadge" class="badge">Collapsed</div>
+    <div class="sec-head" onclick="toggleSec('secBody','secBadge')">
+      <h3 style="margin:0;color:#8b0000">Group Category Entry</h3>
+      <div id="secBadge" class="badge">Collapsed</div>
     </div>
-    <div id="mappingBody" class="section-body">
-      <div class="mapping-form">
-        <div class="field">
-          <label for="mapPartnerName">Partner / Alias / Group Name</label>
-          <input type="text" id="mapPartnerName" placeholder="Example: LOCAL BLOOD COUNCIL">
-        </div>
-        <div class="field">
-          <label for="mapCategory">Category</label>
+    <div id="secBody" class="sec-body">
+      <div class="map-form">
+        <div class="field"><label>Partner / Alias / Group Name</label>
+          <input type="text" id="mapPartner" placeholder="Example: LOCAL BLOOD COUNCIL"></div>
+        <div class="field"><label>Category</label>
           <select id="mapCategory">
             <option value="Group">Group</option>
             <option value="RC143 / BRGY Base">RC143 / BRGY Base</option>
             <option value="Pledge 25">Pledge 25</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="mapPlace">Place Override</label>
-          <input type="text" id="mapPlace" placeholder="Example: 0891 ADIWANG ROAD, DONTONGAN">
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="btn-red" onclick="saveGroupCategory()">Save Mapping</button>
-            <button type="button" class="btn-gray" onclick="clearMappingEditor()">Cancel</button>
-          </div>
-        </div>
+          </select></div>
+        <div class="field"><label>Place Override</label>
+          <input type="text" id="mapPlace" placeholder="Example: 0891 ADIWANG ROAD"></div>
+        <div class="field"><label>&nbsp;</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-red" onclick="saveMapping()">Save Mapping</button>
+            <button class="btn-gray" onclick="clearMappingEditor()">Cancel</button>
+          </div></div>
       </div>
-      <div id="mappingList" class="mapping-list">
-        <div class="empty">No group category mappings yet.</div>
-      </div>
+      <div id="mappingList" class="map-list"><div class="empty">No mappings yet.</div></div>
     </div>
   </div>
   <div class="card">
-    <h3 style="margin-top:0;color:#991b1b;">Year / Month Statistics</h3>
+    <h3 style="margin-top:0;color:#991b1b">Year / Month Statistics</h3>
     <div id="reportContainer"></div>
   </div>
+
 </div>
 <script>
-// ─── FIREBASE ────────────────────────────────────────────────────────────────
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-  authDomain: "galloners-club.firebaseapp.com",
-  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "galloners-club",
-  storageBucket: "galloners-club.firebasestorage.app",
-  messagingSenderId: "213049860421",
-  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-  measurementId: "G-XYXJH9JNXJ"
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
 };
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const auth  = firebase.auth();
-const fs    = firebase.firestore();
-const rtdb  = firebase.database();
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(), fs=firebase.firestore(), rtdb=firebase.database();
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-let donorRecords    = [];
-let releasingRecords= [];
-let categoryMappings= [];
-let groupedCache    = null;
-let eventsAttached  = false;
-let inlineEditingMappingId = null;
-let initializeInFlight = false;
-let initializeQueued   = false;
-let initializeVersion  = 0;
-let domReadyBooted     = false;
+let allRecords=[],donorRecords=[],releasingRecords=[],categoryMappings=[];
+let groupedCache=null,eventsAttached=false,inlineEditId=null;
+let initInFlight=false,initQueued=false,initVersion=0,domBooted=false;
 
-const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December"
-];
+const MONTHS=["January","February","March","April","May","June",
+               "July","August","September","October","November","December"];
 
-// ─── BOOT ────────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-  if (domReadyBooted) return;
-  domReadyBooted = true;
-  auth.onAuthStateChanged(async () => { await initializePage(); });
-  setTimeout(async () => {
-    if (!donorRecords.length && !initializeInFlight) await initializePage();
-  }, 2500);
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded",()=>{
+  if(domBooted)return; domBooted=true;
+  auth.onAuthStateChanged(async()=>{ await initPage(); });
+  setTimeout(async()=>{ if(!allRecords.length&&!initInFlight) await initPage(); },3000);
 });
 
-async function initializePage() {
-  if (initializeInFlight) { initializeQueued = true; return; }
-  initializeInFlight = true;
-  initializeQueued   = false;
-  const myVersion = ++initializeVersion;
-  try {
-    setStatus("Loading statistics...", "info");
-    await Promise.allSettled([
-      loadDonorDatabase(myVersion),
-      loadCategoryMappings(myVersion),
-      loadReleasingSafe(myVersion)
-    ]);
-    if (myVersion !== initializeVersion) return;
+async function initPage(){
+  if(initInFlight){initQueued=true;return;}
+  initInFlight=true; initQueued=false;
+  const ver=++initVersion;
+  try{
+    setStatus("Loading statistics…","info");
+    await Promise.allSettled([loadDonors(ver),loadMappings(ver),loadReleasing(ver)]);
+    if(ver!==initVersion)return;
     populateFilters();
-    attachEventsOnce();
+    attachEvents();
     renderMappings();
-    buildStatistics();
-    setStatus("Statistics loaded successfully.", "ok");
-  } catch(e) {
+    buildStats();
+    setStatus("Statistics loaded successfully.","ok");
+  }catch(e){
     console.error(e);
-    setStatus("Failed to load statistics: " + (e.message || e), "error");
-  } finally {
-    initializeInFlight = false;
-    if (initializeQueued) { initializeQueued = false; initializePage(); }
+    setStatus("Failed to load: "+(e.message||e),"error");
+  }finally{
+    initInFlight=false;
+    if(initQueued){initQueued=false;initPage();}
   }
 }
 
-function setStatus(msg, type) {
-  const el = document.getElementById("statusBox");
-  el.className = "status " + type;
-  el.textContent = msg;
+function setStatus(msg,type){
+  const el=document.getElementById("statusBox");
+  el.className="status "+type; el.textContent=msg;
+}
+function showDebug(html){
+  const el=document.getElementById("debugBar");
+  el.innerHTML=html; el.classList.add("show");
 }
 
-// ─── DATA LOAD ────────────────────────────────────────────────────────────────
-function isVisible(record) {
-  if (!record || typeof record !== "object") return false;
-  if (record.isDeleted === true) return false;
-  // Check deletedAt — Firestore Timestamp, string, or null
-  const deletedAt = record.deletedAt;
-  if (deletedAt && deletedAt !== "" && deletedAt !== null) return false;
-  const deletedBatchId = String(record.deletedBatchId || "").trim();
-  if (deletedBatchId) return false;
+// ─── VISIBILITY CHECK ─────────────────────────────────────────────────────────
+// Only uses isDeleted flag and deletedBatchId string.
+// We deliberately SKIP checking deletedAt because a Firestore Timestamp object
+// is always truthy and would incorrectly filter out active records.
+function isVisible(r){
+  if(!r||typeof r!=="object") return false;
+  if(r.isDeleted===true) return false;
+  // deletedBatchId is set to a non-empty string when a batch is retracted
+  if(typeof r.deletedBatchId==="string"&&r.deletedBatchId.trim()!=="") return false;
   return true;
 }
 
-async function loadDonorDatabase(version) {
-  const local = [];
-  const snap = await fs.collection("donorDatabase").get();
-  snap.forEach(doc => {
-    const r = { id: doc.id, ...doc.data() };
-    if (isVisible(r)) local.push(r);
+// ─── DATA LOAD ────────────────────────────────────────────────────────────────
+async function loadDonors(ver){
+  const snap=await fs.collection("donorDatabase").get();
+  const all=[], active=[];
+  snap.forEach(doc=>{
+    const r={id:doc.id,...doc.data()};
+    all.push(r);
+    if(isVisible(r)) active.push(r);
   });
-  if (version === initializeVersion) donorRecords = local;
+  if(ver!==initVersion)return;
+  allRecords=all;
+  donorRecords=active;
 }
 
-async function loadCategoryMappings(version) {
-  const local = [];
-  try {
-    const snap = await fs.collection("donorGroupCategories").get();
-    snap.forEach(doc => local.push({ id: doc.id, ...doc.data() }));
-  } catch(e) {}
-  if (version === initializeVersion) categoryMappings = local;
+async function loadMappings(ver){
+  const local=[];
+  try{
+    const snap=await fs.collection("donorGroupCategories").get();
+    snap.forEach(doc=>local.push({id:doc.id,...doc.data()}));
+  }catch(e){}
+  if(ver===initVersion) categoryMappings=local;
 }
 
-async function loadReleasingSafe(version) {
-  let local = [];
-  try {
-    const timeout  = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000));
-    const req      = rtdb.ref("releasing").once("value");
-    const snap     = await Promise.race([req, timeout]);
-    local = flattenRealtime(snap.val());
-  } catch(e) { local = []; }
-  if (version === initializeVersion) releasingRecords = local;
+async function loadReleasing(ver){
+  let local=[];
+  try{
+    const tout=new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),6000));
+    const snap=await Promise.race([rtdb.ref("releasing").once("value"),tout]);
+    local=flattenRTDB(snap.val());
+  }catch(e){local=[];}
+  if(ver===initVersion) releasingRecords=local;
 }
 
-function flattenRealtime(node) {
-  const out = [];
-  walkNode(node, out);
-  return out;
-}
-function walkNode(node, out) {
-  if (node == null) return;
-  if (Array.isArray(node)) { node.forEach(x => walkNode(x, out)); return; }
-  if (typeof node !== "object") return;
-  const keys = Object.keys(node).map(k => k.toLowerCase());
-  const isRecord = keys.some(k => ["date","requestdate","releaseddate","requests","wb","prbc","ffp","pc","cryo"].includes(k));
-  if (isRecord) { out.push(node); return; }
-  Object.keys(node).forEach(k => walkNode(node[k], out));
+function flattenRTDB(node){
+  const out=[];
+  function walk(n){
+    if(n==null)return;
+    if(Array.isArray(n)){n.forEach(walk);return;}
+    if(typeof n!=="object")return;
+    const keys=Object.keys(n).map(k=>k.toLowerCase());
+    const isRec=["date","requestdate","releaseddate","requests","wb","prbc","ffp","pc","cryo"].some(k=>keys.includes(k));
+    if(isRec){out.push(n);return;}
+    Object.keys(n).forEach(k=>walk(n[k]));
+  }
+  walk(node); return out;
 }
 
-function attachEventsOnce() {
-  if (eventsAttached) return;
-  eventsAttached = true;
-  document.getElementById("filterYear").addEventListener("change", buildStatistics);
-  document.getElementById("filterMonth").addEventListener("change", buildStatistics);
-  document.getElementById("searchText").addEventListener("input", buildStatistics);
+function attachEvents(){
+  if(eventsAttached)return; eventsAttached=true;
+  document.getElementById("filterYear").addEventListener("change",buildStats);
+  document.getElementById("filterMonth").addEventListener("change",buildStats);
+  document.getElementById("searchText").addEventListener("input",buildStats);
 }
 
 // ─── DATE UTILITIES ───────────────────────────────────────────────────────────
-// Matches the exact resolution logic used in donor-tracking.html
-
-const MONTH_MAP = {
-  jan:"01",january:"01",feb:"02",february:"02",mar:"03",march:"03",
+const MON={jan:"01",january:"01",feb:"02",february:"02",mar:"03",march:"03",
   apr:"04",april:"04",may:"05",jun:"06",june:"06",jul:"07",july:"07",
   aug:"08",august:"08",sep:"09",sept:"09",september:"09",
-  oct:"10",october:"10",nov:"11",november:"11",dec:"12",december:"12"
-};
+  oct:"10",october:"10",nov:"11",november:"11",dec:"12",december:"12"};
 
-function parseDateFromText(text) {
-  const s = String(text || "").trim().toLowerCase();
-  if (!s) return "";
-  const ymd = s.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
-  if (ymd) return `${ymd[1]}-${ymd[2].padStart(2,"0")}-${ymd[3].padStart(2,"0")}`;
-  const mdy = s.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
-  if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,"0")}-${mdy[2].padStart(2,"0")}`;
-  const monthYear = s.match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/);
-  if (monthYear) {
-    const key = Object.keys(MONTH_MAP).find(k => monthYear[1].startsWith(k));
-    if (key) return `${monthYear[2]}-${MONTH_MAP[key]}-01`;
+function parseTxt(text){
+  const s=String(text||"").trim().toLowerCase(); if(!s)return"";
+  let m;
+  if((m=s.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/))) return`${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  if((m=s.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/))) return`${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  if((m=s.match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/))) {
+    const k=Object.keys(MON).find(k=>m[1].startsWith(k)); if(k)return`${m[2]}-${MON[k]}-01`;
   }
-  const yearMonth = s.match(/(\d{4})[\s\-_]*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)/);
-  if (yearMonth) {
-    const key = Object.keys(MONTH_MAP).find(k => yearMonth[2].startsWith(k));
-    if (key) return `${yearMonth[1]}-${MONTH_MAP[key]}-01`;
+  if((m=s.match(/(\d{4})[\s\-_]*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)/))) {
+    const k=Object.keys(MON).find(k=>m[2].startsWith(k)); if(k)return`${m[1]}-${MON[k]}-01`;
   }
-  return "";
+  return"";
 }
 
-function parseDate(raw) {
-  if (!raw) return null;
-  if (raw instanceof Date) return isNaN(raw) ? null : raw;
-  if (typeof raw?.toDate === "function") return raw.toDate();
-  if (typeof raw === "object" && raw.seconds) return new Date(raw.seconds * 1000);
-  if (typeof raw === "string") {
-    const t = raw.trim();
-    if (!t) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
-      const [y,m,d] = t.split("-").map(Number);
-      return new Date(y, m-1, d);
-    }
-    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(t)) {
-      const [m,d,yR] = t.split("/");
-      let y = Number(yR);
-      if (String(yR).length === 2) y = y < 50 ? 2000+y : 1900+y;
-      return new Date(y, Number(m)-1, Number(d));
-    }
-    const fromText = parseDateFromText(t);
-    if (fromText) {
-      const [y,m,d] = fromText.split("-").map(Number);
-      return new Date(y, m-1, d);
-    }
-    const fb = new Date(t);
-    if (!isNaN(fb.getTime())) return fb;
+function parseDate(raw){
+  if(!raw)return null;
+  if(raw instanceof Date)return isNaN(raw)?null:raw;
+  if(typeof raw?.toDate==="function")return raw.toDate();
+  if(typeof raw==="object"&&raw.seconds)return new Date(raw.seconds*1000);
+  if(typeof raw==="string"){
+    const t=raw.trim(); if(!t)return null;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t)){const[y,mo,d]=t.split("-").map(Number);return new Date(y,mo-1,d);}
+    if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(t)){const[mo,d,yr]=t.split("/");let y=Number(yr);if(String(yr).length===2)y=y<50?2000+y:1900+y;return new Date(y,Number(mo)-1,Number(d));}
+    const ft=parseTxt(t); if(ft){const[y,mo,d]=ft.split("-").map(Number);return new Date(y,mo-1,d);}
+    const fb=new Date(t); if(!isNaN(fb.getTime()))return fb;
   }
   return null;
 }
 
-function toISODate(d) {
-  if (!d || isNaN(d)) return "";
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
-function getDateParts(d) {
-  if (!d || isNaN(d)) return { year:null, month:null, day:null };
-  return { year:d.getFullYear(), month:d.getMonth()+1, day:d.getDate() };
-}
+function toISO(d){if(!d||isNaN(d))return"";return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function parts(d){if(!d||isNaN(d))return{year:null,month:null,day:null};return{year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate()};}
 
 // ─── ENTRY DATE RESOLUTION ────────────────────────────────────────────────────
-// Mirrors donor-tracking.html resolveEntryDate() + applyImportedDateCarryForward()
-//
-// donor-tracking.html resolves in this order:
-//   1. record.entryDate / donationDate / date / bleedingDate  (direct field)
-//   2. parseDateFromText(importMeta.sourceSheet)
-//   3. parseDateFromText(importMeta.sourceFile)
-//   4. createdAt
-//
-// AND it runs a batch carry-forward per (batchId+sourceFile+sourceSheet) group
-// sorted by sourceRowNumber so rows with empty dates inherit the previous row's date.
+// Mirrors donor-tracking.html exactly: direct → sourceSheet → sourceFile → createdAt
+// + carry-forward within each import batch group
 
-function resolveDirectEntryDate(r) {
-  return (
-    toISODate(parseDate(r.entryDate))       ||
-    toISODate(parseDate(r.donationDate))    ||
-    toISODate(parseDate(r.date))            ||
-    toISODate(parseDate(r.bleedingDate))    ||
-    ""
-  );
+function directDate(r){
+  return toISO(parseDate(r.entryDate))||toISO(parseDate(r.donationDate))||toISO(parseDate(r.date))||toISO(parseDate(r.bleedingDate))||"";
+}
+function sourceBase(r){
+  return parseTxt(r?.importMeta?.sourceSheet||"")||parseTxt(r?.importMeta?.sourceFile||"")||toISO(parseDate(r.createdAt))||"";
+}
+function dayOnly(val,base){
+  const raw=String(val??"").trim(); if(!raw||!base||!/^\d{4}-\d{2}-\d{2}$/.test(base))return"";
+  const m=raw.match(/^(\d{1,2})$/); if(!m)return"";
+  const day=Number(m[1]); if(!day||day<1||day>31)return"";
+  const[y,mo]=base.split("-");
+  const cand=`${y}-${mo}-${String(day).padStart(2,"0")}`;
+  const d=new Date(cand+"T00:00:00");
+  if(isNaN(d.getTime())||d.getFullYear()!==Number(y)||d.getMonth()+1!==Number(mo)||d.getDate()!==day)return"";
+  return cand;
 }
 
-function resolveSourceMonthBase(r) {
-  return (
-    parseDateFromText(r?.importMeta?.sourceSheet || "") ||
-    parseDateFromText(r?.importMeta?.sourceFile  || "") ||
-    toISODate(parseDate(r.createdAt))                   ||
-    ""
-  );
-}
-
-function parseDayOnlyDateWithBase(value, baseISO) {
-  const raw = String(value ?? "").trim();
-  if (!raw || !baseISO || !/^\d{4}-\d{2}-\d{2}$/.test(baseISO)) return "";
-  const m = raw.match(/^(\d{1,2})$/);
-  if (!m) return "";
-  const day = Number(m[1]);
-  if (!day || day < 1 || day > 31) return "";
-  const [year, month] = baseISO.split("-");
-  const candidate = `${year}-${month}-${String(day).padStart(2,"0")}`;
-  const d = new Date(candidate + "T00:00:00");
-  if (isNaN(d.getTime())) return "";
-  if (d.getFullYear() !== Number(year) || d.getMonth()+1 !== Number(month) || d.getDate() !== day) return "";
-  return candidate;
-}
-
-/**
- * Apply the same carry-forward logic donor-tracking.html uses.
- * Groups records by batchId+sourceFile+sourceSheet, sorts by sourceRowNumber,
- * then cascades the last known date to rows with no explicit date.
- */
-function applyCarryForward(records) {
-  const groups = {};
-  records.forEach(r => {
-    const key = [
-      r?.importMeta?.batchId      || "",
-      r?.importMeta?.sourceFile   || "",
-      r?.importMeta?.sourceSheet  || ""
-    ].join("|");
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(r);
+function applyCarryForward(records){
+  const grps={};
+  records.forEach(r=>{
+    const key=[r?.importMeta?.batchId||"",r?.importMeta?.sourceFile||"",r?.importMeta?.sourceSheet||""].join("|");
+    if(!grps[key])grps[key]=[];
+    grps[key].push(r);
   });
-
-  Object.values(groups).forEach(items => {
-    items.sort((a, b) =>
-      Number(a?.importMeta?.sourceRowNumber || 0) - Number(b?.importMeta?.sourceRowNumber || 0)
-    );
-    let lastDate = "";
-    items.forEach(r => {
-      const explicit = resolveDirectEntryDate(r);
-      const base     = resolveSourceMonthBase(r);
-      const rawMarker= r.entryDate || r.donationDate || r.date || r.bleedingDate || "";
-      const dayOnly  = parseDayOnlyDateWithBase(rawMarker, lastDate || base);
-
-      if (explicit) {
-        r._resolvedEntryDate = explicit;
-        lastDate = explicit;
-      } else if (dayOnly) {
-        r._resolvedEntryDate = dayOnly;
-        lastDate = dayOnly;
-      } else if (lastDate) {
-        r._resolvedEntryDate = lastDate;
-      } else if (base) {
-        r._resolvedEntryDate = base;
-        lastDate = base;
-      }
+  Object.values(grps).forEach(items=>{
+    items.sort((a,b)=>Number(a?.importMeta?.sourceRowNumber||0)-Number(b?.importMeta?.sourceRowNumber||0));
+    let last="";
+    items.forEach(r=>{
+      const exp=directDate(r), base=sourceBase(r);
+      const raw=r.entryDate||r.donationDate||r.date||r.bleedingDate||"";
+      const dOnly=dayOnly(raw,last||base);
+      if(exp){r._erd=exp;last=exp;}
+      else if(dOnly){r._erd=dOnly;last=dOnly;}
+      else if(last){r._erd=last;}
+      else if(base){r._erd=base;last=base;}
     });
   });
 }
 
-function getResolvedEntryDate(r) {
-  // Use pre-computed value if available (set by applyCarryForward)
-  if (r._resolvedEntryDate) return r._resolvedEntryDate;
-  return resolveDirectEntryDate(r) || resolveSourceMonthBase(r) || "";
+function getDate(r){
+  return r._erd||directDate(r)||sourceBase(r)||"";
 }
 
 // ─── DONOR TYPE RESOLUTION ────────────────────────────────────────────────────
-// Mirrors donor-tracking.html getDonorTypes() exactly:
-//  - Splits donorType field on comma/pipe/slash
-//  - Checks mbdDetails → adds "MBD"
-//  - Checks patientDirectedDetails → adds "Patient Directed"
-//  - walkInRaw is stored as "Walk-in" donorType or via walkInRaw field
+// Handles ALL storage variations across old + new pages:
+//   "MBD", "Walk-in", "WALK-IN", "Patient Directed", "PATIENT DIRECTED"
+//   comma-separated combos, mbdDetails / patientDirectedDetails / walkInRaw fields
 
-function getDonorTypes(r) {
-  const rawType = String(r?.donorType || "").trim();
-  const values  = [];
-  const seen    = new Set();
+function getDonorTypes(r){
+  const raw=String(r?.donorType||"").trim();
+  const vals=[],seen=new Set();
 
-  rawType.split(/[,|/]+/).forEach(part => {
-    const s = part.trim().toLowerCase().replace(/[-_]+/g," ");
-    if (s === "mbd" && !seen.has("MBD")) { seen.add("MBD"); values.push("MBD"); }
-    if ((s === "walk in" || s === "walkin" || s === "walk-in") && !seen.has("Walk-in")) { seen.add("Walk-in"); values.push("Walk-in"); }
-    if ((s === "patient directed" || s === "patient-directed" || s === "patientdirected") && !seen.has("Patient Directed")) { seen.add("Patient Directed"); values.push("Patient Directed"); }
+  raw.split(/[,|/]+/).forEach(part=>{
+    // normalise for comparison — strip all hyphens, lowercase, collapse spaces
+    const s=part.trim().toLowerCase().replace(/[-]+/g," ").replace(/\s+/g," ");
+    if(s==="mbd"&&!seen.has("MBD")){seen.add("MBD");vals.push("MBD");}
+    if((s==="walk in"||s==="walkin")&&!seen.has("Walk-in")){seen.add("Walk-in");vals.push("Walk-in");}
+    if((s==="patient directed"||s==="patientdirected")&&!seen.has("Patient Directed")){seen.add("Patient Directed");vals.push("Patient Directed");}
   });
 
-  // donor-tracking.html also checks these fields directly
-  if (String(r?.mbdDetails || "").trim() && !seen.has("MBD")) { seen.add("MBD"); values.push("MBD"); }
-  if (String(r?.patientDirectedDetails || "").trim() && !seen.has("Patient Directed")) { seen.add("Patient Directed"); values.push("Patient Directed"); }
+  // presence of detail fields → always implies the type
+  if(String(r?.mbdDetails||"").trim()&&!seen.has("MBD")){seen.add("MBD");vals.push("MBD");}
+  if(String(r?.patientDirectedDetails||"").trim()&&!seen.has("Patient Directed")){seen.add("Patient Directed");vals.push("Patient Directed");}
+  if(String(r?.walkInRaw||"").trim()&&!seen.has("Walk-in")){seen.add("Walk-in");vals.push("Walk-in");}
 
-  return values;
+  return vals;
 }
 
-function getPrimaryDonorType(r) {
-  const types = getDonorTypes(r);
-  if (types.includes("MBD"))               return "MBD";
-  if (types.includes("Walk-in"))           return "Walk-in";
-  if (types.includes("Patient Directed"))  return "Patient Directed";
-  return "";
+function primaryType(r){
+  const t=getDonorTypes(r);
+  if(t.includes("MBD"))return"MBD";
+  if(t.includes("Walk-in"))return"Walk-in";
+  if(t.includes("Patient Directed"))return"Patient Directed";
+  return"";
 }
+function isCategorized(r){return getDonorTypes(r).length>0;}
 
-function hasCategorizedType(r) {
-  return getDonorTypes(r).length > 0;
-}
-
-// ─── FIELD ACCESSORS (exact field names from donor-tracking.html) ─────────────
-// donor-tracking.html stores these exact field names in Firestore:
-//   surname, firstName, middleName, birthday, age, sex
-//   contactNumber, address, cityProvince
-//   entryDate, donorType, donorCategory, mbdDetails, patientDirectedDetails
-//   walkInRaw, serialNumber, numberOfDonations
-//   bloodType, amount, bloodBagBrand, bloodBagType
-//   timeStarted, timeEnded, remarks
-//   importMeta.{ batchId, sourceFile, sourceSheet, sourceRowNumber }
-
-function getMbdGroup(r) {
-  // Primary group name for MBD donors — matches donor-tracking.html getGroupLabel()
-  const type = getPrimaryDonorType(r);
-  if (type === "MBD")              return String(r.mbdDetails || "").trim().toUpperCase() || "MBD";
-  if (type === "Patient Directed") return String(r.patientDirectedDetails || "").trim().toUpperCase() || "PATIENT DIRECTED";
-  if (type === "Walk-in")          return "WALK-IN";
-  return "";
-}
-
-function getAge(r) {
-  // donor-tracking.html stores age directly as r.age
-  const direct = parseNumericAge(r.age);
-  if (direct != null && direct >= 0 && direct <= 120) return direct;
-  // Fallback: compute from birthday
-  const bday     = parseDate(r.birthday);
-  const donation = parseDate(getResolvedEntryDate(r));
-  if (!bday || !donation) return null;
-  let years = donation.getFullYear() - bday.getFullYear();
-  const md = donation.getMonth() - bday.getMonth();
-  if (md < 0 || (md === 0 && donation.getDate() < bday.getDate())) years--;
-  return (years >= 0 && years <= 120) ? years : null;
-}
-
-function parseNumericAge(v) {
-  if (v == null || v === "") return null;
-  if (typeof v === "number" && isFinite(v)) return v;
-  const m = String(v).match(/(\d{1,3})/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return isFinite(n) ? n : null;
-}
-
-// ─── BLOOD TYPE ───────────────────────────────────────────────────────────────
-// donor-tracking.html stores normalized blood type in r.bloodType
-// e.g., "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "UNKNOWN"
-// The import page normalizes using normalizeBloodType() before saving.
-// We just need to canonicalize what we read.
-
-function normalizeBloodType(v) {
-  let s = String(v || "").toUpperCase().trim()
+// ─── FIELD HELPERS ────────────────────────────────────────────────────────────
+function normBT(v){
+  let s=String(v||"").toUpperCase().trim()
     .replace(/\./g," ").replace(/_/g," ").replace(/\s+/g," ")
     .replace(/TYPE\s*/g,"").replace(/GROUP\s*/g,"").replace(/BLOOD\s*/g,"")
-    .replace(/R\/H|RH FACTOR|RH TYPE|RH/g,"")
+    .replace(/R\/H|RH\s*FACTOR|RH\s*TYPE|\bRH\b/g,"")
     .replace(/POSITIVE|\bPOS\b/g,"+").replace(/NEGATIVE|\bNEG\b/g,"-")
-    .replace(/PLUS/g,"+").replace(/MINUS/g,"-")
-    .replace(/\s+/g,"").trim();
-  const map = {
-    "AB+":["AB+","ABPOS","AB(+)"],
-    "AB-":["AB-","ABNEG","AB(-)"],
-    "A+" :["A+","APOS","A(+)"],
-    "A-" :["A-","ANEG","A(-)"],
-    "B+" :["B+","BPOS","B(+)"],
-    "B-" :["B-","BNEG","B(-)"],
-    "O+" :["O+","OPOS","O(+)"],
-    "O-" :["O-","ONEG","O(-)"],
-    "AB" :["AB"],
-    "A"  :["A"],
-    "B"  :["B"],
-    "O"  :["O"]
-  };
-  for (const [canonical, aliases] of Object.entries(map)) {
-    if (aliases.includes(s)) {
-      // bare letter → assume positive
-      if (!canonical.includes("+") && !canonical.includes("-")) return canonical + "+";
-      return canonical;
+    .replace(/PLUS/g,"+").replace(/MINUS/g,"-").replace(/\s+/g,"").trim();
+  const MAP={"AB+":["AB+","ABPOS","AB(+)"],"AB-":["AB-","ABNEG","AB(-)"],
+    "A+":["A+","APOS","A(+)"],"A-":["A-","ANEG","A(-)"],
+    "B+":["B+","BPOS","B(+)"],"B-":["B-","BNEG","B(-)"],
+    "O+":["O+","OPOS","O(+)"],"O-":["O-","ONEG","O(-)"],
+    "AB":["AB"],"A":["A"],"B":["B"],"O":["O"]};
+  for(const[can,ali]of Object.entries(MAP)){
+    if(ali.includes(s)){
+      if(!can.includes("+")&&!can.includes("-"))return can+"+";
+      return can;
     }
   }
-  if (s === "UNKNOWN" || s === "UNK" || s === "UN" || s === "") return "Unknown";
-  return "Unknown";
+  if(s==="UNKNOWN"||s==="UNK"||s==="UN"||s==="")return"Unknown";
+  return"Unknown";
 }
+function getBT(r){return normBT(r.bloodType||"");}
 
-function getBloodType(r) {
-  // donor-tracking.html stores bloodType directly
-  const bt = normalizeBloodType(r.bloodType || "");
-  return bt || "Unknown";
+function normBag(v){
+  const s=String(v||"").toUpperCase().trim();
+  if(["SINGLE","S","1"].includes(s))return"S";
+  if(["DOUBLE","D","2"].includes(s))return"D";
+  if(["TRIPLE","T","3"].includes(s))return"T";
+  if(["QUADRUPLE","QUAD","Q","4"].includes(s))return"Q";
+  return"";
 }
+function getBag(r){return normBag(r.bloodBagType||"");}
 
-// ─── BLOOD BAG TYPE ───────────────────────────────────────────────────────────
-// donor-tracking.html stores bloodBagType as "SINGLE","DOUBLE","TRIPLE","QUADRUPLE"
-// The import page normalizes these strings before saving.
-
-function normalizeBagCode(v) {
-  const s = String(v || "").toUpperCase().trim();
-  if (["SINGLE","S","1"].includes(s))    return "S";
-  if (["DOUBLE","D","2"].includes(s))    return "D";
-  if (["TRIPLE","T","3"].includes(s))    return "T";
-  if (["QUADRUPLE","QUAD","Q","4"].includes(s)) return "Q";
-  return "";
+function normSex(v){
+  const s=String(v||"").toUpperCase().trim();
+  if(s==="MALE"||s==="M")return"Male";
+  if(s==="FEMALE"||s==="F")return"Female";
+  return"";
 }
-
-function getBagCode(r) {
-  // donor-tracking.html field is bloodBagType
-  return normalizeBagCode(r.bloodBagType || r.bloodBagBrand || "");
+function normCat(v){
+  const s=String(v||"").toLowerCase();
+  if(s.includes("new"))return"New";
+  if(s.includes("repeat"))return"Repeat";
+  if(s.includes("lapse"))return"Lapse";
+  return"";
 }
-
-// ─── SEX / DONOR CATEGORY ────────────────────────────────────────────────────
-// donor-tracking.html stores sex as "MALE"/"FEMALE" (uppercase)
-// donorCategory as "New","Repeat","Lapse"
-
-function normalizeSex(v) {
-  const s = String(v || "").toUpperCase().trim();
-  if (s === "MALE"   || s === "M") return "Male";
-  if (s === "FEMALE" || s === "F") return "Female";
-  return "";
+function getAge(r){
+  const d=parseNum(r.age); if(d!=null&&d>=0&&d<=120)return d;
+  const bd=parseDate(r.birthday),dd=parseDate(getDate(r));
+  if(!bd||!dd)return null;
+  let y=dd.getFullYear()-bd.getFullYear();
+  const md=dd.getMonth()-bd.getMonth();
+  if(md<0||(md===0&&dd.getDate()<bd.getDate()))y--;
+  return(y>=0&&y<=120)?y:null;
 }
-
-function normalizeDonorCategory(v) {
-  const s = String(v || "").toLowerCase();
-  if (s.includes("new"))    return "New";
-  if (s.includes("repeat")) return "Repeat";
-  if (s.includes("lapse"))  return "Lapse";
-  return "";
+function parseNum(v){
+  if(v==null||v==="")return null;
+  if(typeof v==="number"&&isFinite(v))return v;
+  const m=String(v).match(/(\d{1,3})/); if(!m)return null;
+  const n=Number(m[1]); return isFinite(n)?n:null;
 }
 
 // ─── GROUP MAPPING ────────────────────────────────────────────────────────────
-function normalizeAliasKey(value) {
-  let s = String(value || "").toUpperCase().trim();
-  s = s.replace(/\(.*?\)/g," ").replace(/[_.,/\\]+/g," ")
-       .replace(/\s*-\s*\d+\s*$/g," ").replace(/\d+\s*$/g," ")
-       .replace(/\bNO\.?\s*\d+\b/g," ").replace(/\b#\s*\d+\b/g," ")
-       .replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g," ")
-       .replace(/\s+/g," ").trim();
+function normKey(v){
+  let s=String(v||"").toUpperCase().trim();
+  s=s.replace(/\(.*?\)/g," ").replace(/[_.,/\\]+/g," ")
+     .replace(/\s*-\s*\d+\s*$/g," ").replace(/\d+\s*$/g," ")
+     .replace(/\bNO\.?\s*\d+\b/g," ").replace(/\b#\s*\d+\b/g," ")
+     .replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g," ")
+     .replace(/\s+/g," ").trim();
   return s;
 }
-
-function smartGroupDisplayName(value) { return normalizeAliasKey(value || ""); }
-
-function getBestMapping(partnerName) {
-  const norm = normalizeAliasKey(partnerName || "");
-  if (!norm) return null;
-  const exact = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === norm);
-  if (exact) return exact;
-  return categoryMappings.find(x => {
-    const t = normalizeAliasKey(x.partnerName || x.name || "");
-    return t && (t.includes(norm) || norm.includes(t));
-  }) || null;
+function smartName(v){return normKey(v||"");}
+function bestMap(name){
+  const n=normKey(name||""); if(!n)return null;
+  return categoryMappings.find(x=>normKey(x.partnerName||x.name||"")===n)||
+    categoryMappings.find(x=>{const t=normKey(x.partnerName||x.name||"");return t&&(t.includes(n)||n.includes(t));})||null;
 }
 
-// ─── COMPONENT PREP FROM BAG CODE ────────────────────────────────────────────
-// donor-tracking.html does NOT store prepared components separately.
-// Components are derived from bag type at display time.
-// S/D → 1 whole blood (450 cc)
-// T   → PRBC + FFP + PC
-// Q   → PRBC + FFP + PC + CRYO
-
-function getPreparedComponents(bagCode) {
-  if (bagCode === "Q") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":1 };
-  if (bagCode === "T") return { "450 cc":0, "PRBC":1, "FFP":1, "PC":1, "CRYO":0 };
-  if (bagCode === "D") return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-  if (bagCode === "S") return { "450 cc":1, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
-  return { "450 cc":0, "PRBC":0, "FFP":0, "PC":0, "CRYO":0 };
+// ─── COMPONENT DERIVATION ─────────────────────────────────────────────────────
+function getComps(bag){
+  if(bag==="Q")return{"450 cc":0,"PRBC":1,"FFP":1,"PC":1,"CRYO":1};
+  if(bag==="T")return{"450 cc":0,"PRBC":1,"FFP":1,"PC":1,"CRYO":0};
+  if(bag==="D")return{"450 cc":1,"PRBC":0,"FFP":0,"PC":0,"CRYO":0};
+  if(bag==="S")return{"450 cc":1,"PRBC":0,"FFP":0,"PC":0,"CRYO":0};
+  return{"450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0};
 }
+function bagC(c){return{S:c==="S"?1:0,D:c==="D"?1:0,T:c==="T"?1:0,Q:c==="Q"?1:0};}
+function addBag(t,s){t.S+=s.S;t.D+=s.D;t.T+=s.T;t.Q+=s.Q;}
+function sumBG(o){return(o.S||0)+(o.D||0)+(o.T||0)+(o.Q||0);}
+function sumBC(s,c){return Object.values(s.bagTypeBloodType[c]||{}).reduce((a,b)=>a+(b||0),0);}
 
-function bagCounts(code) { return { S:code==="S"?1:0, D:code==="D"?1:0, T:code==="T"?1:0, Q:code==="Q"?1:0 }; }
-function addBags(t, s) { t.S+=s.S; t.D+=s.D; t.T+=s.T; t.Q+=s.Q; }
-function sumBagGroup(o) { return (o.S||0)+(o.D||0)+(o.T||0)+(o.Q||0); }
-function sumBagCol(s, code) { return Object.values(s.bagTypeBloodType[code]||{}).reduce((a,b)=>a+(b||0),0); }
-
-// ─── STATS FACTORY ───────────────────────────────────────────────────────────
-function createBloodTypeCounter() {
-  return {"O+":0,"A+":0,"B+":0,"AB+":0,"O-":0,"A-":0,"B-":0,"AB-":0,"Unknown":0};
-}
-
-function emptyStats() {
-  return {
-    totalDonors: 0,
-    dailyCounts: {},
-    officeBleeding: {
-      "Walk-in":         {S:0,D:0,T:0,Q:0},
-      "Patient Directed":{S:0,D:0,T:0,Q:0}
-    },
-    fieldDonation: {
-      "Total MBD":        {S:0,D:0,T:0,Q:0},
-      "Group":            {S:0,D:0,T:0,Q:0},
-      "RC143 / BRGY Base":{S:0,D:0,T:0,Q:0},
-      "Pledge 25":        {S:0,D:0,T:0,Q:0},
-      "Unmapped":         {S:0,D:0,T:0,Q:0}
-    },
-    fieldDetails: { group:[], rc143:[], pledge25:[], unmapped:[] },
-    bloodType: createBloodTypeCounter(),
-    bagTypeBloodType: {
-      S: createBloodTypeCounter(),
-      D: createBloodTypeCounter(),
-      T: createBloodTypeCounter(),
-      Q: createBloodTypeCounter()
-    },
-    components:{ "450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0 },
-    componentBloodType:{
-      "450 cc": createBloodTypeCounter(),
-      "PRBC":   createBloodTypeCounter(),
-      "FFP":    createBloodTypeCounter(),
-      "PC":     createBloodTypeCounter(),
-      "CRYO":   createBloodTypeCounter()
-    },
-    requests:{ "450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0 },
-    sex:{ "Male":0,"Female":0 },
-    frequency:{ "First-time donors":0,"Repeat non-regular":0,"Repeat regular":0,"Total":0 },
-    age:{
-      "16-17":0,"18-20":0,"21-30":0,"31-40":0,
-      "41-50":0,"51-60":0,"60-65":0,"66 & above":0,"Total":0
-    },
-    agePicture:{
-      "Under 18":0,"18-24":0,"25-44":0,"45-64":0,"65 & above":0,"Total donations":0
-    },
-    youth1625Sex:{ "Male":0,"Female":0,"Total":0 }
+// ─── STATS SCAFFOLD ───────────────────────────────────────────────────────────
+function mkBT(){return{"O+":0,"A+":0,"B+":0,"AB+":0,"O-":0,"A-":0,"B-":0,"AB-":0,"Unknown":0};}
+function mkStats(){
+  return{
+    totalDonors:0, dailyCounts:{},
+    officeBleeding:{"Walk-in":{S:0,D:0,T:0,Q:0},"Patient Directed":{S:0,D:0,T:0,Q:0}},
+    fieldDonation:{"Total MBD":{S:0,D:0,T:0,Q:0},"Group":{S:0,D:0,T:0,Q:0},"RC143 / BRGY Base":{S:0,D:0,T:0,Q:0},"Pledge 25":{S:0,D:0,T:0,Q:0},"Unmapped":{S:0,D:0,T:0,Q:0}},
+    fieldDetails:{group:[],rc143:[],pledge25:[],unmapped:[]},
+    bloodType:mkBT(),
+    bagTypeBloodType:{S:mkBT(),D:mkBT(),T:mkBT(),Q:mkBT()},
+    components:{"450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0},
+    componentBloodType:{"450 cc":mkBT(),"PRBC":mkBT(),"FFP":mkBT(),"PC":mkBT(),"CRYO":mkBT()},
+    requests:{"450 cc":0,"PRBC":0,"FFP":0,"PC":0,"CRYO":0},
+    sex:{"Male":0,"Female":0},
+    frequency:{"First-time donors":0,"Repeat non-regular":0,"Repeat regular":0,"Total":0},
+    age:{"16-17":0,"18-20":0,"21-30":0,"31-40":0,"41-50":0,"51-60":0,"60-65":0,"66 & above":0,"Total":0},
+    agePicture:{"Under 18":0,"18-24":0,"25-44":0,"45-64":0,"65 & above":0,"Total donations":0},
+    youth1625Sex:{"Male":0,"Female":0,"Total":0}
   };
 }
 
-// ─── APPLY ONE DONOR RECORD ───────────────────────────────────────────────────
-function applyDonor(s, r) {
-  const entryDateISO  = getResolvedEntryDate(r);
-  const donorTypePrim = getPrimaryDonorType(r);
-  const mbdGroup      = getMbdGroup(r);
-  const mapping       = donorTypePrim === "MBD" ? getBestMapping(mbdGroup) : null;
-  const bt            = getBloodType(r);
-  const bagCode       = getBagCode(r);
-  const bags          = bagCounts(bagCode);
-  const hasBag        = !!bagCode;
+// ─── APPLY ONE RECORD ─────────────────────────────────────────────────────────
+function applyDonor(s,r){
+  const iso  =getDate(r);
+  const pType=primaryType(r);
+  const grp  =pType==="MBD"?String(r.mbdDetails||"").trim().toUpperCase()||"MBD":
+               pType==="Patient Directed"?String(r.patientDirectedDetails||"").trim().toUpperCase()||"PATIENT DIRECTED":"WALK-IN";
+  const map  =pType==="MBD"?bestMap(grp):null;
+  const bt   =getBT(r);
+  const bag  =getBag(r);
+  const bags =bagC(bag);
+  const hasBag=!!bag;
 
-  // ── Total donors (only categorized entries) ──
-  if (hasCategorizedType(r)) {
+  // total donor count — every categorized entry
+  if(isCategorized(r)){
     s.totalDonors++;
-    if (entryDateISO) {
-      s.dailyCounts[entryDateISO] = (s.dailyCounts[entryDateISO] || 0) + 1;
-    }
+    if(iso) s.dailyCounts[iso]=(s.dailyCounts[iso]||0)+1;
   }
 
-  // ── Collection / bag stats ──
-  if (hasBag) {
-    s.bloodType[bt] = (s.bloodType[bt] || 0) + 1;
-    if (s.bagTypeBloodType[bagCode]) {
-      s.bagTypeBloodType[bagCode][bt] = (s.bagTypeBloodType[bagCode][bt] || 0) + 1;
+  if(hasBag){
+    s.bloodType[bt]=(s.bloodType[bt]||0)+1;
+    if(s.bagTypeBloodType[bag]) s.bagTypeBloodType[bag][bt]=(s.bagTypeBloodType[bag][bt]||0)+1;
+
+    if(pType==="MBD"){
+      addBag(s.fieldDonation["Total MBD"],bags);
+      const cat=map?(map.category||"Unmapped"):"Unmapped";
+      if(!s.fieldDonation[cat])s.fieldDonation[cat]={S:0,D:0,T:0,Q:0};
+      addBag(s.fieldDonation[cat],bags);
+      const d=parseDate(iso);
+      const dd=d?`${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}`:"";
+      const dname=map?(map.partnerName||grp||"Unspecified"):smartName(grp||"Unspecified");
+      const dplace=map&&map.place?map.place:(r.cityProvince||r.address||"");
+      const det={name:dname,place:dplace,date:dd,rawDate:iso,totalDonors:1,"450 cc S":bags.S,"450 cc D":bags.D,"450 cc T":bags.T,"450 cc Q":bags.Q};
+      if(cat==="Group")s.fieldDetails.group.push(det);
+      else if(cat==="RC143 / BRGY Base")s.fieldDetails.rc143.push(det);
+      else if(cat==="Pledge 25")s.fieldDetails.pledge25.push(det);
+      else s.fieldDetails.unmapped.push(det);
+    }else if(pType==="Walk-in"){
+      addBag(s.officeBleeding["Walk-in"],bags);
+    }else if(pType==="Patient Directed"){
+      addBag(s.officeBleeding["Patient Directed"],bags);
     }
 
-    if (donorTypePrim === "MBD") {
-      addBags(s.fieldDonation["Total MBD"], bags);
-      const category = mapping ? (mapping.category || "Unmapped") : "Unmapped";
-      if (!s.fieldDonation[category]) s.fieldDonation[category] = {S:0,D:0,T:0,Q:0};
-      addBags(s.fieldDonation[category], bags);
-
-      // Date display — use the formatted entry date (MM/DD/YY)
-      const d = parseDate(entryDateISO);
-      const dateDisplay = d ? `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}` : "";
-
-      // Use mbdDetails as the group name (uppercase, as stored by import/tracking)
-      const displayName = mapping
-        ? (mapping.partnerName || mbdGroup || "Unspecified")
-        : smartGroupDisplayName(mbdGroup || "Unspecified");
-      const displayPlace = mapping && mapping.place ? mapping.place : (r.cityProvince || r.address || "");
-
-      const detail = {
-        name: displayName,
-        place: displayPlace,
-        date: dateDisplay,
-        rawDate: entryDateISO,
-        totalDonors: 1,
-        "450 cc S": bags.S,
-        "450 cc D": bags.D,
-        "450 cc T": bags.T,
-        "450 cc Q": bags.Q
-      };
-      if      (category === "Group")            s.fieldDetails.group.push(detail);
-      else if (category === "RC143 / BRGY Base") s.fieldDetails.rc143.push(detail);
-      else if (category === "Pledge 25")         s.fieldDetails.pledge25.push(detail);
-      else                                       s.fieldDetails.unmapped.push(detail);
-
-    } else if (donorTypePrim === "Walk-in") {
-      addBags(s.officeBleeding["Walk-in"], bags);
-    } else if (donorTypePrim === "Patient Directed") {
-      addBags(s.officeBleeding["Patient Directed"], bags);
-    }
-
-    // ── Component prep ──
-    const prep = getPreparedComponents(bagCode);
-    Object.entries(prep).forEach(([comp, qty]) => {
-      s.components[comp] += qty;
-      if (qty > 0) s.componentBloodType[comp][bt] = (s.componentBloodType[comp][bt] || 0) + qty;
+    const prep=getComps(bag);
+    Object.entries(prep).forEach(([comp,qty])=>{
+      s.components[comp]+=qty;
+      if(qty>0)s.componentBloodType[comp][bt]=(s.componentBloodType[comp][bt]||0)+qty;
     });
   }
 
-  // ── Sex ──
-  const sex = normalizeSex(r.sex || "");
-  if (sex) s.sex[sex]++;
-
-  // ── Donor category / frequency ──
-  // donor-tracking.html stores donorCategory as "New","Repeat","Lapse"
-  const cat = normalizeDonorCategory(r.donorCategory || "");
-  if      (cat === "New")    s.frequency["First-time donors"]++;
-  else if (cat === "Lapse")  s.frequency["Repeat non-regular"]++;
-  else if (cat === "Repeat") s.frequency["Repeat regular"]++;
+  const sex=normSex(r.sex||""); if(sex)s.sex[sex]++;
+  const cat=normCat(r.donorCategory||"");
+  if(cat==="New")s.frequency["First-time donors"]++;
+  else if(cat==="Lapse")s.frequency["Repeat non-regular"]++;
+  else if(cat==="Repeat")s.frequency["Repeat regular"]++;
   s.frequency["Total"]++;
 
-  // ── Age ──
-  const age = getAge(r);
-  const ageGroup = getAgeGroup(age);
-  if (ageGroup) { s.age[ageGroup]++; s.age["Total"]++; }
-  const agePicGroup = getAgePicGroup(age);
-  if (agePicGroup) { s.agePicture[agePicGroup]++; s.agePicture["Total donations"]++; }
-
-  // ── Youth 16-25 ──
-  if (age != null && age >= 16 && age <= 25) {
-    const sx = normalizeSex(r.sex || "");
-    if (sx === "Male")   s.youth1625Sex["Male"]++;
-    if (sx === "Female") s.youth1625Sex["Female"]++;
+  const age=getAge(r);
+  const ag=ageGrp(age); if(ag){s.age[ag]++;s.age["Total"]++;}
+  const ap=ageGrpPic(age); if(ap){s.agePicture[ap]++;s.agePicture["Total donations"]++;}
+  if(age!=null&&age>=16&&age<=25){
+    const sx=normSex(r.sex||"");
+    if(sx==="Male")s.youth1625Sex["Male"]++;
+    if(sx==="Female")s.youth1625Sex["Female"]++;
     s.youth1625Sex["Total"]++;
   }
 }
 
-function getAgeGroup(age) {
-  if (age == null) return null;
-  if (age <= 17) return "16-17";
-  if (age <= 20) return "18-20";
-  if (age <= 30) return "21-30";
-  if (age <= 40) return "31-40";
-  if (age <= 50) return "41-50";
-  if (age <= 60) return "51-60";
-  if (age <= 65) return "60-65";
-  return "66 & above";
+function ageGrp(a){
+  if(a==null)return null;
+  if(a<=17)return"16-17"; if(a<=20)return"18-20"; if(a<=30)return"21-30";
+  if(a<=40)return"31-40"; if(a<=50)return"41-50"; if(a<=60)return"51-60";
+  if(a<=65)return"60-65"; return"66 & above";
 }
-function getAgePicGroup(age) {
-  if (age == null) return null;
-  if (age < 18)  return "Under 18";
-  if (age <= 24) return "18-24";
-  if (age <= 44) return "25-44";
-  if (age <= 64) return "45-64";
-  return "65 & above";
+function ageGrpPic(a){
+  if(a==null)return null;
+  if(a<18)return"Under 18"; if(a<=24)return"18-24";
+  if(a<=44)return"25-44";   if(a<=64)return"45-64"; return"65 & above";
 }
 
-// ─── RELEASING REQUESTS ───────────────────────────────────────────────────────
-function normalizeReqComponent(v) {
-  const s = String(v || "").toUpperCase().trim();
-  if (["WB","WHOLE BLOOD","450CC","450 CC","450S","450 S"].includes(s)) return "450 cc";
-  if (s === "PRBC") return "PRBC";
-  if (s === "FFP")  return "FFP";
-  if (["PC","PLATELET CONCENTRATE"].includes(s)) return "PC";
-  if (s === "CRYO") return "CRYO";
-  return "";
-}
-
-function applyRequestedOnly(s, r) {
-  const items = [];
-  if (Array.isArray(r.requests)) r.requests.forEach(x => items.push({ component: x.component||x.product||x.type||"", quantity: x.quantity||x.qty||0 }));
-  const panels = [r.requestedPanel, r.requestedBlood, r.bloodRequest, r.request].filter(x => x && typeof x === "object");
-  panels.forEach(p => {
-    ["WB","wb","PRBC","prbc","FFP","ffp","PC","pc","CRYO","cryo"].forEach(k => {
-      if (p[k] != null) items.push({ component: k, quantity: p[k] });
-    });
+function applyRequest(s,r){
+  const items=[];
+  if(Array.isArray(r.requests))r.requests.forEach(x=>items.push({component:x.component||x.product||x.type||"",quantity:x.quantity||x.qty||0}));
+  [r.requestedPanel,r.requestedBlood,r.bloodRequest,r.request].filter(x=>x&&typeof x==="object").forEach(p=>{
+    ["WB","wb","PRBC","prbc","FFP","ffp","PC","pc","CRYO","cryo"].forEach(k=>{if(p[k]!=null)items.push({component:k,quantity:p[k]});});
   });
-  items.forEach(item => {
-    const key = normalizeReqComponent(item.component);
-    const qty = Number(item.quantity) || 0;
-    if (key && qty) s.requests[key] += qty;
+  items.forEach(item=>{
+    const k=normReqComp(item.component),q=Number(item.quantity)||0;
+    if(k&&q)s.requests[k]+=q;
   });
 }
+function normReqComp(v){
+  const s=String(v||"").toUpperCase().trim();
+  if(["WB","WHOLE BLOOD","450CC","450 CC","450S","450 S"].includes(s))return"450 cc";
+  if(s==="PRBC")return"PRBC"; if(s==="FFP")return"FFP";
+  if(["PC","PLATELET CONCENTRATE"].includes(s))return"PC";
+  if(s==="CRYO")return"CRYO"; return"";
+}
 
-// ─── FILTER HELPERS ───────────────────────────────────────────────────────────
-function getFilteredDonors() {
-  const y = document.getElementById("filterYear").value;
-  const m = document.getElementById("filterMonth").value;
-  const q = String(document.getElementById("searchText").value || "").trim().toLowerCase();
-
-  return donorRecords.filter(r => {
-    if (!isVisible(r)) return false;
-    if (!hasCategorizedType(r)) return false;
-
-    const iso  = getResolvedEntryDate(r);
-    const d    = parseDate(iso);
-    const p    = getDateParts(d);
-    if (!p.year) return false;
-
-    if (y !== "ALL" && String(p.year) !== y) return false;
-    if (m !== "ALL" && String(p.month) !== m) return false;
-
-    if (q) {
-      const hay = [
-        r.mbdDetails, r.patientDirectedDetails,
-        r.walkInRaw, r.donorType,
-        r.surname, r.firstName
-      ].join(" ").toLowerCase();
-      if (!hay.includes(q)) return false;
+// ─── FILTER ───────────────────────────────────────────────────────────────────
+function getFiltered(){
+  const y=document.getElementById("filterYear").value;
+  const m=document.getElementById("filterMonth").value;
+  const q=String(document.getElementById("searchText").value||"").trim().toLowerCase();
+  return donorRecords.filter(r=>{
+    // Accept ALL records — we count everyone, including those without bag type
+    const iso=getDate(r); const d=parseDate(iso); const p=parts(d);
+    if(!p.year)return false;
+    if(y!=="ALL"&&String(p.year)!==y)return false;
+    if(m!=="ALL"&&String(p.month)!==m)return false;
+    if(q){
+      const hay=[r.mbdDetails,r.patientDirectedDetails,r.walkInRaw,r.donorType,r.surname,r.firstName].join(" ").toLowerCase();
+      if(!hay.includes(q))return false;
     }
     return true;
   });
 }
 
-function getFilteredReleasing() {
-  const y = document.getElementById("filterYear").value;
-  const m = document.getElementById("filterMonth").value;
-  return releasingRecords.filter(r => {
-    const d = parseDate(r.date || r.requestDate || r.releasedDate || r.entryDate || null);
-    const p = getDateParts(d);
-    if (y !== "ALL" && String(p.year) !== y) return false;
-    if (m !== "ALL" && String(p.month) !== m) return false;
+function getReleasing(){
+  const y=document.getElementById("filterYear").value;
+  const m=document.getElementById("filterMonth").value;
+  return releasingRecords.filter(r=>{
+    const d=parseDate(r.date||r.requestDate||r.releasedDate||r.entryDate||null);
+    const p=parts(d);
+    if(y!=="ALL"&&String(p.year)!==y)return false;
+    if(m!=="ALL"&&String(p.month)!==m)return false;
     return true;
   });
 }
 
-// ─── BUILD STATISTICS ─────────────────────────────────────────────────────────
-function buildStatistics() {
-  try {
-    // Run carry-forward on the full dataset once per build
+// ─── BUILD STATS ──────────────────────────────────────────────────────────────
+function buildStats(){
+  try{
+    // Carry-forward dates across import batches
     applyCarryForward(donorRecords);
 
-    const donors   = getFilteredDonors();
-    const releases = getFilteredReleasing();
-    const grouped  = {};
+    const donors=getFiltered();
+    const releases=getReleasing();
+    const grouped={};
 
-    donors.forEach(r => {
-      const iso = getResolvedEntryDate(r);
-      const d   = parseDate(iso);
-      const p   = getDateParts(d);
-      if (!p.year || !p.month) return;
-      const y = String(p.year);
-      const k = `${p.year}-${String(p.month).padStart(2,"0")}`;
-      if (!grouped[y])    grouped[y] = {};
-      if (!grouped[y][k]) grouped[y][k] = emptyStats();
-      grouped[y][k]._meta = { year: p.year, month: p.month };
-      applyDonor(grouped[y][k], r);
+    // Diagnostic counts
+    const diagCat=donors.filter(r=>isCategorized(r)).length;
+    const diagBag=donors.filter(r=>getBag(r)).length;
+    const diagNoCat=donors.filter(r=>!isCategorized(r)).length;
+
+    donors.forEach(r=>{
+      const iso=getDate(r); const d=parseDate(iso); const p=parts(d);
+      if(!p.year||!p.month)return;
+      const y=String(p.year), k=`${p.year}-${String(p.month).padStart(2,"0")}`;
+      if(!grouped[y])grouped[y]={};
+      if(!grouped[y][k])grouped[y][k]=mkStats();
+      grouped[y][k]._meta={year:p.year,month:p.month};
+      applyDonor(grouped[y][k],r);
     });
 
-    releases.forEach(r => {
-      const d = parseDate(r.date || r.requestDate || r.releasedDate || r.entryDate || null);
-      const p = getDateParts(d);
-      if (!p.year || !p.month) return;
-      const y = String(p.year);
-      const k = `${p.year}-${String(p.month).padStart(2,"0")}`;
-      if (!grouped[y])    grouped[y] = {};
-      if (!grouped[y][k]) grouped[y][k] = emptyStats();
-      grouped[y][k]._meta = { year: p.year, month: p.month };
-      applyRequestedOnly(grouped[y][k], r);
+    releases.forEach(r=>{
+      const d=parseDate(r.date||r.requestDate||r.releasedDate||r.entryDate||null);
+      const p=parts(d); if(!p.year||!p.month)return;
+      const y=String(p.year), k=`${p.year}-${String(p.month).padStart(2,"0")}`;
+      if(!grouped[y])grouped[y]={};
+      if(!grouped[y][k])grouped[y][k]=mkStats();
+      grouped[y][k]._meta={year:p.year,month:p.month};
+      applyRequest(grouped[y][k],r);
     });
 
-    groupedCache = grouped;
-    renderMonthlySummary(grouped);
-    renderMonthlySexTable(grouped);
-    const q = String(document.getElementById("searchText").value || "").trim();
-    if (q) renderSearchGroupReport(grouped, q);
-    else   renderReport(grouped);
-    setStatus("Statistics loaded successfully.", "ok");
-  } catch(e) {
+    groupedCache=grouped;
+    renderSummary(grouped);
+    renderSexTable(grouped);
+    const q=String(document.getElementById("searchText").value||"").trim();
+    if(q)renderSearchReport(grouped,q);
+    else renderReport(grouped);
+
+    // Show diagnostic bar
+    showDebug(`
+      📋 Total records in DB: <b>${allRecords.length}</b> &nbsp;|&nbsp;
+      ✅ Visible (not deleted): <b>${donorRecords.length}</b> &nbsp;|&nbsp;
+      🔍 Matching current filter: <b>${donors.length}</b> &nbsp;|&nbsp;
+      🏷️ Categorized (MBD/Walk-in/PD): <b>${diagCat}</b> &nbsp;|&nbsp;
+      🩸 Has bag type: <b>${diagBag}</b> &nbsp;|&nbsp;
+      ⚠️ No donor type: <b>${diagNoCat}</b>
+    `);
+    setStatus(`Statistics loaded — ${donorRecords.length} active records, ${diagCat} categorized.`,"ok");
+  }catch(e){
     console.error(e);
-    document.getElementById("reportContainer").innerHTML     = `<div class="empty">Failed to build statistics: ${escapeHtml(e.message || String(e))}</div>`;
-    document.getElementById("summaryGrid").innerHTML         = `<div class="empty">Failed to build monthly summary.</div>`;
-    document.getElementById("sexMonthlyContainer").innerHTML = `<div class="empty">Failed to build male / female monthly table.</div>`;
-    setStatus("Failed to build statistics.", "error");
+    document.getElementById("reportContainer").innerHTML=`<div class="empty">Error: ${escH(e.message||String(e))}</div>`;
+    setStatus("Failed to build statistics: "+e.message,"error");
   }
 }
 
 // ─── RENDER HELPERS ───────────────────────────────────────────────────────────
-function num(v) { return Number(v || 0).toLocaleString(); }
-function escapeHtml(s) {
-  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
-}
-function escapeJs(s) {
-  return String(s ?? "").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,"\\n");
-}
-function csvEscape(v) {
-  const s = String(v ?? "");
-  return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g,'""')}"` : s;
-}
-function sumVals(o) { return Object.values(o).reduce((a,b) => a+(Number(b)||0), 0); }
-function sumDetailField(rows, f) { return (rows||[]).reduce((a,b)=>a+(Number(b[f])||0),0); }
-function getMonthLabel(meta) { return `${MONTHS[(meta.month||1)-1]} ${meta.year||""}`.trim(); }
-function flattenMonths(grouped) {
-  const rows = [];
-  Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(y => {
-    Object.keys(grouped[y]).sort((a,b)=>b.localeCompare(a)).forEach(k => rows.push(grouped[y][k]));
+function n(v){return Number(v||0).toLocaleString();}
+function escH(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+function escJ(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,"\\n");}
+function csvE(v){const s=String(v??"");return(s.includes(",")||s.includes('"')||s.includes("\n"))?`"${s.replace(/"/g,'""')}"`:s;}
+function sumV(o){return Object.values(o).reduce((a,b)=>a+(Number(b)||0),0);}
+function sumDF(rows,f){return(rows||[]).reduce((a,b)=>a+(Number(b[f])||0),0);}
+function mLabel(meta){return`${MONTHS[(meta.month||1)-1]} ${meta.year||""}`.trim();}
+function flatMonths(g){const r=[];Object.keys(g).sort((a,b)=>b.localeCompare(a)).forEach(y=>Object.keys(g[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>r.push(g[y][k])));return r;}
+
+function combineRows(rows){
+  const map={};
+  (rows||[]).forEach(r=>{
+    const k=normKey(r.name||"");
+    if(!map[k])map[k]={name:k||r.name||"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0,totalDonors:0};
+    map[k]["450 cc S"]+=Number(r["450 cc S"]||0); map[k]["450 cc D"]+=Number(r["450 cc D"]||0);
+    map[k]["450 cc T"]+=Number(r["450 cc T"]||0); map[k]["450 cc Q"]+=Number(r["450 cc Q"]||0);
+    map[k].totalDonors+=Number(r.totalDonors||0);
+    if(!map[k].place&&r.place)map[k].place=r.place;
+    if(!map[k].date&&r.date)map[k].date=r.date;
   });
-  return rows;
+  return Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-function combineSmartGroupRows(rows) {
-  const map = {};
-  (rows||[]).forEach(r => {
-    const key = normalizeAliasKey(r.name || "");
-    if (!map[key]) map[key] = { name: key||r.name||"", place:"", date:"", "450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0, totalDonors:0 };
-    map[key]["450 cc S"] += Number(r["450 cc S"]||0);
-    map[key]["450 cc D"] += Number(r["450 cc D"]||0);
-    map[key]["450 cc T"] += Number(r["450 cc T"]||0);
-    map[key]["450 cc Q"] += Number(r["450 cc Q"]||0);
-    map[key].totalDonors += Number(r.totalDonors||0);
-    if (!map[key].place && r.place) map[key].place = r.place;
-    if (!map[key].date  && r.date)  map[key].date  = r.date;
-  });
-  return Object.values(map).sort((a,b) => a.name.localeCompare(b.name));
+function dailyDrop(mk,s){
+  const keys=Object.keys(s.dailyCounts||{}).sort((a,b)=>a.localeCompare(b));
+  const smk=escH(mk), jmk=escJ(mk);
+  const inner=keys.length
+    ?`<div class="daily-list">${keys.map(dk=>{const d=parseDate(dk);const lbl=d?`${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`:dk;return`<div class="daily-row"><span>${escH(lbl)}</span><span class="daily-count">${n(s.dailyCounts[dk])}</span></div>`;}).join("")}</div>`
+    :`<div class="daily-empty">No daily counts.</div>`;
+  return`<div class="daily-wrap"><button class="daily-btn" onclick="tDaily('${jmk}')"><span>Daily Count of Donors</span><span id="da-${smk}">▼</span></button><div id="dc-${smk}" class="daily-content">${inner}</div></div>`;
 }
 
-// ─── DAILY DROPDOWN ───────────────────────────────────────────────────────────
-function buildDailyDropdown(monthKey, s) {
-  const keys = Object.keys(s.dailyCounts || {}).sort((a,b) => a.localeCompare(b));
-  const safeKey = escapeHtml(monthKey);
-  const jsKey   = escapeJs(monthKey);
-
-  const inner = keys.length
-    ? `<div class="daily-dropdown-list">${keys.map(dayKey => {
-        const d     = parseDate(dayKey);
-        const label = d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : dayKey;
-        return `<div class="daily-row"><div class="daily-row-date">${escapeHtml(label)}</div><div class="daily-row-count">${num(s.dailyCounts[dayKey])}</div></div>`;
-      }).join("")}</div>`
-    : `<div class="daily-empty">No daily donor counts found.</div>`;
-
-  return `
-    <div class="daily-dropdown-wrap">
-      <button type="button" class="daily-dropdown-btn" onclick="toggleDailyDropdown('${jsKey}')">
-        <span>Daily Count of Donors</span>
-        <span id="dailyArrow-${safeKey}">▼</span>
-      </button>
-      <div id="dailyDropdown-${safeKey}" class="daily-dropdown-content">${inner}</div>
+function renderSummary(g){
+  const years=Object.keys(g).sort((a,b)=>b.localeCompare(a));
+  const el=document.getElementById("summaryGrid");
+  if(!years.length){el.innerHTML=`<div class="empty">No monthly summary found.</div>`;return;}
+  el.innerHTML=years.map((y,yi)=>{
+    const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
+    return`<div class="summary-year-block">
+      <div class="summary-year-head" onclick="tNext(this)"><span>${escH(y)}</span><span>${mks.length} month${mks.length===1?"":"s"}</span></div>
+      <div class="summary-year-content ${yi===0?"open":""}">
+        <div class="summary-year-grid">
+          ${mks.map(k=>{const s=g[y][k];const mk=`${s._meta?.year||""}-${String(s._meta?.month||"").padStart(2,"0")}`;return`
+            <div class="summary-box">
+              <div class="lbl">${escH(mLabel(s._meta||{}))}</div>
+              <div class="val">${n(s.totalDonors)}</div>
+              <div class="sub">Total Donor Entries</div>
+              <div class="sub">Office: ${n(sumBG(s.officeBleeding["Walk-in"])+sumBG(s.officeBleeding["Patient Directed"]))}</div>
+              <div class="sub">Field (MBD): ${n(sumBG(s.fieldDonation["Total MBD"]))}</div>
+              <div class="sub">Prepared: ${n(sumV(s.components))}</div>
+              <div class="sub">Requested: ${n(sumV(s.requests))}</div>
+              ${dailyDrop(mk,s)}
+            </div>`;}).join("")}
+        </div>
+      </div>
     </div>`;
-}
-
-// ─── MONTHLY SUMMARY ─────────────────────────────────────────────────────────
-function renderMonthlySummary(grouped) {
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-  const el    = document.getElementById("summaryGrid");
-  if (!years.length) { el.innerHTML = `<div class="empty">No monthly summary found.</div>`; return; }
-  el.innerHTML = years.map((year, yi) => {
-    const mKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="summary-year-block">
-        <div class="summary-year-head" onclick="toggleNext(this)">
-          <span>${escapeHtml(year)}</span>
-          <span>${mKeys.length} month${mKeys.length===1?"":"s"}</span>
-        </div>
-        <div class="summary-year-content ${yi===0?"open":""}">
-          <div class="summary-year-grid">
-            ${mKeys.map(k => {
-              const s  = grouped[year][k];
-              const mk = `${s._meta?.year||""}-${String(s._meta?.month||"").padStart(2,"0")}`;
-              return `
-                <div class="summary-box">
-                  <div class="label">${escapeHtml(getMonthLabel(s._meta||{}))}</div>
-                  <div class="value">${num(s.totalDonors)}</div>
-                  <div class="sub">Total Donor Entries</div>
-                  <div class="sub">Office: ${num(sumBagGroup(s.officeBleeding["Walk-in"])+sumBagGroup(s.officeBleeding["Patient Directed"]))}</div>
-                  <div class="sub">Field: ${num(sumBagGroup(s.fieldDonation["Total MBD"]))}</div>
-                  <div class="sub">Prepared: ${num(sumVals(s.components))}</div>
-                  <div class="sub">Requested: ${num(sumVals(s.requests))}</div>
-                  ${buildDailyDropdown(mk, s)}
-                </div>`;
-            }).join("")}
-          </div>
-        </div>
-      </div>`;
   }).join("");
 }
 
-// ─── MALE / FEMALE TABLE ─────────────────────────────────────────────────────
-function renderMonthlySexTable(grouped) {
-  const months = flattenMonths(grouped);
-  const el     = document.getElementById("sexMonthlyContainer");
-  if (!months.length) { el.innerHTML = `<div class="empty">No male / female data found.</div>`; return; }
-  el.innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <tr><th>Month</th><th>Male</th><th>Female</th><th>Total</th></tr>
-        ${months.map(s => `
-          <tr>
-            <td>${escapeHtml(getMonthLabel(s._meta||{}))}</td>
-            <td>${num(s.sex["Male"])}</td>
-            <td>${num(s.sex["Female"])}</td>
-            <td>${num((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td>
-          </tr>`).join("")}
-      </table>
-    </div>`;
+function renderSexTable(g){
+  const months=flatMonths(g);
+  const el=document.getElementById("sexMonthly");
+  if(!months.length){el.innerHTML=`<div class="empty">No male/female data found.</div>`;return;}
+  el.innerHTML=`<div class="table-wrap"><table>
+    <tr><th>Month</th><th>Male</th><th>Female</th><th>Total</th></tr>
+    ${months.map(s=>`<tr><td>${escH(mLabel(s._meta||{}))}</td><td>${n(s.sex["Male"])}</td><td>${n(s.sex["Female"])}</td><td>${n((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td></tr>`).join("")}
+  </table></div>`;
 }
 
-// ─── FIELD CATEGORY TABLE ────────────────────────────────────────────────────
-function renderFieldCategoryTable(title, label, rows) {
-  const r2 = rows.length ? rows : [{ name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0 }];
-  return `
-    <div class="table-wrap" style="margin-bottom:10px;">
-      <table>
-        <tr class="subheader"><td colspan="7">${title}</td></tr>
-        <tr>
-          <th>${label==="Group"?"Group":"Municipality"}</th>
-          <th>${label==="Pledge 25"?"School or Barangay street (location)":"Place"}</th>
-          <th>Date</th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th>
-        </tr>
-        ${r2.map(r => `
-          <tr>
-            <td>${escapeHtml(r.name||"")}</td><td>${escapeHtml(r.place||"")}</td>
-            <td>${escapeHtml(r.date||"")}</td>
-            <td>${num(r["450 cc S"])}</td><td>${num(r["450 cc D"])}</td>
-            <td>${num(r["450 cc T"])}</td><td>${num(r["450 cc Q"])}</td>
-          </tr>`).join("")}
-        <tr class="subheader">
-          <td colspan="3">Sub total</td>
-          <td>${num(sumDetailField(r2,"450 cc S"))}</td>
-          <td>${num(sumDetailField(r2,"450 cc D"))}</td>
-          <td>${num(sumDetailField(r2,"450 cc T"))}</td>
-          <td>${num(sumDetailField(r2,"450 cc Q"))}</td>
-        </tr>
-      </table>
-    </div>`;
+function fieldTable(title,label,rows){
+  const r2=rows.length?rows:[{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+  return`<div class="table-wrap" style="margin-bottom:10px"><table>
+    <tr class="sub-row"><td colspan="7">${title}</td></tr>
+    <tr><th>${label==="Group"?"Group":"Municipality"}</th><th>${label==="Pledge 25"?"School or Barangay street (location)":"Place"}</th><th>Date</th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+    ${r2.map(r=>`<tr><td>${escH(r.name||"")}</td><td>${escH(r.place||"")}</td><td>${escH(r.date||"")}</td><td>${n(r["450 cc S"])}</td><td>${n(r["450 cc D"])}</td><td>${n(r["450 cc T"])}</td><td>${n(r["450 cc Q"])}</td></tr>`).join("")}
+    <tr class="sub-row"><td colspan="3">Sub total</td><td>${n(sumDF(r2,"450 cc S"))}</td><td>${n(sumDF(r2,"450 cc D"))}</td><td>${n(sumDF(r2,"450 cc T"))}</td><td>${n(sumDF(r2,"450 cc Q"))}</td></tr>
+  </table></div>`;
 }
 
-// ─── SEARCH GROUP REPORT ─────────────────────────────────────────────────────
-function aggregateSearchRows(details, query) {
-  const q   = String(query || "").trim().toLowerCase();
-  const all = [...(details.group||[]),...(details.rc143||[]),...(details.pledge25||[]),...(details.unmapped||[])];
-  const map = {};
-  all.forEach(row => {
-    const name = String(row.name || "").trim();
-    if (q && !name.toLowerCase().includes(q)) return;
-    const key = `${normalizeAliasKey(name)}__${row.date||""}`;
-    if (!map[key]) map[key] = { name, date:row.date||"", rawDate: parseDate(row.rawDate||row.date), totalDonors:0 };
-    map[key].totalDonors += Number(row.totalDonors || 0);
+function aggSearch(det,q){
+  const qn=String(q||"").trim().toLowerCase();
+  const all=[...(det.group||[]),...(det.rc143||[]),...(det.pledge25||[]),...(det.unmapped||[])];
+  const map={};
+  all.forEach(row=>{
+    const name=String(row.name||"").trim();
+    if(qn&&!name.toLowerCase().includes(qn))return;
+    const key=`${normKey(name)}__${row.date||""}`;
+    if(!map[key])map[key]={name,date:row.date||"",rawDate:parseDate(row.rawDate||row.date),totalDonors:0};
+    map[key].totalDonors+=Number(row.totalDonors||0);
   });
-  return Object.values(map).sort((a,b) => {
-    const at = a.rawDate?.getTime()||0, bt = b.rawDate?.getTime()||0;
-    return bt-at || a.name.localeCompare(b.name);
-  });
+  return Object.values(map).sort((a,b)=>{const at=a.rawDate?.getTime()||0,bt=b.rawDate?.getTime()||0;return bt-at||a.name.localeCompare(b.name);});
 }
 
-function renderSearchGroupReport(grouped, query) {
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-  const el    = document.getElementById("reportContainer");
-  if (!years.length) { el.innerHTML = `<div class="empty">No statistics found.</div>`; return; }
-  el.innerHTML = years.map((year, yi) => {
-    const mKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="year-block">
-        <div class="year-head" onclick="toggleNext(this)">
-          <span>${year}</span><span>${mKeys.length} month group(s)</span>
-        </div>
-        <div class="year-content ${yi===0?"open":""}">
-          ${mKeys.map((k, mi) => {
-            const s    = grouped[year][k];
-            const rows = aggregateSearchRows(s.fieldDetails, query);
-            return `
-              <div class="month-block">
-                <div class="month-head" onclick="toggleNext(this)">
-                  <span>${MONTHS[(s._meta.month||1)-1]}</span>
-                  <span>${num(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))} donor(s)</span>
-                </div>
-                <div class="month-content ${yi===0&&mi===0?"open":""}">
-                  <div class="sheet-block">
-                    <div class="sheet-title title-b">Group Search Results</div>
-                    <div class="search-note">Showing only Date and Total Donors per Date for matching group search.</div>
-                    ${rows.length ? `
-                    <div class="table-wrap">
-                      <table>
-                        <tr><th>Group</th><th>Date</th><th>Total Donors</th></tr>
-                        ${rows.map(r => `
-                          <tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${num(r.totalDonors)}</td></tr>`).join("")}
-                        <tr class="subheader"><td colspan="2">Total</td><td>${num(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))}</td></tr>
-                      </table>
-                    </div>` : `<div class="empty">No matching group entries for this month.</div>`}
-                  </div>
-                </div>
-              </div>`;
-          }).join("")}
-        </div>
-      </div>`;
+function renderSearchReport(g,q){
+  const years=Object.keys(g).sort((a,b)=>b.localeCompare(a));
+  const el=document.getElementById("reportContainer");
+  if(!years.length){el.innerHTML=`<div class="empty">No statistics found.</div>`;return;}
+  el.innerHTML=years.map((y,yi)=>{
+    const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
+    return`<div class="year-block">
+      <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month(s)</span></div>
+      <div class="year-content ${yi===0?"open":""}">
+        ${mks.map((k,mi)=>{const s=g[y][k];const rows=aggSearch(s.fieldDetails,q);return`
+          <div class="month-block">
+            <div class="month-head" onclick="tNext(this)"><span>${MONTHS[(s._meta.month||1)-1]}</span><span>${n(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))} donor(s)</span></div>
+            <div class="month-content ${yi===0&&mi===0?"open":""}">
+              <div class="sheet-block"><div class="sheet-title tb">Group Search Results</div>
+              <div class="search-note">Showing matching groups with total donor counts.</div>
+              ${rows.length?`<div class="table-wrap"><table>
+                <tr><th>Group</th><th>Date</th><th>Total Donors</th></tr>
+                ${rows.map(r=>`<tr><td>${escH(r.name)}</td><td>${escH(r.date)}</td><td>${n(r.totalDonors)}</td></tr>`).join("")}
+                <tr class="sub-row"><td colspan="2">Total</td><td>${n(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))}</td></tr>
+              </table></div>`:`<div class="empty">No matching groups this month.</div>`}
+              </div>
+            </div>
+          </div>`;}).join("")}
+      </div>
+    </div>`;
   }).join("");
 }
 
-// ─── MAIN REPORT ─────────────────────────────────────────────────────────────
-function renderReport(grouped) {
-  const years = Object.keys(grouped).sort((a,b)=>b.localeCompare(a));
-  const el    = document.getElementById("reportContainer");
-  if (!years.length) { el.innerHTML = `<div class="empty">No statistics found.</div>`; return; }
-  el.innerHTML = years.map((year, yi) => {
-    const mKeys = Object.keys(grouped[year]).sort((a,b)=>b.localeCompare(a));
-    return `
-      <div class="year-block">
-        <div class="year-head" onclick="toggleNext(this)">
-          <span>${year}</span><span>${mKeys.length} month group(s)</span>
-        </div>
-        <div class="year-content ${yi===0?"open":""}">
-          ${mKeys.map((k, mi) => {
-            const s = grouped[year][k];
-            const mn = MONTHS[(s._meta.month||1)-1];
-            return `
-              <div class="month-block">
-                <div class="month-head" onclick="toggleNext(this)">
-                  <span>${mn}</span><span>${num(s.totalDonors)} donor entries</span>
-                </div>
-                <div class="month-content ${yi===0&&mi===0?"open":""}">
+function renderReport(g){
+  const years=Object.keys(g).sort((a,b)=>b.localeCompare(a));
+  const el=document.getElementById("reportContainer");
+  if(!years.length){el.innerHTML=`<div class="empty">No statistics found for the selected filter.</div>`;return;}
+  el.innerHTML=years.map((y,yi)=>{
+    const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
+    return`<div class="year-block">
+      <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month group(s)</span></div>
+      <div class="year-content ${yi===0?"open":""}">
+        ${mks.map((k,mi)=>{const s=g[y][k];const mn=MONTHS[(s._meta.month||1)-1];return`
+          <div class="month-block">
+            <div class="month-head" onclick="tNext(this)"><span>${mn}</span><span>${n(s.totalDonors)} donor entries</span></div>
+            <div class="month-content ${yi===0&&mi===0?"open":""}">
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-a">A. Office Bleeding</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                      <tr><td>1. Walk-in</td><td>${num(s.officeBleeding["Walk-in"].S)}</td><td>${num(s.officeBleeding["Walk-in"].D)}</td><td>${num(s.officeBleeding["Walk-in"].T)}</td><td>${num(s.officeBleeding["Walk-in"].Q)}</td></tr>
-                      <tr><td>2. Patient-directed</td><td>${num(s.officeBleeding["Patient Directed"].S)}</td><td>${num(s.officeBleeding["Patient Directed"].D)}</td><td>${num(s.officeBleeding["Patient Directed"].T)}</td><td>${num(s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                      <tr class="subheader">
-                        <td>Total</td>
-                        <td>${num(s.officeBleeding["Walk-in"].S+s.officeBleeding["Patient Directed"].S)}</td>
-                        <td>${num(s.officeBleeding["Walk-in"].D+s.officeBleeding["Patient Directed"].D)}</td>
-                        <td>${num(s.officeBleeding["Walk-in"].T+s.officeBleeding["Patient Directed"].T)}</td>
-                        <td>${num(s.officeBleeding["Walk-in"].Q+s.officeBleeding["Patient Directed"].Q)}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title ta">A. Office Bleeding</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+                <tr><td>1. Walk-in</td><td>${n(s.officeBleeding["Walk-in"].S)}</td><td>${n(s.officeBleeding["Walk-in"].D)}</td><td>${n(s.officeBleeding["Walk-in"].T)}</td><td>${n(s.officeBleeding["Walk-in"].Q)}</td></tr>
+                <tr><td>2. Patient-directed</td><td>${n(s.officeBleeding["Patient Directed"].S)}</td><td>${n(s.officeBleeding["Patient Directed"].D)}</td><td>${n(s.officeBleeding["Patient Directed"].T)}</td><td>${n(s.officeBleeding["Patient Directed"].Q)}</td></tr>
+                <tr class="sub-row"><td>Total</td>
+                  <td>${n(s.officeBleeding["Walk-in"].S+s.officeBleeding["Patient Directed"].S)}</td>
+                  <td>${n(s.officeBleeding["Walk-in"].D+s.officeBleeding["Patient Directed"].D)}</td>
+                  <td>${n(s.officeBleeding["Walk-in"].T+s.officeBleeding["Patient Directed"].T)}</td>
+                  <td>${n(s.officeBleeding["Walk-in"].Q+s.officeBleeding["Patient Directed"].Q)}</td>
+                </tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-b">B. Field Donation</div>
-                    ${renderFieldCategoryTable("Group","Group",combineSmartGroupRows(s.fieldDetails.group))}
-                    ${renderFieldCategoryTable("RC143 or Brgy base","RC143 / BRGY Base",combineSmartGroupRows(s.fieldDetails.rc143))}
-                    ${renderFieldCategoryTable("Pledge 25","Pledge 25",combineSmartGroupRows(s.fieldDetails.pledge25))}
-                  </div>
+              <div class="sheet-block"><div class="sheet-title tb">B. Field Donation</div>
+                ${fieldTable("Group","Group",combineRows(s.fieldDetails.group))}
+                ${fieldTable("RC143 or Brgy base","RC143 / BRGY Base",combineRows(s.fieldDetails.rc143))}
+                ${fieldTable("Pledge 25","Pledge 25",combineRows(s.fieldDetails.pledge25))}
+              </div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-c">II. Blood Type Distribution of Blood Collection</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                      ${["O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"].map(bt => `
-                        <tr>
-                          <td>${bt}</td>
-                          <td>${num(s.bagTypeBloodType.S[bt]||0)}</td>
-                          <td>${num(s.bagTypeBloodType.D[bt]||0)}</td>
-                          <td>${num(s.bagTypeBloodType.T[bt]||0)}</td>
-                          <td>${num(s.bagTypeBloodType.Q[bt]||0)}</td>
-                        </tr>`).join("")}
-                      <tr class="subheader">
-                        <td>Total</td>
-                        <td>${num(sumBagCol(s,"S"))}</td>
-                        <td>${num(sumBagCol(s,"D"))}</td>
-                        <td>${num(sumBagCol(s,"T"))}</td>
-                        <td>${num(sumBagCol(s,"Q"))}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title tc">II. Blood Type Distribution of Blood Collection</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+                ${["O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"].map(bt=>`<tr><td>${bt}</td><td>${n(s.bagTypeBloodType.S[bt]||0)}</td><td>${n(s.bagTypeBloodType.D[bt]||0)}</td><td>${n(s.bagTypeBloodType.T[bt]||0)}</td><td>${n(s.bagTypeBloodType.Q[bt]||0)}</td></tr>`).join("")}
+                <tr class="sub-row"><td>Total</td><td>${n(sumBC(s,"S"))}</td><td>${n(sumBC(s,"D"))}</td><td>${n(sumBC(s,"T"))}</td><td>${n(sumBC(s,"Q"))}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-d">III. Component Preparation</div>
-                    <div class="table-wrap"><table>
-                      <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
-                      <tr class="subheader">
-                        <td>No. of components prepared</td>
-                        <td>${num(s.components["450 cc"])}</td><td>${num(s.components["PRBC"])}</td>
-                        <td>${num(s.components["FFP"])}</td><td>${num(s.components["PC"])}</td>
-                        <td>${num(s.components["CRYO"])}</td>
-                      </tr>
-                      ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt => `
-                        <tr>
-                          <td>${bt}</td>
-                          <td>${num(s.componentBloodType["450 cc"][bt]||0)}</td>
-                          <td>${num(s.componentBloodType["PRBC"][bt]||0)}</td>
-                          <td>${num(s.componentBloodType["FFP"][bt]||0)}</td>
-                          <td>${num(s.componentBloodType["PC"][bt]||0)}</td>
-                          <td>${num(s.componentBloodType["CRYO"][bt]||0)}</td>
-                        </tr>`).join("")}
-                      <tr class="subheader">
-                        <td>Unknown</td>
-                        <td>${num(s.componentBloodType["450 cc"]["Unknown"]||0)}</td>
-                        <td>${num(s.componentBloodType["PRBC"]["Unknown"]||0)}</td>
-                        <td>${num(s.componentBloodType["FFP"]["Unknown"]||0)}</td>
-                        <td>${num(s.componentBloodType["PC"]["Unknown"]||0)}</td>
-                        <td>${num(s.componentBloodType["CRYO"]["Unknown"]||0)}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title td">III. Component Preparation</div>
+              <div class="table-wrap"><table>
+                <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
+                <tr class="sub-row"><td>No. of components prepared</td><td>${n(s.components["450 cc"])}</td><td>${n(s.components["PRBC"])}</td><td>${n(s.components["FFP"])}</td><td>${n(s.components["PC"])}</td><td>${n(s.components["CRYO"])}</td></tr>
+                ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt=>`<tr><td>${bt}</td><td>${n(s.componentBloodType["450 cc"][bt]||0)}</td><td>${n(s.componentBloodType["PRBC"][bt]||0)}</td><td>${n(s.componentBloodType["FFP"][bt]||0)}</td><td>${n(s.componentBloodType["PC"][bt]||0)}</td><td>${n(s.componentBloodType["CRYO"][bt]||0)}</td></tr>`).join("")}
+                <tr class="sub-row"><td>Unknown</td><td>${n(s.componentBloodType["450 cc"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PRBC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["FFP"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["CRYO"]["Unknown"]||0)}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-e">IV. Blood Requests Received</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
-                      <tr>
-                        <td>Requested Only</td>
-                        <td>${num(s.requests["450 cc"])}</td><td>${num(s.requests["PRBC"])}</td>
-                        <td>${num(s.requests["FFP"])}</td><td>${num(s.requests["PC"])}</td>
-                        <td>${num(s.requests["CRYO"])}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title te">IV. Blood Requests Received</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
+                <tr><td>Requested Only</td><td>${n(s.requests["450 cc"])}</td><td>${n(s.requests["PRBC"])}</td><td>${n(s.requests["FFP"])}</td><td>${n(s.requests["PC"])}</td><td>${n(s.requests["CRYO"])}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-f">V. Sex Distribution of Donors</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
-                      <tr>
-                        <td>Donors</td>
-                        <td>${num(s.sex["Male"])}</td><td>${num(s.sex["Female"])}</td>
-                        <td>${num((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title tf">V. Sex Distribution of Donors</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
+                <tr><td>Donors</td><td>${n(s.sex["Male"])}</td><td>${n(s.sex["Female"])}</td><td>${n((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-g">VI. Distribution of Donors according to Frequency of Donation</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
-                      <tr>
-                        <td>Donors</td>
-                        <td>${num(s.frequency["First-time donors"])}</td>
-                        <td>${num(s.frequency["Repeat non-regular"])}</td>
-                        <td>${num(s.frequency["Repeat regular"])}</td>
-                        <td>${num(s.frequency["Total"])}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title tg">VI. Distribution of Donors according to Frequency of Donation</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
+                <tr><td>Donors</td><td>${n(s.frequency["First-time donors"])}</td><td>${n(s.frequency["Repeat non-regular"])}</td><td>${n(s.frequency["Repeat regular"])}</td><td>${n(s.frequency["Total"])}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-h">VII. Distribution of Donors By Age Group</div>
-                    <div class="table-wrap"><table>
-                      <tr>
-                        <th></th><th>16-17</th><th>18-20</th><th>21-30</th><th>31-40</th>
-                        <th>41-50</th><th>51-60</th><th>60-65</th><th>66 & above</th><th>Total</th>
-                      </tr>
-                      <tr>
-                        <td>Donors</td>
-                        <td>${num(s.age["16-17"])}</td><td>${num(s.age["18-20"])}</td>
-                        <td>${num(s.age["21-30"])}</td><td>${num(s.age["31-40"])}</td>
-                        <td>${num(s.age["41-50"])}</td><td>${num(s.age["51-60"])}</td>
-                        <td>${num(s.age["60-65"])}</td><td>${num(s.age["66 & above"])}</td>
-                        <td>${num(s.age["Total"])}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title th">VII. Distribution of Donors By Age Group</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>16-17</th><th>18-20</th><th>21-30</th><th>31-40</th><th>41-50</th><th>51-60</th><th>60-65</th><th>66 & above</th><th>Total</th></tr>
+                <tr><td>Donors</td><td>${n(s.age["16-17"])}</td><td>${n(s.age["18-20"])}</td><td>${n(s.age["21-30"])}</td><td>${n(s.age["31-40"])}</td><td>${n(s.age["41-50"])}</td><td>${n(s.age["51-60"])}</td><td>${n(s.age["60-65"])}</td><td>${n(s.age["66 & above"])}</td><td>${n(s.age["Total"])}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-i">VIII. Donor Statistics by Age Range</div>
-                    <div class="table-wrap"><table>
-                      <tr><th>Category</th><th>Count</th></tr>
-                      <tr><td>Donors under 18 years</td><td>${num(s.agePicture["Under 18"])}</td></tr>
-                      <tr><td>Donors aged 18 to 24 years</td><td>${num(s.agePicture["18-24"])}</td></tr>
-                      <tr><td>Donors aged 25 to 44 years</td><td>${num(s.agePicture["25-44"])}</td></tr>
-                      <tr><td>Donors aged 45 to 64 years</td><td>${num(s.agePicture["45-64"])}</td></tr>
-                      <tr><td>Donors aged 65 years or older</td><td>${num(s.agePicture["65 & above"])}</td></tr>
-                      <tr class="subheader"><td>Total number of donations</td><td>${num(s.agePicture["Total donations"])}</td></tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title ti">VIII. Donor Statistics by Age Range</div>
+              <div class="table-wrap"><table>
+                <tr><th>Category</th><th>Count</th></tr>
+                <tr><td>Donors under 18 years</td><td>${n(s.agePicture["Under 18"])}</td></tr>
+                <tr><td>Donors aged 18 to 24 years</td><td>${n(s.agePicture["18-24"])}</td></tr>
+                <tr><td>Donors aged 25 to 44 years</td><td>${n(s.agePicture["25-44"])}</td></tr>
+                <tr><td>Donors aged 45 to 64 years</td><td>${n(s.agePicture["45-64"])}</td></tr>
+                <tr><td>Donors aged 65 years or older</td><td>${n(s.agePicture["65 & above"])}</td></tr>
+                <tr class="sub-row"><td>Total number of donations</td><td>${n(s.agePicture["Total donations"])}</td></tr>
+              </table></div></div>
 
-                  <div class="sheet-block">
-                    <div class="sheet-title title-j">IX. Monthly Donors Aged 16-25 Years Old</div>
-                    <div class="table-wrap"><table>
-                      <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
-                      <tr>
-                        <td>16-25 Years Old</td>
-                        <td>${num(s.youth1625Sex["Male"])}</td>
-                        <td>${num(s.youth1625Sex["Female"])}</td>
-                        <td>${num(s.youth1625Sex["Total"])}</td>
-                      </tr>
-                    </table></div>
-                  </div>
+              <div class="sheet-block"><div class="sheet-title tj">IX. Monthly Donors Aged 16-25 Years Old</div>
+              <div class="table-wrap"><table>
+                <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
+                <tr><td>16-25 Years Old</td><td>${n(s.youth1625Sex["Male"])}</td><td>${n(s.youth1625Sex["Female"])}</td><td>${n(s.youth1625Sex["Total"])}</td></tr>
+              </table></div></div>
 
-                </div>
-              </div>`;
-          }).join("")}
-        </div>
-      </div>`;
+            </div>
+          </div>`;}).join("")}
+      </div>
+    </div>`;
   }).join("");
 }
 
-// ─── TOGGLE HELPERS ──────────────────────────────────────────────────────────
-function toggleDailyDropdown(monthKey) {
-  const c = document.getElementById(`dailyDropdown-${monthKey}`);
-  const a = document.getElementById(`dailyArrow-${monthKey}`);
-  if (!c || !a) return;
-  c.classList.toggle("open");
-  a.textContent = c.classList.contains("open") ? "▲" : "▼";
+// ─── TOGGLE HELPERS ───────────────────────────────────────────────────────────
+function tDaily(mk){
+  const c=document.getElementById(`dc-${mk}`),a=document.getElementById(`da-${mk}`);
+  if(!c||!a)return;
+  c.classList.toggle("open"); a.textContent=c.classList.contains("open")?"▲":"▼";
 }
-function toggleNext(el) { el.nextElementSibling?.classList.toggle("open"); }
-function toggleSectionBody(bodyId, badgeId) {
-  const b = document.getElementById(bodyId);
-  const g = document.getElementById(badgeId);
-  b.classList.toggle("open");
-  g.textContent = b.classList.contains("open") ? "Expanded" : "Collapsed";
+function tNext(el){el.nextElementSibling?.classList.toggle("open");}
+function toggleSec(bodyId,badgeId){
+  const b=document.getElementById(bodyId),g=document.getElementById(badgeId);
+  b.classList.toggle("open"); g.textContent=b.classList.contains("open")?"Expanded":"Collapsed";
 }
+
+// ─── POPULATE FILTERS ─────────────────────────────────────────────────────────
+function populateFilters(){
+  const ye=document.getElementById("filterYear"), me=document.getElementById("filterMonth");
+  const ky=ye.value||"ALL", km=me.value||"ALL";
+  // Apply carry-forward first so dates are resolved before we scan years
+  applyCarryForward(donorRecords);
+  const years=[...new Set(donorRecords.map(r=>{const d=parseDate(getDate(r));return d?String(d.getFullYear()):"";}).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  ye.innerHTML=`<option value="ALL">All Years</option>`+years.map(y=>`<option value="${y}">${y}</option>`).join("");
+  if([...ye.options].some(o=>o.value===ky))ye.value=ky;
+  me.innerHTML=`<option value="ALL">All Months</option>`+MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join("");
+  if([...me.options].some(o=>o.value===km))me.value=km;
+}
+
+async function reloadStatistics(){await initPage();}
 
 // ─── GROUP MAPPING CRUD ───────────────────────────────────────────────────────
-async function saveGroupCategory() {
-  const partner  = (document.getElementById("mapPartnerName").value || "").trim();
-  const category = document.getElementById("mapCategory").value;
-  const place    = (document.getElementById("mapPlace").value || "").trim();
-  if (!partner) { alert("Please enter a partner / group name."); return; }
-  try {
-    const normalized = normalizeAliasKey(partner);
-    const existing   = categoryMappings.find(x => normalizeAliasKey(x.partnerName || x.name || "") === normalized);
-    const payload    = { partnerName: smartGroupDisplayName(partner), category, place, normalizedKey: normalized, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-    if (existing) {
-      await fs.collection("donorGroupCategories").doc(existing.id).update(payload);
-    } else {
-      await fs.collection("donorGroupCategories").add({ ...payload, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-    }
-    inlineEditingMappingId = null;
-    clearMappingEditor();
-    await loadCategoryMappings(initializeVersion);
-    renderMappings();
-    buildStatistics();
-    alert(existing ? "Group category updated." : "Group category saved.");
-  } catch(e) { console.error(e); alert("Failed to save: " + (e.message || e)); }
+async function saveMapping(){
+  const partner=(document.getElementById("mapPartner").value||"").trim();
+  const category=document.getElementById("mapCategory").value;
+  const place=(document.getElementById("mapPlace").value||"").trim();
+  if(!partner){alert("Please enter a partner / group name.");return;}
+  try{
+    const normalized=normKey(partner);
+    const existing=categoryMappings.find(x=>normKey(x.partnerName||x.name||"")===normalized);
+    const payload={partnerName:smartName(partner),category,place,normalizedKey:normalized,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    if(existing){await fs.collection("donorGroupCategories").doc(existing.id).update(payload);}
+    else{await fs.collection("donorGroupCategories").add({...payload,createdAt:firebase.firestore.FieldValue.serverTimestamp()});}
+    inlineEditId=null; clearMappingEditor();
+    await loadMappings(initVersion); renderMappings(); buildStats();
+    alert(existing?"Group category updated.":"Group category saved.");
+  }catch(e){console.error(e);alert("Failed to save: "+(e.message||e));}
 }
 
-async function saveInlineGroupCategory(id) {
-  const partner  = (document.getElementById("inlineEditPartnerName").value || "").trim();
-  const category = document.getElementById("inlineEditCategory").value;
-  const place    = (document.getElementById("inlineEditPlace").value || "").trim();
-  if (!partner) { alert("Please enter a partner / group name."); return; }
-  try {
-    const normalized = normalizeAliasKey(partner);
-    await fs.collection("donorGroupCategories").doc(id).update({ partnerName: smartGroupDisplayName(partner), category, place, normalizedKey: normalized, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    inlineEditingMappingId = null;
-    await loadCategoryMappings(initializeVersion);
-    renderMappings();
-    buildStatistics();
+async function saveInlineMapping(id){
+  const partner=(document.getElementById("inlinePartner").value||"").trim();
+  const category=document.getElementById("inlineCat").value;
+  const place=(document.getElementById("inlinePlace").value||"").trim();
+  if(!partner){alert("Please enter a partner / group name.");return;}
+  try{
+    const normalized=normKey(partner);
+    await fs.collection("donorGroupCategories").doc(id).update({partnerName:smartName(partner),category,place,normalizedKey:normalized,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    inlineEditId=null; await loadMappings(initVersion); renderMappings(); buildStats();
     alert("Group category updated.");
-  } catch(e) { console.error(e); alert("Failed to update: " + (e.message || e)); }
+  }catch(e){console.error(e);alert("Failed to update: "+(e.message||e));}
 }
 
-function clearMappingEditor() {
-  document.getElementById("mapPartnerName").value = "";
-  document.getElementById("mapCategory").value    = "Group";
-  document.getElementById("mapPlace").value       = "";
-  inlineEditingMappingId = null;
+function clearMappingEditor(){
+  document.getElementById("mapPartner").value="";
+  document.getElementById("mapCategory").value="Group";
+  document.getElementById("mapPlace").value="";
+  inlineEditId=null;
 }
-function cancelInlineEdit() { inlineEditingMappingId = null; renderMappings(); }
-function fillMappingForEdit(id) { inlineEditingMappingId = id; renderMappings(); }
+function cancelInlineEdit(){inlineEditId=null;renderMappings();}
+function startInlineEdit(id){inlineEditId=id;renderMappings();}
 
-async function deleteGroupCategory(id) {
-  if (!confirm("Delete this mapping?")) return;
-  try {
+async function deleteMapping(id){
+  if(!confirm("Delete this mapping?"))return;
+  try{
     await fs.collection("donorGroupCategories").doc(id).delete();
-    inlineEditingMappingId = null;
-    await loadCategoryMappings(initializeVersion);
-    renderMappings();
-    buildStatistics();
-  } catch(e) { console.error(e); alert("Failed to delete: " + (e.message || e)); }
+    inlineEditId=null; await loadMappings(initVersion); renderMappings(); buildStats();
+  }catch(e){console.error(e);alert("Failed to delete: "+(e.message||e));}
 }
 
-function renderMappings() {
-  const list = document.getElementById("mappingList");
-  if (!categoryMappings.length) { list.innerHTML = `<div class="empty">No group category mappings yet.</div>`; return; }
-  const sorted = [...categoryMappings].sort((a,b) => String(a.partnerName||a.name||"").localeCompare(String(b.partnerName||b.name||"")));
-  list.innerHTML = sorted.map(item => {
-    if (inlineEditingMappingId === item.id) {
-      return `
-        <div class="mapping-row editing">
-          <div class="field"><label>Partner / Alias / Group Name</label>
-            <input type="text" id="inlineEditPartnerName" value="${escapeHtml(item.partnerName||item.name||"")}">
-          </div>
-          <div class="field"><label>Category</label>
-            <select id="inlineEditCategory">
-              <option value="Group" ${(item.category||"Group")==="Group"?"selected":""}>Group</option>
-              <option value="RC143 / BRGY Base" ${item.category==="RC143 / BRGY Base"?"selected":""}>RC143 / BRGY Base</option>
-              <option value="Pledge 25" ${item.category==="Pledge 25"?"selected":""}>Pledge 25</option>
-            </select>
-          </div>
-          <div class="field"><label>Place Override</label>
-            <input type="text" id="inlineEditPlace" value="${escapeHtml(item.place||"")}">
-          </div>
-          <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-            <button class="btn-red" onclick="saveInlineGroupCategory('${escapeJs(item.id)}')">Update</button>
-            <button class="btn-gray" onclick="cancelInlineEdit()">Cancel</button>
-          </div>
-        </div>`;
-    }
-    return `
-      <div class="mapping-row">
-        <div><strong>${escapeHtml(item.partnerName||item.name||"")}</strong></div>
-        <div>${escapeHtml(item.category||"Unmapped")}</div>
-        <div>${escapeHtml(item.place||"")}</div>
-        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-          <button class="btn-blue" onclick="fillMappingForEdit('${escapeJs(item.id)}')">Edit</button>
-          <button class="btn-gray" onclick="deleteGroupCategory('${escapeJs(item.id)}')">Delete</button>
+function renderMappings(){
+  const list=document.getElementById("mappingList");
+  if(!categoryMappings.length){list.innerHTML=`<div class="empty">No group category mappings yet.</div>`;return;}
+  const sorted=[...categoryMappings].sort((a,b)=>String(a.partnerName||a.name||"").localeCompare(String(b.partnerName||b.name||"")));
+  list.innerHTML=sorted.map(item=>{
+    if(inlineEditId===item.id)return`
+      <div class="map-row editing">
+        <div class="field"><label>Partner / Alias / Group Name</label><input type="text" id="inlinePartner" value="${escH(item.partnerName||item.name||"")}"></div>
+        <div class="field"><label>Category</label><select id="inlineCat">
+          <option value="Group" ${(item.category||"Group")==="Group"?"selected":""}>Group</option>
+          <option value="RC143 / BRGY Base" ${item.category==="RC143 / BRGY Base"?"selected":""}>RC143 / BRGY Base</option>
+          <option value="Pledge 25" ${item.category==="Pledge 25"?"selected":""}>Pledge 25</option>
+        </select></div>
+        <div class="field"><label>Place Override</label><input type="text" id="inlinePlace" value="${escH(item.place||"")}"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+          <button class="btn-red" onclick="saveInlineMapping('${escJ(item.id)}')">Update</button>
+          <button class="btn-gray" onclick="cancelInlineEdit()">Cancel</button>
         </div>
       </div>`;
+    return`<div class="map-row">
+      <div><strong>${escH(item.partnerName||item.name||"")}</strong></div>
+      <div>${escH(item.category||"Unmapped")}</div>
+      <div>${escH(item.place||"")}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn-blue" onclick="startInlineEdit('${escJ(item.id)}')">Edit</button>
+        <button class="btn-gray" onclick="deleteMapping('${escJ(item.id)}')">Delete</button>
+      </div>
+    </div>`;
   }).join("");
 }
 
-// ─── FILTER POPULATE ─────────────────────────────────────────────────────────
-function populateFilters() {
-  const yearEl  = document.getElementById("filterYear");
-  const monthEl = document.getElementById("filterMonth");
-  const keepY   = yearEl.value  || "ALL";
-  const keepM   = monthEl.value || "ALL";
-
-  const years = [...new Set(
-    donorRecords
-      .map(r => parseDate(getResolvedEntryDate(r)))
-      .filter(Boolean)
-      .map(d => String(d.getFullYear()))
-  )].sort((a,b) => b.localeCompare(a));
-
-  yearEl.innerHTML = `<option value="ALL">All Years</option>` +
-    years.map(y => `<option value="${y}">${y}</option>`).join("");
-  if ([...yearEl.options].some(o => o.value === keepY)) yearEl.value = keepY;
-
-  monthEl.innerHTML = `<option value="ALL">All Months</option>` +
-    MONTHS.map((m,i) => `<option value="${i+1}">${m}</option>`).join("");
-  if ([...monthEl.options].some(o => o.value === keepM)) monthEl.value = keepM;
-}
-
-async function reloadStatistics() { await initializePage(); }
-
 // ─── EXPORT CSV ───────────────────────────────────────────────────────────────
-function exportCSV() {
-  if (!groupedCache) { alert("No statistics available yet."); return; }
-  const rows = [[
-    "Year","Month",
-    "Walk-in S","Walk-in D","Walk-in T","Walk-in Q",
-    "Patient Directed S","Patient Directed D","Patient Directed T","Patient Directed Q",
-    "MBD S","MBD D","MBD T","MBD Q",
-    "450 cc","PRBC","FFP","PC","CRYO",
-    "Male","Female",
-    "16-17","18-20","21-30","31-40","41-50","51-60","60-65","66 & above"
-  ]];
-  Object.keys(groupedCache).sort((a,b)=>b-a).forEach(y => {
-    Object.keys(groupedCache[y]).sort((a,b)=>b.localeCompare(a)).forEach(k => {
-      const s = groupedCache[y][k];
-      rows.push([
-        y, MONTHS[(s._meta.month||1)-1],
-        s.officeBleeding["Walk-in"].S, s.officeBleeding["Walk-in"].D,
-        s.officeBleeding["Walk-in"].T, s.officeBleeding["Walk-in"].Q,
-        s.officeBleeding["Patient Directed"].S, s.officeBleeding["Patient Directed"].D,
-        s.officeBleeding["Patient Directed"].T, s.officeBleeding["Patient Directed"].Q,
-        s.fieldDonation["Total MBD"].S, s.fieldDonation["Total MBD"].D,
-        s.fieldDonation["Total MBD"].T, s.fieldDonation["Total MBD"].Q,
-        s.components["450 cc"], s.components["PRBC"],
-        s.components["FFP"],    s.components["PC"], s.components["CRYO"],
-        s.sex["Male"], s.sex["Female"],
-        s.age["16-17"],s.age["18-20"],s.age["21-30"],s.age["31-40"],
-        s.age["41-50"],s.age["51-60"],s.age["60-65"],s.age["66 & above"]
+function exportCSV(){
+  if(!groupedCache){alert("No statistics yet.");return;}
+  const rows=[["Year","Month","Walk-in S","Walk-in D","Walk-in T","Walk-in Q","Patient Dir S","Patient Dir D","Patient Dir T","Patient Dir Q","MBD S","MBD D","MBD T","MBD Q","450 cc","PRBC","FFP","PC","CRYO","Male","Female","16-17","18-20","21-30","31-40","41-50","51-60","60-65","66 & above"]];
+  Object.keys(groupedCache).sort((a,b)=>b-a).forEach(y=>{
+    Object.keys(groupedCache[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>{
+      const s=groupedCache[y][k];
+      rows.push([y,MONTHS[(s._meta.month||1)-1],
+        s.officeBleeding["Walk-in"].S,s.officeBleeding["Walk-in"].D,s.officeBleeding["Walk-in"].T,s.officeBleeding["Walk-in"].Q,
+        s.officeBleeding["Patient Directed"].S,s.officeBleeding["Patient Directed"].D,s.officeBleeding["Patient Directed"].T,s.officeBleeding["Patient Directed"].Q,
+        s.fieldDonation["Total MBD"].S,s.fieldDonation["Total MBD"].D,s.fieldDonation["Total MBD"].T,s.fieldDonation["Total MBD"].Q,
+        s.components["450 cc"],s.components["PRBC"],s.components["FFP"],s.components["PC"],s.components["CRYO"],
+        s.sex["Male"],s.sex["Female"],
+        s.age["16-17"],s.age["18-20"],s.age["21-30"],s.age["31-40"],s.age["41-50"],s.age["51-60"],s.age["60-65"],s.age["66 & above"]
       ]);
     });
   });
-  const csv  = rows.map(r => r.map(csvEscape).join(",")).join("\n");
-  const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href = url; a.download = "donor-database-statistics.csv";
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  const csv=rows.map(r=>r.map(csvE).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="donor-database-statistics.csv";
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 }
 </script>
 </body>
