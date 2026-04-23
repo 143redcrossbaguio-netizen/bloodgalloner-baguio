@@ -439,29 +439,35 @@ function normalizeBloodTypeDisplay(v) {
     for (const [re, val] of patterns) {
         if (re.test(s)) return val;
     }
-    return String(v).trim().toUpperCase() || "";
+    // Unrecognized value (e.g. "DOUBLE", "KARMI") — return empty string
+    return "";
 }
 
 // Try every possible field name a Firestore record might use for blood type.
 // Records imported from different Excel formats may store it under different keys.
+// resolveBloodType: ONLY reads known blood-type field names.
+// Does NOT do a broad field scan — that caused bloodBagType/bloodBagBrand
+// to be misread as blood types.
 function resolveBloodType(r) {
-    const directFields = [
-        r.bloodType, r.blood_type, r.bloodtype, r.aboRh, r.abo_rh,
-        r.aboRhType, r.bloodGroup, r.blood_group, r.abo, r.group,
-        r.bloodTypeRh, r.bloodTyping, r.bt, r.BT, r.typeAndRh,
-        r.finalBloodType, r.labBloodType, r.bloodTypeResult
+    // These are the only fields that can legitimately hold an ABO/Rh blood type.
+    // Order matters: most specific first.
+    const candidates = [
+        r.bloodType,        // primary field used by import + tracking
+        r.blood_type,
+        r.bloodtype,
+        r.aboRh,
+        r.abo_rh,
+        r.aboRhType,
+        r.bloodGroup,
+        r.blood_group,
+        r.bloodTypeRh,
+        r.bloodTyping,
+        r.typeAndRh,
+        r.finalBloodType,
+        r.labBloodType,
+        r.bloodTypeResult
     ];
-    for (const val of directFields) {
-        const norm = normalizeBloodTypeDisplay(val);
-        if (norm) return norm;
-    }
-    // Scan all string/number fields whose key suggests blood type
-    for (const [key, val] of Object.entries(r || {})) {
-        if (typeof val !== "string" && typeof val !== "number") continue;
-        if (key.startsWith("_")) continue;
-        const kl = key.toLowerCase();
-        if (!kl.includes("blood") && !kl.includes("abo") &&
-            !kl.includes("group") && !kl.includes("rh") && kl !== "bt") continue;
+    for (const val of candidates) {
         const norm = normalizeBloodTypeDisplay(val);
         if (norm) return norm;
     }
