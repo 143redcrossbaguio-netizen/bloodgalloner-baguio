@@ -798,6 +798,82 @@ async function backupToGoogleSheets(data) {
         return "";
     }
 
+
+    function parseDayOnlyDateWithBase(value, baseIsoDate) {
+        const raw = String(value ?? '').trim();
+        if (!raw || !baseIsoDate) return '';
+        const match = raw.match(/^(\d{1,2})$/);
+        if (!match) return '';
+        const day = Number(match[1]);
+        if (!Number.isFinite(day) || day < 1 || day > 31) return '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(baseIsoDate)) return '';
+        const [year, month] = baseIsoDate.split('-');
+        const candidate = `${year}-${month}-${String(day).padStart(2, '0')}`;
+        const d = new Date(candidate + 'T00:00:00');
+        if (isNaN(d.getTime())) return '';
+        if (d.getFullYear() !== Number(year) || d.getMonth() + 1 !== Number(month) || d.getDate() !== day) return '';
+        return candidate;
+    }
+
+    function resolveDirectEntryDate(record) {
+        return (
+            parseDateFlexible(record.entryDate) ||
+            parseDateFlexible(record.donationDate) ||
+            parseDateFlexible(record.date) ||
+            parseDateFlexible(record.bleedingDate) ||
+            ''
+        );
+    }
+
+    function resolveSourceMonthBase(record) {
+        return (
+            parseDateFromText(record?.importMeta?.sourceSheet || '') ||
+            parseDateFromText(record?.importMeta?.sourceFile || '') ||
+            parseCreatedAtDate(record.createdAt) ||
+            ''
+        );
+    }
+
+    function applyImportedDateCarryForward(records) {
+        const grouped = {};
+
+        records.forEach(record => {
+            const batchId = String(record?.importMeta?.batchId || '');
+            const sourceFile = String(record?.importMeta?.sourceFile || '');
+            const sourceSheet = String(record?.importMeta?.sourceSheet || '');
+            const sourceRow = Number(record?.importMeta?.sourceRowNumber || 0);
+            const key = `${batchId}|${sourceFile}|${sourceSheet}`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push({ record, sourceRow });
+        });
+
+        Object.values(grouped).forEach(items => {
+            items.sort((a, b) => a.sourceRow - b.sourceRow || String(a.record.serialNumber || '').localeCompare(String(b.record.serialNumber || ''), undefined, { numeric:true, sensitivity:'base' }));
+            let lastDate = '';
+            items.forEach(({ record }) => {
+                const explicit = resolveDirectEntryDate(record);
+                const base = resolveSourceMonthBase(record);
+                const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
+                const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, lastDate || base);
+
+                if (explicit) {
+                    record._resolvedEntryDate = explicit;
+                    lastDate = explicit;
+                } else if (dayOnly) {
+                    record._resolvedEntryDate = dayOnly;
+                    lastDate = dayOnly;
+                } else if (lastDate) {
+                    record._resolvedEntryDate = lastDate;
+                } else if (!record._resolvedEntryDate && base) {
+                    record._resolvedEntryDate = base;
+                    lastDate = base;
+                } else if (record._resolvedEntryDate) {
+                    lastDate = record._resolvedEntryDate;
+                }
+            });
+        });
+    }
+
     function parseCreatedAtDate(raw) {
         if (!raw) return "";
         if (typeof raw?.toDate === "function") return parseDateFlexible(raw.toDate());
@@ -806,16 +882,15 @@ async function backupToGoogleSheets(data) {
     }
 
     function resolveEntryDate(record) {
-        return (
-            parseDateFlexible(record.entryDate) ||
-            parseDateFlexible(record.donationDate) ||
-            parseDateFlexible(record.date) ||
-            parseDateFlexible(record.bleedingDate) ||
-            parseDateFromText(record?.importMeta?.sourceSheet || "") ||
-            parseDateFromText(record?.importMeta?.sourceFile || "") ||
-            parseCreatedAtDate(record.createdAt) ||
-            ""
-        );
+        const direct = resolveDirectEntryDate(record);
+        if (direct) return direct;
+
+        const base = resolveSourceMonthBase(record);
+        const rawEntryMarker = record.entryDate || record.donationDate || record.date || record.bleedingDate || '';
+        const dayOnly = parseDayOnlyDateWithBase(rawEntryMarker, base);
+        if (dayOnly) return dayOnly;
+
+        return base || "";
     }
 
     function resolveBirthday(record) {
@@ -981,6 +1056,10 @@ async function backupToGoogleSheets(data) {
     }
 
     function compareSerialNumbers(a, b) {
+        const rowA = Number(a?.importMeta?.sourceRowNumber || 0);
+        const rowB = Number(b?.importMeta?.sourceRowNumber || 0);
+        if (rowA !== rowB) return rowA - rowB;
+
         const serialA = String(a.serialNumber || "");
         const serialB = String(b.serialNumber || "");
         return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
@@ -1866,6 +1945,8 @@ async function backupToGoogleSheets(data) {
                 }))
                 .filter(record => record.isDeleted !== true)
                 .map(record => attachResolvedFields(record));
+
+            applyImportedDateCarryForward(allDonors);
 
             allDonors.sort((a, b) => {
                 const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
