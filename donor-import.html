@@ -545,29 +545,30 @@ let recomputeTimer = null;
 // Maps logical field names → all possible Excel column header spellings
 const FIELD_ALIASES = {
     serialNumber:   ["serial number","serial no","serial","donor no","donor number","control no","control number","sn","serial #","sn."],
+    suffix:         ["suffix","name suffix","name extension","extension name","ext name","ext","suffix name","name ext","sr","jr","ii","iii"],
     surname:        ["surname","last name","lastname","family name","apelido","last"],
     firstName:      ["first name","firstname","given name","given","name","pangalan","given names","first"],
     middleName:     ["middle name","middlename","middle initial","mi","m.i.","middle"],
     birthday:       ["birthday","birth date","birthdate","date of birth","dob","bday"],
     donationDate:   ["donation date","date donated","date of donation","date bled","bleeding date","date","collection date","entry date","entrydate"],
     donorType:      ["donor type","type of donor","type","donor"],
-    donorCategory:  ["donor category","type of donor category","category","regular/new donor","new/repeat/lapse","new repeat lapse","type of donor"],
+    donorCategory:  ["donor category","type of donor category","category","regular/new donor","new/repeat/lapse","new repeat lapse","type of donor","new/repeat/lapse/others","donor type category","frequency","new repeat lapse others"],
     mbdDetails:     ["mbd","mbd details","organization","group","group name","company","school","office","site","venue","mobile blood donation"],
     patientDirectedDetails: ["patient directed","patient directed details","patient name","patient","patient directed donor","pd","p.d."],
-    walkIn:         ["walk in","walk-in","walkin"],
+    walkIn:         ["walk in","walk-in","walkin","walk-in donor","walk in donor"],
     sex:            ["sex","gender"],
-    contactNumber:  ["contact","contact number","mobile","mobile number","phone","phone number","cellphone","cp no","contact no","cp number"],
+    contactNumber:  ["contact","contact number","mobile","mobile number","phone","phone number","cellphone","cp no","contact no","cp number","contact no.","cp#","mobile no","mobile no.","contact #","tel","telephone","tel no","cel no","cellphone no"],
     address:        ["address","home address","house number/purok/street name","house number","street","purok","house no"],
-    cityProvince:   ["barangay/city","barangay city","city","city/province","barangay","city or province","town/city","municipality/city","brgy/city"],
-    bloodType:      ["blood type","blood group","abo rh","abo/rh","blood","blood type/rh","abo","bt","b.t.","bt.","abo-rh","blood typing","blood type result","type and rh","blood type/rh factor","abo rh type","blood type (abo)","abo rh typing","blood type abo","final blood type","lab blood type","bloodtype","blood grp","grp","abo type"],
-    amount:         ["amount","collection amount","volume","ml","amt"],
-    bloodBagBrand:  ["blood bag brand","blood bag used","brand","bag brand","bb used","blood bag","bb brand"],
-    bloodBagType:   ["blood bag type","type of blood bag","bag type","type of bb"],
-    timeStarted:    ["time started","start time","bleeding time start","time start","ts","t.s.","time s"],
-    timeEnded:      ["time ended","end time","bleeding time end","time end","te","t.e.","time e"],
+    cityProvince:   ["barangay/city","barangay city","city","city/province","barangay","city or province","town/city","municipality/city","brgy/city","city/municipality","city / province","province","municipality","town","city province","city/prov","city prov","barangay/city/province"],
+    bloodType:      ["blood type","blood group","abo rh","abo/rh","blood","blood type/rh","abo","bt","b.t.","bt.","abo-rh","blood typing","blood type result","type and rh","blood type/rh factor","abo rh type","blood type (abo)","abo rh typing","blood type abo","final blood type","lab blood type","bloodtype","blood grp","grp","abo type","o pos","a pos","b pos","ab pos","o neg","a neg","b neg","ab neg","o+","a+","b+","ab+","o-","a-","b-","ab-"],
+    amount:         ["amount","collection amount","volume","ml","amt","amount (ml)","amount ml","collection volume","vol","blood volume"],
+    bloodBagBrand:  ["blood bag brand","blood bag used","brand","bag brand","bb used","blood bag","bb brand","bb","blood bag (brand)","bag used","bb brand used","blood bag brand used","brand used"],
+    bloodBagType:   ["blood bag type","type of blood bag","bag type","type of bb","type of blood bag used","bb type","blood bag configuration","bag configuration","type bb","bb used type","type of bag","bag","blood bag used type"],
+    timeStarted:    ["time started","start time","bleeding time start","time start","ts","t.s.","time s","time bled start","bleed start","ts.","time in"],
+    timeEnded:      ["time ended","end time","bleeding time end","time end","te","t.e.","time e","time bled end","bleed end","te.","time out"],
     age:            ["age"],
-    remarks:        ["remarks","remark","notes","comment","donor rxn","results","rxn"],
-    numberOfDonations: ["# of donations","number of donations","donation count","count","no of donations","donations","# donations","no. of donations"]
+    remarks:        ["remarks","remark","notes","comment","donor rxn","results","rxn","donor reaction","reaction","donor rxn.","rxn.","donor remarks"],
+    numberOfDonations: ["# of donations","number of donations","donation count","count","no of donations","donations","# donations","no. of donations","no. of donation","# of donation","total donations","total # of donations","cumulative donations","donation #","nth donation","donation no","donation no."]
 };
 
 // Columns whose header itself identifies the donor type (the value in the cell is the detail)
@@ -764,11 +765,14 @@ function normalizeBloodBagType(v) {
     return r;
 }
 function normalizeAmount(v) {
-    const r = String(v || "").trim().toUpperCase();
+    const r = String(v || "").trim().toUpperCase().replace(/\s+/g," ");
     if (!r) return "";
-    if (["450","450ML","450 ML","450CC","450 CC"].includes(r)) return "450 ML";
+    if (["450","450ML","450 ML","450CC","450 CC","450 CC.","450CC."].includes(r)) return "450 ML";
     if (r === "QNS") return "QNS";
     if (r === "UB") return "UB";
+    // Handle Excel numeric cell storing 450 as a number
+    const num = parseFloat(r);
+    if (!isNaN(num) && num >= 440 && num <= 470) return "450 ML";
     return r;
 }
 function normalizeSex(v) {
@@ -844,7 +848,7 @@ function extractSpecialColumns(row) {
     return { mbdColumn, walkInColumn, patientDirectedColumn };
 }
 
-function looksLikeWalkIn(v) { const t = normalizeText(v); return t==="walk-in"||t==="walk in"||t==="walkin"; }
+function looksLikeWalkIn(v) { const t = normalizeText(v).replace(/\s+/g,"").replace(/-/g,""); return t==="walkin"; }
 function looksLikePd(v) { return normalizeText(v).includes("patient"); }
 
 function inferDonorType(raw) {
@@ -908,6 +912,7 @@ function buildMappedRaw(row, fileName, sheetName, sourceRowNumber, context) {
     const raw = {
         rowId:        createRowId(),
         serialNumber: String(getFirstMappedValue(row, FIELD_ALIASES.serialNumber) || "").trim(),
+        suffix:       String(getFirstMappedValue(row, FIELD_ALIASES.suffix) || "").trim().toUpperCase(),
         surname:      cleanName(getFirstMappedValue(row, FIELD_ALIASES.surname) || ""),
         firstName:    cleanName(getFirstMappedValue(row, FIELD_ALIASES.firstName) || ""),
         middleName:   cleanName(getFirstMappedValue(row, FIELD_ALIASES.middleName) || ""),
@@ -1521,6 +1526,7 @@ async function importSelectedRows() {
             // Build payload — all fields that donor-tracking.html reads
             const payload = {
                 // Identity
+                suffix:     row.suffix || "",
                 surname:    row.surname || "",
                 firstName:  row.firstName || "",
                 middleName: row.middleName || "",
