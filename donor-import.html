@@ -696,6 +696,80 @@ function parseDateFromText(text) {
     return "";
 }
 
+
+function parseDayOnlyDate(value, baseIsoDate) {
+    const raw = String(value ?? "").trim();
+    if (!raw || !baseIsoDate) return "";
+
+    const dayMatch = raw.match(/^(\d{1,2})$/);
+    if (!dayMatch) return "";
+
+    const day = Number(dayMatch[1]);
+    if (!Number.isFinite(day) || day < 1 || day > 31) return "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(baseIsoDate)) return "";
+
+    const [year, month] = baseIsoDate.split('-');
+    const candidate = `${year}-${month}-${String(day).padStart(2, '0')}`;
+    const d = new Date(candidate + 'T00:00:00');
+    if (isNaN(d.getTime())) return "";
+    if (d.getFullYear() !== Number(year) || d.getMonth() + 1 !== Number(month) || d.getDate() !== day) return "";
+    return candidate;
+}
+
+function normalizeBloodTypeValue(value) {
+    let s = String(value || '').trim().toUpperCase();
+    if (!s) return '';
+    s = s.replace(/\./g, ' ')
+         .replace(/POSITIVE/g, '+')
+         .replace(/NEGATIVE/g, '-')
+         .replace(/POS/g, '+')
+         .replace(/NEG/g, '-')
+         .replace(/\s+/g, '')
+         .replace(/RH/g, '');
+    const known = ['O+','A+','B+','AB+','O-','A-','B-','AB-'];
+    if (known.includes(s)) return s;
+    if (s === 'UNKNOWN' || s === 'UNK' || s === 'UN') return 'UNKNOWN';
+    return String(value || '').trim().toUpperCase();
+}
+
+function normalizeBloodBagTypeValue(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    if (['S','1','SINGLE'].includes(raw)) return 'SINGLE';
+    if (['D','2','DOUBLE'].includes(raw)) return 'DOUBLE';
+    if (['T','3','TRIPLE'].includes(raw)) return 'TRIPLE';
+    if (['Q','4','QUADRUPLE','QUAD'].includes(raw)) return 'QUADRUPLE';
+    return raw;
+}
+
+function normalizeAmountValue(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    if (raw in {'450':1,'450ML':1,'450 ML':1,'450CC':1,'450 CC':1}) return '450 ML';
+    if (raw in {'QNS':1}) return 'QNS';
+    if (raw in {'UB':1}) return 'UB';
+    return raw;
+}
+
+function normalizeSexValue(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (raw === 'M' || raw === 'MALE') return 'MALE';
+    if (raw === 'F' || raw === 'FEMALE') return 'FEMALE';
+    return raw;
+}
+
+function resolveImportedEntryDate(rawValue, context, sheetDate, fileDate, defaultDonationDate) {
+    const direct = parsePossibleDate(rawValue);
+    if (direct) return { date: direct, fromMarker: true };
+
+    const base = context.lastDate || sheetDate || fileDate || defaultDonationDate || '';
+    const dayOnly = parseDayOnlyDate(rawValue, base);
+    if (dayOnly) return { date: dayOnly, fromMarker: true };
+
+    const inherited = context.lastDate || sheetDate || fileDate || defaultDonationDate || '';
+    return { date: inherited, fromMarker: false };
+}
+
 function donorKey(data) {
     return [
         normalizeText(data.surname),
@@ -955,9 +1029,11 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
 
     const specialColumns = extractFromSpecialColumns(row);
 
-    const directDonationDate = parsePossibleDate(getFirstMappedValue(row, FIELD_ALIASES.donationDate) || "");
+    const rawDonationDateValue = getFirstMappedValue(row, FIELD_ALIASES.donationDate) || "";
     const sheetDate = parseDateFromText(sheetName);
     const fileDate = parseDateFromText(fileName);
+    const resolvedDateInfo = resolveImportedEntryDate(rawDonationDateValue, context, sheetDate, fileDate, defaultDonationDate);
+    const directDonationDate = resolvedDateInfo.date;
 
     let donorTypeRawDirect = String(getFirstMappedValue(row, FIELD_ALIASES.donorType) || "").trim();
     let donorCategoryDirect = normalizeDonorCategory(getFirstMappedValue(row, FIELD_ALIASES.donorCategory) || "");
@@ -975,7 +1051,7 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         pdDirect = specialColumns.patientDirectedColumn;
     }
 
-    const inheritedDateUsed = !directDonationDate && !!context.lastDate;
+    const inheritedDateUsed = !resolvedDateInfo.fromMarker && !!context.lastDate;
     const entryDate = directDonationDate || context.lastDate || sheetDate || fileDate || defaultDonationDate || "";
 
     if (directDonationDate) context.lastDate = directDonationDate;
@@ -994,14 +1070,14 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         mbdDetails: mbdDirect || defaultMbdGroup || "",
         patientDirectedDetails: pdDirect || "",
         walkInRaw: walkInDirect || "",
-        sex: String(getFirstMappedValue(row, FIELD_ALIASES.sex) || "").trim().toUpperCase(),
+        sex: normalizeSexValue(getFirstMappedValue(row, FIELD_ALIASES.sex) || ""),
         contactNumber: String(getFirstMappedValue(row, FIELD_ALIASES.contactNumber) || "").trim(),
         address: String(getFirstMappedValue(row, FIELD_ALIASES.address) || "").trim(),
         cityProvince: String(getFirstMappedValue(row, FIELD_ALIASES.cityProvince) || "").trim(),
-        bloodType: String(getFirstMappedValue(row, FIELD_ALIASES.bloodType) || "").trim().toUpperCase(),
-        amount: String(getFirstMappedValue(row, FIELD_ALIASES.amount) || "").trim(),
-        bloodBagBrand: String(getFirstMappedValue(row, FIELD_ALIASES.bloodBagBrand) || "").trim(),
-        bloodBagType: String(getFirstMappedValue(row, FIELD_ALIASES.bloodBagType) || "").trim(),
+        bloodType: normalizeBloodTypeValue(getFirstMappedValue(row, FIELD_ALIASES.bloodType) || ""),
+        amount: normalizeAmountValue(getFirstMappedValue(row, FIELD_ALIASES.amount) || ""),
+        bloodBagBrand: String(getFirstMappedValue(row, FIELD_ALIASES.bloodBagBrand) || "").trim().toUpperCase(),
+        bloodBagType: normalizeBloodBagTypeValue(getFirstMappedValue(row, FIELD_ALIASES.bloodBagType) || ""),
         timeStarted: String(getFirstMappedValue(row, FIELD_ALIASES.timeStarted) || "").trim(),
         timeEnded: String(getFirstMappedValue(row, FIELD_ALIASES.timeEnded) || "").trim(),
         age: parseIntSafe(getFirstMappedValue(row, FIELD_ALIASES.age) || ""),
@@ -1011,7 +1087,7 @@ function buildMappedRawFromRow(row, fileName, sheetName, sourceRowNumber, contex
         sourceSheet: sheetName,
         sourceRowNumber,
         inheritedDateUsed,
-        inheritedGroupUsed: false,
+        inheritedGroupUsed: !mbdDirect && !!defaultMbdGroup,
         removed: false,
         selected: true,
         manualReviewed: false
@@ -1196,9 +1272,16 @@ function syncRowComputedFields(row) {
     row.birthday = parsePossibleDate(row.birthday || "");
     row.entryDate = parsePossibleDate(row.entryDate || "");
     row.donorCategory = normalizeDonorCategory(row.donorCategory || "");
-    row.sex = String(row.sex || "").trim().toUpperCase();
-    row.bloodType = String(row.bloodType || "").trim().toUpperCase();
+    row.sex = normalizeSexValue(row.sex || "");
+    row.bloodType = normalizeBloodTypeValue(row.bloodType || "");
+    row.amount = normalizeAmountValue(row.amount || "");
+    row.bloodBagBrand = String(row.bloodBagBrand || "").trim().toUpperCase();
+    row.bloodBagType = normalizeBloodBagTypeValue(row.bloodBagType || "");
     row.numberOfDonationsImported = parseIntSafe(row.numberOfDonationsImported || 0);
+
+    row.mbdDetails = String(row.mbdDetails || "").trim().toUpperCase();
+    row.patientDirectedDetails = String(row.patientDirectedDetails || "").trim().toUpperCase();
+    row.walkInRaw = String(row.walkInRaw || "").trim().toUpperCase();
 
     if (row.donorType === "MBD") {
         row.walkInRaw = "";
