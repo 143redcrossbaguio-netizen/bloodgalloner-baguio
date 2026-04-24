@@ -581,14 +581,22 @@ function parseCreatedAtDate(raw) {
 function applyImportedDateCarryForward(records) {
     const grouped = {};
     records.forEach(r => {
-        const batchId   = String(r?.importMeta?.batchId     || "");
-        const sourceFile= String(r?.importMeta?.sourceFile  || "");
-        const sourceSheet=String(r?.importMeta?.sourceSheet || "");
-        const sourceRow = Number(r?.importMeta?.sourceRowNumber || 0);
+        // ONLY apply carry-forward to bulk-imported records that have importMeta.
+        // Manual entries from donor-entry.html have no importMeta — their entryDate
+        // is already correct and must never be overwritten by carry-forward logic.
+        const batchId    = String(r?.importMeta?.batchId      || "");
+        const sourceFile = String(r?.importMeta?.sourceFile   || "");
+        const sourceSheet= String(r?.importMeta?.sourceSheet  || "");
+        const sourceRow  = Number(r?.importMeta?.sourceRowNumber || 0);
+
+        // Skip records with no importMeta at all — they are manual entries
+        if (!batchId && !sourceFile && !sourceSheet) return;
+
         const key = `${batchId}|${sourceFile}|${sourceSheet}`;
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push({ r, sourceRow });
     });
+
     Object.values(grouped).forEach(items => {
         items.sort((a, b) => a.sourceRow - b.sourceRow ||
             String(a.r.serialNumber || "").localeCompare(String(b.r.serialNumber || ""), undefined, { numeric:true, sensitivity:"base" })
@@ -599,18 +607,23 @@ function applyImportedDateCarryForward(records) {
             const base     = resolveSourceMonthBase(r);
             const rawMarker= r.entryDate || r.donationDate || r.date || r.bleedingDate || "";
             const dayOnly  = parseDayOnlyDateWithBase(rawMarker, lastDate || base);
+
             if (explicit) {
+                // Record has its own date — use it and update carry-forward anchor
                 r._resolvedEntryDate = explicit;
                 lastDate = explicit;
             } else if (dayOnly) {
                 r._resolvedEntryDate = dayOnly;
                 lastDate = dayOnly;
             } else if (lastDate) {
+                // No date in this row — inherit from previous row in the same batch
                 r._resolvedEntryDate = lastDate;
-            } else if (!r._resolvedEntryDate && base) {
+            } else if (base) {
                 r._resolvedEntryDate = base;
                 lastDate = base;
-            } else if (r._resolvedEntryDate) {
+            }
+            // If r already has _resolvedEntryDate from a prior pass, keep lastDate in sync
+            if (!lastDate && r._resolvedEntryDate) {
                 lastDate = r._resolvedEntryDate;
             }
         });
@@ -618,14 +631,28 @@ function applyImportedDateCarryForward(records) {
 }
 
 function resolveEntryDate(r) {
+    // 1. Carry-forward already resolved this (bulk imports)
     if (r._resolvedEntryDate) return r._resolvedEntryDate;
+
+    // 2. Direct date fields — highest priority for ALL record types
     const direct = resolveDirectEntryDate(r);
     if (direct) return direct;
+
+    // 3. Day-only number relative to a base (bulk import edge case)
     const base     = resolveSourceMonthBase(r);
     const rawMarker= r.entryDate || r.donationDate || r.date || r.bleedingDate || "";
     const dayOnly  = parseDayOnlyDateWithBase(rawMarker, base);
     if (dayOnly) return dayOnly;
-    return base || "";
+
+    // 4. Source sheet/file name contains a month (bulk imports)
+    if (base) return base;
+
+    // 5. Last resort: use createdAt timestamp — works perfectly for manual entries
+    //    that were saved with a valid server timestamp
+    const fromCreatedAt = parseCreatedAtDate(r.createdAt);
+    if (fromCreatedAt) return fromCreatedAt;
+
+    return "";
 }
 
 function resolveBirthday(r) { return parseDateFlexible(r.birthday) || String(r.birthday || ""); }
@@ -1090,9 +1117,12 @@ async function loadDonors() {
             .filter(r => r.isDeleted !== true)
             .map(r => attachResolvedFields(r));
 
-        // Apply carry-forward BEFORE resolving entry dates for display
+        // Step 1: carry-forward ONLY affects bulk-imported records (those with importMeta).
+        // Manual entries are skipped — their entryDate is already correct.
         applyImportedDateCarryForward(allDonors);
-        // Re-resolve entry dates after carry-forward (since _resolvedEntryDate was just set)
+
+        // Step 2: re-resolve all dates. For manual entries this just re-reads entryDate.
+        // For bulk imports it uses the carry-forward result from step 1.
         allDonors.forEach(r => { r._resolvedEntryDate = resolveEntryDate(r); });
 
         allDonors.sort((a, b) => {
