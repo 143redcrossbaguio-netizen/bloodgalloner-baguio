@@ -631,7 +631,7 @@ function applyImportedDateCarryForward(records) {
 }
 
 function resolveEntryDate(r) {
-    // 1. Carry-forward already resolved this (bulk imports)
+    // 1. Carry-forward already resolved this (bulk imports only)
     if (r._resolvedEntryDate) return r._resolvedEntryDate;
 
     // 2. Direct date fields — highest priority for ALL record types
@@ -647,12 +647,23 @@ function resolveEntryDate(r) {
     // 4. Source sheet/file name contains a month (bulk imports)
     if (base) return base;
 
-    // 5. Last resort: use createdAt timestamp — works perfectly for manual entries
-    //    that were saved with a valid server timestamp
+    // 5. createdAt — Firestore server timestamp set when the record was saved.
+    //    This is the reliable fallback for manually entered records from donor-entry.html
+    //    The createdAt is ALWAYS set (firebase.firestore.FieldValue.serverTimestamp())
     const fromCreatedAt = parseCreatedAtDate(r.createdAt);
     if (fromCreatedAt) return fromCreatedAt;
 
     return "";
+}
+
+// Helper: get the best possible date string from a record, guaranteed non-empty when
+// any date-like information exists. Used by populateGroupMonthOptions as safety net.
+function getBestDateForRecord(r) {
+    return (
+        resolveEntryDate(r) ||
+        parseCreatedAtDate(r.createdAt) ||
+        ""
+    );
 }
 
 function resolveBirthday(r) { return parseDateFlexible(r.birthday) || String(r.birthday || ""); }
@@ -729,7 +740,7 @@ function attachResolvedFields(r) {
         donorType:                resolveDonorType(r),
         contactNumber:            resolveContactNumber(r),
         occupation:               resolveOccupation(r),
-        _resolvedEntryDate:       resolveEntryDate(r),
+        _resolvedEntryDate:       resolveEntryDate(r), // will be refined after carry-forward
         _resolvedBirthday:        resolveBirthday(r),
         _resolvedTimeStarted:     resolveTimeStarted(r),
         _resolvedTimeEnded:       resolveTimeEnded(r),
@@ -884,7 +895,8 @@ function buildDonorKey(r) {
 function groupDonors(records) {
     const grouped = {};
     records.forEach(r => {
-        const { year, month, monthName } = getYearMonth(r._resolvedEntryDate);
+        const dateToUse = getBestDateForRecord(r);
+        const { year, month, monthName } = getYearMonth(dateToUse);
         if (!grouped[year]) grouped[year] = {};
         if (!grouped[year][month]) grouped[year][month] = { monthName, records:[] };
         grouped[year][month].records.push(r);
@@ -913,7 +925,12 @@ function populatePrintMonthOptions(records) {
 function populateGroupMonthOptions(records) {
     const monthMap = {};
     records.forEach(r => {
-        const { monthKey, monthName, year } = getYearMonth(r._resolvedEntryDate);
+        // Use getBestDateForRecord so records with empty _resolvedEntryDate
+        // (e.g. manually entered records whose date wasn't resolved yet)
+        // still appear in the correct month using their createdAt timestamp
+        const dateToUse = getBestDateForRecord(r);
+        const { monthKey, monthName, year } = getYearMonth(dateToUse);
+        if (monthKey === "No Year-No Month") return; // truly no date at all
         if (!monthMap[monthKey]) monthMap[monthKey] = `${monthName} ${year}`;
     });
     const sorted     = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
@@ -1123,7 +1140,7 @@ async function loadDonors() {
 
         // Step 2: re-resolve all dates. For manual entries this just re-reads entryDate.
         // For bulk imports it uses the carry-forward result from step 1.
-        allDonors.forEach(r => { r._resolvedEntryDate = resolveEntryDate(r); });
+        allDonors.forEach(r => { r._resolvedEntryDate = getBestDateForRecord(r); });
 
         allDonors.sort((a, b) => {
             const dc = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
