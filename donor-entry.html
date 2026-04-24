@@ -3,2080 +3,446 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Donor Database Tracking</title>
-
+    <title>Donor Database Entry</title>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-
     <style>
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #eef2f6;
-            color: #1f2937;
-        }
-
-        .page-wrap {
-            padding: 10px 16px 16px 16px;
-        }
-
-        .top-summary {
-            background: rgba(255,255,255,0.98);
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-            padding: 14px;
-            margin-bottom: 16px;
-        }
-
-        .summary-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .top-controls-row {
-            display: grid;
-            grid-template-columns: minmax(280px, 1.5fr) 220px 110px;
-            gap: 10px;
-            align-items: end;
-        }
-
-        .second-controls-row {
-            display: grid;
-            grid-template-columns: 220px auto;
-            gap: 10px;
-            align-items: end;
-        }
-
-        .field-group {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .field-group label {
-            display: block;
-            font-size: 12px;
-            font-weight: bold;
-            margin: 0 0 5px 0;
-            color: #334155;
-            line-height: 1.1;
-        }
-
-        .field-group input,
-        .field-group select {
-            width: 100%;
-            padding: 10px 11px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            font-size: 14px;
-            background: #fff;
-            height: 42px;
-        }
-
-        button {
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .main-btn {
-            padding: 11px 14px;
-            font-size: 13px;
-            white-space: nowrap;
-            height: 42px;
-        }
-
-        .small-btn {
-            padding: 8px 10px;
-            font-size: 12px;
-        }
-
-        .blue-btn { background: #1565c0; color: white; }
-        .green-btn { background: #2e7d32; color: white; }
-        .gray-btn { background: #64748b; color: white; }
-        .red-btn { background: #8a1111; color: white; }
-        .purple-btn { background: #6b21a8; color: white; }
-        .orange-btn { background: #ef6c00; color: white; }
-
-        .toolbar-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: nowrap;
-            align-items: end;
-            justify-content: flex-start;
-            min-width: 0;
-        }
-
-        .content-panel {
-            min-width: 0;
-        }
-
-        .status-message {
-            display: none;
-            margin-bottom: 12px;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: bold;
-            background: white;
-            border: 1px solid #dbe3ec;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-        }
-
-        .status-success {
-            display: block;
-            background: #e8f7e8;
-            color: #1b5e20;
-            border: 1px solid #b7dfb9;
-        }
-
-        .status-error {
-            display: block;
-            background: #fdeaea;
-            color: #b71c1c;
-            border: 1px solid #efb7b7;
-        }
-
-        .duplicate-box {
-            display: none;
-            margin-bottom: 12px;
-            padding: 14px;
-            border-radius: 10px;
-            background: #fff;
-            border: 1px solid #dbe3ec;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-        }
-
-        .duplicate-box.show {
-            display: block;
-        }
-
-        .duplicate-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #8b0000;
-            margin-bottom: 10px;
-        }
-
-        .duplicate-note {
-            font-size: 13px;
-            color: #475569;
-            margin-bottom: 12px;
-        }
-
-        .duplicate-wrap {
-            overflow: auto;
-            width: 100%;
-        }
-
-        .duplicate-table {
-            width: 100%;
-            min-width: 1400px;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-
-        .duplicate-table th,
-        .duplicate-table td {
-            border: 1px solid #d7d7d7;
-            padding: 7px 8px;
-            text-align: center;
-            vertical-align: middle;
-            white-space: nowrap;
-        }
-
-        .duplicate-table th {
-            background: #f7f7f7;
-        }
-
-        .year-group,
-        .month-group {
-            background: white;
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-            overflow: hidden;
-            margin-bottom: 14px;
-        }
-
-        .year-header,
-        .month-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-            font-weight: bold;
-        }
-
-        .year-header {
-            background: #b30000;
-            color: white;
-            padding: 15px 16px;
-            font-size: 17px;
-        }
-
-        .month-header {
-            background: #eef4f9;
-            color: #22313f;
-            padding: 13px 16px;
-            font-size: 14px;
-            border-top: 1px solid #dbe3ec;
-        }
-
-        .toggle-icon {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .group-body.hidden {
-            display: none;
-        }
-
-        .month-tools {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            padding: 10px 12px;
-            border-bottom: 1px solid #e5e7eb;
-            background: #fafcff;
-        }
-
-        .subtotal-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding: 10px 14px;
-            background: #fff8f0;
-            border-top: 1px solid #eee;
-            border-bottom: 1px solid #eee;
-            font-weight: bold;
-            color: #7a2e00;
-            font-size: 13px;
-        }
-
-        .table-wrap {
-            overflow: auto;
-            width: 100%;
-            max-height: 72vh;
-        }
-
-        table {
-            width: 100%;
-            min-width: 2850px;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-
-        th, td {
-            border: 1px solid #d7d7d7;
-            padding: 7px 8px;
-            text-align: center;
-            vertical-align: middle;
-            white-space: nowrap;
-        }
-
-        th {
-            position: sticky;
-            top: 0;
-            z-index: 3;
-            color: #111827;
-            font-weight: bold;
-        }
-
-        th.col-mbd { background: #e7c1a7; }
-        th.col-walkin { background: #b9d2f0; }
-        th.col-patient { background: #bcd796; }
-        th.col-normal { background: #efefef; }
-        th.col-donorcat { background: #efe6ff; }
-        th.col-bloodtype { background: #f4f4f4; }
-        th.col-serial { background: #f0f0f0; }
-        th.col-amount { background: #c9d7ff; }
-        th.col-actions { background: #ececec; }
-        th.col-entrydate { background: #f9e2e2; }
-
-        th.col-time-start,
-        td.col-time-start {
-            min-width: 90px;
-            width: 90px;
-            max-width: 90px;
-        }
-
-        th.col-time-end,
-        td.col-time-end {
-            min-width: 78px;
-            width: 78px;
-            max-width: 78px;
-            padding-left: 5px;
-            padding-right: 5px;
-        }
-
-        .header-filter-wrap {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .header-filter-wrap select {
-            min-width: 78px;
-            max-width: 110px;
-            padding: 3px 5px;
-            font-size: 11px;
-            border: 1px solid #bfc7d4;
-            border-radius: 5px;
-            background: #fff;
-        }
-
-        .donation-total {
-            font-weight: bold;
-            color: #111827;
-            display: block;
-        }
-
-        .donation-entry-note {
-            display: block;
-            font-size: 10px;
-            color: #64748b;
-            margin-top: 2px;
-        }
-
-        .actions-cell {
-            display: flex;
-            gap: 6px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .edit-btn { background: #1565c0; color: white; }
-        .delete-btn { background: #b30000; color: white; }
-        .save-btn { background: #2e7d32; color: white; }
-        .cancel-btn { background: #64748b; color: white; }
-
-        .edit-input,
-        .edit-select {
-            width: 100%;
-            min-width: 80px;
-            padding: 6px 8px;
-            border: 1px solid #bbb;
-            border-radius: 5px;
-            font-size: 12px;
-        }
-
-        .empty-box {
-            background: white;
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-            padding: 28px;
-            text-align: center;
-            color: #666;
-            font-weight: bold;
-        }
-
-        @media print {
-            body { background: white; }
-            .top-summary, .month-tools, .actions-cell, th.col-actions, #statusMessage, #duplicateBox { display: none !important; }
-            .page-wrap { padding: 0; }
-            .year-group, .month-group, .table-wrap {
-                box-shadow: none;
-                border-radius: 0;
-                max-height: none;
-                overflow: visible;
-            }
-            th { position: static; }
-            .group-body.hidden { display: block !important; }
-        }
-
-        @media (max-width: 1400px) {
-            .top-controls-row {
-                grid-template-columns: 1fr 220px 110px;
-            }
-
-            .second-controls-row {
-                grid-template-columns: 220px 1fr;
-            }
-
-            .toolbar-actions {
-                flex-wrap: wrap;
-            }
-        }
-
-        @media (max-width: 900px) {
-            .top-controls-row,
-            .second-controls-row {
-                grid-template-columns: 1fr;
-            }
-
-            .toolbar-actions {
-                flex-wrap: wrap;
-            }
-        }
+        *{box-sizing:border-box}
+        body{margin:0;font-family:Arial,sans-serif;background:#eef2f6;color:#1f2937}
+        header{background:linear-gradient(90deg,#8b0000,#b30000);color:white;padding:10px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.18);position:sticky;top:0;z-index:1000}
+        .header-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+        .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;justify-content:flex-end}
+        .header-find-wrap{display:flex;align-items:center;gap:8px;flex:1 1 420px;min-width:280px;max-width:620px}
+        .header-find-label{color:#fff;font-size:12px;font-weight:bold;white-space:nowrap}
+        .header-find-input{width:100%;min-width:180px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.32);background:rgba(255,255,255,0.94);color:#1f2937;font-size:13px}
+        .page{max-width:1180px;margin:12px auto;padding:0 10px 16px}
+        .lis-panel{background:white;border:1px solid #dbe3ec;border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,0.08);overflow:hidden;margin-bottom:16px}
+        .panel-head{background:#dde7f1;color:#243447;font-weight:bold;padding:9px 12px;border-bottom:1px solid #d4dde7;font-size:13px}
+        .collapse-btn{width:100%;border:1px solid #efc6c6;border-radius:10px;background:linear-gradient(180deg,#fff7f7,#ffe9e9);color:#8a1111;font-weight:bold;padding:9px 12px;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+        .collapse-btn .chevron{font-size:12px;transition:transform 0.2s}
+        .collapse-btn.open .chevron{transform:rotate(180deg)}
+        .collapse-content.hidden{display:none}
+        .panel-body{padding:12px}
+        .auth-indicator{padding:8px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.28);color:#fff;min-width:220px;text-align:center}
+        .reload-btn{padding:8px 12px;font-size:13px;border:none;border-radius:8px;font-weight:bold;background:#1976d2;color:#fff;cursor:pointer}
+        .lookup-sticky{position:sticky;top:66px;z-index:900}
+        .field-row{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+        .form-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px 12px}
+        .span-2{grid-column:span 2}.span-3{grid-column:span 3}.span-4{grid-column:span 4}
+        .span-6{grid-column:span 6}.span-8{grid-column:span 8}.span-12{grid-column:span 12}
+        .field-group{display:flex;flex-direction:column}
+        .field-group label{font-weight:bold;margin-bottom:4px;font-size:13px;color:#334155}
+        .field-group input:not([type=radio]):not([type=checkbox]),.field-group select,.field-group textarea{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff}
+        .field-group input:focus,.field-group select:focus,.field-group textarea:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.12)}
+        /* green tint for loaded identity fields */
+        .loaded-field{background:#f0fdf4 !important;border-color:#86efac !important}
+        .readonly-fill{background:#f8fafc !important}
+        .serial-main-box{border:1px solid #bfd5f7;border-radius:12px;background:linear-gradient(180deg,#f4f8ff,#e8f1ff);padding:12px}
+        .serial-wrap{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px}
+        .serial-prefix{background:#dce9ff;border:1px solid #b9cced;padding:10px 12px;border-radius:8px;font-weight:bold;white-space:nowrap;color:#334155;min-height:42px;display:flex;align-items:center}
+        .radio-box{border:1px solid #dbe3ec;border-radius:10px;padding:12px;background:#f8fafc}
+        .serial-tools-box{border:1px solid #efc6c6;border-radius:12px;padding:12px;background:linear-gradient(180deg,#fff7f7,#ffe9e9)}
+        .range-type-box{margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.75);border:1px solid #f0c8c8}
+        .radio-options{display:flex;flex-wrap:wrap;gap:18px;margin-bottom:10px}
+        .radio-options label,.range-type-options label{display:flex;align-items:center;gap:6px;margin:0;font-weight:normal;cursor:pointer}
+        .range-type-options{display:flex;flex-wrap:wrap;gap:18px;margin-top:6px}
+        .hidden{display:none}
+        .group-info{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:#fff5f5;border:1px solid #efc6c6;color:#8a1111}
+        .loaded-donor-info{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:#edf7ed;border:1px solid #b7dfb9;color:#166534}
+        .type-helper{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8}
+        .serial-helper{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:#edf4ff;border:1px solid #bfd5f7;color:#274690}
+        .time-helper{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:bold;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+        .serial-batch-info{margin-top:8px;padding:7px 9px;border-radius:8px;font-size:11px;font-weight:bold;background:#fff;border:1px solid #efc6c6;color:#8a1111}
+        .range-type-info{margin-top:10px;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:bold;background:#f0f9ff;border:1px solid #bae6fd;color:#075985}
+        .helper-text{margin-top:4px;font-size:12px;color:#64748b}
+        .lookup-results{margin-top:14px;border:1px solid #dbe3ec;border-radius:10px;overflow:hidden}
+        .lookup-table-wrap{max-height:260px;overflow:auto}
+        table{width:100%;border-collapse:collapse;min-width:900px}
+        th,td{border-bottom:1px solid #e5e7eb;padding:9px 10px;text-align:left;font-size:13px;white-space:nowrap}
+        th{background:#f1f5f9;position:sticky;top:0;z-index:1}
+        .small-btn,.main-btn{border:none;border-radius:8px;cursor:pointer;font-weight:bold}
+        .small-btn{padding:7px 9px;font-size:11px}
+        .main-btn{padding:10px 16px;font-size:13px}
+        .blue-btn{background:#1565c0;color:white}.green-btn{background:#2e7d32;color:white}
+        .gray-btn{background:#64748b;color:white}.red-btn{background:#8a1111;color:white}
+        .orange-btn{background:#c56a00;color:white}
+        .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+        .serial-btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+        .serial-batch-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;margin-top:6px}
+        .preview-box{margin-top:8px;padding:8px 10px;background:rgba(255,255,255,0.8);border:1px dashed #e3a4a4;border-radius:8px;font-size:12px;color:#5b1c1c;line-height:1.5}
+        textarea{min-height:85px;resize:vertical}
+        .status-message{margin-top:14px;padding:12px;border-radius:8px;font-weight:bold;display:none}
+        .status-success{display:block;background:#e8f7e8;color:#1b5e20;border:1px solid #b7dfb9}
+        .status-error{display:block;background:#fdeaea;color:#b71c1c;border:1px solid #efb7b7}
+        .section-note{font-size:12px;color:#64748b;margin-top:-4px;margin-bottom:12px}
+        .inline-toggle{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px}
+        .inline-toggle label{display:flex;align-items:center;gap:6px;margin:0;font-weight:normal;cursor:pointer}
+        @media(max-width:1100px){.form-grid,.serial-batch-grid{grid-template-columns:repeat(6,1fr)}.span-2,.span-3,.span-4,.span-6,.span-8,.span-12{grid-column:span 6}.field-row{grid-template-columns:1fr}.serial-wrap{grid-template-columns:1fr}}
+        @media(max-width:700px){.form-grid,.serial-batch-grid{grid-template-columns:1fr}.span-2,.span-3,.span-4,.span-6,.span-8,.span-12{grid-column:span 1}.header-bar{flex-direction:column;align-items:stretch}.header-find-wrap{min-width:100%;order:3}.lookup-sticky{top:88px}}
     </style>
 </head>
 <body>
-
-<div class="page-wrap">
-    <div class="top-summary">
-        <div class="summary-grid">
-            <div class="top-controls-row">
-                <div class="field-group">
-                    <label for="searchInput">Search</label>
-                    <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, occupation, MBD, Walk-in, Patient Directed, organization">
-                </div>
-
-                <div class="field-group">
-                    <label for="printMonthSelect">Print / Duplicate Month</label>
-                    <select id="printMonthSelect">
-                        <option value="">Select month</option>
-                    </select>
-                </div>
-
-                <button class="main-btn blue-btn" id="reloadBtn" type="button">Reload</button>
+<header>
+    <div class="header-bar">
+        <div style="font-size:0"></div>
+        <div class="header-actions">
+            <div class="header-find-wrap">
+                <span class="header-find-label">Find Existing Donor</span>
+                <input type="text" id="lookupSearch" class="header-find-input" placeholder="Live search surname, first name, middle name, birthday, blood type">
             </div>
-
-            <div class="second-controls-row">
-                <div class="field-group">
-                    <label for="groupMonthFilter">Month Filter</label>
-                    <select id="groupMonthFilter">
-                        <option value="">All Months</option>
-                    </select>
-                </div>
-
-                <div class="toolbar-actions">
-                    <button class="main-btn gray-btn" id="printSelectedMonthBtn">Print</button>
-                    <button class="main-btn green-btn" id="exportCsvBtn">Export</button>
-                    <button class="main-btn red-btn" id="collapseAllBtn">Collapse</button>
-                    <button class="main-btn blue-btn" id="expandAllBtn">Expand</button>
-                    <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
+            <div id="authIndicator" class="auth-indicator">Checking login status...</div>
+            <button type="button" id="reloadPageBtn" class="reload-btn">Reload</button>
+        </div>
+    </div>
+</header>
+<div class="page">
+    <div class="lis-panel lookup-sticky">
+        <div class="panel-body" style="padding-top:10px;padding-bottom:10px">
+            <div id="loadedDonorInfo" class="loaded-donor-info hidden"></div>
+            <div id="lookupResultsBox" class="lookup-results hidden">
+                <div class="lookup-table-wrap">
+                    <table><thead><tr>
+                        <th>Action</th><th>Surname</th><th>First Name</th><th>Middle Name</th>
+                        <th>Birthday</th><th>Blood Type</th><th>Last Entry Date</th>
+                        <th>Type of Donor</th><th># of Donations</th>
+                    </tr></thead><tbody id="lookupResultsBody"></tbody></table>
                 </div>
             </div>
         </div>
     </div>
-
-    <div id="statusMessage" class="status-message"></div>
-
-    <div id="duplicateBox" class="duplicate-box">
-        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
-        <div class="duplicate-note" id="duplicateNote"></div>
-        <div class="duplicate-wrap">
-            <table class="duplicate-table">
-                <thead>
-                    <tr>
-                        <th>Duplicate Group</th>
-                        <th>Entry Date</th>
-                        <th>Serial Number</th>
-                        <th>Surname</th>
-                        <th>First Name</th>
-                        <th>Middle Name</th>
-                        <th>Birthday</th>
-                        <th>Blood Type</th>
-                        <th>Donor Type</th>
-                        <th>MBD / Patient Directed</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="duplicateBody">
-                    <tr><td colspan="11">No duplicate data found.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <main class="content-panel">
-        <div id="trackingContainer"></div>
-    </main>
-</div>
-
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.firebasestorage.app",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
-    };
-
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-
-const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycby4eA5kzslPQZavsA5TxOB3DjKZOZm4ZtNlbijW7KcCGBnM_SpMDne3t-tdb_d8GSm-/exec";
-
-async function backupToGoogleSheets(data) {
-    if (!GOOGLE_SHEETS_BACKUP_URL) return;
-
-    try {
-        await fetch(GOOGLE_SHEETS_BACKUP_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: {
-                "Content-Type": "text/plain;charset=utf-8"
-            },
-            body: JSON.stringify(data)
-        });
-    } catch (err) {
-        console.error("Google Sheets backup failed:", err);
-    }
-}
-
-    const trackingContainer = document.getElementById("trackingContainer");
-    const searchInput = document.getElementById("searchInput");
-    const groupMonthFilter = document.getElementById("groupMonthFilter");
-    const printMonthSelect = document.getElementById("printMonthSelect");
-    const printSelectedMonthBtn = document.getElementById("printSelectedMonthBtn");
-    const exportCsvBtn = document.getElementById("exportCsvBtn");
-    const collapseAllBtn = document.getElementById("collapseAllBtn");
-    const expandAllBtn = document.getElementById("expandAllBtn");
-    const duplicateDataBtn = document.getElementById("duplicateDataBtn");
-    const reloadBtn = document.getElementById("reloadBtn");
-    const statusMessage = document.getElementById("statusMessage");
-    const duplicateBox = document.getElementById("duplicateBox");
-    const duplicateTitle = document.getElementById("duplicateTitle");
-    const duplicateNote = document.getElementById("duplicateNote");
-    const duplicateBody = document.getElementById("duplicateBody");
-
-    let allDonors = [];
-    let filteredDonors = [];
-    let collapsedGroups = {};
-    let currentDonationTotals = {};
-    let sequenceMap = {};
-    let headerFilters = {
-        entryDate: "",
-        mbd: "",
-        walkIn: "",
-        patientDirected: "",
-        sex: "",
-        bloodType: "",
-        donorCategory: "",
-        amount: "",
-        bloodBagType: "",
-        serialSort: ""
-    };
-
-    function showMessage(message, type) {
-        statusMessage.textContent = message;
-        statusMessage.className = "status-message";
-        statusMessage.classList.add(type === "success" ? "status-success" : "status-error");
-    }
-
-    function hideDuplicateBox() {
-        duplicateBox.classList.remove("show");
-        duplicateTitle.textContent = "Duplicate Data";
-        duplicateNote.textContent = "";
-        duplicateBody.innerHTML = `<tr><td colspan="11">No duplicate data found.</td></tr>`;
-    }
-
-    function showDuplicateBox(title, note, rowsHtml) {
-        duplicateTitle.textContent = title;
-        duplicateNote.textContent = note;
-        duplicateBody.innerHTML = rowsHtml;
-        duplicateBox.classList.add("show");
-    }
-
-    function escapeHtml(text) {
-        if (text === null || text === undefined) return "";
-        return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    function csvEscape(value) {
-        if (value === null || value === undefined) return "";
-        return `"${String(value).replace(/"/g, '""')}"`;
-    }
-
-    function normalizeText(value) {
-        return String(value || "").trim().toLowerCase();
-    }
-
-    function normalizeMatchValue(value) {
-        return normalizeText(value).replace(/[-_]+/g, " ").replace(/\s+/g, " ");
-    }
-
-    function toUpperTrim(value) {
-        return String(value || "").trim().toUpperCase();
-    }
-
-    function toUpperDisplay(value) {
-        if (value === null || value === undefined) return "";
-        return String(value).toUpperCase();
-    }
-
-    function escapeUpperHtml(text) {
-        return escapeHtml(toUpperDisplay(text));
-    }
-
-    function resolveSuffix(record) {
-        return (
-            String(record.suffix || "").trim() ||
-            String(record.nameSuffix || "").trim() ||
-            String(record.suffixName || "").trim() ||
-            String(record.extensionName || "").trim() ||
-            String(record.extName || "").trim() ||
-            String(record.nameExtension || "").trim() ||
-            ""
-        );
-    }
-
-    function getSurnameWithSuffix(record) {
-        return [resolveSuffix(record), String(record.surname || "").trim()].filter(Boolean).join(" ").trim();
-    }
-
-    function resolveDonorType(record) {
-        const rawType = normalizeMatchValue(record?.donorType);
-
-        if (rawType === normalizeMatchValue("MBD")) return "MBD";
-        if (rawType === normalizeMatchValue("WALK-IN")) return "WALK-IN";
-        if (rawType === normalizeMatchValue("PATIENT DIRECTED")) return "PATIENT DIRECTED";
-
-        const mbdDetails = String(record?.mbdDetails || "").trim();
-        const patientDirectedDetails = String(record?.patientDirectedDetails || "").trim();
-
-        if (mbdDetails) return "MBD";
-        if (patientDirectedDetails) return "PATIENT DIRECTED";
-
-        return "";
-    }
-
-    function isDonorType(record, type) {
-        return normalizeMatchValue(resolveDonorType(record)) === normalizeMatchValue(type);
-    }
-
-    function isDonorCategory(record, category) {
-        return normalizeMatchValue(record?.donorCategory) === normalizeMatchValue(category);
-    }
-
-    function buildDonorKey(record) {
-        return [
-            normalizeText(resolveSuffix(record)),
-            normalizeText(record.surname),
-            normalizeText(record.firstName),
-            normalizeText(record.middleName),
-            normalizeText(resolveBirthday(record)),
-            normalizeText(record.contactNumber)
-        ].join("|");
-    }
-
-    function getMonthName(monthNumber) {
-        const names = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-        return names[monthNumber - 1] || "Unknown Month";
-    }
-
-    function parseDateFromText(text) {
-        const name = String(text || "").toLowerCase().trim();
-
-        const ymd = name.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/);
-        if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2, "0")}-${String(ymd[3]).padStart(2, "0")}`;
-
-        const mdy = name.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/);
-        if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2, "0")}-${String(mdy[2]).padStart(2, "0")}`;
-
-        const monthMap = {
-            jan:"01", january:"01",
-            feb:"02", february:"02",
-            mar:"03", march:"03",
-            apr:"04", april:"04",
-            may:"05",
-            jun:"06", june:"06",
-            jul:"07", july:"07",
-            aug:"08", august:"08",
-            sep:"09", sept:"09", september:"09",
-            oct:"10", october:"10",
-            nov:"11", november:"11",
-            dec:"12", december:"12"
-        };
-
-        const monthYear = name.match(/(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)[\s\-_]*(\d{4})/);
-        if (monthYear) return `${monthYear[2]}-${monthMap[monthYear[1]]}-01`;
-
-        const yearMonth = name.match(/(\d{4})[\s\-_]*(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)/);
-        if (yearMonth) return `${yearMonth[1]}-${monthMap[yearMonth[2]]}-01`;
-
-        return "";
-    }
-
-    function parseDateFlexible(raw) {
-        if (!raw) return "";
-        if (typeof raw === "string") {
-            const trimmed = raw.trim();
-
-            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-
-            if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) {
-                const [m, d, yRaw] = trimmed.split("/");
-                let y = Number(yRaw);
-                if (String(yRaw).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
-                return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-            }
-
-            const parsedText = parseDateFromText(trimmed);
-            if (parsedText) return parsedText;
-
-            const d = new Date(trimmed);
-            if (!isNaN(d.getTime())) {
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            }
-            return "";
-        }
-
-        if (typeof raw?.toDate === "function") {
-            const d = raw.toDate();
-            if (!isNaN(d.getTime())) {
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            }
-        }
-
-        if (typeof raw === "object" && raw.seconds) {
-            const d = new Date(raw.seconds * 1000);
-            if (!isNaN(d.getTime())) {
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            }
-        }
-
-        if (raw instanceof Date && !isNaN(raw.getTime())) {
-            return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2, "0")}-${String(raw.getDate()).padStart(2, "0")}`;
-        }
-
-        return "";
-    }
-
-    function parseCreatedAtDate(raw) {
-        if (!raw) return "";
-        if (typeof raw?.toDate === "function") return parseDateFlexible(raw.toDate());
-        if (typeof raw === "object" && raw.seconds) return parseDateFlexible(new Date(raw.seconds * 1000));
-        return "";
-    }
-
-    function resolveEntryDate(record) {
-        return (
-            parseDateFlexible(record.entryDate) ||
-            parseDateFlexible(record.donationDate) ||
-            parseDateFlexible(record.date) ||
-            parseDateFlexible(record.bleedingDate) ||
-            parseDateFromText(record?.importMeta?.sourceSheet || "") ||
-            parseDateFromText(record?.importMeta?.sourceFile || "") ||
-            parseCreatedAtDate(record.createdAt) ||
-            ""
-        );
-    }
-
-    function resolveBirthday(record) {
-        return parseDateFlexible(record.birthday) || String(record.birthday || "");
-    }
-
-    function resolveContactNumber(record) {
-        return (
-            String(record.contactNumber || "").trim() ||
-            String(record.contactNo || "").trim() ||
-            String(record.contactNum || "").trim() ||
-            String(record.contact || "").trim() ||
-            String(record.mobileNumber || "").trim() ||
-            String(record.mobileNo || "").trim() ||
-            String(record.cellphoneNumber || "").trim() ||
-            String(record.cellphoneNo || "").trim() ||
-            String(record.phoneNumber || "").trim() ||
-            String(record.phoneNo || "").trim() ||
-            String(record.phone || "").trim() ||
-            ""
-        );
-    }
-
-    function resolveOccupation(record) {
-        return (
-            String(record.occupation || "").trim() ||
-            String(record.job || "").trim() ||
-            String(record.work || "").trim() ||
-            String(record.profession || "").trim() ||
-            ""
-        );
-    }
-
-    function resolveTimeStarted(record) {
-        return (
-            String(record.timeStarted || "").trim() ||
-            String(record.startedTime || "").trim() ||
-            String(record.startTime || "").trim() ||
-            String(record.timeStart || "").trim() ||
-            ""
-        );
-    }
-
-    function resolveTimeEnded(record) {
-        return (
-            String(record.timeEnded || "").trim() ||
-            String(record.endedTime || "").trim() ||
-            String(record.endTime || "").trim() ||
-            String(record.timeEnd || "").trim() ||
-            ""
-        );
-    }
-
-    function resolveDonationCountValue(value) {
-        const text = String(value ?? "").trim();
-        return text === "" ? "0" : text;
-    }
-
-    function attachResolvedFields(record) {
-        return {
-            ...record,
-            donorType: resolveDonorType(record),
-            contactNumber: resolveContactNumber(record),
-            occupation: resolveOccupation(record),
-            _resolvedEntryDate: resolveEntryDate(record),
-            _resolvedBirthday: resolveBirthday(record),
-            _resolvedTimeStarted: resolveTimeStarted(record),
-            _resolvedTimeEnded: resolveTimeEnded(record),
-            _resolvedNumberOfDonations: resolveDonationCountValue(record.numberOfDonations)
-        };
-    }
-
-    function getYearMonth(entryDate) {
-        if (!entryDate) {
-            return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
-        }
-
-        const parts = entryDate.split("-");
-        if (parts.length !== 3) {
-            return { year: "No Year", month: 0, monthName: "No Month", monthKey: "No Year-No Month" };
-        }
-
-        const year = parts[0];
-        const month = parseInt(parts[1], 10);
-        const monthName = getMonthName(month);
-
-        return {
-            year,
-            month,
-            monthName,
-            monthKey: `${year}-${String(month).padStart(2, "0")}`
-        };
-    }
-
-    function getGroupLabel(record) {
-        if (isDonorType(record, "MBD")) {
-            return toUpperTrim(record.mbdDetails || "MBD");
-        }
-        if (isDonorType(record, "WALK-IN")) {
-            return "WALK-IN";
-        }
-        if (isDonorType(record, "PATIENT DIRECTED")) {
-            return toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
-        }
-        return "";
-    }
-
-    function matchesUnifiedSearch(record, keyword) {
-        if (!keyword) return true;
-
-        const text = [
-            record._resolvedEntryDate,
-            record.serialNumber,
-            record.donorType,
-            record.donorCategory,
-            record.patientDirectedDetails,
-            record.mbdDetails,
-            getGroupLabel(record),
-            resolveSuffix(record),
-            getSurnameWithSuffix(record),
-            record.surname,
-            record.firstName,
-            record.middleName,
-            record._resolvedBirthday,
-            record.age,
-            record.sex,
-            record.contactNumber,
-            record.address,
-            record.cityProvince,
-            record.occupation,
-            record._resolvedNumberOfDonations,
-            record.bloodType,
-            record.amount,
-            record.bloodBagBrand,
-            record.bloodBagType,
-            record._resolvedTimeStarted,
-            record._resolvedTimeEnded,
-            record.remarks
-        ].join(" ").toLowerCase();
-
-        return text.includes(keyword.toLowerCase());
-    }
-
-    function matchesMonthFilter(record) {
-        const selectedMonth = groupMonthFilter.value;
-        if (!selectedMonth) return true;
-        const monthKey = getYearMonth(record._resolvedEntryDate).monthKey;
-        return monthKey === selectedMonth;
-    }
-
-    function matchesHeaderFilters(record) {
-        if (headerFilters.entryDate && record._resolvedEntryDate !== headerFilters.entryDate) return false;
-        if (headerFilters.mbd && !isDonorType(record, "MBD")) return false;
-        if (headerFilters.walkIn && !isDonorType(record, "WALK-IN")) return false;
-        if (headerFilters.patientDirected && !isDonorType(record, "PATIENT DIRECTED")) return false;
-        if (headerFilters.sex && normalizeText(record.sex) !== normalizeText(headerFilters.sex)) return false;
-        if (headerFilters.bloodType && normalizeText(record.bloodType) !== normalizeText(headerFilters.bloodType)) return false;
-        if (headerFilters.donorCategory && !isDonorCategory(record, headerFilters.donorCategory)) return false;
-        if (headerFilters.amount && normalizeText(record.amount) !== normalizeText(headerFilters.amount)) return false;
-        if (headerFilters.bloodBagType && normalizeText(record.bloodBagType) !== normalizeText(headerFilters.bloodBagType)) return false;
-        return true;
-    }
-
-    function compareSerialNumbers(a, b) {
-        const serialA = String(a.serialNumber || "");
-        const serialB = String(b.serialNumber || "");
-        return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
-    }
-
-    function compareByEntryDateAsc(a, b) {
-        const dateA = a._resolvedEntryDate || "";
-        const dateB = b._resolvedEntryDate || "";
-        const dateCompare = dateA.localeCompare(dateB);
-        if (dateCompare !== 0) return dateCompare;
-
-        const serialA = String(a.serialNumber || "");
-        const serialB = String(b.serialNumber || "");
-        return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
-    }
-
-    function applySerialSort(records) {
-        if (headerFilters.serialSort === "asc") {
-            records.sort((a, b) => compareSerialNumbers(a, b));
-        } else if (headerFilters.serialSort === "desc") {
-            records.sort((a, b) => compareSerialNumbers(b, a));
-        }
-        return records;
-    }
-
-    function getGroupKey(type, a, b = "") {
-        return `${type}-${a}-${b}`;
-    }
-
-    function isCollapsed(key) {
-        return collapsedGroups[key] !== false;
-    }
-
-    function countType(records, type) {
-        return records.filter(r => isDonorType(r, type)).length;
-    }
-
-    function getCategorizedEntryCount(records) {
-        return records.filter(r =>
-            isDonorType(r, "MBD") ||
-            isDonorType(r, "WALK-IN") ||
-            isDonorType(r, "PATIENT DIRECTED")
-        ).length;
-    }
-
-    function computeCurrentDonationTotals(records) {
-        const totals = {};
-        const sorted = [...records].sort((a, b) => {
-            const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
-            if (dateCompare !== 0) return dateCompare;
-            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-        });
-
-        sorted.forEach(record => {
-            const key = buildDonorKey(record);
-            if (totals[key] === undefined) {
-                totals[key] = resolveDonationCountValue(record.numberOfDonations);
-            }
-        });
-
-        return totals;
-    }
-
-    function computeSequenceMap(records) {
-        const map = {};
-        const grouped = {};
-
-        records.forEach(record => {
-            const date = record._resolvedEntryDate || "";
-            const donorType = normalizeMatchValue(resolveDonorType(record));
-            let typeGroupKey = `${date}|${donorType}`;
-
-            if (donorType === normalizeMatchValue("MBD")) {
-                typeGroupKey += `|${normalizeText(record.mbdDetails || "")}`;
-            } else if (donorType === normalizeMatchValue("PATIENT DIRECTED")) {
-                typeGroupKey += `|patient-directed`;
-            } else if (donorType === normalizeMatchValue("WALK-IN")) {
-                typeGroupKey += `|walk-in`;
-            }
-
-            if (!grouped[typeGroupKey]) grouped[typeGroupKey] = [];
-            grouped[typeGroupKey].push(record);
-        });
-
-        Object.keys(grouped).forEach(groupKey => {
-            grouped[groupKey].sort((a, b) => {
-                const serialA = a.serialNumber || "";
-                const serialB = b.serialNumber || "";
-                return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: "base" });
-            });
-
-            grouped[groupKey].forEach((record, index) => {
-                map[record.id] = index + 1;
-            });
-        });
-
-        return map;
-    }
-
-    function getCategoryDisplay(record) {
-        const seq = sequenceMap[record.id] || "";
-        if (!seq) return "";
-
-        if (isDonorType(record, "WALK-IN")) {
-            return `WALK-IN-${seq}`;
-        }
-
-        if (isDonorType(record, "MBD")) {
-            return `${toUpperTrim(record.mbdDetails || "MBD")}-${seq}`;
-        }
-
-        if (isDonorType(record, "PATIENT DIRECTED")) {
-            const patientName = toUpperTrim(record.patientDirectedDetails || "PATIENT DIRECTED") || "PATIENT DIRECTED";
-            return `${patientName}-${seq}`;
-        }
-
-        return "";
-    }
-
-    function groupDonors(records) {
-        const grouped = {};
-
-        records.forEach(record => {
-            const { year, month, monthName } = getYearMonth(record._resolvedEntryDate);
-
-            if (!grouped[year]) grouped[year] = {};
-            if (!grouped[year][month]) {
-                grouped[year][month] = {
-                    monthName,
-                    records: []
-                };
-            }
-
-            grouped[year][month].records.push(record);
-        });
-
-        Object.keys(grouped).forEach(year => {
-            Object.keys(grouped[year]).forEach(month => {
-                applySerialSort(grouped[year][month].records);
-            });
-        });
-
-        return grouped;
-    }
-
-    function populatePrintMonthOptions(records) {
-        const monthMap = {};
-
-        records.forEach(record => {
-            const { monthKey, monthName, year } = getYearMonth(record._resolvedEntryDate);
-            if (!monthMap[monthKey]) {
-                monthMap[monthKey] = `${monthName} ${year}`;
-            }
-        });
-
-        const sortedKeys = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
-        const currentValue = printMonthSelect.value;
-
-        printMonthSelect.innerHTML = `<option value="">Select month</option>` +
-            sortedKeys.map(key => `<option value="${key}">${monthMap[key]}</option>`).join("");
-
-        if (sortedKeys.includes(currentValue)) {
-            printMonthSelect.value = currentValue;
-        }
-    }
-
-    function populateGroupMonthOptions(records) {
-        const monthMap = {};
-
-        records.forEach(record => {
-            const { monthKey, monthName, year } = getYearMonth(record._resolvedEntryDate);
-            if (!monthMap[monthKey]) {
-                monthMap[monthKey] = `${monthName} ${year}`;
-            }
-        });
-
-        const sortedKeys = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
-        const currentValue = groupMonthFilter.value;
-
-        groupMonthFilter.innerHTML = `<option value="">All Months</option>` +
-            sortedKeys.map(key => `<option value="${key}">${monthMap[key]}</option>`).join("");
-
-        if (sortedKeys.includes(currentValue)) {
-            groupMonthFilter.value = currentValue;
-        }
-    }
-
-    function renderHeaderFilterSelect(filterKey, options, selectedValue, placeholderLabel) {
-        const normalizedSelected = normalizeMatchValue(selectedValue);
-        return `
-            <div class="header-filter-wrap">
-                <span>${escapeHtml(placeholderLabel)}</span>
-                <select onchange="setHeaderFilter('${filterKey}', this.value)">
-                    <option value="">All</option>
-                    ${options.map(opt => `<option value="${escapeHtml(opt)}" ${normalizeMatchValue(opt) === normalizedSelected ? "selected" : ""}>${escapeHtml(opt)}</option>`).join("")}
-                </select>
-            </div>
-        `;
-    }
-
-    function getEntryDateFilterOptions(records) {
-        return [...new Set(records.map(record => record._resolvedEntryDate).filter(Boolean))].sort((a, b) => b.localeCompare(a));
-    }
-
-    function buildDuplicateKey(record) {
-        return [
-            normalizeText(record.serialNumber),
-            normalizeText(record.surname),
-            normalizeText(record.firstName),
-            normalizeText(record.middleName),
-            normalizeText(record._resolvedBirthday)
-        ].join("|");
-    }
-
-    function getDuplicateRecordsForMonth(monthValue) {
-        const monthRecords = allDonors.filter(record => {
-            const { monthKey } = getYearMonth(record._resolvedEntryDate);
-            return monthKey === monthValue;
-        });
-
-        const grouped = {};
-        monthRecords.forEach(record => {
-            const key = buildDuplicateKey(record);
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(record);
-        });
-
-        return Object.values(grouped).filter(group => group.length > 1);
-    }
-
-    function renderDuplicateMonthView(monthValue) {
-        if (!monthValue) {
-            showMessage("Please select a month first for Duplicate Data.", "error");
-            return;
-        }
-
-        const duplicateGroups = getDuplicateRecordsForMonth(monthValue);
-        const parts = monthValue.split("-");
-        const monthLabel = `${getMonthName(parseInt(parts[1], 10))} ${parts[0]}`;
-
-        if (!duplicateGroups.length) {
-            showDuplicateBox(
-                `Duplicate Data - ${monthLabel}`,
-                "No duplicate data found for this month.",
-                `<tr><td colspan="11">No duplicate data found for this month.</td></tr>`
-            );
-            return;
-        }
-
-        let rowsHtml = "";
-        let groupCounter = 1;
-        let totalRows = 0;
-
-        duplicateGroups.forEach(group => {
-            group.forEach((record, index) => {
-                totalRows++;
-                rowsHtml += `
-                    <tr>
-                        <td>${index === 0 ? `Duplicate ${groupCounter} (${group.length})` : ""}</td>
-                        <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                        <td>${escapeUpperHtml(record.serialNumber)}</td>
-                        <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                        <td>${escapeUpperHtml(record.firstName)}</td>
-                        <td>${escapeUpperHtml(record.middleName)}</td>
-                        <td>${escapeHtml(record._resolvedBirthday)}</td>
-                        <td>${escapeUpperHtml(record.bloodType)}</td>
-                        <td>${escapeUpperHtml(resolveDonorType(record))}</td>
-                        <td>${escapeUpperHtml(record.mbdDetails || record.patientDirectedDetails || "")}</td>
-                        <td class="actions-cell">
-                            <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
-                            <button class="small-btn delete-btn" onclick="deleteDonor('${record.id}')">Delete</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            groupCounter++;
-        });
-
-        showDuplicateBox(
-            `Duplicate Data - ${monthLabel}`,
-            `Duplicate groups found: ${duplicateGroups.length} | Duplicate rows: ${totalRows}`,
-            rowsHtml
-        );
-    }
-
-    function renderTracking() {
-        const keyword = searchInput.value.trim();
-        const baseDonors = allDonors
-            .filter(record => matchesUnifiedSearch(record, keyword))
-            .filter(record => matchesMonthFilter(record));
-        const entryDateOptions = getEntryDateFilterOptions(baseDonors);
-
-        filteredDonors = baseDonors
-            .filter(record => matchesHeaderFilters(record));
-
-        currentDonationTotals = computeCurrentDonationTotals(allDonors);
-        sequenceMap = computeSequenceMap(filteredDonors);
-
-        populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
-        populateGroupMonthOptions(allDonors);
-
-        if (!filteredDonors.length) {
-            trackingContainer.innerHTML = `<div class="empty-box">No donor records found.</div>`;
-            return;
-        }
-
-        const grouped = groupDonors(filteredDonors);
-        const sortedYears = Object.keys(grouped).sort((a, b) => {
-            if (a === "No Year") return 1;
-            if (b === "No Year") return -1;
-            return Number(b) - Number(a);
-        });
-
-        let html = "";
-
-        sortedYears.forEach((year, yearIndex) => {
-            const monthsObj = grouped[year];
-            const sortedMonths = Object.keys(monthsObj).sort((a, b) => Number(b) - Number(a));
-            const yearKey = getGroupKey("year", year);
-            const yearCollapsed = isCollapsed(yearKey);
-
-            html += `
-                <div class="year-group">
-                    <div class="year-header" onclick="toggleGroup('${yearKey}', 'year-body-${yearIndex}', 'year-icon-${yearIndex}')">
-                        <span>${escapeHtml(year)}</span>
-                        <span id="year-icon-${yearIndex}" class="toggle-icon">${yearCollapsed ? "+" : "−"}</span>
+    <div class="lis-panel">
+        <div class="panel-head">Donor Entry Form</div>
+        <div class="panel-body">
+            <form id="donorForm" novalidate>
+                <div class="form-grid">
+                    <div class="field-group span-12"><label for="entryDate">Date</label><input type="date" id="entryDate" required></div>
+                    <div class="field-group span-6">
+                        <div class="serial-main-box">
+                            <label for="serialNumber">1. Serial Number</label>
+                            <div class="serial-wrap">
+                                <span id="serialPrefix" class="serial-prefix">PRC2600-2600</span>
+                                <input type="text" id="serialNumber" placeholder="Enter manual number or scan barcode" required>
+                            </div>
+                            <div class="inline-toggle"><label><input type="checkbox" id="useSerialPrefix" checked> Enable prefix</label></div>
+                            <div id="serialHelperBox" class="serial-helper">Prefix enabled.</div>
+                        </div>
                     </div>
-
-                    <div id="year-body-${yearIndex}" class="group-body ${yearCollapsed ? "hidden" : ""}">
-            `;
-
-            sortedMonths.forEach((month, monthIndex) => {
-                const monthBlock = monthsObj[month];
-                const records = monthBlock.records;
-                const monthKey = getGroupKey("month", year, month);
-                const monthCollapsed = isCollapsed(monthKey);
-                const monthValueForPrint = `${year}-${String(month).padStart(2, "0")}`;
-
-                const mbdCount = countType(records, "MBD");
-                const walkInCount = countType(records, "WALK-IN");
-                const patientDirectedCount = countType(records, "PATIENT DIRECTED");
-                const realEntriesCount = getCategorizedEntryCount(records);
-
-                html += `
-                    <div class="month-group">
-                        <div class="month-header" onclick="toggleGroup('${monthKey}', 'month-body-${yearIndex}-${monthIndex}', 'month-icon-${yearIndex}-${monthIndex}')">
-                            <span>${escapeHtml(monthBlock.monthName)} (${realEntriesCount})</span>
-                            <span id="month-icon-${yearIndex}-${monthIndex}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
+                    <div class="field-group span-6">
+                        <label>2. Donor Type</label>
+                        <div class="radio-box">
+                            <div class="radio-options">
+                                <label><input type="radio" name="donorType" value="Patient Directed"> Patient Directed</label>
+                                <label><input type="radio" name="donorType" value="Walk-in"> Walk-in</label>
+                                <label><input type="radio" name="donorType" value="MBD"> MBD</label>
+                            </div>
+                            <div id="patientDirectedBox" class="hidden"><input type="text" id="patientDirectedDetails" placeholder="Enter patient directed details"></div>
+                            <div id="walkInBox" class="hidden" style="margin-top:10px">
+                                <div class="field-row">
+                                    <input type="number" id="walkInCount" min="1" placeholder="Number of walk-in donors">
+                                    <button type="button" id="startWalkInGroupBtn" class="main-btn blue-btn">Start Walk-in Group</button>
+                                </div>
+                            </div>
+                            <div id="mbdBox" class="hidden" style="margin-top:10px">
+                                <div class="field-row">
+                                    <input type="text" id="mbdDetails" placeholder="Enter MBD site / organization">
+                                    <input type="number" id="mbdCount" min="1" placeholder="Number of MBD donors">
+                                </div>
+                                <div style="margin-top:10px"><button type="button" id="startMbdGroupBtn" class="main-btn blue-btn">Start MBD Group</button></div>
+                            </div>
+                            <div id="groupInfoBox" class="group-info hidden"></div>
                         </div>
-
-                        <div class="month-tools">
-                            <button class="small-btn gray-btn" onclick="printOneMonth('${monthValueForPrint}')">Print This Month</button>
-                            <button class="small-btn green-btn" onclick="exportOneMonthCsv('${monthValueForPrint}')">Export This Month CSV</button>
-                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValueForPrint}')">Show Duplicates This Month</button>
-                        </div>
-
-                        <div class="subtotal-bar">
-                            <span>Entries: ${realEntriesCount}</span>
-                            <span>MBD: ${mbdCount}</span>
-                            <span>Walk-in: ${walkInCount}</span>
-                            <span>Patient-Directed: ${patientDirectedCount}</span>
-                            <span>New: ${records.filter(r => isDonorCategory(r, "NEW")).length}</span>
-                            <span>Repeat: ${records.filter(r => isDonorCategory(r, "REPEAT")).length}</span>
-                            <span>Lapse: ${records.filter(r => isDonorCategory(r, "LAPSE")).length}</span>
-                        </div>
-
-                        <div id="month-body-${yearIndex}-${monthIndex}" class="group-body ${monthCollapsed ? "hidden" : ""}">
-                            <div class="table-wrap">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th class="col-entrydate">
-                                                ${renderHeaderFilterSelect("entryDate", entryDateOptions, headerFilters.entryDate, "Entry Date")}
-                                            </th>
-                                            <th class="col-mbd">
-                                                ${renderHeaderFilterSelect("mbd", ["MBD"], headerFilters.mbd, "MBD")}
-                                            </th>
-                                            <th class="col-walkin">
-                                                ${renderHeaderFilterSelect("walkIn", ["WALK-IN"], headerFilters.walkIn, "Walk-in")}
-                                            </th>
-                                            <th class="col-patient">
-                                                ${renderHeaderFilterSelect("patientDirected", ["PATIENT DIRECTED"], headerFilters.patientDirected, "Patient-Directed")}
-                                            </th>
-                                            <th class="col-normal">Surname</th>
-                                            <th class="col-normal">Given Name</th>
-                                            <th class="col-normal">Middle Name</th>
-                                            <th class="col-normal">Birthday</th>
-                                            <th class="col-normal">Age</th>
-                                            <th class="col-normal">
-                                                ${renderHeaderFilterSelect("sex", ["MALE", "FEMALE"], headerFilters.sex, "Sex")}
-                                            </th>
-                                            <th class="col-normal">Contact Number</th>
-                                            <th class="col-normal">House Number/Purok/Street Name</th>
-                                            <th class="col-normal">Barangay/City</th>
-                                            <th class="col-normal">Occupation</th>
-                                            <th class="col-donorcat">
-                                                ${renderHeaderFilterSelect("donorCategory", ["NEW", "REPEAT", "LAPSE"], headerFilters.donorCategory, "Type of Donor")}
-                                            </th>
-                                            <th class="col-normal"># of Donations</th>
-                                            <th class="col-bloodtype">
-                                                ${renderHeaderFilterSelect("bloodType", ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"], headerFilters.bloodType, "Blood Type")}
-                                            </th>
-                                            <th class="col-serial">
-                                                ${renderHeaderFilterSelect("serialSort", ["asc", "desc"], headerFilters.serialSort, "Serial Number")}
-                                            </th>
-                                            <th class="col-amount">
-                                                ${renderHeaderFilterSelect("amount", ["450 ML", "QNS", "UB"], headerFilters.amount, "Amount")}
-                                            </th>
-                                            <th class="col-normal">Blood Bag Used</th>
-                                            <th class="col-normal">
-                                                ${renderHeaderFilterSelect("bloodBagType", ["SINGLE", "DOUBLE", "TRIPLE", "QUADRUPLE"], headerFilters.bloodBagType, "Type of Blood Bag")}
-                                            </th>
-                                            <th class="col-normal col-time-start">Time Started</th>
-                                            <th class="col-normal col-time-end">Time Ended</th>
-                                            <th class="col-normal">Remarks</th>
-                                            <th class="col-actions">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                `;
-
-                records.forEach(record => {
-                    const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
-                    const enteredValue = resolveDonationCountValue(record.numberOfDonations);
-
-                    html += `
-                        <tr id="row-${record.id}">
-                            <td>${escapeHtml(record._resolvedEntryDate)}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
-                            <td>${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                            <td>${escapeUpperHtml(record.firstName)}</td>
-                            <td>${escapeUpperHtml(record.middleName)}</td>
-                            <td>${escapeHtml(record._resolvedBirthday)}</td>
-                            <td>${escapeHtml(record.age)}</td>
-                            <td>${escapeUpperHtml(record.sex)}</td>
-                            <td>${escapeUpperHtml(record.contactNumber)}</td>
-                            <td>${escapeUpperHtml(record.address)}</td>
-                            <td>${escapeUpperHtml(record.cityProvince)}</td>
-                            <td>${escapeUpperHtml(record.occupation)}</td>
-                            <td>${escapeUpperHtml(record.donorCategory || "")}</td>
-                            <td title="Entered for this record: ${escapeHtml(enteredValue)}">
-                                <span class="donation-total">${escapeHtml(latestTotal)}</span>
-                                <span class="donation-entry-note">ENTRY: ${escapeHtml(enteredValue)}</span>
-                            </td>
-                            <td>${escapeUpperHtml(record.bloodType)}</td>
-                            <td>${escapeUpperHtml(record.serialNumber)}</td>
-                            <td>${escapeUpperHtml(record.amount)}</td>
-                            <td>${escapeUpperHtml(record.bloodBagBrand)}</td>
-                            <td>${escapeUpperHtml(record.bloodBagType)}</td>
-                            <td class="col-time-start">${escapeHtml(record._resolvedTimeStarted)}</td>
-                            <td class="col-time-end">${escapeHtml(record._resolvedTimeEnded)}</td>
-                            <td>${escapeUpperHtml(record.remarks)}</td>
-                            <td class="actions-cell">
-                                <button class="small-btn edit-btn" onclick="startEdit('${record.id}')">Edit</button>
-                                <button class="small-btn delete-btn" onclick="deleteDonor('${record.id}')">Delete</button>
-                            </td>
-                        </tr>
-                    `;
-                });
-
-                html += `
-                                    </tbody>
-                                </table>
+                    </div>
+                    <div class="field-group span-12">
+                        <button type="button" id="serialRangeToggleBtn" class="collapse-btn" aria-expanded="false">
+                            <span>Serial Range Helper</span><span class="chevron">&#9660;</span>
+                        </button>
+                        <div id="serialRangeCollapse" class="collapse-content hidden">
+                            <div class="serial-tools-box">
+                                <div class="helper-text">Bulk entry helper. Enter only the numeric ending. Example: start <b>4152</b>, end <b>4160</b>, skip <b>4155,4158</b></div>
+                                <div class="serial-batch-grid">
+                                    <div class="field-group span-3"><label for="serialRangeStart">Start Number</label><input type="text" id="serialRangeStart" placeholder="4152"></div>
+                                    <div class="field-group span-3"><label for="serialRangeEnd">End Number</label><input type="text" id="serialRangeEnd" placeholder="4160"></div>
+                                    <div class="field-group span-4"><label for="serialRangeSkip">Skipped Numbers</label><input type="text" id="serialRangeSkip" placeholder="4155,4158"></div>
+                                    <div class="field-group span-2"><label>&nbsp;</label><button type="button" id="generateSerialRangeBtn" class="main-btn orange-btn">Generate</button></div>
+                                </div>
+                                <div class="range-type-box">
+                                    <label style="font-weight:bold;font-size:13px;color:#7f1d1d">Range Donor Type</label>
+                                    <div class="range-type-options">
+                                        <label><input type="radio" name="rangeDonorType" value="Walk-in"> Walk-in</label>
+                                        <label><input type="radio" name="rangeDonorType" value="MBD"> MBD</label>
+                                        <label><input type="radio" name="rangeDonorType" value="Patient Directed"> Patient Directed</label>
+                                    </div>
+                                    <div id="rangeMbdBox" class="hidden" style="margin-top:10px"><input type="text" id="rangeMbdDetails" placeholder="Range MBD site / organization"></div>
+                                    <div id="rangePatientBox" class="hidden" style="margin-top:10px"><input type="text" id="rangePatientDetails" placeholder="Range patient directed details"></div>
+                                    <div id="rangeTypeInfo" class="range-type-info hidden"></div>
+                                </div>
+                                <div id="serialBatchInfo" class="serial-batch-info hidden"></div>
+                                <div id="serialBatchPreview" class="preview-box hidden"></div>
+                                <div class="serial-btn-row">
+                                    <button type="button" id="nextSerialBtn" class="main-btn blue-btn">Load Next Serial</button>
+                                    <button type="button" id="clearSerialBatchBtn" class="main-btn gray-btn">Clear Serial List</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                `;
-            });
-
-            html += `
+                    <!-- IDENTITY FIELDS (pre-filled from history) -->
+                    <div class="field-group span-2"><label for="suffix">3. Suffix</label><input type="text" id="suffix" placeholder="Jr., Sr., III"></div>
+                    <div class="field-group span-3"><label for="surname">4. Surname</label><input type="text" id="surname" required></div>
+                    <div class="field-group span-4"><label for="firstName">5. First Name</label><input type="text" id="firstName" required></div>
+                    <div class="field-group span-3"><label for="middleName">6. Middle Name</label><input type="text" id="middleName"></div>
+                    <div class="field-group span-4"><label for="birthday">7. Birthday</label><input type="date" id="birthday" required></div>
+                    <div class="field-group span-2"><label for="age">8. Age</label><input type="number" id="age" readonly class="readonly-fill"></div>
+                    <div class="field-group span-3"><label for="civilStatus">9. Civil Status</label>
+                        <select id="civilStatus" required><option value="">Select</option><option>Single</option><option>Married</option><option>Separated</option><option>Divorced</option><option>Widowed</option></select></div>
+                    <div class="field-group span-3"><label for="sex">10. Sex</label>
+                        <select id="sex" required><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+                    <div class="field-group span-8"><label for="address">11. Address</label><input type="text" id="address" required></div>
+                    <div class="field-group span-4"><label for="cityProvince">12. Province / City</label><input type="text" id="cityProvince" required></div>
+                    <div class="field-group span-6"><label for="occupation">13. Occupation</label><input type="text" id="occupation"></div>
+                    <div class="field-group span-6"><label for="contactNumber">14. Contact Number</label><input type="text" id="contactNumber" inputmode="numeric"></div>
+                    <div class="field-group span-6">
+                        <label>15. Type of Donor</label>
+                        <div class="radio-box">
+                            <div class="radio-options">
+                                <label><input type="radio" name="donorCategoryOption" value="Auto" checked> Auto</label>
+                                <label><input type="radio" name="donorCategoryOption" value="New"> New</label>
+                                <label><input type="radio" name="donorCategoryOption" value="Repeat"> Repeat</label>
+                                <label><input type="radio" name="donorCategoryOption" value="Lapse"> Lapse</label>
+                            </div>
+                            <input type="hidden" id="donorCategory" value="Auto">
+                        </div>
+                        <div class="helper-text">Auto applies logic only when donor history is loaded.</div>
                     </div>
+                    <div class="field-group span-6">
+                        <label for="numberOfDonations">16. Number of Donations</label>
+                        <input type="text" id="numberOfDonations" inputmode="text" placeholder="Example: 5 or 5TH" value="0">
+                        <div class="helper-text">Enter manually. Loading a donor does not auto-increment.</div>
+                    </div>
+                    <div class="field-group span-12"><div id="typeHelperBox" class="type-helper hidden"></div></div>
+                    <!-- DONATION FIELDS (always blank — encode fresh each donation) -->
+                    <div class="field-group span-3"><label for="bloodType">17. Blood Type</label>
+                        <select id="bloodType" required><option value="">Select</option>
+                        <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+                        <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+                        <option value="Unknown">Unknown</option></select></div>
+                    <div class="field-group span-3"><label for="bloodBagBrand">18. Blood Bag Used</label>
+                        <select id="bloodBagBrand" required><option value="">Select</option><option value="KARMI">KARMI</option><option value="TERUMO">TERUMO</option></select></div>
+                    <div class="field-group span-3"><label for="bloodBagType">19. Blood Bag Type</label>
+                        <select id="bloodBagType" required><option value="">Select</option>
+                        <option>Single</option><option>Double</option><option>Triple</option><option>Quadruple</option></select></div>
+                    <div class="field-group span-3"><label for="amount">20. Amount</label>
+                        <select id="amount" required><option value="">Select</option>
+                        <option value="450 ml">450 ml</option><option value="QNS">QNS</option><option value="UB">UB</option></select></div>
+                    <div class="field-group span-6"><label for="timeStarted">21. Time Started</label><input type="text" id="timeStarted" inputmode="numeric" placeholder="HHMM (e.g. 930 or 1930)"></div>
+                    <div class="field-group span-6"><label for="timeEnded">22. Time Ended</label><input type="text" id="timeEnded" inputmode="numeric" placeholder="HHMM (e.g. 930 or 1930)"></div>
+                    <div class="field-group span-12">
+                        <div class="helper-text">Use 24-hour format only. No AM/PM.</div>
+                        <div id="timeHelperBox" class="time-helper hidden"></div>
+                    </div>
+                    <div class="field-group span-12"><label for="remarks">23. Remarks</label><textarea id="remarks"></textarea></div>
                 </div>
-            `;
-        });
+                <div class="btn-row">
+                    <button type="submit" id="saveDonorBtn" class="main-btn green-btn">Save Donor Entry</button>
+                    <button type="reset" class="main-btn gray-btn">Clear Form</button>
+                    <button type="button" id="clearLoadedDonorBtn" class="main-btn blue-btn">Clear Loaded Donor</button>
+                    <button type="button" id="endGroupBtn" class="main-btn red-btn">End Active Group</button>
+                </div>
+                <div id="statusMessage" class="status-message"></div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+const firebaseConfig={apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",authDomain:"galloners-club.firebaseapp.com",databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"galloners-club",storageBucket:"galloners-club.firebasestorage.app",messagingSenderId:"213049860421",appId:"1:213049860421:web:4156aaa52b945f48711e2c",measurementId:"G-XYXJH9JNXJ"};
+if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore(),auth=firebase.auth();
 
-        trackingContainer.innerHTML = html;
-    }
+// ── GOOGLE SHEETS BACKUP ──────────────────────────────────────────────────────
+// Replace with your deployed Apps Script Web App URL
+const SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
 
-    function buildEditSelect(options, selectedValue) {
-        const normalizedSelected = normalizeMatchValue(selectedValue);
-        return `
-            <select class="edit-select">
-                ${options.map(opt => `<option value="${escapeHtml(opt)}" ${normalizeMatchValue(opt) === normalizedSelected ? "selected" : ""}>${escapeHtml(opt ? String(opt).toUpperCase() : "")}</option>`).join("")}
-            </select>
-        `;
-    }
-
-    function buildEditInput(value, type = "text") {
-        const isUppercaseField = type === "text";
-        const safeValue = isUppercaseField ? toUpperDisplay(value || "") : (value || "");
-        return `<input class="edit-input" type="${type}" value="${escapeHtml(safeValue)}"${isUppercaseField ? ' data-uppercase="true" style="text-transform: uppercase;"' : ""}>`;
-    }
-
-    function getMonthLabel(monthValue) {
-        const labelParts = monthValue.split("-");
-        return `${getMonthName(parseInt(labelParts[1], 10))} ${labelParts[0]}`;
-    }
-
-    function getMonthPrintDateRange(records) {
-        const validDates = records
-            .map(r => r._resolvedEntryDate)
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b));
-
-        if (!validDates.length) return "";
-        return `${formatPrintDate(validDates[0])} to ${formatPrintDate(validDates[validDates.length - 1])}`;
-    }
-
-    function formatPrintDate(dateText) {
-        const parsed = parseDateFlexible(dateText);
-        if (!parsed || !/^\d{4}-\d{2}-\d{2}$/.test(parsed)) return dateText || "";
-        const [year, month, day] = parsed.split("-");
-        return `${month}-${day}-${year.slice(-2)}`;
-    }
-
-    function abbreviateSex(value) {
-        const v = normalizeMatchValue(value);
-        if (v === "male") return "M";
-        if (v === "female") return "F";
-        return value || "";
-    }
-
-    function abbreviateBloodBagType(value) {
-        const v = normalizeMatchValue(value);
-        if (v === "single") return "S";
-        if (v === "double") return "D";
-        if (v === "triple") return "T";
-        if (v === "quadruple") return "Q";
-        return value || "";
-    }
-
-    function hasPrintableRemarks(records) {
-        return records.some(record => String(record.remarks || "").trim() !== "");
-    }
-
-    function buildPrintRows(records, includeRemarks) {
-        const sortedRecords = [...records].sort(compareByEntryDateAsc);
-
-        return sortedRecords.map(record => {
-            const donorKey = buildDonorKey(record);
-            const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
-
-            return `
-                <tr>
-                    <td class="col-entry-date">${escapeHtml(formatPrintDate(record._resolvedEntryDate))}</td>
-                    <td class="col-mbd">${escapeUpperHtml(isDonorType(record, "MBD") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-walkin">${escapeUpperHtml(isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-pd">${escapeUpperHtml(isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "")}</td>
-                    <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(record))}</td>
-                    <td class="col-given print-no-wrap">${escapeUpperHtml(record.firstName)}</td>
-                    <td class="col-middle">${escapeUpperHtml(record.middleName)}</td>
-                    <td class="col-bday">${escapeHtml(formatPrintDate(record._resolvedBirthday))}</td>
-                    <td class="col-age">${escapeHtml(record.age)}</td>
-                    <td class="col-sex">${escapeHtml(abbreviateSex(record.sex))}</td>
-                    <td class="col-contact">${escapeUpperHtml(record.contactNumber)}</td>
-                    <td class="col-address print-address-cell">${escapeUpperHtml(record.address)}</td>
-                    <td class="col-city">${escapeUpperHtml(record.cityProvince)}</td>
-                    <td class="col-occ">${escapeUpperHtml(record.occupation)}</td>
-                    <td class="col-donor-type">${escapeUpperHtml(record.donorCategory || "")}</td>
-                    <td class="col-donations">${escapeHtml(latestTotal)}</td>
-                    <td class="col-bt">${escapeUpperHtml(record.bloodType)}</td>
-                    <td class="col-serial print-no-wrap">${escapeUpperHtml(record.serialNumber)}</td>
-                    <td class="col-amt">${escapeUpperHtml(record.amount)}</td>
-                    <td class="col-bbused">${escapeUpperHtml(record.bloodBagBrand)}</td>
-                    <td class="col-bagtype">${escapeHtml(abbreviateBloodBagType(record.bloodBagType))}</td>
-                    <td class="col-ts">${escapeHtml(record._resolvedTimeStarted)}</td>
-                    <td class="col-te">${escapeHtml(record._resolvedTimeEnded)}</td>
-                    ${includeRemarks ? `<td class="col-remarks">${escapeUpperHtml(record.remarks)}</td>` : ""}
-                </tr>
-            `;
-        }).join("");
-    }
-
-    function buildPrintableTable(records, monthLabel) {
-        const dateRange = getMonthPrintDateRange(records);
-        const includeRemarks = hasPrintableRemarks(records);
-        const rows = buildPrintRows(records, includeRemarks);
-
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Print ${monthLabel}</title>
-                <style>
-                    @page {
-                        size: 8.5in 13in landscape;
-                        margin: 6mm;
-                    }
-                    * { box-sizing: border-box; }
-                    body {
-                        font-family: Arial, sans-serif;
-                        margin: 0;
-                        color: #111827;
-                    }
-                    h2 {
-                        margin: 0 0 4px 0;
-                        color: #8b0000;
-                        font-size: 15px;
-                    }
-                    .sub {
-                        margin-bottom: 4px;
-                        color: #555;
-                        font-weight: bold;
-                        font-size: 10px;
-                    }
-                    .date-range {
-                        margin-bottom: 6px;
-                        color: #7a2e00;
-                        font-weight: bold;
-                        font-size: 9px;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        table-layout: fixed;
-                        font-size: 7px;
-                    }
-                    th, td {
-                        border: 1px solid #999;
-                        padding: 2px 2px;
-                        text-align: center;
-                        vertical-align: middle;
-                        white-space: normal;
-                        word-break: break-word;
-                        overflow-wrap: break-word;
-                        line-height: 1.05;
-                    }
-                    th {
-                        background: #efefef;
-                        font-size: 6.8px;
-                    }
-                    .print-address-cell {
-                        text-align: left;
-                    }
-                    .print-no-wrap {
-                        white-space: nowrap !important;
-                        word-break: normal !important;
-                        overflow-wrap: normal !important;
-                    }
-
-                    .col-entry-date { width: 5.2%; }
-                    .col-mbd { width: 5.0%; }
-                    .col-walkin { width: 4.2%; }
-                    .col-pd { width: 5.4%; }
-                    .col-surname { width: 7.0%; }
-                    .col-given { width: 10.5%; }
-                    .col-middle { width: 6.4%; }
-                    .col-bday { width: 5.0%; }
-                    .col-age { width: 2.5%; }
-                    .col-sex { width: 2.0%; }
-                    .col-contact { width: 5.0%; }
-                    .col-address { width: 10.8%; }
-                    .col-city { width: 4.8%; }
-                    .col-occ { width: 4.5%; }
-                    .col-donor-type { width: 4.0%; }
-                    .col-donations { width: 3.0%; }
-                    .col-bt { width: 2.4%; }
-                    .col-serial { width: 11.0%; }
-                    .col-amt { width: 2.4%; }
-                    .col-bbused { width: 4.0%; }
-                    .col-bagtype { width: 2.6%; }
-                    .col-ts { width: 3.0%; }
-                    .col-te { width: 3.0%; }
-                    .col-remarks { width: 4.7%; }
-
-                    thead {
-                        display: table-header-group;
-                    }
-                    tr, td, th {
-                        page-break-inside: avoid;
-                    }
-                </style>
-            </head>
-            <body>
-                <h2>Donor Database Tracking</h2>
-                <div class="sub">${monthLabel}</div>
-                <div class="date-range">${escapeHtml(dateRange)}</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="col-entry-date">Entry Date</th>
-                            <th class="col-mbd">MBD</th>
-                            <th class="col-walkin">Walk-in</th>
-                            <th class="col-pd">Patient-Directed</th>
-                            <th class="col-surname">Surname</th>
-                            <th class="col-given print-no-wrap">Given Name</th>
-                            <th class="col-middle">Middle Name</th>
-                            <th class="col-bday">Birthday</th>
-                            <th class="col-age">Age</th>
-                            <th class="col-sex">Sex</th>
-                            <th class="col-contact">Contact No.</th>
-                            <th class="col-address">Address</th>
-                            <th class="col-city">Brgy/City</th>
-                            <th class="col-occ">Occupation</th>
-                            <th class="col-donor-type">Type</th>
-                            <th class="col-donations"># of D</th>
-                            <th class="col-bt">BT</th>
-                            <th class="col-serial print-no-wrap">Serial No.</th>
-                            <th class="col-amt">AMT</th>
-                            <th class="col-bbused">BB USED</th>
-                            <th class="col-bagtype">Bag</th>
-                            <th class="col-ts">TS</th>
-                            <th class="col-te">TE</th>
-                            ${includeRemarks ? `<th class="col-remarks">Remarks</th>` : ""}
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </body>
-            </html>
-        `;
-    }
-
-    function buildGroupedCsv(records) {
-        const grouped = groupDonors(records);
-        const sortedYears = Object.keys(grouped).sort((a, b) => {
-            if (a === "No Year") return 1;
-            if (b === "No Year") return -1;
-            return Number(b) - Number(a);
-        });
-
-        const lines = [];
-
-        sortedYears.forEach(year => {
-            lines.push([`Year: ${year}`]);
-            const sortedMonths = Object.keys(grouped[year]).sort((a, b) => Number(b) - Number(a));
-
-            sortedMonths.forEach(month => {
-                const monthBlock = grouped[year][month];
-                const recordsInMonth = monthBlock.records;
-                const realEntriesCount = getCategorizedEntryCount(recordsInMonth);
-
-                lines.push([`Month: ${monthBlock.monthName} ${year}`]);
-                lines.push([
-                    `Entries: ${realEntriesCount}`,
-                    `MBD: ${countType(recordsInMonth, "MBD")}`,
-                    `Walk-in: ${countType(recordsInMonth, "WALK-IN")}`,
-                    `Patient-Directed: ${countType(recordsInMonth, "PATIENT DIRECTED")}`,
-                    `New: ${recordsInMonth.filter(r => isDonorCategory(r, "NEW")).length}`,
-                    `Repeat: ${recordsInMonth.filter(r => isDonorCategory(r, "REPEAT")).length}`,
-                    `Lapse: ${recordsInMonth.filter(r => isDonorCategory(r, "LAPSE")).length}`
-                ]);
-                lines.push([
-                    "Entry Date",
-                    "MBD",
-                    "Walk-in",
-                    "Patient-Directed",
-                    "Surname",
-                    "Given Name",
-                    "Middle Name",
-                    "Birthday",
-                    "Age",
-                    "Sex",
-                    "Contact Number",
-                    "House Number/Purok/Street Name",
-                    "Barangay/City",
-                    "Occupation",
-                    "Type of Donor",
-                    "# of Donations",
-                    "Blood Type",
-                    "Serial Number",
-                    "Amount",
-                    "Blood Bag Used",
-                    "Type of Blood Bag",
-                    "Time Started",
-                    "Time Ended",
-                    "Remarks"
-                ]);
-
-                recordsInMonth.forEach(record => {
-                    const donorKey = buildDonorKey(record);
-                    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(record.numberOfDonations);
-
-                    lines.push([
-                        record._resolvedEntryDate || "",
-                        isDonorType(record, "MBD") ? getCategoryDisplay(record) : "",
-                        isDonorType(record, "WALK-IN") ? getCategoryDisplay(record) : "",
-                        isDonorType(record, "PATIENT DIRECTED") ? getCategoryDisplay(record) : "",
-                        toUpperDisplay(getSurnameWithSuffix(record)),
-                        toUpperDisplay(record.firstName || ""),
-                        toUpperDisplay(record.middleName || ""),
-                        record._resolvedBirthday || "",
-                        record.age || "",
-                        toUpperDisplay(record.sex || ""),
-                        toUpperDisplay(record.contactNumber || ""),
-                        toUpperDisplay(record.address || ""),
-                        toUpperDisplay(record.cityProvince || ""),
-                        toUpperDisplay(record.occupation || ""),
-                        toUpperDisplay(record.donorCategory || ""),
-                        latestTotal,
-                        toUpperDisplay(record.bloodType || ""),
-                        toUpperDisplay(record.serialNumber || ""),
-                        toUpperDisplay(record.amount || ""),
-                        toUpperDisplay(record.bloodBagBrand || ""),
-                        toUpperDisplay(record.bloodBagType || ""),
-                        record._resolvedTimeStarted || "",
-                        record._resolvedTimeEnded || "",
-                        toUpperDisplay(record.remarks || "")
-                    ]);
-                });
-
-                lines.push([]);
-            });
-        });
-
-        return lines.map(row => row.map(csvEscape).join(",")).join("\n");
-    }
-
-    function exportCsv(records, fileLabel) {
-        if (!records.length) {
-            showMessage("No records to export.", "error");
-            return;
-        }
-
-        const csvContent = buildGroupedCsv(records);
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-
-        link.href = url;
-        link.download = fileLabel;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }
-
-    window.printOneMonth = function(monthValue) {
-        const records = getRecordsForMonth(monthValue);
-        if (!records.length) {
-            showMessage("No records found for that month.", "error");
-            return;
-        }
-
-        const monthLabel = getMonthLabel(monthValue);
-        const printWindow = window.open("", "_blank");
-        printWindow.document.write(buildPrintableTable(records, monthLabel));
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-    };
-
-    window.exportOneMonthCsv = function(monthValue) {
-        const records = getRecordsForMonth(monthValue);
-        if (!records.length) {
-            showMessage("No records found for that month.", "error");
-            return;
-        }
-        exportCsv(records, `donor-tracking-${monthValue}.csv`);
-        showMessage("Selected month CSV exported successfully.", "success");
-    };
-
-    function getRecordsForMonth(monthValue) {
-        return filteredDonors.filter(record => {
-            const { monthKey } = getYearMonth(record._resolvedEntryDate);
-            return monthKey === monthValue;
-        });
-    }
-
-    async function loadDonors() {
-        try {
-            const user = auth.currentUser;
-            if (!user) {
-                trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
-                return;
-            }
-
-            const snapshot = await db.collection("donorDatabase").get();
-
-            allDonors = snapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
-                .filter(record => record.isDeleted !== true)
-                .map(record => attachResolvedFields(record));
-
-            allDonors.sort((a, b) => {
-                const dateCompare = (b._resolvedEntryDate || "").localeCompare(a._resolvedEntryDate || "");
-                if (dateCompare !== 0) return dateCompare;
-                return (a.serialNumber || "").localeCompare(b.serialNumber || "", undefined, { numeric: true, sensitivity: "base" });
-            });
-
-            populateGroupMonthOptions(allDonors);
-            renderTracking();
-
-            if (printMonthSelect.value) {
-                renderDuplicateMonthView(printMonthSelect.value);
-            } else {
-                hideDuplicateBox();
-            }
-        } catch (error) {
-            console.error(error);
-            trackingContainer.innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
-            showMessage("Failed to load donor records: " + error.message, "error");
-        }
-    }
-
-    window.startEdit = function(id) {
-        hideDuplicateBox();
-
-        const record = allDonors.find(item => item.id === id);
-        if (!record) return;
-
-        const row = document.getElementById(`row-${id}`);
-        if (!row) {
-            showMessage("Record is not visible in the current table view. Clear filters or expand the month, then edit again.", "error");
-            return;
-        }
-
-        row.innerHTML = `
-            <td>${buildEditInput(record._resolvedEntryDate || "", "date")}</td>
-            <td>${buildEditInput(record.mbdDetails || "")}</td>
-            <td>${buildEditSelect(["", "WALK-IN"], isDonorType(record, "WALK-IN") ? "WALK-IN" : "")}</td>
-            <td>${buildEditInput(record.patientDirectedDetails || "")}</td>
-            <td>${buildEditInput(record.surname || "")}</td>
-            <td>${buildEditInput(record.firstName || "")}</td>
-            <td>${buildEditInput(record.middleName || "")}</td>
-            <td>${buildEditInput(parseDateFlexible(record._resolvedBirthday || record.birthday || ""), "date")}</td>
-            <td>${buildEditInput(record.age || "", "number")}</td>
-            <td>${buildEditSelect(["MALE", "FEMALE"], record.sex || "")}</td>
-            <td>${buildEditInput(record.contactNumber || "")}</td>
-            <td>${buildEditInput(record.address || "")}</td>
-            <td>${buildEditInput(record.cityProvince || "")}</td>
-            <td>${buildEditInput(record.occupation || "")}</td>
-            <td>${buildEditSelect(["NEW", "REPEAT", "LAPSE"], record.donorCategory || "")}</td>
-            <td>${buildEditInput(resolveDonationCountValue(record.numberOfDonations), "text")}</td>
-            <td>${buildEditSelect(["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"], record.bloodType || "")}</td>
-            <td>${buildEditInput(record.serialNumber || "")}</td>
-            <td>${buildEditSelect(["450 ML", "QNS", "UB"], record.amount || "")}</td>
-            <td>${buildEditSelect(["KARMI", "TERUMO"], record.bloodBagBrand || "")}</td>
-            <td>${buildEditSelect(["SINGLE", "DOUBLE", "TRIPLE", "QUADRUPLE"], record.bloodBagType || "")}</td>
-            <td>${buildEditInput(record._resolvedTimeStarted || "", "time")}</td>
-            <td>${buildEditInput(record._resolvedTimeEnded || "", "time")}</td>
-            <td>${buildEditInput(record.remarks || "")}</td>
-            <td class="actions-cell">
-                <button class="small-btn save-btn" onclick="saveEdit('${id}')">Save</button>
-                <button class="small-btn cancel-btn" onclick="renderTracking()">Cancel</button>
-            </td>
-        `;
-    };
-
-    window.saveEdit = async function(id) {
-        const row = document.getElementById(`row-${id}`);
-        const fields = row.querySelectorAll("input, select");
-
-        const mbdDetails = fields[1].value.trim();
-        const walkInValue = fields[2].value;
-        const patientDirectedDetails = fields[3].value.trim();
-
-        let donorType = "";
-        if (mbdDetails) donorType = "MBD";
-        else if (patientDirectedDetails) donorType = "PATIENT DIRECTED";
-        else if (normalizeMatchValue(walkInValue) === normalizeMatchValue("WALK-IN")) donorType = "WALK-IN";
-
-        const updatedData = {
-            entryDate: fields[0].value,
-            mbdDetails: toUpperTrim(mbdDetails),
-            patientDirectedDetails: toUpperTrim(patientDirectedDetails),
-            donorType: donorType,
-            surname: toUpperTrim(fields[4].value),
-            firstName: toUpperTrim(fields[5].value),
-            middleName: toUpperTrim(fields[6].value),
-            birthday: fields[7].value,
-            age: parseInt(fields[8].value || "0"),
-            sex: fields[9].value,
-            contactNumber: toUpperTrim(fields[10].value),
-            address: toUpperTrim(fields[11].value),
-            cityProvince: toUpperTrim(fields[12].value),
-            occupation: toUpperTrim(fields[13].value),
-            donorCategory: fields[14].value,
-            numberOfDonations: fields[15].value.trim(),
-            bloodType: fields[16].value,
-            serialNumber: toUpperTrim(fields[17].value),
-            amount: fields[18].value,
-            bloodBagBrand: fields[19].value,
-            bloodBagType: fields[20].value,
-            timeStarted: fields[21].value,
-            timeEnded: fields[22].value,
-            remarks: toUpperTrim(fields[23].value)
-        };
-
-        try {
-            await db.collection("donorDatabase").doc(id).update(updatedData);
-
-            backupToGoogleSheets({
-                action: "update",
-                source: "donor-tracking.html",
-                donorId: id,
-                updatedAt: new Date().toISOString(),
-                ...updatedData
-            });
-
-            showMessage("Record updated successfully.", "success");
-            await loadDonors();
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to update record: " + error.message, "error");
-        }
-    };
-
-    window.deleteDonor = async function(id) {
-        const confirmed = confirm("Delete this donor record?");
-        if (!confirmed) return;
-
-        try {
-            await db.collection("donorDatabase").doc(id).update({
-                isDeleted: true,
-                deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                deletedFrom: "donor-tracking.html"
-            });
-
-            const record = allDonors.find(item => item.id === id) || {};
-            backupToGoogleSheets({
-                action: "soft_delete",
-                source: "donor-tracking.html",
-                donorId: id,
-                deletedAt: new Date().toISOString(),
-                ...record,
-                isDeleted: true,
-                deletedFrom: "donor-tracking.html"
-            });
-
-            showMessage("Record deleted successfully.", "success");
-            await loadDonors();
-        } catch (error) {
-            console.error(error);
-            showMessage("Failed to delete record: " + error.message, "error");
-        }
-    };
-
-    window.toggleGroup = function(groupKey, bodyId, iconId) {
-        const body = document.getElementById(bodyId);
-        const icon = document.getElementById(iconId);
-
-        if (!body || !icon) return;
-
-        const willHide = !body.classList.contains("hidden");
-
-        if (willHide) {
-            body.classList.add("hidden");
-            icon.textContent = "+";
-            collapsedGroups[groupKey] = true;
-        } else {
-            body.classList.remove("hidden");
-            icon.textContent = "−";
-            collapsedGroups[groupKey] = false;
-        }
-    };
-
-    window.setHeaderFilter = function(filterKey, value) {
-        headerFilters[filterKey] = value;
-        if (value && ["mbd", "walkIn", "patientDirected"].includes(filterKey)) {
-            ["mbd", "walkIn", "patientDirected"].forEach(key => {
-                if (key !== filterKey) headerFilters[key] = "";
-            });
-        }
-        renderTracking();
-    };
-
-    reloadBtn.addEventListener("click", async function() {
-        hideDuplicateBox();
-        await loadDonors();
-        showMessage("Tracking data reloaded.", "success");
+async function backupToSheets(donorData, action) {
+  if (!SHEETS_BACKUP_URL) return;
+  try {
+    const payload = { action: action || "add", ...donorData };
+    await fetch(SHEETS_BACKUP_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
     });
-
-    searchInput.addEventListener("input", function() {
-        hideDuplicateBox();
-        renderTracking();
-    });
-
-    groupMonthFilter.addEventListener("change", function() {
-        hideDuplicateBox();
-        renderTracking();
-    });
-
-    printSelectedMonthBtn.addEventListener("click", function() {
-        const value = printMonthSelect.value;
-        if (!value) {
-            showMessage("Please select a month to print.", "error");
-            return;
+  } catch(e) { console.warn("Sheets backup failed:", e); }
+}
+const donorForm=document.getElementById("donorForm");
+const entryDate=document.getElementById("entryDate"),birthday=document.getElementById("birthday"),age=document.getElementById("age");
+const donorCategory=document.getElementById("donorCategory"),donorCategoryRadios=document.querySelectorAll('input[name="donorCategoryOption"]');
+const numberOfDonations=document.getElementById("numberOfDonations"),typeHelperBox=document.getElementById("typeHelperBox");
+const statusMessage=document.getElementById("statusMessage"),authIndicator=document.getElementById("authIndicator"),saveDonorBtn=document.getElementById("saveDonorBtn");
+const donorTypeRadios=document.querySelectorAll('input[name="donorType"]');
+const patientDirectedBox=document.getElementById("patientDirectedBox"),patientDirectedDetails=document.getElementById("patientDirectedDetails");
+const walkInBox=document.getElementById("walkInBox"),walkInCount=document.getElementById("walkInCount"),startWalkInGroupBtn=document.getElementById("startWalkInGroupBtn");
+const mbdBox=document.getElementById("mbdBox"),mbdDetails=document.getElementById("mbdDetails"),mbdCount=document.getElementById("mbdCount"),startMbdGroupBtn=document.getElementById("startMbdGroupBtn");
+const groupInfoBox=document.getElementById("groupInfoBox"),endGroupBtn=document.getElementById("endGroupBtn");
+const lookupSearch=document.getElementById("lookupSearch"),lookupResultsBox=document.getElementById("lookupResultsBox"),lookupResultsBody=document.getElementById("lookupResultsBody");
+const loadedDonorInfo=document.getElementById("loadedDonorInfo"),clearLoadedDonorBtn=document.getElementById("clearLoadedDonorBtn");
+const serialPrefix=document.getElementById("serialPrefix"),serialNumberInput=document.getElementById("serialNumber"),useSerialPrefix=document.getElementById("useSerialPrefix"),serialHelperBox=document.getElementById("serialHelperBox");
+const serialRangeStart=document.getElementById("serialRangeStart"),serialRangeEnd=document.getElementById("serialRangeEnd"),serialRangeSkip=document.getElementById("serialRangeSkip"),generateSerialRangeBtn=document.getElementById("generateSerialRangeBtn");
+const nextSerialBtn=document.getElementById("nextSerialBtn"),clearSerialBatchBtn=document.getElementById("clearSerialBatchBtn"),serialRangeToggleBtn=document.getElementById("serialRangeToggleBtn"),serialRangeCollapse=document.getElementById("serialRangeCollapse");
+const serialBatchInfo=document.getElementById("serialBatchInfo"),serialBatchPreview=document.getElementById("serialBatchPreview");
+const rangeDonorTypeRadios=document.querySelectorAll('input[name="rangeDonorType"]'),rangeMbdBox=document.getElementById("rangeMbdBox"),rangeMbdDetails=document.getElementById("rangeMbdDetails"),rangePatientBox=document.getElementById("rangePatientBox"),rangePatientDetails=document.getElementById("rangePatientDetails"),rangeTypeInfo=document.getElementById("rangeTypeInfo");
+const timeStartedInput=document.getElementById("timeStarted"),timeEndedInput=document.getElementById("timeEnded"),timeHelperBox=document.getElementById("timeHelperBox");
+let currentUser=null,authReady=false,loadedDonorRecord=null,donorLookupResults=[],autoTypeSuggestion="",autoTypeReason="",isSaving=false,donorSearchDebounce=null;
+const AG_KEY="donorEntryActiveGroup",SB_KEY="donorEntrySerialBatch";
+// Identity field IDs that get green-highlighted when loaded from history
+const IDENTITY_FIELDS=["suffix","surname","firstName","middleName","birthday","civilStatus","sex","address","cityProvince","occupation","contactNumber"];
+function setTodayDate(){entryDate.value=new Date().toISOString().split("T")[0];updateSerialPrefixByDate();}
+function computeAge(){if(!birthday.value){age.value="";return;}const bd=new Date(birthday.value),td=new Date();let y=td.getFullYear()-bd.getFullYear();const md=td.getMonth()-bd.getMonth();if(md<0||(md===0&&td.getDate()<bd.getDate()))y--;age.value=y>=0?y:"";}
+function showMsg(m,t){statusMessage.textContent=m;statusMessage.className="status-message";statusMessage.classList.add(t==="success"?"status-success":"status-error");}
+function clearMsg(){statusMessage.textContent="";statusMessage.className="status-message";}
+function setAuthInd(t,ok){authIndicator.textContent=t;authIndicator.style.background=ok?"rgba(30,95,35,0.35)":"rgba(255,255,255,0.15)";authIndicator.style.borderColor=ok?"rgba(183,223,185,0.75)":"rgba(255,255,255,0.28)";authIndicator.style.color="#fff";}
+function setSaving(s){isSaving=s;saveDonorBtn.disabled=s;saveDonorBtn.textContent=s?"Saving...":"Save Donor Entry";}
+function nt(v){return String(v||"").trim().toLowerCase();}
+function na(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
+function esc(t){if(t==null)return"";return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+function normCount(v){const r=String(v||"").trim();if(!r)return"";const m=r.replace(/\s+/g," ").match(/^(\d+)(st|nd|rd|th)?$/i);if(m)return`${Number(m[1])}${m[2]?m[2].toUpperCase():""}`;return r.trim();}
+function getCountDisplay(v){const n=normCount(v);return n||(String(v??"").trim()||"0");}
+function getStoredCount(rec){if(rec?.numberOfDonations!=null&&String(rec.numberOfDonations).trim()!=="")return rec.numberOfDonations;if(rec?.numberOfDonationsNumeric!=null)return rec.numberOfDonationsNumeric;return 0;}
+function normCountField(){const n=normCount(numberOfDonations.value);if(n)numberOfDonations.value=n;}
+function selDonorType(){const r=document.querySelector('input[name="donorType"]:checked');return r?r.value:"";}
+function setDonorType(v){donorTypeRadios.forEach(r=>{r.checked=r.value===v;});updateTypeFields();}
+function updateTypeFields(){const s=selDonorType();patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");if(s==="Patient Directed")patientDirectedBox.classList.remove("hidden");if(s==="Walk-in")walkInBox.classList.remove("hidden");if(s==="MBD")mbdBox.classList.remove("hidden");}
+function selCatMode(){if(donorCategory.value)return donorCategory.value;const r=document.querySelector('input[name="donorCategoryOption"]:checked');return r?r.value:"Auto";}
+function setCatMode(v){const vv=v||"Auto";donorCategory.value=vv;donorCategoryRadios.forEach(r=>{r.checked=r.value===vv;});refreshTypeHelper();}
+function selRangeType(){const r=document.querySelector('input[name="rangeDonorType"]:checked');return r?r.value:"";}
+function updateRangeFields(){const s=selRangeType();rangeMbdBox.classList.add("hidden");rangePatientBox.classList.add("hidden");if(s==="MBD")rangeMbdBox.classList.remove("hidden");if(s==="Patient Directed")rangePatientBox.classList.remove("hidden");if(s){let t=`Range type: ${s}`;if(s==="MBD"&&rangeMbdDetails.value.trim())t+=` | ${rangeMbdDetails.value.trim()}`;if(s==="Patient Directed"&&rangePatientDetails.value.trim())t+=` | ${rangePatientDetails.value.trim()}`;rangeTypeInfo.textContent=t;rangeTypeInfo.classList.remove("hidden");}else{rangeTypeInfo.textContent="";rangeTypeInfo.classList.add("hidden");}}
+function calcAutoType(lastDate){if(!lastDate||!entryDate.value)return{value:"New",reason:"No previous donation, defaulting to New."};const nd=new Date(entryDate.value+"T00:00:00"),ld=new Date(lastDate+"T00:00:00");if(isNaN(nd)||isNaN(ld))return{value:"New",reason:"Date incomplete, defaulting to New."};const days=(nd-ld)/(864e5);if(days<0)return{value:"New",reason:"Entry date earlier than last donation."};if(days<=365)return{value:"Repeat",reason:`Last donation ${Math.floor(days)} day(s) ago.`};return{value:"Lapse",reason:`Last donation ${Math.floor(days)} day(s) ago.`};}
+function refreshTypeHelper(){const m=selCatMode();typeHelperBox.textContent=m==="Auto"?(autoTypeSuggestion?`Auto result: ${autoTypeSuggestion}. ${autoTypeReason}`:"Auto result not available yet."):`Manual override: ${m}.`;typeHelperBox.classList.remove("hidden");}
+function updateAutoType(){if(!loadedDonorRecord){autoTypeSuggestion="New";autoTypeReason="No loaded donor history, defaulting to New.";}else{const r=calcAutoType(loadedDonorRecord.entryDate);autoTypeSuggestion=r.value;autoTypeReason=r.reason;}refreshTypeHelper();}
+function getFinalCat(){return selCatMode()!=="Auto"?selCatMode():(autoTypeSuggestion||"New");}
+function pfxFromYear(y){return`PRC2600-${String(y||"").slice(-2)||"26"}00`;}
+function entryYear(){return entryDate.value?Number(entryDate.value.split("-")[0]):new Date().getFullYear();}
+function updateSerialPrefixByDate(){serialPrefix.textContent=pfxFromYear(entryYear());updateSerialUI();renderBatchInfo();}
+function updateSerialUI(){const en=useSerialPrefix.checked;serialPrefix.style.display=en?"flex":"none";serialHelperBox.textContent=en?`Prefix enabled. Serial = ${serialPrefix.textContent.trim()} + your input.`:"Prefix disabled. Serial = exactly what you type.";}
+function getFinalSerial(){const raw=serialNumberInput.value.trim(),pfx=serialPrefix.textContent.trim();if(!raw)return"";if(!useSerialPrefix.checked)return raw;if(raw.toUpperCase().startsWith(pfx.toUpperCase()))return raw;return pfx+raw;}
+function stripPfx(v){return String(v||"").trim().replace(/\s+/g,"").replace(/^PRC2600-\d{4}/i,"").replace(/^PRC2600-/i,"").replace(/[^0-9]/g,"");}
+function parseSkip(t){return Array.from(new Set(String(t||"").split(",").map(i=>stripPfx(i)).filter(Boolean)));}
+function buildRange(s0,e0,sk){const s=stripPfx(s0),e=stripPfx(e0);if(!s||!e)throw new Error("Please enter both start and end serial numbers.");const sn=Number(s),en=Number(e);if(isNaN(sn)||isNaN(en))throw new Error("Serial numbers must be numeric.");if(en<sn)throw new Error("End must be >= start.");const w=Math.max(s.length,e.length),skip=new Set(parseSkip(sk)),list=[];for(let n=sn;n<=en;n++){const p=String(n).padStart(w,"0");if(!skip.has(p)&&!skip.has(String(n)))list.push(p);}if(!list.length)throw new Error("No serial numbers left after skipping.");return list;}
+function getSB(){try{const r=localStorage.getItem(SB_KEY);if(!r)return null;const p=JSON.parse(r);if(!p||!Array.isArray(p.list))return null;return p;}catch(e){return null;}}
+function setSB(d){try{localStorage.setItem(SB_KEY,JSON.stringify(d));}catch(e){}}
+function clrSB(){try{localStorage.removeItem(SB_KEY);}catch(e){}}
+function clrSBatch(){clrSB();renderBatchInfo();}
+function setSerialBatch(list){setSB({prefix:serialPrefix.textContent.trim(),list:list.slice(),originalCount:list.length,rangeDonorType:selRangeType(),rangeMbdDetails:rangeMbdDetails.value.trim(),rangePatientDetails:rangePatientDetails.value.trim(),createdAtMs:Date.now()});renderBatchInfo();loadNextSerial(false);}
+function renderBatchInfo(){const b=getSB();if(!b||!b.list.length){serialBatchInfo.classList.add("hidden");serialBatchPreview.classList.add("hidden");return;}const pfx=b.prefix||serialPrefix.textContent.trim();const prev=b.list.slice(0,6).map(i=>`${pfx}${i}`).join(", ");const more=b.list.length>6?` ... and ${b.list.length-6} more`:"";let dt=b.rangeDonorType?` | Type: ${b.rangeDonorType}`:"";if(b.rangeDonorType==="MBD"&&b.rangeMbdDetails)dt+=` - ${b.rangeMbdDetails}`;if(b.rangeDonorType==="Patient Directed"&&b.rangePatientDetails)dt+=` - ${b.rangePatientDetails}`;serialBatchInfo.textContent=`Active serial list: ${b.list.length} remaining | Next: ${pfx}${b.list[0]}${dt}`;serialBatchPreview.innerHTML=`<b>Preview:</b> ${esc(prev)}${esc(more)}`;serialBatchInfo.classList.remove("hidden");serialBatchPreview.classList.remove("hidden");}
+function loadNextSerial(show=true){const b=getSB();if(!b||!b.list.length){if(show)showMsg("No active serial list.","error");renderBatchInfo();return;}serialNumberInput.value=b.list[0];renderBatchInfo();if(show)showMsg(`Next serial: ${(b.prefix||serialPrefix.textContent.trim())}${b.list[0]}`,"success");}
+function consumeSB(){const b=getSB();if(!b||!b.list.length)return{batch:null,completed:false};b.list.shift();if(!b.list.length){clrSB();renderBatchInfo();return{batch:null,completed:true};}setSB(b);renderBatchInfo();return{batch:b,completed:false};}
+function setRangeCollapsed(open){serialRangeCollapse.classList.toggle("hidden",!open);serialRangeToggleBtn.classList.toggle("open",open);serialRangeToggleBtn.setAttribute("aria-expanded",open?"true":"false");}
+serialRangeToggleBtn.addEventListener("click",()=>setRangeCollapsed(serialRangeCollapse.classList.contains("hidden")));
+function getAG(){try{const r=localStorage.getItem(AG_KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
+function setAG(d){try{localStorage.setItem(AG_KEY,JSON.stringify(d));}catch(e){}}
+function clrAG(){try{localStorage.removeItem(AG_KEY);}catch(e){}}
+function renderAG(){const ag=getAG();if(!ag||!ag.remaining||ag.remaining<=0){groupInfoBox.classList.add("hidden");groupInfoBox.textContent="";return;}const orig=Number(ag.originalCount||ag.remaining||0),rem=Number(ag.remaining||0),cur=Math.max(1,orig-rem+1),prog=orig>0?`Donor ${cur} of ${orig} | Remaining after this: ${rem}`:`Remaining: ${rem}`;if(ag.entryDate!==entryDate.value){groupInfoBox.textContent=`Saved active group for ${ag.entryDate}. ${prog}`;groupInfoBox.classList.remove("hidden");return;}if(ag.donorType==="Walk-in"){groupInfoBox.textContent=`Active Group: Walk-in | ${prog}`;setDonorType("Walk-in");}else if(ag.donorType==="MBD"){groupInfoBox.textContent=`Active Group: MBD - ${ag.organization} | ${prog}`;setDonorType("MBD");mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){groupInfoBox.textContent=`Active Group: Patient Directed - ${ag.details||""} | ${prog}`;setDonorType("Patient Directed");patientDirectedDetails.value=ag.details||"";}groupInfoBox.classList.remove("hidden");}
+function consumeAG(){const ag=getAG();if(!ag)return{group:null,completed:false};const rem=Number(ag.remaining||0)-1;if(rem<=0){clrAG();return{group:null,completed:true};}const u={...ag,remaining:rem,updatedAtMs:Date.now()};setAG(u);return{group:u,completed:false};}
+function nsTime(v){const raw=String(v||"").trim();if(!raw)return"";if(raw.includes(":")){const m=raw.match(/^(\d{1,2}):(\d{1,2})$/);if(!m)return"";const h=Number(m[1]),mi=Number(m[2]);if(isNaN(h)||isNaN(mi)||h<0||h>23||mi<0||mi>59)return"";return`${String(h).padStart(2,"0")}:${String(mi).padStart(2,"0")}`;}const d=raw.replace(/\D/g,"").slice(0,4);if(!d)return"";let h,mi;if(d.length<=2){h=Number(d);mi=0;}else if(d.length===3){h=Number(d[0]);mi=Number(d.slice(1));}else{h=Number(d.slice(0,2));mi=Number(d.slice(2,4));}if(isNaN(h)||isNaN(mi)||h<0||h>23||mi<0||mi>59)return"";return`${String(h).padStart(2,"0")}:${String(mi).padStart(2,"0")}`;}
+function fmtTime(v){const raw=String(v||"");if(!raw)return"";const c=raw.replace(/[^\d:]/g,"");if(c.includes(":")){const p=c.split(":");const h=(p[0]||"").replace(/\D/g,"").slice(0,2);const m=(p[1]||"").replace(/\D/g,"").slice(0,2);return m.length?`${h}:${m}`:`${h}:`;}return c.replace(/\D/g,"").slice(0,4);}
+function parseTime(v){const n=nsTime(v);if(!n)return null;const m=n.match(/^(\d{2}):(\d{2})$/);if(!m)return null;return{raw:String(v||"").trim(),normalized:n,totalMinutes:Number(m[1])*60+Number(m[2])};}
+function fmtDur(t){const h=Math.floor(t/60),m=t%60;if(h>0&&m>0)return`${h} hr ${m} min`;return h>0?`${h} hr`:`${m} min`;}
+function validateTimes(){const s=timeStartedInput.value.trim(),e=timeEndedInput.value.trim();if(!s&&!e){timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";return{valid:true,durationMinutes:null,overnight:false,normalizedStarted:"",normalizedEnded:""};}if((s&&!e)||(!s&&e)){timeHelperBox.textContent="Please complete both Time Started and Time Ended.";timeHelperBox.classList.remove("hidden");return{valid:false};}const sp=parseTime(s),ep=parseTime(e);if(!sp||!ep){timeHelperBox.textContent="Invalid time. Use 24-hour format.";timeHelperBox.classList.remove("hidden");return{valid:false};}let dur=ep.totalMinutes-sp.totalMinutes,ov=false;if(dur<0){dur+=1440;ov=true;}if(dur===0){timeHelperBox.textContent="Start and end cannot be the same.";timeHelperBox.classList.remove("hidden");return{valid:false};}timeStartedInput.value=sp.normalized;timeEndedInput.value=ep.normalized;timeHelperBox.textContent=ov?`Accepted. Duration: ${fmtDur(dur)} (crossed midnight).`:`Accepted. Duration: ${fmtDur(dur)}.`;timeHelperBox.classList.remove("hidden");return{valid:true,durationMinutes:dur,overnight:ov,normalizedStarted:sp.normalized,normalizedEnded:ep.normalized};}
+function attachTime(inp){inp.addEventListener("input",function(){const p=inp.value,c=inp.selectionStart||p.length,f=fmtTime(p);if(f!==p){inp.value=f;const nc=Math.max(0,Math.min(f.length,c+(f.length-p.length)));inp.setSelectionRange(nc,nc);}});inp.addEventListener("blur",function(){const p=parseTime(inp.value);inp.value=p?p.normalized:"";validateTimes();});}
+function getFocusable(){return Array.from(donorForm.querySelectorAll("input,select,textarea")).filter(el=>el.type!=="hidden"&&!el.disabled&&el.offsetParent!==null);}
+function focusNext(cur){const f=getFocusable(),i=f.indexOf(cur);if(i===-1)return;for(let j=i+1;j<f.length;j++){const n=f[j];if(!n.disabled&&n.offsetParent!==null){n.focus();if(typeof n.select==="function"&&n.tagName.toLowerCase()==="input"&&n.type!=="date")n.select();break;}}}
+function markLoaded(ids){ids.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add("loaded-field");});}
+function clearHighlights(){IDENTITY_FIELDS.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove("loaded-field");});}
+function renderLookup(results){donorLookupResults=results;if(!results.length){lookupResultsBox.classList.add("hidden");lookupResultsBody.innerHTML="";showMsg("No existing donor matched your search.","error");return;}lookupResultsBody.innerHTML=results.map((rec,i)=>`<tr><td><button type="button" class="small-btn blue-btn" onclick="loadDonor(${i})">Load</button></td><td>${esc(rec.surname||"")}</td><td>${esc(rec.firstName||"")}</td><td>${esc(rec.middleName||"")}</td><td>${esc(rec.birthday||"")}</td><td>${esc(rec.bloodType||"")}</td><td>${esc(rec.entryDate||"")}</td><td>${esc(rec.donorCategory||"New")}</td><td>${esc(getCountDisplay(getStoredCount(rec)))}</td></tr>`).join("");lookupResultsBox.classList.remove("hidden");}
+function idKey(rec){return[na(rec.surname),na(rec.firstName),String(rec.birthday||"").trim()].join("|");}
+async function searchDonors(){try{clearMsg();const kw=nt(lookupSearch.value);if(!kw){donorLookupResults=[];lookupResultsBody.innerHTML="";lookupResultsBox.classList.add("hidden");return;}const snap=await db.collection("donorDatabase").orderBy("entryDate","desc").get();const all=snap.docs.map(d=>({id:d.id,...d.data()}));const latest={};all.forEach(rec=>{const k=idKey(rec);if(!latest[k]||rec.entryDate>latest[k].entryDate)latest[k]=rec;});let unique=Object.values(latest).filter(rec=>[rec.suffix,rec.surname,rec.firstName,rec.middleName,rec.birthday,rec.bloodType].join(" ").toLowerCase().includes(kw));unique.sort((a,b)=>(b.entryDate||"").localeCompare(a.entryDate||""));renderLookup(unique);if(unique.length)showMsg(`${unique.length} donor match(es) found.`,"success");else showMsg("No existing donor matched your search.","error");}catch(err){console.error(err);showMsg("Failed to search: "+err.message,"error");}}
+// ============================================================
+// THE KEY FIX: loadDonor
+// LOADS (pre-fills + green highlight):
+//   suffix, surname, firstName, middleName, birthday, civilStatus,
+//   sex, address, cityProvince, occupation, contactNumber
+// ALWAYS BLANK (encode fresh for every new donation):
+//   bloodType, bloodBagBrand, bloodBagType, amount,
+//   timeStarted, timeEnded, remarks
+// ============================================================
+window.loadDonor=function(index){
+    const donor=donorLookupResults[index];
+    if(!donor)return;
+    loadedDonorRecord=donor;
+    // --- Pre-fill identity ---
+    document.getElementById("suffix").value       = donor.suffix        || "";
+    document.getElementById("surname").value      = donor.surname       || "";
+    document.getElementById("firstName").value    = donor.firstName     || "";
+    document.getElementById("middleName").value   = donor.middleName    || "";
+    document.getElementById("birthday").value     = donor.birthday      || "";
+    computeAge();
+    document.getElementById("civilStatus").value  = donor.civilStatus   || "";
+    // Sex fix: stored as "Male"/"Female" — set via value property directly
+    const sexEl = document.getElementById("sex");
+    const sexVal = String(donor.sex || "").trim();
+    // Try exact match first, then case-insensitive
+    let sexSet = false;
+    for (const opt of sexEl.options) {
+        if (opt.value === sexVal) { sexEl.value = opt.value; sexSet = true; break; }
+    }
+    if (!sexSet) {
+        for (const opt of sexEl.options) {
+            if (opt.value.toLowerCase() === sexVal.toLowerCase()) { sexEl.value = opt.value; sexSet = true; break; }
         }
-        window.printOneMonth(value);
-    });
-
-    exportCsvBtn.addEventListener("click", function() {
-        exportCsv(filteredDonors, "donor-database-filtered.csv");
-        showMessage("Filtered CSV exported successfully.", "success");
-    });
-
-    collapseAllBtn.addEventListener("click", function() {
-        const grouped = groupDonors(filteredDonors);
-        Object.keys(grouped).forEach(year => {
-            collapsedGroups[getGroupKey("year", year)] = true;
-            Object.keys(grouped[year]).forEach(month => {
-                collapsedGroups[getGroupKey("month", year, month)] = true;
-            });
-        });
-        renderTracking();
-    });
-
-    expandAllBtn.addEventListener("click", function() {
-        const grouped = groupDonors(filteredDonors);
-        Object.keys(grouped).forEach(year => {
-            collapsedGroups[getGroupKey("year", year)] = false;
-            Object.keys(grouped[year]).forEach(month => {
-                collapsedGroups[getGroupKey("month", year, month)] = false;
-            });
-        });
-        renderTracking();
-    });
-
-    duplicateDataBtn.addEventListener("click", function() {
-        renderDuplicateMonthView(printMonthSelect.value);
-    });
-
-    document.addEventListener("input", function(event) {
-        if (!event.target.matches(".edit-input[data-uppercase='true']")) return;
-        const start = event.target.selectionStart;
-        const end = event.target.selectionEnd;
-        event.target.value = event.target.value.toUpperCase();
-        if (start !== null && end !== null) {
-            event.target.setSelectionRange(start, end);
-        }
-    });
-
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            loadDonors();
-        } else {
-            trackingContainer.innerHTML = `<div class="empty-box">Please log in first.</div>`;
-        }
-    });
+    }
+    if (!sexSet) sexEl.value = "";
+    document.getElementById("address").value       = donor.address       || "";
+    document.getElementById("cityProvince").value  = donor.cityProvince  || "";
+    document.getElementById("occupation").value    = donor.occupation    || "";  // blank for old imports — that is correct
+    document.getElementById("contactNumber").value = donor.contactNumber || "";
+    markLoaded(IDENTITY_FIELDS);
+    // --- Donation fields: always blank ---
+    document.getElementById("bloodType").value     = "";
+    document.getElementById("bloodBagBrand").value = "";
+    document.getElementById("bloodBagType").value  = "";
+    document.getElementById("amount").value        = "";
+    document.getElementById("timeStarted").value   = "";
+    document.getElementById("timeEnded").value     = "";
+    document.getElementById("remarks").value       = "";
+    timeHelperBox.classList.add("hidden"); timeHelperBox.textContent = "";
+    // --- Count ---
+    const prevCount = getCountDisplay(getStoredCount(donor));
+    numberOfDonations.value = prevCount;
+    setCatMode("Auto"); updateAutoType();
+    loadedDonorInfo.innerHTML=`&#9989; <b>Identity loaded:</b> ${esc(donor.surname||"")}, ${esc(donor.firstName||"")} ${esc(donor.middleName||"")} &nbsp;|&nbsp; Last donation: <b>${esc(donor.entryDate||"-")}</b> &nbsp;|&nbsp; Previous count: <b>${esc(prevCount)}</b><br><span style="color:#166534;font-weight:normal;font-size:12px;">&#128994; Fields in green were loaded from history. &nbsp; Blood Type, Blood Bag, Amount, Time Started/Ended and Remarks are <b>blank &mdash; encode fresh</b> for this donation.</span>`;
+    loadedDonorInfo.classList.remove("hidden");
+    showMsg("Donor identity loaded. Blood Type, Bag, Amount and Times are blank — encode fresh for this donation.","success");
+};
+function clearLoadedDonor(){loadedDonorRecord=null;loadedDonorInfo.classList.add("hidden");loadedDonorInfo.textContent="";clearHighlights();setCatMode("Auto");numberOfDonations.value="0";updateAutoType();}
+function clearEntryFields(){["suffix","surname","firstName","middleName","birthday","age","address","cityProvince","occupation","contactNumber"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});document.getElementById("civilStatus").selectedIndex=0;document.getElementById("sex").selectedIndex=0;document.getElementById("bloodType").selectedIndex=0;document.getElementById("bloodBagBrand").selectedIndex=0;document.getElementById("bloodBagType").selectedIndex=0;document.getElementById("amount").selectedIndex=0;document.getElementById("timeStarted").value="";document.getElementById("timeEnded").value="";document.getElementById("remarks").value="";setCatMode("Auto");numberOfDonations.value="0";timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";clearHighlights();}
+attachTime(timeStartedInput); attachTime(timeEndedInput);
+donorTypeRadios.forEach(r=>r.addEventListener("change",updateTypeFields));
+donorCategoryRadios.forEach(r=>r.addEventListener("change",function(){if(r.checked)setCatMode(r.value);}));
+rangeDonorTypeRadios.forEach(r=>r.addEventListener("change",updateRangeFields));
+rangeMbdDetails.addEventListener("input",updateRangeFields); rangePatientDetails.addEventListener("input",updateRangeFields);
+birthday.addEventListener("change",computeAge);
+entryDate.addEventListener("change",()=>{updateAutoType();renderAG();updateSerialPrefixByDate();});
+useSerialPrefix.addEventListener("change",updateSerialUI);
+numberOfDonations.addEventListener("blur",normCountField);
+timeStartedInput.addEventListener("change",validateTimes); timeEndedInput.addEventListener("change",validateTimes);
+donorForm.addEventListener("keydown",function(e){if(e.key!=="Enter")return;if(e.target.tagName.toLowerCase()==="textarea")return;if(["button","submit","reset"].includes(e.target.type))return;e.preventDefault();focusNext(e.target);});
+generateSerialRangeBtn.addEventListener("click",function(){try{const rt=selRangeType();if(!rt){showMsg("Please select the Range Donor Type.","error");return;}if(rt==="MBD"&&!rangeMbdDetails.value.trim()){showMsg("Please enter the Range MBD site.","error");return;}if(rt==="Patient Directed"&&!rangePatientDetails.value.trim()){showMsg("Please enter Range patient directed details.","error");return;}const list=buildRange(serialRangeStart.value,serialRangeEnd.value,serialRangeSkip.value);setSerialBatch(list);showMsg(`Serial list generated. ${list.length} serial(s) ready.`,"success");}catch(err){showMsg(err.message,"error");}});
+nextSerialBtn.addEventListener("click",()=>loadNextSerial(true));
+clearSerialBatchBtn.addEventListener("click",()=>{clrSBatch();showMsg("Serial list cleared.","success");});
+lookupSearch.addEventListener("input",()=>{clearTimeout(donorSearchDebounce);donorSearchDebounce=setTimeout(searchDonors,300);});
+clearLoadedDonorBtn.addEventListener("click",clearLoadedDonor);
+document.getElementById("reloadPageBtn").addEventListener("click",()=>window.location.reload());
+startWalkInGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const count=parseInt(walkInCount.value||"0");if(count<=0){showMsg("Please enter a valid number of walk-in donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"Walk-in",organization:"",details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("Walk-in");renderAG();showMsg(`Walk-in group started for ${count} donors.`,"success");});
+startMbdGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const org=mbdDetails.value.trim(),count=parseInt(mbdCount.value||"0");if(!org){showMsg("Please enter MBD site / organization.","error");return;}if(count<=0){showMsg("Please enter a valid number of MBD donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"MBD",organization:org,details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("MBD");renderAG();showMsg(`MBD group started for ${count} donors under ${org}.`,"success");});
+endGroupBtn.addEventListener("click",()=>{clrAG();renderAG();showMsg("Active group ended manually.","success");});
+donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||")":"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select donor type.","error");return false;}if(selDonorType()==="Patient Directed"&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(selDonorType()==="MBD"&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!numberOfDonations.value.trim())numberOfDonations.value="0";normCountField();updateAutoType();setSaving(true);const cnt=getCountDisplay(numberOfDonations.value||"0");const data={entryDate:entryDate.value,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:selDonorType()==="Patient Directed"?pdVal:"",mbdDetails:selDonorType()==="MBD"?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:autoTypeSuggestion||"",donorCategoryAutoReason:autoTypeReason||"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||")":"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||")":"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||")":"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};const docRef = await db.collection("donorDatabase").add(data);
+    // Backup to Google Sheets immediately after save
+    backupToSheets({...data, donorId: docRef.id, action: "add"}, "add");
+    let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
+donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();age.value="";setCatMode("Auto");numberOfDonations.value="0";patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
+auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();}else setAuthInd("No logged in user detected.",false);});
+setTodayDate();setCatMode("Auto");numberOfDonations.value="0";updateAutoType();updateSerialUI();validateTimes();renderAG();renderBatchInfo();updateRangeFields();setRangeCollapsed(false);
+const eb=getSB();if(eb?.list?.length){serialNumberInput.value=eb.list[0];rangeDonorTypeRadios.forEach(r=>{r.checked=r.value===eb.rangeDonorType;});rangeMbdDetails.value=eb.rangeMbdDetails||"";rangePatientDetails.value=eb.rangePatientDetails||"";updateRangeFields();}
 </script>
-
 </body>
 </html>
