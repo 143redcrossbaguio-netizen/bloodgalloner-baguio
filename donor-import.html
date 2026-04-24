@@ -815,6 +815,46 @@ function aoaToObjectRows(aoa) {
     if (!aoa.length) return { rows: [], headers: [] };
     const headerIndex = detectHeaderRowIndex(aoa);
     const headers = (aoa[headerIndex] || []).map((h, i) => String(h ?? "").trim() || `COLUMN_${i+1}`);
+
+    // ── Auto-detect blank column headers by scanning data values ──────────────
+    // When a column header is blank/space (becomes COLUMN_N), check the first
+    // several data rows to infer what kind of data it holds.
+    // This fixes Excel files where the DATE column header is a space " ".
+    const SCAN_ROWS = Math.min(10, aoa.length - headerIndex - 1);
+    headers.forEach((h, ci) => {
+        if (!h.startsWith("COLUMN_")) return; // already has a real name
+
+        // Collect non-empty values from this column in the first data rows
+        const samples = [];
+        for (let si = 1; si <= SCAN_ROWS; si++) {
+            const rowIdx = headerIndex + si;
+            if (rowIdx >= aoa.length) break;
+            const val = aoa[rowIdx][ci];
+            if (val !== null && val !== undefined && String(val).trim() !== "") {
+                samples.push(val);
+            }
+        }
+        if (!samples.length) return;
+
+        // If most samples are JS Date objects or parse as full dates → rename to "date"
+        const dateLike = samples.filter(v => {
+            if (v instanceof Date) return !isNaN(v.getTime());
+            const s = String(v).trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return true;
+            if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s)) return true;
+            if (typeof v === "number" && v > 40000 && v < 60000) return true; // Excel serial
+            return false;
+        });
+        if (dateLike.length / samples.length >= 0.5) {
+            headers[ci] = "date";
+            return;
+        }
+
+        // If most samples are numbers and the column is early (col 0–1) → could be count, skip
+        // If samples look like names or text → leave as COLUMN_N
+    });
+    // ── End auto-detect ───────────────────────────────────────────────────────
+
     const rows = [];
     for (let i = headerIndex + 1; i < aoa.length; i++) {
         const obj = {};
