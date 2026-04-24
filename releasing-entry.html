@@ -253,13 +253,6 @@ button{
 
 <div class="container">
 
-<label>DATE</label>
-<input type="date" id="date">
-
-<label>FACILITY</label>
-<input type="text" id="facility" list="facilityList" placeholder="Type facility name" required>
-<datalist id="facilityList"></datalist>
-
 <div class="topButtons">
     <button class="facilityBtn" onclick="goFacilityManager()">OPEN FACILITY MANAGER</button>
     <button class="trackingBtn" onclick="goTracking()">GO TO TRACKING</button>
@@ -270,6 +263,13 @@ button{
     <input type="text" id="liveSearch" placeholder="Search surname, first name, facility, blood type, OR, date">
     <div id="searchResults" class="searchResults"></div>
 </div>
+
+<label>DATE</label>
+<input type="date" id="date">
+
+<label>FACILITY</label>
+<input type="text" id="facility" list="facilityList" placeholder="Type facility name" required>
+<datalist id="facilityList"></datalist>
 
 <div class="sectionSpacer"></div>
 
@@ -347,8 +347,8 @@ button{
 <label>6A. BOX CONTAINER</label>
 <input type="number" id="boxContainerQty" placeholder="Qty">
 
-<label>6. OR (Optional)</label>
-<input type="text" id="or">
+<label>6. OR</label>
+<input type="text" id="or" required>
 
 <label>9. AMOUNT PAID</label>
 <div class="row">
@@ -571,6 +571,57 @@ async function loadComponentPrices(){
 
 function safeUpper(value){
   return String(value || "").toUpperCase();
+}
+
+function normalizeCompare(value){
+  return safeUpper(value).replace(/\s+/g, " ").trim();
+}
+
+function isSimilarText(a, b){
+  const first = normalizeCompare(a);
+  const second = normalizeCompare(b);
+
+  if(first === "" || second === "") return false;
+  if(first === second) return true;
+  if(first.length >= 4 && second.length >= 4 && (first.includes(second) || second.includes(first))) return true;
+
+  return false;
+}
+
+function findSimilarReleasingEntry(entryData){
+  return allReleasingEntries.find(item => {
+    if(selectedLoadedId && item.id === selectedLoadedId) return false;
+
+    const sameAge = normalizeCompare(item.age) === normalizeCompare(entryData.age);
+    const sameSex = normalizeCompare(item.sex) === normalizeCompare(entryData.sex);
+    const sameBloodType = normalizeCompare(item.bloodtype) === normalizeCompare(entryData.bloodtype);
+    const sameOr = normalizeCompare(item.or) === normalizeCompare(entryData.or);
+    const similarSurname = isSimilarText(item.surname, entryData.surname);
+    const similarFirstname = isSimilarText(item.firstname, entryData.firstname);
+
+    return similarSurname && similarFirstname && sameAge && sameSex && sameBloodType && sameOr;
+  }) || null;
+}
+
+function focusNextField(currentField){
+  const focusableFields = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([readonly]), select, button'))
+    .filter(el => !el.disabled && el.offsetParent !== null && !el.classList.contains("augmentationToggle"));
+
+  const currentIndex = focusableFields.indexOf(currentField);
+
+  if(currentIndex > -1 && currentIndex < focusableFields.length - 1){
+    focusableFields[currentIndex + 1].focus();
+  }
+}
+
+function bindEnterMoveToNextBox(){
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Enter") return;
+    if(!e.target.matches("input, select")) return;
+
+    e.preventDefault();
+    focusNextField(e.target);
+  });
 }
 
 function renderSearchResults(matches){
@@ -1114,6 +1165,13 @@ saveBtn.addEventListener("click", async () => {
     return;
   }
 
+  const orValue = document.getElementById("or").value.trim();
+  if(orValue === ""){
+    alert("OR is required.");
+    document.getElementById("or").focus();
+    return;
+  }
+
   const requests = [];
   document.querySelectorAll(".requestRow").forEach(row => {
     const type = row.querySelector(".requestType").value;
@@ -1153,7 +1211,7 @@ saveBtn.addEventListener("click", async () => {
     age: document.getElementById("age").value,
     sex: document.getElementById("sex").value,
     bloodtype: document.getElementById("bloodtype").value,
-    or: document.getElementById("or").value.toUpperCase(),
+    or: orValue.toUpperCase(),
     boxContainerQty: document.getElementById("boxContainerQty").value || 0,
     requests: requests,
     issued: issued,
@@ -1165,6 +1223,12 @@ saveBtn.addEventListener("click", async () => {
     waivedUnit: waivedItems[0]?.unit || 0,
     priceSnapshot: priceSnapshotToSave
   };
+
+  const similarEntry = findSimilarReleasingEntry(entryData);
+  if(similarEntry){
+    alert(`Very similar record found. Entry was not saved.\n\nExisting: ${safeUpper(similarEntry.surname)}, ${safeUpper(similarEntry.firstname)} | AGE: ${similarEntry.age || "-"} | SEX: ${similarEntry.sex || "-"} | BLOOD TYPE: ${similarEntry.bloodtype || "-"} | OR: ${safeUpper(similarEntry.or)}`);
+    return;
+  }
 
   try {
     if(selectedLoadedId){
@@ -1494,6 +1558,7 @@ onAuthStateChanged(auth, async (user) => {
   setTodayDate();
   loadFacilities();
   bindLiveSearch();
+  bindEnterMoveToNextBox();
   loadTrackingSearchData();
   resetWaivedRows();
   await loadComponentPrices();
