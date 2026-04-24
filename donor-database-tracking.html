@@ -322,13 +322,14 @@ const auth = firebase.auth();
 
 const GOOGLE_SHEETS_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxmQvzztD4x0jfeJ-cZDilAaYOX4x8HQLp0dQFCtG3F3Sr48hJVhEsdUKgpiCymlFyO/exec";
 
-async function backupToGoogleSheets(data) {
+async function backupToGoogleSheets(data, action) {
     if (!GOOGLE_SHEETS_BACKUP_URL) return;
     try {
+        const payload = { action: action || data.action || "add", ...data };
         await fetch(GOOGLE_SHEETS_BACKUP_URL, {
             method: "POST", mode: "no-cors",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
     } catch(e) { console.error("Google Sheets backup failed:", e); }
 }
@@ -1218,7 +1219,7 @@ window.saveEdit = async function(id) {
     try {
         await db.collection("donorDatabase").doc(id).update(updatedData);
 
-        backupToGoogleSheets({ action:"update", source:"donor-tracking.html", donorId:id, updatedAt:new Date().toISOString(), ...updatedData });
+        backupToGoogleSheets({ donorId:id, source:"donor-tracking.html", updatedAt:new Date().toISOString(), ...updatedData }, "update");
 
         updateLocalDonorRecord(id, updatedData);
         renderTracking();
@@ -1238,7 +1239,7 @@ window.deleteDonor = async function(id) {
             deletedFrom: "donor-tracking.html"
         });
         const r = allDonors.find(r => r.id === id) || {};
-        backupToGoogleSheets({ action:"soft_delete", source:"donor-tracking.html", donorId:id, deletedAt:new Date().toISOString(), ...r, isDeleted:true });
+        backupToGoogleSheets({ donorId:id, source:"donor-tracking.html", deletedAt:new Date().toISOString(), ...r, isDeleted:true }, "soft_delete");
         allDonors      = allDonors.filter(r => r.id !== id);
         filteredDonors = filteredDonors.filter(r => r.id !== id);
         renderTracking();
