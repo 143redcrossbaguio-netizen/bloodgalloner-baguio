@@ -257,7 +257,7 @@
 // Leave it as the placeholder if you haven't deployed yet — the form
 // will still save to Firebase, only the Sheets backup will be skipped.
 // ============================================================
-const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxo259g-XCcgtNtADWhOzUztWqS8b1YYS9FYOJpoYehPOCYC4SJt17texFQOhjjhG8GRA/exec";
+const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwmI0yMiu5znJAKBsnFLLIruvTXjdxgSHovX-8g0MnI6MsYUbXG3q5vaSIs5wZ_5EfLcQ/exec";
 
 const firebaseConfig={apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",authDomain:"galloners-club.firebaseapp.com",databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"galloners-club",storageBucket:"galloners-club.firebasestorage.app",messagingSenderId:"213049860421",appId:"1:213049860421:web:4156aaa52b945f48711e2c",measurementId:"G-XYXJH9JNXJ"};
 if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
@@ -286,8 +286,8 @@ const IDENTITY_FIELDS=["suffix","surname","firstName","middleName","birthday","c
 
 // ============================================================
 // GOOGLE SHEETS BACKUP FUNCTION
-// Fire-and-forget. Uses no-cors so Apps Script silently accepts the
-// POST. If the URL isn't set or the call fails, Firebase still saves.
+// Uses text/plain content-type to avoid CORS preflight while
+// still delivering the JSON body to Apps Script. Fire-and-forget.
 // ============================================================
 function sendToGoogleSheets(data){
     if(!GOOGLE_SHEETS_URL || GOOGLE_SHEETS_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE"){
@@ -302,16 +302,22 @@ function sendToGoogleSheets(data){
                 clean[k] = new Date().toISOString();
             } else if(v === null || v === undefined){
                 clean[k] = "";
+            } else if(typeof v === "boolean"){
+                clean[k] = v ? "TRUE" : "FALSE";
             } else if(typeof v === "object"){
                 clean[k] = JSON.stringify(v);
             } else {
                 clean[k] = v;
             }
         }
+        // text/plain avoids the CORS preflight that strips the body in no-cors mode
         fetch(GOOGLE_SHEETS_URL, {
             method: "POST",
             mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(clean)
+        }).then(() => {
+            console.log("Google Sheets backup sent.");
         }).catch(err => {
             console.warn("Google Sheets backup failed (Firebase save still succeeded):", err);
         });
