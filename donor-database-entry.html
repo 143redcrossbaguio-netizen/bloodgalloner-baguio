@@ -35,7 +35,6 @@
         .field-group label{font-weight:bold;margin-bottom:4px;font-size:13px;color:#334155}
         .field-group input:not([type=radio]):not([type=checkbox]),.field-group select,.field-group textarea{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff}
         .field-group input:focus,.field-group select:focus,.field-group textarea:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.12)}
-        /* green tint for loaded identity fields */
         .loaded-field{background:#f0fdf4 !important;border-color:#86efac !important}
         .readonly-fill{background:#f8fafc !important}
         .serial-main-box{border:1px solid #bfd5f7;border-radius:12px;background:linear-gradient(180deg,#f4f8ff,#e8f1ff);padding:12px}
@@ -186,7 +185,6 @@
                             </div>
                         </div>
                     </div>
-                    <!-- IDENTITY FIELDS (pre-filled from history) -->
                     <div class="field-group span-2"><label for="suffix">3. Suffix</label><input type="text" id="suffix" placeholder="Jr., Sr., III"></div>
                     <div class="field-group span-3"><label for="surname">4. Surname</label><input type="text" id="surname" required></div>
                     <div class="field-group span-4"><label for="firstName">5. First Name</label><input type="text" id="firstName" required></div>
@@ -220,7 +218,6 @@
                         <div class="helper-text">Enter manually. Loading a donor does not auto-increment.</div>
                     </div>
                     <div class="field-group span-12"><div id="typeHelperBox" class="type-helper hidden"></div></div>
-                    <!-- DONATION FIELDS (always blank — encode fresh each donation) -->
                     <div class="field-group span-3"><label for="bloodType">17. Blood Type</label>
                         <select id="bloodType" required><option value="">Select</option>
                         <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
@@ -254,6 +251,14 @@
     </div>
 </div>
 <script>
+// ============================================================
+// GOOGLE SHEETS BACKUP CONFIG
+// Paste your Apps Script Web App URL below (the one ending in /exec).
+// Leave it as the placeholder if you haven't deployed yet — the form
+// will still save to Firebase, only the Sheets backup will be skipped.
+// ============================================================
+const GOOGLE_SHEETS_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
 const firebaseConfig={apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",authDomain:"galloners-club.firebaseapp.com",databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"galloners-club",storageBucket:"galloners-club.firebasestorage.app",messagingSenderId:"213049860421",appId:"1:213049860421:web:4156aaa52b945f48711e2c",measurementId:"G-XYXJH9JNXJ"};
 if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore(),auth=firebase.auth();
@@ -277,8 +282,44 @@ const rangeDonorTypeRadios=document.querySelectorAll('input[name="rangeDonorType
 const timeStartedInput=document.getElementById("timeStarted"),timeEndedInput=document.getElementById("timeEnded"),timeHelperBox=document.getElementById("timeHelperBox");
 let currentUser=null,authReady=false,loadedDonorRecord=null,donorLookupResults=[],autoTypeSuggestion="",autoTypeReason="",isSaving=false,donorSearchDebounce=null;
 const AG_KEY="donorEntryActiveGroup",SB_KEY="donorEntrySerialBatch";
-// Identity field IDs that get green-highlighted when loaded from history
 const IDENTITY_FIELDS=["suffix","surname","firstName","middleName","birthday","civilStatus","sex","address","cityProvince","occupation","contactNumber"];
+
+// ============================================================
+// GOOGLE SHEETS BACKUP FUNCTION
+// Fire-and-forget. Uses no-cors so Apps Script silently accepts the
+// POST. If the URL isn't set or the call fails, Firebase still saves.
+// ============================================================
+function sendToGoogleSheets(data){
+    if(!GOOGLE_SHEETS_URL || GOOGLE_SHEETS_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE"){
+        console.warn("Google Sheets backup skipped: GOOGLE_SHEETS_URL not configured.");
+        return;
+    }
+    try{
+        const clean = {};
+        for(const k in data){
+            const v = data[k];
+            if(k === "createdAt"){
+                clean[k] = new Date().toISOString();
+            } else if(v === null || v === undefined){
+                clean[k] = "";
+            } else if(typeof v === "object"){
+                clean[k] = JSON.stringify(v);
+            } else {
+                clean[k] = v;
+            }
+        }
+        fetch(GOOGLE_SHEETS_URL, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify(clean)
+        }).catch(err => {
+            console.warn("Google Sheets backup failed (Firebase save still succeeded):", err);
+        });
+    } catch(err){
+        console.warn("Google Sheets backup error (Firebase save still succeeded):", err);
+    }
+}
+
 function setTodayDate(){entryDate.value=new Date().toISOString().split("T")[0];updateSerialPrefixByDate();}
 function computeAge(){if(!birthday.value){age.value="";return;}const bd=new Date(birthday.value),td=new Date();let y=td.getFullYear()-bd.getFullYear();const md=td.getMonth()-bd.getMonth();if(md<0||(md===0&&td.getDate()<bd.getDate()))y--;age.value=y>=0?y:"";}
 function showMsg(m,t){statusMessage.textContent=m;statusMessage.className="status-message";statusMessage.classList.add(t==="success"?"status-success":"status-error");}
@@ -339,20 +380,11 @@ function clearHighlights(){IDENTITY_FIELDS.forEach(id=>{const el=document.getEle
 function renderLookup(results){donorLookupResults=results;if(!results.length){lookupResultsBox.classList.add("hidden");lookupResultsBody.innerHTML="";showMsg("No existing donor matched your search.","error");return;}lookupResultsBody.innerHTML=results.map((rec,i)=>`<tr><td><button type="button" class="small-btn blue-btn" onclick="loadDonor(${i})">Load</button></td><td>${esc(rec.surname||"")}</td><td>${esc(rec.firstName||"")}</td><td>${esc(rec.middleName||"")}</td><td>${esc(rec.birthday||"")}</td><td>${esc(rec.bloodType||"")}</td><td>${esc(rec.entryDate||"")}</td><td>${esc(rec.donorCategory||"New")}</td><td>${esc(getCountDisplay(getStoredCount(rec)))}</td></tr>`).join("");lookupResultsBox.classList.remove("hidden");}
 function idKey(rec){return[na(rec.surname),na(rec.firstName),String(rec.birthday||"").trim()].join("|");}
 async function searchDonors(){try{clearMsg();const kw=nt(lookupSearch.value);if(!kw){donorLookupResults=[];lookupResultsBody.innerHTML="";lookupResultsBox.classList.add("hidden");return;}const snap=await db.collection("donorDatabase").orderBy("entryDate","desc").get();const all=snap.docs.map(d=>({id:d.id,...d.data()}));const latest={};all.forEach(rec=>{const k=idKey(rec);if(!latest[k]||rec.entryDate>latest[k].entryDate)latest[k]=rec;});let unique=Object.values(latest).filter(rec=>[rec.suffix,rec.surname,rec.firstName,rec.middleName,rec.birthday,rec.bloodType].join(" ").toLowerCase().includes(kw));unique.sort((a,b)=>(b.entryDate||"").localeCompare(a.entryDate||""));renderLookup(unique);if(unique.length)showMsg(`${unique.length} donor match(es) found.`,"success");else showMsg("No existing donor matched your search.","error");}catch(err){console.error(err);showMsg("Failed to search: "+err.message,"error");}}
-// ============================================================
-// THE KEY FIX: loadDonor
-// LOADS (pre-fills + green highlight):
-//   suffix, surname, firstName, middleName, birthday, civilStatus,
-//   sex, address, cityProvince, occupation, contactNumber
-// ALWAYS BLANK (encode fresh for every new donation):
-//   bloodType, bloodBagBrand, bloodBagType, amount,
-//   timeStarted, timeEnded, remarks
-// ============================================================
+
 window.loadDonor=function(index){
     const donor=donorLookupResults[index];
     if(!donor)return;
     loadedDonorRecord=donor;
-    // --- Pre-fill identity ---
     document.getElementById("suffix").value       = donor.suffix        || "";
     document.getElementById("surname").value      = donor.surname       || "";
     document.getElementById("firstName").value    = donor.firstName     || "";
@@ -360,10 +392,8 @@ window.loadDonor=function(index){
     document.getElementById("birthday").value     = donor.birthday      || "";
     computeAge();
     document.getElementById("civilStatus").value  = donor.civilStatus   || "";
-    // Sex fix: stored as "Male"/"Female" — set via value property directly
     const sexEl = document.getElementById("sex");
     const sexVal = String(donor.sex || "").trim();
-    // Try exact match first, then case-insensitive
     let sexSet = false;
     for (const opt of sexEl.options) {
         if (opt.value === sexVal) { sexEl.value = opt.value; sexSet = true; break; }
@@ -376,10 +406,9 @@ window.loadDonor=function(index){
     if (!sexSet) sexEl.value = "";
     document.getElementById("address").value       = donor.address       || "";
     document.getElementById("cityProvince").value  = donor.cityProvince  || "";
-    document.getElementById("occupation").value    = donor.occupation    || "";  // blank for old imports — that is correct
+    document.getElementById("occupation").value    = donor.occupation    || "";
     document.getElementById("contactNumber").value = donor.contactNumber || "";
     markLoaded(IDENTITY_FIELDS);
-    // --- Donation fields: always blank ---
     document.getElementById("bloodType").value     = "";
     document.getElementById("bloodBagBrand").value = "";
     document.getElementById("bloodBagType").value  = "";
@@ -388,7 +417,6 @@ window.loadDonor=function(index){
     document.getElementById("timeEnded").value     = "";
     document.getElementById("remarks").value       = "";
     timeHelperBox.classList.add("hidden"); timeHelperBox.textContent = "";
-    // --- Count ---
     const prevCount = getCountDisplay(getStoredCount(donor));
     numberOfDonations.value = prevCount;
     setCatMode("Auto"); updateAutoType();
@@ -418,7 +446,15 @@ document.getElementById("reloadPageBtn").addEventListener("click",()=>window.loc
 startWalkInGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const count=parseInt(walkInCount.value||"0");if(count<=0){showMsg("Please enter a valid number of walk-in donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"Walk-in",organization:"",details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("Walk-in");renderAG();showMsg(`Walk-in group started for ${count} donors.`,"success");});
 startMbdGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const org=mbdDetails.value.trim(),count=parseInt(mbdCount.value||"0");if(!org){showMsg("Please enter MBD site / organization.","error");return;}if(count<=0){showMsg("Please enter a valid number of MBD donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"MBD",organization:org,details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("MBD");renderAG();showMsg(`MBD group started for ${count} donors under ${org}.`,"success");});
 endGroupBtn.addEventListener("click",()=>{clrAG();renderAG();showMsg("Active group ended manually.","success");});
-donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||")":"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select donor type.","error");return false;}if(selDonorType()==="Patient Directed"&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(selDonorType()==="MBD"&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!numberOfDonations.value.trim())numberOfDonations.value="0";normCountField();updateAutoType();setSaving(true);const cnt=getCountDisplay(numberOfDonations.value||"0");const data={entryDate:entryDate.value,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:selDonorType()==="Patient Directed"?pdVal:"",mbdDetails:selDonorType()==="MBD"?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:autoTypeSuggestion||"",donorCategoryAutoReason:autoTypeReason||"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||")":"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||")":"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||")":"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};await db.collection("donorDatabase").add(data);let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
+donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||""):"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select donor type.","error");return false;}if(selDonorType()==="Patient Directed"&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(selDonorType()==="MBD"&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!numberOfDonations.value.trim())numberOfDonations.value="0";normCountField();updateAutoType();setSaving(true);const cnt=getCountDisplay(numberOfDonations.value||"0");const data={entryDate:entryDate.value,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:selDonorType()==="Patient Directed"?pdVal:"",mbdDetails:selDonorType()==="MBD"?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:autoTypeSuggestion||"",donorCategoryAutoReason:autoTypeReason||"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+
+// Save to Firebase first
+await db.collection("donorDatabase").add(data);
+
+// Also send to Google Sheets backup (fire-and-forget — won't block on errors)
+sendToGoogleSheets(data);
+
+let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
 donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();age.value="";setCatMode("Auto");numberOfDonations.value="0";patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
 auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();}else setAuthInd("No logged in user detected.",false);});
 setTodayDate();setCatMode("Auto");numberOfDonations.value="0";updateAutoType();updateSerialUI();validateTimes();renderAG();renderBatchInfo();updateRangeFields();setRangeCollapsed(false);
