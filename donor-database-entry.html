@@ -252,10 +252,12 @@
 </div>
 <script>
 // ============================================================
-// GOOGLE SHEETS BACKUP CONFIG
-// Paste your Apps Script Web App URL below (the one ending in /exec).
-// Leave it as the placeholder if you haven't deployed yet — the form
-// will still save to Firebase, only the Sheets backup will be skipped.
+// GOOGLE SHEETS BACKUP — DAILY SYNC (NOT REAL-TIME)
+// ============================================================
+// Data is saved to Firebase instantly. A separate Apps Script
+// trigger runs at 3:00 AM Manila time daily and copies the day's
+// entries to Google Sheets in batch. This keeps the form fast
+// during peak encoding hours and avoids Apps Script slowness.
 // ============================================================
 const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwmI0yMiu5znJAKBsnFLLIruvTXjdxgSHovX-8g0MnI6MsYUbXG3q5vaSIs5wZ_5EfLcQ/exec";
 
@@ -285,45 +287,14 @@ const AG_KEY="donorEntryActiveGroup",SB_KEY="donorEntrySerialBatch";
 const IDENTITY_FIELDS=["suffix","surname","firstName","middleName","birthday","civilStatus","sex","address","cityProvince","occupation","contactNumber"];
 
 // ============================================================
-// GOOGLE SHEETS BACKUP FUNCTION
-// Uses text/plain content-type to avoid CORS preflight while
-// still delivering the JSON body to Apps Script. Fire-and-forget.
+// GOOGLE SHEETS BACKUP — disabled (data now syncs nightly via
+// Apps Script time-driven trigger, not via this fetch call).
+// Kept as a no-op so the submit handler works without changes.
 // ============================================================
 function sendToGoogleSheets(data){
-    if(!GOOGLE_SHEETS_URL || GOOGLE_SHEETS_URL === "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE"){
-        console.warn("Google Sheets backup skipped: GOOGLE_SHEETS_URL not configured.");
-        return;
-    }
-    try{
-        const clean = {};
-        for(const k in data){
-            const v = data[k];
-            if(k === "createdAt"){
-                clean[k] = new Date().toISOString();
-            } else if(v === null || v === undefined){
-                clean[k] = "";
-            } else if(typeof v === "boolean"){
-                clean[k] = v ? "TRUE" : "FALSE";
-            } else if(typeof v === "object"){
-                clean[k] = JSON.stringify(v);
-            } else {
-                clean[k] = v;
-            }
-        }
-        // text/plain avoids the CORS preflight that strips the body in no-cors mode
-        fetch(GOOGLE_SHEETS_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(clean)
-        }).then(() => {
-            console.log("Google Sheets backup sent.");
-        }).catch(err => {
-            console.warn("Google Sheets backup failed (Firebase save still succeeded):", err);
-        });
-    } catch(err){
-        console.warn("Google Sheets backup error (Firebase save still succeeded):", err);
-    }
+    // No-op — Google Sheets is now updated nightly by Apps Script
+    // reading directly from Firebase. See apps-script-daily-sync.gs.
+    return;
 }
 
 function setTodayDate(){entryDate.value=new Date().toISOString().split("T")[0];updateSerialPrefixByDate();}
