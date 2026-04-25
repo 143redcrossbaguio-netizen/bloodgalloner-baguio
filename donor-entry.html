@@ -1,480 +1,371 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blood Galloner Donor Entry</title>
+<title>Galloners Club - Donor Entry</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    * {
-      box-sizing: border-box;
-      font-family: Arial, sans-serif;
-    }
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
-    body {
-      margin: 0;
-      background: #f5f5f5;
-      color: #222;
-    }
-
-    header {
-      background: #b30000;
-      color: white;
-      padding: 18px;
-      text-align: center;
-    }
-
-    .container {
-      max-width: 1100px;
-      margin: 25px auto;
-      padding: 20px;
-    }
-
-    .card {
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-
-    h2 {
-      margin-top: 0;
-      color: #b30000;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-    }
-
-    label {
-      font-weight: bold;
-      font-size: 14px;
-    }
-
-    input, select, textarea {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    textarea {
-      resize: vertical;
-    }
-
-    button {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    .btn-primary {
-      background: #b30000;
-      color: white;
-    }
-
-    .btn-secondary {
-      background: #444;
-      color: white;
-    }
-
-    .btn-danger {
-      background: #dc3545;
-      color: white;
-    }
-
-    .btn-row {
-      display: flex;
-      gap: 10px;
-      margin-top: 18px;
-      flex-wrap: wrap;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      font-size: 14px;
-    }
-
-    th, td {
-      border: 1px solid #ddd;
-      padding: 9px;
-      text-align: left;
-    }
-
-    th {
-      background: #b30000;
-      color: white;
-    }
-
-    .blood {
-      color: white;
-      padding: 5px 8px;
-      border-radius: 6px;
-      font-weight: bold;
-      display: inline-block;
-    }
-
-    .Apos, .Aneg { background: #e74c3c; }
-    .Bpos, .Bneg { background: #3498db; }
-    .ABpos, .ABneg { background: #8e44ad; }
-    .Opos, .Oneg { background: #27ae60; }
-
-    .small {
-      font-size: 12px;
-      color: #666;
-    }
-
-    @media (max-width: 800px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
-
-      table {
-        font-size: 12px;
-      }
-    }
-  </style>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f4f4f4;color:#222;}
+header{background:#b30000;color:white;padding:18px 15px;text-align:center;}
+.logo{width:100px;display:block;margin:0 auto 10px auto;}
+.container{max-width:1050px;margin:20px auto;background:white;padding:20px;border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+h2{color:#b30000;margin-top:0;}
+.status-bar{display:none;margin-bottom:15px;padding:12px 14px;border-radius:8px;font-weight:bold;white-space:pre-wrap;}
+.status-loading{display:block;background:#eef5ff;border:1px solid #cdddf5;color:#1f4f8a;}
+.status-success{display:block;background:#edf8ef;border:1px solid #c7e6cd;color:#226437;}
+.status-error{display:block;background:#fff1f1;border:1px solid #f0bdbd;color:#b30000;}
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+.serial-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-bottom:15px;}
+label{display:block;font-size:13px;font-weight:bold;color:#444;margin-bottom:5px;}
+input,select,textarea{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;}
+textarea{min-height:80px;resize:vertical;}
+button{padding:9px 12px;border:none;border-radius:6px;cursor:pointer;color:white;font-weight:bold;}
+.add-btn{background:#1565c0;}
+.save-btn{background:#b30000;}
+.track-btn{background:#2e7d32;}
+.clear-btn{background:#455a64;}
+.delete-btn{background:#c62828;}
+.update-btn{background:#ef6c00;}
+.button-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px;}
+table{width:100%;border-collapse:collapse;margin-top:12px;}
+th,td{padding:8px;border:1px solid #ddd;text-align:center;vertical-align:middle;}
+th{background:#b30000;color:white;}
+.name-preview{font-weight:bold;color:#b30000;margin-top:5px;}
+.table-wrap{overflow:auto;border:1px solid #ddd;border-radius:8px;margin-top:12px;}
+.note{font-size:12px;color:#666;line-height:1.4;margin-top:8px;}
+.mode-pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#fff4f4;border:1px solid #e0b4b4;color:#b30000;font-weight:bold;font-size:12px;margin-bottom:10px;}
+@media(max-width:900px){.form-grid,.serial-grid{grid-template-columns:1fr;}.container{max-width:94%;}}
+</style>
 </head>
 
 <body>
-  <header>
-    <h1>Blood Galloner Donor Entry</h1>
-    <p>Donor Registration and Donation Tracking</p>
-  </header>
+<header>
+<img src="images/logo.png" class="logo" onerror="this.style.display='none'">
+<h2>Galloners Club - Donor Entry</h2>
+</header>
 
-  <div class="container">
+<div class="container">
+<div id="statusBar" class="status-bar"></div>
+<span id="modePill" class="mode-pill">New Donor Entry</span>
 
-    <div class="card">
-      <h2>Donor Entry Form</h2>
-
-      <div class="grid">
-        <div>
-          <label>Serial Number Prefix</label>
-          <input type="text" id="serialPrefix" value="PRC2600-" />
-        </div>
-
-        <div>
-          <label>Serial Number</label>
-          <input type="text" id="serialNumber" placeholder="Example: 0001" />
-        </div>
-
-        <div>
-          <label>Date</label>
-          <input type="date" id="entryDate" />
-        </div>
-
-        <div>
-          <label>Donor Type</label>
-          <select id="donorType">
-            <option value="Walk-in">Walk-in</option>
-            <option value="MBD">MBD</option>
-            <option value="Patient Directed">Patient Directed</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Donor Name</label>
-          <input type="text" id="donorName" placeholder="Full name" oninput="lookupDonor()" />
-          <p class="small" id="lookupResult"></p>
-        </div>
-
-        <div>
-          <label>Blood Type</label>
-          <select id="bloodType">
-            <option value="">Select Blood Type</option>
-            <option value="A+">A+</option>
-            <option value="A-">A-</option>
-            <option value="B+">B+</option>
-            <option value="B-">B-</option>
-            <option value="AB+">AB+</option>
-            <option value="AB-">AB-</option>
-            <option value="O+">O+</option>
-            <option value="O-">O-</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Amount / Blood Bag Type</label>
-          <select id="amount">
-            <option value="">Select</option>
-            <option value="450cc">450cc</option>
-            <option value="350cc">350cc</option>
-            <option value="Double Bag">Double Bag</option>
-            <option value="Triple Bag">Triple Bag</option>
-            <option value="Quadruple Bag">Quadruple Bag</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Time Started</label>
-          <input type="time" id="timeStarted" />
-        </div>
-
-        <div>
-          <label>Time Ended</label>
-          <input type="time" id="timeEnded" />
-        </div>
-
-        <div>
-          <label>Number of Donations</label>
-          <input type="number" id="donationCount" min="1" value="1" />
-        </div>
-
-        <div>
-          <label>Status</label>
-          <select id="status">
-            <option value="Successful">Successful</option>
-            <option value="Deferred">Deferred</option>
-            <option value="Incomplete">Incomplete</option>
-            <option value="Reaction">Reaction</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Encoded By</label>
-          <input type="text" id="encodedBy" placeholder="Staff name" />
-        </div>
-      </div>
-
-      <div style="margin-top:15px;">
-        <label>Remarks</label>
-        <textarea id="remarks" rows="3" placeholder="Remarks / notes"></textarea>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn-primary" onclick="saveDonor()">Save Entry</button>
-        <button class="btn-secondary" onclick="addSerial()">Add Serial</button>
-        <button class="btn-secondary" onclick="clearForm()">Clear Form</button>
-        <button class="btn-danger" onclick="clearAllRecords()">Clear All Records</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Saved Donor Records</h2>
-
-      <input type="text" id="searchInput" placeholder="Search by name, serial, blood type, or donor type..." oninput="renderTable()" />
-
-      <table>
-        <thead>
-          <tr>
-            <th>Serial</th>
-            <th>Date</th>
-            <th>Name</th>
-            <th>Blood Type</th>
-            <th>Type</th>
-            <th>Donations</th>
-            <th>Amount</th>
-            <th>Time</th>
-            <th>Status</th>
-            <th>Remarks</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="donorTable"></tbody>
-      </table>
-    </div>
-
+<h2>Donor Information</h2>
+<div class="form-grid">
+  <div>
+    <label>Surname</label>
+    <input type="text" id="surname" oninput="updateNamePreview()" autocomplete="off">
   </div>
+  <div>
+    <label>First Name</label>
+    <input type="text" id="firstName" oninput="updateNamePreview()" autocomplete="off">
+  </div>
+  <div>
+    <label>Middle Name</label>
+    <input type="text" id="middleName" oninput="updateNamePreview()" autocomplete="off">
+  </div>
+  <div>
+    <label>Birthday</label>
+    <input type="date" id="birthday">
+  </div>
+  <div>
+    <label>Blood Type</label>
+    <select id="bloodType">
+      <option value="">Select</option>
+      <option value="A">A</option>
+      <option value="B">B</option>
+      <option value="AB">AB</option>
+      <option value="O">O</option>
+    </select>
+  </div>
+  <div>
+    <label>Rh Factor</label>
+    <select id="rhFactor">
+      <option value="">Select</option>
+      <option value="+">Positive (+)</option>
+      <option value="-">Negative (-)</option>
+    </select>
+  </div>
+  <div>
+    <label>Contact</label>
+    <input type="text" id="contact" autocomplete="off">
+  </div>
+  <div>
+    <label>Award Status</label>
+    <select id="awardStatus">
+      <option value="NOT AWARDED">NOT AWARDED</option>
+      <option value="AWARDED">AWARDED</option>
+    </select>
+  </div>
+</div>
 
-  <script>
-    let donors = JSON.parse(localStorage.getItem("donors")) || [];
+<div class="form-grid" style="grid-template-columns:1fr 1fr;">
+  <div>
+    <label>Year Awarded</label>
+    <input type="number" id="yearAwarded" min="1900" max="2999" placeholder="Example: 2026">
+  </div>
+  <div>
+    <label>Remarks</label>
+    <textarea id="remarks" placeholder="Optional remarks"></textarea>
+  </div>
+</div>
 
-    document.getElementById("entryDate").valueAsDate = new Date();
+<div class="name-preview" id="namePreview">Name Preview: —</div>
 
-    function getFullSerial() {
-      const prefix = document.getElementById("serialPrefix").value.trim();
-      const number = document.getElementById("serialNumber").value.trim();
-      return prefix + number;
+<h2 style="margin-top:22px;">Serial Number and Donation Date</h2>
+<div class="serial-grid">
+  <div>
+    <label>Serial Number</label>
+    <input type="text" id="serialInput" placeholder="Enter serial number" autocomplete="off">
+  </div>
+  <div>
+    <label>Date</label>
+    <input type="date" id="dateInput">
+  </div>
+  <button class="add-btn" onclick="addSerialToList()">Add Serial</button>
+</div>
+
+<div class="note">Add as many serial numbers as needed. They will collate below first. Nothing is saved to Firebase until you press Save Donor Entry.</div>
+
+<h2 style="margin-top:22px;">Collated Serial Entries Before Saving</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Surname</th>
+<th>First Name</th>
+<th>Middle Name</th>
+<th>Birthday</th>
+<th>Serial Number</th>
+<th>Date</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody id="serialTable">
+<tr><td colspan="8">No serial entries yet.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="button-row">
+  <button class="save-btn" onclick="saveDonorEntry()">Save Donor Entry</button>
+  <button class="clear-btn" onclick="clearForm()">Clear Form</button>
+  <button class="track-btn" onclick="goToGallonersTracking()">Go to Galloners Tracking</button>
+</div>
+</div>
+
+<script>
+var firebaseConfig = {
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  projectId:"galloners-club"
+};
+
+if(!firebase.apps.length){ firebase.initializeApp(firebaseConfig); }
+var auth = firebase.auth();
+var db = firebase.firestore();
+
+let serialEntries = [];
+let editId = new URLSearchParams(window.location.search).get("editId");
+let existingDonorData = null;
+
+document.getElementById("dateInput").valueAsDate = new Date();
+
+function safeText(value){ return String(value || "").trim(); }
+function setStatus(message,type){
+  let el=document.getElementById("statusBar");
+  el.className="status-bar";
+  if(!message){el.style.display="none";el.innerHTML="";return;}
+  el.innerText=message;
+  if(type==="error") el.classList.add("status-error");
+  else if(type==="success") el.classList.add("status-success");
+  else el.classList.add("status-loading");
+}
+function escapeHtml(text){
+  return String(text || "")
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function formatDateToYMD(date){
+  let y=date.getFullYear();
+  let m=String(date.getMonth()+1).padStart(2,"0");
+  let d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+function normalizeDate(value){
+  if(!value) return "";
+  if(typeof value === "object" && value.seconds){ return formatDateToYMD(new Date(value.seconds*1000)); }
+  if(typeof value === "object" && typeof value.toDate === "function"){ return formatDateToYMD(value.toDate()); }
+  return safeText(value);
+}
+function getFullName(){
+  return `${safeText(document.getElementById("firstName").value)} ${safeText(document.getElementById("middleName").value)} ${safeText(document.getElementById("surname").value)}`.replace(/\s+/g," ").trim();
+}
+function updateNamePreview(){
+  document.getElementById("namePreview").innerText = "Name Preview: " + (getFullName() || "—");
+  renderSerialTable();
+}
+function getDonorInfo(){
+  return {
+    surname:safeText(document.getElementById("surname").value),
+    firstName:safeText(document.getElementById("firstName").value),
+    middleName:safeText(document.getElementById("middleName").value),
+    birthday:safeText(document.getElementById("birthday").value),
+    bloodType:safeText(document.getElementById("bloodType").value),
+    rhFactor:safeText(document.getElementById("rhFactor").value),
+    contact:safeText(document.getElementById("contact").value),
+    awardStatus:safeText(document.getElementById("awardStatus").value || "NOT AWARDED").toUpperCase(),
+    yearAwarded:safeText(document.getElementById("yearAwarded").value),
+    remarks:safeText(document.getElementById("remarks").value)
+  };
+}
+function validateDonorInfo(){
+  let d=getDonorInfo();
+  if(!d.surname || !d.firstName || !d.birthday){ alert("Please enter surname, first name, and birthday."); return false; }
+  return true;
+}
+function addSerialToList(){
+  if(!validateDonorInfo()) return;
+  let serial=safeText(document.getElementById("serialInput").value);
+  let date=safeText(document.getElementById("dateInput").value);
+  if(!serial || !date){ alert("Please enter serial number and date."); return; }
+  let duplicate=serialEntries.some(s => safeText(s.serial).toLowerCase()===serial.toLowerCase() && safeText(s.date)===date);
+  if(duplicate){ alert("This serial/date is already added."); return; }
+  serialEntries.push({ serial:serial, date:date });
+  document.getElementById("serialInput").value="";
+  document.getElementById("dateInput").valueAsDate=new Date();
+  renderSerialTable();
+}
+function deleteSerial(index){
+  serialEntries.splice(index,1);
+  renderSerialTable();
+}
+function renderSerialTable(){
+  let tbody=document.getElementById("serialTable");
+  let d=getDonorInfo();
+  if(serialEntries.length===0){
+    tbody.innerHTML='<tr><td colspan="8">No serial entries yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML="";
+  serialEntries.forEach((s,index)=>{
+    tbody.innerHTML += `
+      <tr>
+        <td>${index+1}</td>
+        <td>${escapeHtml(d.surname)}</td>
+        <td>${escapeHtml(d.firstName)}</td>
+        <td>${escapeHtml(d.middleName)}</td>
+        <td>${escapeHtml(d.birthday)}</td>
+        <td><b>${escapeHtml(s.serial)}</b></td>
+        <td>${escapeHtml(s.date)}</td>
+        <td><button class="delete-btn" onclick="deleteSerial(${index})">Delete</button></td>
+      </tr>`;
+  });
+}
+function mergeSerials(oldSerials,newSerials){
+  let map={};
+  function put(s){
+    let serial=safeText(s.serial || s.serialNumber || s.unitSerial || "");
+    let date=normalizeDate(s.date || s.entryDate || s.donationDate || "");
+    if(!serial && !date) return;
+    map[[serial,date].join("|")]={serial:serial,date:date};
+  }
+  (Array.isArray(oldSerials)?oldSerials:[]).forEach(put);
+  (Array.isArray(newSerials)?newSerials:[]).forEach(put);
+  return Object.values(map);
+}
+async function saveDonorEntry(){
+  if(!auth.currentUser){ alert("You are not logged in."); window.location.href="index.html"; return; }
+  if(!validateDonorInfo()) return;
+  if(serialEntries.length===0){ alert("Please add at least one serial entry before saving."); return; }
+  let d=getDonorInfo();
+  if(d.awardStatus === "NOT AWARDED") d.yearAwarded = "";
+  let payload={
+    surname:d.surname,
+    firstName:d.firstName,
+    middleName:d.middleName,
+    birthday:d.birthday,
+    bloodType:d.bloodType,
+    rhFactor:d.rhFactor,
+    contact:d.contact,
+    remarks:d.remarks,
+    awardStatus:d.awardStatus || "NOT AWARDED",
+    yearAwarded:d.yearAwarded || "",
+    serials: mergeSerials(existingDonorData ? existingDonorData.serials : [], serialEntries),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    setStatus("Saving donor entry...","loading");
+    if(editId){
+      await db.collection("donors").doc(editId).set(payload,{merge:true});
+      setStatus("Donor entry updated successfully.","success");
+    }else{
+      payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      let docRef = await db.collection("donors").add(payload);
+      editId = docRef.id;
+      existingDonorData = payload;
+      document.getElementById("modePill").innerText = "Edit Donor Entry";
+      setStatus("Donor entry saved successfully.","success");
     }
-
-    function saveDonor() {
-      const donorName = document.getElementById("donorName").value.trim();
-      const bloodType = document.getElementById("bloodType").value;
-      const serialNumber = document.getElementById("serialNumber").value.trim();
-
-      if (!serialNumber || !donorName || !bloodType) {
-        alert("Please fill in Serial Number, Donor Name, and Blood Type.");
-        return;
-      }
-
-      const donor = {
-        id: Date.now(),
-        serial: getFullSerial(),
-        date: document.getElementById("entryDate").value,
-        donorType: document.getElementById("donorType").value,
-        name: donorName,
-        bloodType: bloodType,
-        amount: document.getElementById("amount").value,
-        timeStarted: document.getElementById("timeStarted").value,
-        timeEnded: document.getElementById("timeEnded").value,
-        donationCount: document.getElementById("donationCount").value,
-        status: document.getElementById("status").value,
-        encodedBy: document.getElementById("encodedBy").value.trim(),
-        remarks: document.getElementById("remarks").value.trim(),
-        createdAt: new Date().toISOString()
-      };
-
-      donors.push(donor);
-      localStorage.setItem("donors", JSON.stringify(donors));
-
-      alert("Donor entry saved successfully.");
-      clearForm();
-      renderTable();
-    }
-
-    function lookupDonor() {
-      const name = document.getElementById("donorName").value.trim().toLowerCase();
-      const result = document.getElementById("lookupResult");
-
-      if (!name) {
-        result.textContent = "";
-        return;
-      }
-
-      const existing = donors.filter(d =>
-        d.name.toLowerCase().includes(name)
-      );
-
-      if (existing.length > 0) {
-        const latest = existing[existing.length - 1];
-        result.textContent =
-          "Repeat donor found. Last blood type: " +
-          latest.bloodType +
-          " | Total previous records: " +
-          existing.length;
-
-        document.getElementById("bloodType").value = latest.bloodType;
-        document.getElementById("donationCount").value = existing.length + 1;
-      } else {
-        result.textContent = "New donor.";
-        document.getElementById("donationCount").value = 1;
-      }
-    }
-
-    function bloodClass(type) {
-      return type
-        .replace("+", "pos")
-        .replace("-", "neg")
-        .replace("AB", "AB")
-        .replace("O", "O")
-        .replace("A", "A")
-        .replace("B", "B");
-    }
-
-    function renderTable() {
-      const tbody = document.getElementById("donorTable");
-      const search = document.getElementById("searchInput").value.toLowerCase();
-
-      tbody.innerHTML = "";
-
-      const filtered = donors.filter(d =>
-        d.serial.toLowerCase().includes(search) ||
-        d.name.toLowerCase().includes(search) ||
-        d.bloodType.toLowerCase().includes(search) ||
-        d.donorType.toLowerCase().includes(search)
-      );
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="11" style="text-align:center;">No records found</td>
-          </tr>
-        `;
-        return;
-      }
-
-      filtered.forEach(donor => {
-        const row = document.createElement("tr");
-
-        row.innerHTML = `
-          <td>${donor.serial}</td>
-          <td>${donor.date}</td>
-          <td>${donor.name}</td>
-          <td>
-            <span class="blood ${bloodClass(donor.bloodType)}">
-              ${donor.bloodType}
-            </span>
-          </td>
-          <td>${donor.donorType}</td>
-          <td>${donor.donationCount}</td>
-          <td>${donor.amount}</td>
-          <td>${donor.timeStarted} - ${donor.timeEnded}</td>
-          <td>${donor.status}</td>
-          <td>${donor.remarks}</td>
-          <td>
-            <button class="btn-danger" onclick="deleteDonor(${donor.id})">
-              Delete
-            </button>
-          </td>
-        `;
-
-        tbody.appendChild(row);
-      });
-    }
-
-    function deleteDonor(id) {
-      if (!confirm("Delete this donor record?")) return;
-
-      donors = donors.filter(d => d.id !== id);
-      localStorage.setItem("donors", JSON.stringify(donors));
-      renderTable();
-    }
-
-    function addSerial() {
-      const serialInput = document.getElementById("serialNumber");
-      let current = serialInput.value.trim();
-
-      if (!current) {
-        serialInput.value = "0001";
-        return;
-      }
-
-      let number = parseInt(current, 10);
-
-      if (isNaN(number)) {
-        alert("Serial number must be numeric.");
-        return;
-      }
-
-      number++;
-
-      serialInput.value = String(number).padStart(current.length, "0");
-    }
-
-    function clearForm() {
-      document.getElementById("serialNumber").value = "";
-      document.getElementById("entryDate").valueAsDate = new Date();
-      document.getElementById("donorType").value = "Walk-in";
-      document.getElementById("donorName").value = "";
-      document.getElementById("bloodType").value = "";
-      document.getElementById("amount").value = "";
-      document.getElementById("timeStarted").value = "";
-      document.getElementById("timeEnded").value = "";
-      document.getElementById("donationCount").value = 1;
-      document.getElementById("status").value = "Successful";
-      document.getElementById("encodedBy").value = "";
-      document.getElementById("remarks").value = "";
-      document.getElementById("lookupResult").textContent = "";
-    }
-
-    function clearAllRecords() {
-      if (!confirm("This will delete all donor records. Continue?")) return;
-
-      donors = [];
-      localStorage.removeItem("donors");
-      renderTable();
-    }
-
-    renderTable();
-  </script>
+    serialEntries=[];
+    await loadEditRecordIfAny();
+    renderSerialTable();
+  }catch(error){
+    console.error(error);
+    setStatus("Error saving donor entry: " + error.message,"error");
+    alert("Error saving donor entry.");
+  }
+}
+function clearForm(){
+  if(!confirm("Clear the form and unsaved serial entries?")) return;
+  serialEntries=[];
+  existingDonorData=null;
+  editId=null;
+  window.history.replaceState({}, document.title, "donor-entry.html");
+  ["surname","firstName","middleName","birthday","bloodType","rhFactor","contact","yearAwarded","remarks","serialInput"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("awardStatus").value="NOT AWARDED";
+  document.getElementById("dateInput").valueAsDate=new Date();
+  document.getElementById("modePill").innerText="New Donor Entry";
+  updateNamePreview();
+  setStatus("","loading");
+}
+function goToGallonersTracking(){
+  window.location.href = "galloners-tracking.html";
+}
+async function loadEditRecordIfAny(){
+  if(!editId) return;
+  setStatus("Loading donor record for editing...","loading");
+  let doc=await db.collection("donors").doc(editId).get();
+  if(!doc.exists){ setStatus("Donor record not found.","error"); return; }
+  let data=doc.data() || {};
+  existingDonorData=data;
+  document.getElementById("modePill").innerText="Edit Donor Entry";
+  document.getElementById("surname").value=safeText(data.surname || data.lastName || data.lastname || "");
+  document.getElementById("firstName").value=safeText(data.firstName || data.firstname || data.givenName || "");
+  document.getElementById("middleName").value=safeText(data.middleName || data.middlename || data.middle || "");
+  document.getElementById("birthday").value=normalizeDate(data.birthday || data.birthDate || data.dateOfBirth || data.dob || "");
+  document.getElementById("bloodType").value=safeText(data.bloodType || data.blood || "");
+  document.getElementById("rhFactor").value=safeText(data.rhFactor || data.rh || "");
+  document.getElementById("contact").value=safeText(data.contact || data.contactNumber || data.mobile || "");
+  document.getElementById("remarks").value=safeText(data.remarks || "");
+  document.getElementById("awardStatus").value=safeText(data.awardStatus || "NOT AWARDED").toUpperCase();
+  document.getElementById("yearAwarded").value=safeText(data.yearAwarded || "");
+  serialEntries = Array.isArray(data.serials) ? data.serials.map(s=>({
+    serial:safeText(s.serial || s.serialNumber || ""),
+    date:normalizeDate(s.date || s.entryDate || s.donationDate || "")
+  })).filter(s=>s.serial || s.date) : [];
+  updateNamePreview();
+  renderSerialTable();
+  setStatus("Loaded donor record.","success");
+}
+auth.onAuthStateChanged(function(user){
+  if(!user){ window.location.href="index.html"; return; }
+  loadEditRecordIfAny();
+});
+</script>
 </body>
 </html>
