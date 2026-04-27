@@ -1227,49 +1227,57 @@ function renderHeaderFilterSelect(filterKey, options, selectedValue, placeholder
         </div>`;
 }
 
-// Multi-select header filter — Excel-style checklist popup
-function renderMultiSelectFilter(filterKey, placeholderLabel) {
+// Multi-select header filter — Excel-style checklist popup.
+// `year` and `month` identify which year+month group this filter button belongs to,
+// so the popup can scope its options to ONLY that group's records.
+function renderMultiSelectFilter(filterKey, placeholderLabel, year, month) {
     const arr = Array.isArray(headerFilters[filterKey]) ? headerFilters[filterKey] : [];
     const isActive = arr.length > 0;
     const countBadge = isActive ? `<span class="filter-count">${arr.length}</span>` : "";
+    const yearAttr  = year !== undefined ? year : "";
+    const monthAttr = month !== undefined ? month : "";
     return `
         <div class="header-filter-wrap">
             <button type="button"
                     class="multi-filter-btn ${isActive ? "active" : ""}"
-                    onclick="openMultiFilterPopup(event, '${filterKey}', '${escapeHtml(placeholderLabel)}')"
+                    onclick="openMultiFilterPopup(event, '${filterKey}', '${escapeHtml(placeholderLabel)}', '${yearAttr}', '${monthAttr}')"
                     title="${isActive ? `${arr.length} selected — click to change` : "Click to filter"}">
                 ${escapeHtml(placeholderLabel)} ▾ ${countBadge}
             </button>
         </div>`;
 }
 
-// Build the list of available options for each multi-filter, restricted to the
-// CURRENTLY VISIBLE month (so April only shows April dates, only April MBDs etc.)
-function getMultiFilterOptions(filterKey, baseDonors) {
+// Build the list of options for a multi-filter, scoped STRICTLY to the
+// year+month group whose header button was clicked.
+//
+// year:  string e.g. "2026" (or "" / undefined → use all years, fallback)
+// month: number e.g. 4 for April (or "" / undefined → use all months, fallback)
+//
+// This is the key fix: each filter button knows the EXACT year+month of the
+// table it sits in, so April's MBD filter will never show February's MBDs.
+function getMultiFilterOptions(filterKey, baseDonors, year, month) {
     const set = new Set();
 
-    // What month is currently selected in the Month Filter dropdown?
-    const selectedMonth = document.getElementById("groupMonthFilter").value; // "" or "YYYY-MM"
+    // Strictly scope to the group's records. Every record has a year+month derived
+    // from its _resolvedEntryDate. We compare numeric month and string year.
+    const wantYear  = (year  !== undefined && year  !== "") ? String(year)            : "";
+    const wantMonth = (month !== undefined && month !== "") ? parseInt(month, 10)     : 0;
 
-    // For records to be a valid candidate for the popup, the record must
-    // belong to the currently selected month (if one is chosen).
-    // When "All Months" is selected, we use everything.
-    const monthFiltered = baseDonors.filter(r => {
-        if (!selectedMonth) return true;
-        return getYearMonth(r._resolvedEntryDate).monthKey === selectedMonth;
+    const scoped = baseDonors.filter(r => {
+        const ym = getYearMonth(r._resolvedEntryDate);
+        if (wantYear  && String(ym.year) !== wantYear)  return false;
+        if (wantMonth && ym.month !== wantMonth)        return false;
+        return true;
     });
 
     if (filterKey === "entryDate") {
-        monthFiltered.forEach(r => {
-            if (!r._resolvedEntryDate) return;
-            // Belt-and-suspenders: also verify the date string itself starts with selectedMonth
-            if (selectedMonth && !r._resolvedEntryDate.startsWith(selectedMonth + "-")) return;
-            set.add(r._resolvedEntryDate);
+        scoped.forEach(r => {
+            if (r._resolvedEntryDate) set.add(r._resolvedEntryDate);
         });
-        return [...set].sort((a,b) => b.localeCompare(a));
+        return [...set].sort((a,b) => a.localeCompare(b));   // chronological for date pickers
     }
     if (filterKey === "mbd") {
-        monthFiltered.forEach(r => {
+        scoped.forEach(r => {
             if (isDonorType(r, "MBD") && String(r.mbdDetails || "").trim()) {
                 // Group by BASE name — e.g. "1-LOYALTY", "5 LOYALTY", "LOYALTY-12" all collapse to "LOYALTY"
                 set.add(stripGroupingNumbers(r.mbdDetails));
@@ -1278,7 +1286,7 @@ function getMultiFilterOptions(filterKey, baseDonors) {
         return [...set].sort();
     }
     if (filterKey === "patientDirected") {
-        monthFiltered.forEach(r => {
+        scoped.forEach(r => {
             if (isDonorType(r, "PATIENT DIRECTED") && String(r.patientDirectedDetails || "").trim()) {
                 set.add(stripGroupingNumbers(r.patientDirectedDetails));
             }
@@ -1322,16 +1330,16 @@ function handleOutsideMultiFilterClick(e) {
     }
 }
 
-window.openMultiFilterPopup = function(event, filterKey, placeholderLabel) {
+window.openMultiFilterPopup = function(event, filterKey, placeholderLabel, year, month) {
     event.stopPropagation();
     closeMultiFilterPopup();
 
-    // Build "base donors" — what the filter should be choosing from.
-    // For multi-filters we use records that match search + month filter,
-    // so e.g. April shows only April dates / MBDs / patient-directed names.
+    // Scope STRICTLY to the year+month of the filter button that was clicked.
+    // We do NOT use the global Month Filter dropdown here — the button itself
+    // tells us which group's records to look at.
     const keyword    = document.getElementById("searchInput").value.trim();
-    const baseDonors = allDonors.filter(r => matchesUnifiedSearch(r, keyword) && matchesMonthFilter(r));
-    const options    = getMultiFilterOptions(filterKey, baseDonors);
+    const baseDonors = allDonors.filter(r => matchesUnifiedSearch(r, keyword));
+    const options    = getMultiFilterOptions(filterKey, baseDonors, year, month);
     const selected   = new Set((headerFilters[filterKey] || []).map(v => String(v)));
 
     const popup = document.createElement("div");
@@ -1500,10 +1508,10 @@ function renderTracking() {
                             <table>
                                 <thead>
                                     <tr>
-                                        <th class="col-entrydate">${renderMultiSelectFilter("entryDate", "Entry Date")}</th>
-                                        <th class="col-mbd">${renderMultiSelectFilter("mbd", "MBD")}</th>
+                                        <th class="col-entrydate">${renderMultiSelectFilter("entryDate", "Entry Date", year, month)}</th>
+                                        <th class="col-mbd">${renderMultiSelectFilter("mbd", "MBD", year, month)}</th>
                                         <th class="col-walkin">${renderHeaderFilterSelect("walkIn", ["WALK-IN"], headerFilters.walkIn, "Walk-in")}</th>
-                                        <th class="col-patient">${renderMultiSelectFilter("patientDirected", "Patient-Directed")}</th>
+                                        <th class="col-patient">${renderMultiSelectFilter("patientDirected", "Patient-Directed", year, month)}</th>
                                         <th class="col-normal">Surname</th>
                                         <th class="col-normal">Given Name</th>
                                         <th class="col-normal">Middle Name</th>
