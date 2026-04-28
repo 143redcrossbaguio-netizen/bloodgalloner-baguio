@@ -626,15 +626,19 @@ return safeText(value)
 .replace(/[^a-z0-9 ]/g,"");
 }
 
+// FIX: Normalize birthday/dates — always returns a clean YYYY-MM-DD string
+// Preserves existing plain string dates without mangling them
 function normalizeBirthday(value){
 if(!value) return "";
 
-if(typeof value === "object" && value.seconds){
+// Firestore Timestamp object with .seconds
+if(typeof value === "object" && value !== null && value.seconds !== undefined){
 let date = new Date(value.seconds * 1000);
 return formatDateToYMD(date);
 }
 
-if(typeof value === "object" && typeof value.toDate === "function"){
+// Firestore Timestamp object with .toDate()
+if(typeof value === "object" && value !== null && typeof value.toDate === "function"){
 let date = value.toDate();
 return formatDateToYMD(date);
 }
@@ -642,11 +646,18 @@ return formatDateToYMD(date);
 let text = safeText(value);
 if(!text) return "";
 
+// Already looks like YYYY-MM-DD — return as-is without re-parsing
+if(/^\d{4}-\d{2}-\d{2}$/.test(text)){
+return text;
+}
+
+// Try parsing other date string formats
 let parsed = new Date(text);
 if(!isNaN(parsed.getTime())){
 return formatDateToYMD(parsed);
 }
 
+// Fallback: normalize separators to dashes and lowercase
 return text.replace(/\//g,"-").replace(/\./g,"-").toLowerCase();
 }
 
@@ -692,6 +703,8 @@ function getPossibleBirthday(data){
 return data.birthday || data.birthDate || data.dateOfBirth || data.dob || data.birth || "";
 }
 
+// FIX: getPossibleDonationDate — preserve raw string value first before normalizing
+// Only run normalizeBirthday on Timestamp objects, not on plain strings that are already valid
 function getPossibleDonationDate(data){
 let fields = [
 data.date,
@@ -705,9 +718,20 @@ data.importDate,
 data.dateTested
 ];
 
-for(let i=0;i<fields.length;i++){
-let normalized = normalizeBirthday(fields[i]);
+for(let i = 0; i < fields.length; i++){
+let val = fields[i];
+if(!val && val !== 0) continue;
+
+// If it's a Firestore Timestamp, convert it
+if(typeof val === "object" && val !== null && (val.seconds !== undefined || typeof val.toDate === "function")){
+let normalized = normalizeBirthday(val);
 if(normalized) return normalized;
+continue;
+}
+
+// Plain string — use as-is if non-empty
+let text = safeText(val);
+if(text) return text;
 }
 
 return "";
@@ -1048,6 +1072,8 @@ if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.name
 return aggregateToResult(null, "No Match");
 }
 
+// FIX: mergeSerialRowsFromDonors — preserve original date strings from serials array
+// Do not run normalizeBirthday on plain string dates here, only on Timestamp objects
 function mergeSerialRowsFromDonors(serials){
 let rows = [];
 
@@ -1055,7 +1081,17 @@ if(Array.isArray(serials)){
 for(let i=0;i<serials.length;i++){
 let s = serials[i] || {};
 let serial = safeText(s.serial || s.serialNumber || s.unitSerial || "");
-let date = safeText(normalizeBirthday(s.date || s.entryDate || s.donationDate || "") || safeText(s.date || s.entryDate || s.donationDate || ""));
+
+// Preserve raw date string; only convert Timestamp objects
+let rawDate = s.date || s.entryDate || s.donationDate || "";
+let date = "";
+if(rawDate && typeof rawDate === "object" && rawDate !== null &&
+(rawDate.seconds !== undefined || typeof rawDate.toDate === "function")){
+date = normalizeBirthday(rawDate);
+} else {
+date = safeText(rawDate);
+}
+
 if(serial || date){
 rows.push({
 docId: "",
@@ -1071,6 +1107,8 @@ count: 0
 return rows;
 }
 
+// FIX: buildSerialsArrayFromDetailRows — preserve dates exactly as stored in detailRows
+// Do not re-normalize; dates are already correct strings at this point
 function buildSerialsArrayFromDetailRows(detailRows){
 let serials = [];
 let seen = {};
@@ -1688,7 +1726,9 @@ if(donor.id){
 return donor.id;
 }
 
+// FIX: Use buildSerialsArrayFromDetailRows to preserve dates correctly
 let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
+
 let docRef = await db.collection("donors").add({
 firstName: donor.firstName || "",
 middleName: donor.middleName || "",
@@ -1730,7 +1770,8 @@ let yearEl = document.getElementById("yearAwarded"+index);
 if(!statusEl || !yearEl) return;
 
 let awardStatus = safeText(statusEl.value || "NOT AWARDED").toUpperCase();
-let yearAwarded = safeText(yearEl.value || "");
+// FIX: Trim and sanitize yearAwarded — store as plain string, not a number that could become NaN
+let yearAwarded = safeText(yearEl.value || "").replace(/[^0-9]/g, "");
 
 if(awardStatus === "NOT AWARDED"){
 yearAwarded = "";
@@ -1795,6 +1836,9 @@ let mainIndex = donorsData.findIndex(x => x.id === donor.id);
 if(mainIndex > -1){
 donorsData[mainIndex].remarks = remarksValue;
 }
+// FIX: also update filteredDonorsData so local state is in sync before re-render
+filteredDonorsData[index].remarks = remarksValue;
+
 applyFiltersAndRender();
 
 let reopenedIndex = filteredDonorsData.findIndex(x => x.id === donor.id);
@@ -1823,6 +1867,7 @@ return;
 }
 
 try{
+// FIX: buildSerialsArrayFromDetailRows now preserves dates correctly
 let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
 
 if(donor.id){
@@ -1831,25 +1876,34 @@ let existingDoc = await donorRef.get();
 let existingData = existingDoc.exists ? (existingDoc.data() || {}) : {};
 let existingSerials = Array.isArray(existingData.serials) ? existingData.serials : [];
 
+// FIX: normalize merge keys using safeText only (not normalizeBirthday)
+// so that plain string dates like "2023-01-15" aren't transformed differently
+// than the same string coming from detailRows
 let merged = {};
 for(let i=0;i<existingSerials.length;i++){
 let s = existingSerials[i] || {};
-let key = [safeText(s.serial), safeText(s.date)].join("|");
+let serial = safeText(s.serial || s.serialNumber || "");
+// Preserve the date exactly as stored in Firestore — convert Timestamps only
+let rawDate = s.date || s.entryDate || s.donationDate || "";
+let date = "";
+if(rawDate && typeof rawDate === "object" && rawDate !== null &&
+(rawDate.seconds !== undefined || typeof rawDate.toDate === "function")){
+date = normalizeBirthday(rawDate);
+} else {
+date = safeText(rawDate);
+}
+let key = [serial, date].join("|");
 if(key !== "|"){
-merged[key] = {
-serial: safeText(s.serial),
-date: safeText(s.date)
-};
+merged[key] = { serial: serial, date: date };
 }
 }
 for(let i=0;i<serialsToSync.length;i++){
 let s = serialsToSync[i] || {};
-let key = [safeText(s.serial), safeText(s.date)].join("|");
+let serial = safeText(s.serial);
+let date = safeText(s.date);
+let key = [serial, date].join("|");
 if(key !== "|"){
-merged[key] = {
-serial: safeText(s.serial),
-date: safeText(s.date)
-};
+merged[key] = { serial: serial, date: date };
 }
 }
 
