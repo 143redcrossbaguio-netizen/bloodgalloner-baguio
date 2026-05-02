@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donor Database Metadata Repair</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,sans-serif;background:#eef2f6;color:#1f2937}
+    header{background:linear-gradient(90deg,#7f0000,#b30000);color:white;padding:18px 22px;box-shadow:0 3px 12px rgba(0,0,0,.18)}
+    header h1{margin:0;font-size:22px;line-height:1.2}
+    header p{margin:5px 0 0;font-size:13px;opacity:.95}
+    .page{max-width:1150px;margin:18px auto;padding:0 14px 30px}
+    .card{background:white;border:1px solid #dbe3ec;border-radius:14px;box-shadow:0 6px 18px rgba(15,23,42,.08);padding:16px;margin-bottom:14px}
+    .warning{background:#fff7ed;border-color:#fed7aa;color:#9a3412;font-weight:bold;line-height:1.5}
+    .okbox{background:#ecfdf5;border-color:#bbf7d0;color:#166534;font-weight:bold;line-height:1.5}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .metric{border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#f8fafc}
+    .metric .label{font-size:12px;font-weight:bold;color:#64748b;margin-bottom:6px}
+    .metric .value{font-size:26px;font-weight:800;color:#8b0000}
+    .btnrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{border:none;border-radius:10px;padding:11px 15px;font-weight:bold;cursor:pointer}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .red{background:#b30000;color:white}.blue{background:#1565c0;color:white}.green{background:#15803d;color:white}.gray{background:#64748b;color:white}.orange{background:#ef6c00;color:white}
+    .status{display:none;padding:12px 14px;border-radius:12px;margin:12px 0;font-weight:bold;border:1px solid #dbe3ec;background:white}
+    .status.show{display:block}.status.info{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}.status.success{background:#ecfdf5;color:#166534;border-color:#bbf7d0}.status.error{background:#fef2f2;color:#991b1b;border-color:#fecaca}.status.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+    .progress-wrap{height:16px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:10px}
+    .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,#b30000,#ef4444);transition:width .2s ease}
+    table{width:100%;border-collapse:collapse;min-width:900px;font-size:12px}
+    th,td{border:1px solid #d7dde7;padding:8px;text-align:left;vertical-align:top;white-space:nowrap}
+    th{background:#f1f5f9;color:#334155;position:sticky;top:0;z-index:2}
+    .tablewrap{overflow:auto;max-height:430px;border:1px solid #dbe3ec;border-radius:12px}
+    .small{font-size:12px;color:#64748b;line-height:1.5}
+    .modebox{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+    .modebox label{display:flex;gap:7px;align-items:center;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-weight:bold;font-size:13px;cursor:pointer}
+    code{background:#f1f5f9;border:1px solid #e5e7eb;padding:2px 5px;border-radius:5px}
+    @media(max-width:850px){.grid{grid-template-columns:1fr 1fr}.btnrow button{flex:1 1 100%}}
+    @media(max-width:520px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Donor Database Metadata Repair</h1>
+  <p>One-time tool to add missing year/month helper fields for faster Tracking and Statistics loading.</p>
+</header>
+
+<div class="page">
+  <div class="card warning">
+    IMPORTANT: Download a backup first before running repair. This tool does not delete donor records and does not change names, serial numbers, blood types, or donation details. It only adds or fixes helper fields: <code>collectionYear</code>, <code>collectionMonth</code>, <code>collectionMonthName</code>, and <code>collectionMonthKey</code>.
+  </div>
+
+  <div class="card">
+    <div class="btnrow">
+      <button class="blue" id="scanBtn">1. Scan Records</button>
+      <button class="green" id="repairMissingBtn" disabled>2. Repair Missing Fields Only</button>
+      <button class="orange" id="repairMismatchBtn" disabled>Repair Missing + Wrong Fields</button>
+      <button class="gray" id="clearBtn">Clear Results</button>
+    </div>
+    <div class="modebox">
+      <label><input type="checkbox" id="skipDeleted" checked> Skip deleted/retracted records</label>
+      <label><input type="checkbox" id="limitPreview" checked> Show first 300 preview rows only</label>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="small" style="margin-top:10px">
+      Use <b>Repair Missing Fields Only</b> first. Use <b>Repair Missing + Wrong Fields</b> only if the scan says some records have wrong month/year metadata.
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="metric"><div class="label">Total Scanned</div><div class="value" id="mTotal">0</div></div>
+    <div class="metric"><div class="label">Skipped Deleted</div><div class="value" id="mSkipped">0</div></div>
+    <div class="metric"><div class="label">Needs Missing Repair</div><div class="value" id="mMissing">0</div></div>
+    <div class="metric"><div class="label">Wrong Metadata</div><div class="value" id="mMismatch">0</div></div>
+  </div>
+
+  <div class="card okbox" id="resultBox" style="display:none"></div>
+
+  <div class="card">
+    <h3 style="margin-top:0;color:#8b0000">Preview of Records Needing Attention</h3>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Status</th><th>Resolved Date</th><th>Target Year</th><th>Target Month</th><th>Current Key</th><th>Target Key</th><th>Serial</th><th>Name</th><th>Source</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"><tr><td colspan="10">Click Scan Records.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MON = {jan:"01",january:"01",feb:"02",february:"02",mar:"03",march:"03",apr:"04",april:"04",may:"05",jun:"06",june:"06",jul:"07",july:"07",aug:"08",august:"08",sep:"09",sept:"09",september:"09",oct:"10",october:"10",nov:"11",november:"11",dec:"12",december:"12"};
+
+let scannedRows = [];
+let scanStats = {total:0, skipped:0, missing:0, mismatch:0};
+
+const $ = id => document.getElementById(id);
+function esc(v){return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+function setStatus(msg,type="info"){$("status").textContent=msg;$("status").className="status show "+type;}
+function setProgress(p){$("progressBar").style.width = Math.max(0,Math.min(100,p)) + "%";}
+function setMetric(id,v){$(id).textContent=Number(v||0).toLocaleString();}
+function isDeleted(r){return r?.isDeleted===true || (typeof r?.deletedBatchId==="string" && r.deletedBatchId.trim()!=="");}
+
+function parseTxt(text){
+  const s=String(text||"").trim().toLowerCase(); if(!s)return"";
+  let m;
+  if((m=s.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/))) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  if((m=s.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/))) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  if((m=s.match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/))){
+    const k=Object.keys(MON).find(k=>m[1].startsWith(k)); if(k)return `${m[2]}-${MON[k]}-01`;
+  }
+  if((m=s.match(/(\d{4})[\s\-_]*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)/))){
+    const k=Object.keys(MON).find(k=>m[2].startsWith(k)); if(k)return `${m[1]}-${MON[k]}-01`;
+  }
+  return"";
+}
+function parseDate(raw){
+  if(!raw)return null;
+  if(raw instanceof Date)return isNaN(raw)?null:raw;
+  if(typeof raw?.toDate==="function")return raw.toDate();
+  if(typeof raw==="object" && raw.seconds)return new Date(raw.seconds*1000);
+  if(typeof raw==="string"){
+    const t=raw.trim(); if(!t)return null;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t)){const[y,m,d]=t.split("-").map(Number);return new Date(y,m-1,d);}
+    if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(t)){const[m,d,yr]=t.split("/");let y=Number(yr);if(String(yr).length===2)y=y<50?2000+y:1900+y;return new Date(y,Number(m)-1,Number(d));}
+    const ft=parseTxt(t); if(ft){const[y,m,d]=ft.split("-").map(Number);return new Date(y,m-1,d);}
+    const fb=new Date(t); if(!isNaN(fb.getTime()))return fb;
+  }
+  return null;
+}
+function toISO(d){if(!d || isNaN(d.getTime()))return"";return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function directDate(r){return toISO(parseDate(r.entryDate)) || toISO(parseDate(r.donationDate)) || toISO(parseDate(r.date)) || toISO(parseDate(r.bleedingDate)) || "";}
+function sourceBase(r){return parseTxt(r?.importMeta?.sourceSheet||"") || parseTxt(r?.importMeta?.sourceFile||"") || parseTxt(r?.sourceSheet||"") || parseTxt(r?.sourceFile||"") || toISO(parseDate(r.createdAt)) || "";}
+function dayOnly(val,base){
+  const raw=String(val??"").trim(); if(!raw || !base || !/^\d{4}-\d{2}-\d{2}$/.test(base))return"";
+  const m=raw.match(/^(\d{1,2})$/); if(!m)return"";
+  const day=Number(m[1]); if(day<1 || day>31)return"";
+  const [y,mo]=base.split("-"); const iso=`${y}-${mo}-${String(day).padStart(2,"0")}`; const d=new Date(iso+"T00:00:00");
+  if(isNaN(d.getTime()) || d.getFullYear()!==Number(y) || d.getMonth()+1!==Number(mo) || d.getDate()!==day)return"";
+  return iso;
+}
+function applyCarryForward(records){
+  const groups={};
+  records.forEach(r=>{
+    const batch=String(r?.importMeta?.batchId || r?.batchId || "");
+    const sourceFile=String(r?.importMeta?.sourceFile || r?.sourceFile || "");
+    const sourceSheet=String(r?.importMeta?.sourceSheet || r?.sourceSheet || "");
+    const key=[batch,sourceFile,sourceSheet].join("|");
+    if(!groups[key])groups[key]=[];
+    groups[key].push(r);
+  });
+  Object.values(groups).forEach(items=>{
+    items.sort((a,b)=>Number(a?.importMeta?.sourceRowNumber || a?.sourceRowNumber || 0)-Number(b?.importMeta?.sourceRowNumber || b?.sourceRowNumber || 0));
+    let last="";
+    items.forEach(r=>{
+      const exp=directDate(r), base=sourceBase(r), raw=r.entryDate||r.donationDate||r.date||r.bleedingDate||"";
+      const dOnly=dayOnly(raw,last||base);
+      if(exp){r._repairResolvedDate=exp;last=exp;}
+      else if(dOnly){r._repairResolvedDate=dOnly;last=dOnly;}
+      else if(last){r._repairResolvedDate=last;}
+      else if(base){r._repairResolvedDate=base;last=base;}
+    });
+  });
+}
+function getResolvedDate(r){return r._repairResolvedDate || directDate(r) || sourceBase(r) || "";}
+function targetMeta(iso){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso))return null;
+  const [y,m]=iso.split("-").map(Number);
+  if(!y || !m || m<1 || m>12)return null;
+  return {collectionYear:y, collectionMonth:m, collectionMonthName:MONTHS[m-1], collectionMonthKey:`${y}-${String(m).padStart(2,"0")}`};
+}
+function currentKey(r){return String(r.collectionMonthKey || (r.collectionYear && r.collectionMonth ? `${r.collectionYear}-${String(r.collectionMonth).padStart(2,"0")}` : "") || "");}
+function needsMissing(r){return r.collectionYear == null || r.collectionMonth == null || !r.collectionMonthName || !r.collectionMonthKey;}
+function needsMismatch(r, meta){
+  if(!meta)return false;
+  return Number(r.collectionYear) !== meta.collectionYear || Number(r.collectionMonth) !== meta.collectionMonth || String(r.collectionMonthName||"") !== meta.collectionMonthName || String(r.collectionMonthKey||"") !== meta.collectionMonthKey;
+}
+function nameOf(r){return [r.surname,r.firstName,r.middleName].filter(Boolean).join(", ");}
+function sourceOf(r){return r?.importMeta?.sourceFile || r?.sourceFile || r?.importMeta?.sourceSheet || r?.sourceSheet || "Manual/Unknown";}
+
+function renderMetrics(){
+  setMetric("mTotal",scanStats.total); setMetric("mSkipped",scanStats.skipped); setMetric("mMissing",scanStats.missing); setMetric("mMismatch",scanStats.mismatch);
+}
+function renderPreview(){
+  const limit = $("limitPreview").checked ? 300 : scannedRows.length;
+  const rows = scannedRows.filter(x=>x.status!=="OK").slice(0,limit);
+  if(!rows.length){$("previewBody").innerHTML = `<tr><td colspan="10">No records need metadata repair.</td></tr>`;return;}
+  $("previewBody").innerHTML = rows.map((x,i)=>`<tr>
+    <td>${i+1}</td><td>${esc(x.status)}</td><td>${esc(x.iso)}</td><td>${esc(x.meta?.collectionYear||"")}</td><td>${esc(x.meta?.collectionMonthName||"")}</td><td>${esc(x.currentKey)}</td><td>${esc(x.meta?.collectionMonthKey||"")}</td><td>${esc(x.serial)}</td><td>${esc(x.name)}</td><td>${esc(x.source)}</td>
+  </tr>`).join("");
+}
+
+async function scanRecords(){
+  setProgress(0); setStatus("Checking login and scanning donorDatabase...","info"); $("resultBox").style.display="none";
+  const user = auth.currentUser;
+  if(!user){setStatus("You are not logged in. Open this tool from your dashboard after login.","error");return;}
+  const snap = await db.collection("donorDatabase").get();
+  const raw=[];
+  snap.forEach(doc=>raw.push({id:doc.id,...doc.data()}));
+  applyCarryForward(raw);
+  scannedRows=[]; scanStats={total:raw.length, skipped:0, missing:0, mismatch:0};
+  const skipDeleted=$("skipDeleted").checked;
+  raw.forEach((r,idx)=>{
+    if(skipDeleted && isDeleted(r)){scanStats.skipped++; return;}
+    const iso=getResolvedDate(r); const meta=targetMeta(iso); const missing=needsMissing(r); const mismatch=meta?needsMismatch(r,meta):false;
+    let status="OK";
+    if(!meta) status="NO DATE FOUND";
+    else if(missing) {status="MISSING"; scanStats.missing++;}
+    else if(mismatch) {status="WRONG"; scanStats.mismatch++;}
+    scannedRows.push({id:r.id, status, iso, meta, currentKey:currentKey(r), serial:r.serialNumber||"", name:nameOf(r), source:sourceOf(r), raw:r, missing, mismatch});
+  });
+  renderMetrics(); renderPreview(); setProgress(100);
+  $("repairMissingBtn").disabled = scanStats.missing < 1;
+  $("repairMismatchBtn").disabled = (scanStats.missing + scanStats.mismatch) < 1;
+  setStatus(`Scan complete. ${scanStats.missing} records have missing metadata. ${scanStats.mismatch} records have wrong metadata.`, scanStats.missing || scanStats.mismatch ? "warn" : "success");
+}
+
+async function repairRecords(includeMismatch){
+  const candidates = scannedRows.filter(x => x.meta && (x.missing || (includeMismatch && x.mismatch)));
+  if(!candidates.length){setStatus("No records to repair. Run Scan Records first.","warn");return;}
+  const confirmMsg = includeMismatch
+    ? `This will add/fix year/month metadata for ${candidates.length} records. It will not delete donor data. Continue?`
+    : `This will add missing year/month metadata for ${candidates.length} records. It will not delete donor data. Continue?`;
+  if(!confirm(confirmMsg))return;
+  setStatus("Repair running... Do not close this page.","info"); setProgress(0);
+  $("repairMissingBtn").disabled=true; $("repairMismatchBtn").disabled=true; $("scanBtn").disabled=true;
+  let done=0, failed=0;
+  const batchSize=400;
+  for(let i=0;i<candidates.length;i+=batchSize){
+    const batch = db.batch();
+    const chunk = candidates.slice(i,i+batchSize);
+    chunk.forEach(x=>{
+      const ref=db.collection("donorDatabase").doc(x.id);
+      batch.update(ref, {
+        collectionYear: x.meta.collectionYear,
+        collectionMonth: x.meta.collectionMonth,
+        collectionMonthName: x.meta.collectionMonthName,
+        collectionMonthKey: x.meta.collectionMonthKey,
+        metadataRepairedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        metadataRepairVersion: "2026-05-02-year-month-v1"
+      });
+    });
+    try{await batch.commit(); done += chunk.length;}
+    catch(e){console.error(e); failed += chunk.length;}
+    setProgress((done+failed)/candidates.length*100);
+    setStatus(`Repair progress: ${done} updated, ${failed} failed out of ${candidates.length}.`, failed?"warn":"info");
+    await new Promise(res=>setTimeout(res,120));
+  }
+  $("scanBtn").disabled=false;
+  setStatus(`Repair finished. Updated ${done} records. Failed ${failed}. Click Scan Records again to verify.`, failed?"warn":"success");
+  $("resultBox").style.display="block";
+  $("resultBox").innerHTML=`Repair completed.<br>Updated: <b>${done.toLocaleString()}</b><br>Failed: <b>${failed.toLocaleString()}</b><br><br>Next: click <b>Scan Records</b> again. If Missing and Wrong are both 0, your records are ready for the final fast Tracking query update.`;
+}
+
+function clearResults(){
+  scannedRows=[]; scanStats={total:0,skipped:0,missing:0,mismatch:0}; renderMetrics(); renderPreview(); setProgress(0);
+  $("status").className="status"; $("resultBox").style.display="none";
+  $("repairMissingBtn").disabled=true; $("repairMismatchBtn").disabled=true; $("scanBtn").disabled=false;
+}
+
+$("scanBtn").addEventListener("click",()=>scanRecords().catch(e=>{console.error(e);setStatus("Scan failed: "+e.message,"error");}));
+$("repairMissingBtn").addEventListener("click",()=>repairRecords(false).catch(e=>{console.error(e);setStatus("Repair failed: "+e.message,"error");$("scanBtn").disabled=false;}));
+$("repairMismatchBtn").addEventListener("click",()=>repairRecords(true).catch(e=>{console.error(e);setStatus("Repair failed: "+e.message,"error");$("scanBtn").disabled=false;}));
+$("clearBtn").addEventListener("click",clearResults);
+$("limitPreview").addEventListener("change",renderPreview);
+
+auth.onAuthStateChanged(user=>{
+  if(user) setStatus("Ready. Click Scan Records.","info");
+  else setStatus("Not logged in. Open this page after logging in through the dashboard.","error");
+});
+</script>
+</body>
+</html>
