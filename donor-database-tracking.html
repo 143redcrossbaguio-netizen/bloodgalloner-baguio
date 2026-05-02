@@ -641,7 +641,24 @@
             </table>
         </div>
     </div>
-
+        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
+        <div class="duplicate-note"  id="duplicateNote"></div>
+        <div class="duplicate-wrap">
+            <table class="duplicate-table">
+                <thead>
+                    <tr>
+                        <th>Duplicate Group</th><th>Entry Date</th><th>Serial Number</th>
+                        <th>Surname</th><th>First Name</th><th>Middle Name</th>
+                        <th>Birthday</th><th>Blood Type</th><th>Donor Type</th>
+                        <th>MBD / Patient Directed</th><th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="duplicateBody">
+                    <tr><td colspan="11">No duplicate data found.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <main class="content-panel">
         <div id="trackingContainer"></div>
@@ -695,6 +712,59 @@ const MONTHS = [
     "January","February","March","April","May","June",
     "July","August","September","October","November","December"
 ];
+
+// FAST LOAD MODE:
+// After the metadata repair, every donor record has collectionMonthKey.
+// This page now loads one month from Firebase by default instead of reading
+// the entire donorDatabase collection every time.
+let currentLoadedMonthKey = "";
+let isAllMonthsSlowMode = false;
+
+function getCurrentMonthKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+function getMonthMetaFromIso(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return { collectionYear:null, collectionMonth:null, collectionMonthName:"", collectionMonthKey:"" };
+    const [y,m] = iso.split("-");
+    const monthNum = Number(m);
+    return {
+        collectionYear: Number(y),
+        collectionMonth: monthNum,
+        collectionMonthName: MONTHS[monthNum-1] || "",
+        collectionMonthKey: `${y}-${String(monthNum).padStart(2,"0")}`
+    };
+}
+
+function populateStaticMonthDropdown(selectId, firstLabel, includeSlowAll = false) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const currentVal = sel.value;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const startYear = Math.max(2024, currentYear - 2);
+    const endYear = currentYear + 6;
+    let html = includeSlowAll ? `<option value="">${firstLabel}</option>` : `<option value="">${firstLabel}</option>`;
+    for (let y = endYear; y >= startYear; y--) {
+        for (let m = 12; m >= 1; m--) {
+            const key = `${y}-${String(m).padStart(2,"0")}`;
+            html += `<option value="${key}">${MONTHS[m-1]} ${y}</option>`;
+        }
+    }
+    sel.innerHTML = html;
+    if (currentVal) sel.value = currentVal;
+    if (!sel.value && selectId === "groupMonthFilter") sel.value = getCurrentMonthKey();
+}
+
+function initFastMonthSelectors() {
+    populateStaticMonthDropdown("groupMonthFilter", "All Months (SLOW)", true);
+    populateStaticMonthDropdown("printMonthSelect", "Select month", false);
+    const g = document.getElementById("groupMonthFilter");
+    const p = document.getElementById("printMonthSelect");
+    if (g && !g.value) g.value = getCurrentMonthKey();
+    if (p && !p.value) p.value = g ? g.value : getCurrentMonthKey();
+}
 
 // ─── STATUS ───────────────────────────────────────────────────────────────────
 function showMessage(message, type) {
@@ -1229,33 +1299,13 @@ function groupDonors(records) {
 
 // ─── POPULATE DROPDOWNS ───────────────────────────────────────────────────────
 function populatePrintMonthOptions(records) {
-    const monthMap  = {};
-    records.forEach(r => {
-        const { monthKey, monthName, year } = getYearMonth(r._resolvedEntryDate);
-        if (!monthMap[monthKey]) monthMap[monthKey] = `${monthName} ${year}`;
-    });
-    const sorted      = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
-    const currentVal  = document.getElementById("printMonthSelect").value;
-    document.getElementById("printMonthSelect").innerHTML =
-        `<option value="">Select month</option>` +
-        sorted.map(k => `<option value="${k}">${monthMap[k]}</option>`).join("");
-    if (sorted.includes(currentVal)) document.getElementById("printMonthSelect").value = currentVal;
+    // Fast mode uses a static month list so the page does not need to read all records just to build the dropdown.
+    populateStaticMonthDropdown("printMonthSelect", "Select month", false);
 }
 
 function populateGroupMonthOptions(records) {
-    const monthMap = {};
-    records.forEach(r => {
-        const dateToUse = getBestDateForRecord(r);
-        const { monthKey, monthName, year } = getYearMonth(dateToUse);
-        if (monthKey === "No Year-No Month") return;
-        if (!monthMap[monthKey]) monthMap[monthKey] = `${monthName} ${year}`;
-    });
-    const sorted     = Object.keys(monthMap).sort((a,b) => b.localeCompare(a));
-    const currentVal = document.getElementById("groupMonthFilter").value;
-    document.getElementById("groupMonthFilter").innerHTML =
-        `<option value="">All Months</option>` +
-        sorted.map(k => `<option value="${k}">${monthMap[k]}</option>`).join("");
-    if (sorted.includes(currentVal)) document.getElementById("groupMonthFilter").value = currentVal;
+    // Fast mode uses a static month list. Select a month to load only that month from Firebase.
+    populateStaticMonthDropdown("groupMonthFilter", "All Months (SLOW)", true);
 }
 
 // ─── HEADER FILTER HELPERS ───────────────────────────────────────────────────
@@ -1517,13 +1567,6 @@ function renderTracking() {
                 </div>
                 <div id="year-body-${yi}" class="group-body ${yearCollapsed ? "hidden" : ""}">`;
 
-        // SPEED FIX: if the year is collapsed, do NOT build all month tables in the DOM.
-        // This keeps the page fast even when the database already contains many years of records.
-        if (yearCollapsed) {
-            html += `</div></div>`;
-            return;
-        }
-
         sortedMonths.forEach((month, mi) => {
             const monthBlock   = monthsObj[month];
             const records      = monthBlock.records;
@@ -1541,17 +1584,8 @@ function renderTracking() {
                     <div class="month-header" onclick="toggleGroup('${monthKey}','month-body-${yi}-${mi}','month-icon-${yi}-${mi}')">
                         <span>${escapeHtml(monthBlock.monthName)} (${realCount})</span>
                         <span id="month-icon-${yi}-${mi}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
-                    </div>`;
-
-            // SPEED FIX: if the month is collapsed, render only the month header.
-            // The heavy table rows are created only after the user clicks the month.
-            if (monthCollapsed) {
-                html += `<div id="month-body-${yi}-${mi}" class="group-body hidden"></div></div>`;
-                return;
-            }
-
-            html += `
-                    <div id="month-body-${yi}-${mi}" class="group-body">
+                    </div>
+                    <div id="month-body-${yi}-${mi}" class="group-body ${monthCollapsed ? "hidden" : ""}">
                         <div class="month-tools">
                             <button class="small-btn gray-btn"   onclick="printOneMonth('${monthValue}')">Print This Month</button>
                             <button class="small-btn green-btn"  onclick="exportOneMonthCsv('${monthValue}')">Export This Month CSV</button>
@@ -1667,15 +1701,27 @@ async function loadDonors() {
             return;
         }
 
-        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading donor records... Please wait.</div>`;
+        initFastMonthSelectors();
+        const selectedMonth = document.getElementById("groupMonthFilter").value;
+        currentLoadedMonthKey = selectedMonth || "";
+        isAllMonthsSlowMode = !selectedMonth;
 
-        const snapshot = await db.collection("donorDatabase").get();
+        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${selectedMonth ? getMonthLabel(selectedMonth) : "all months (slow mode)"} records...</div>`;
+
+        let queryRef = db.collection("donorDatabase");
+        if (selectedMonth) {
+            queryRef = queryRef.where("collectionMonthKey", "==", selectedMonth);
+        }
+
+        const snapshot = await queryRef.get();
 
         allDonors = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
             .filter(r => r.isDeleted !== true)
+            .filter(r => !(typeof r.deletedBatchId === "string" && r.deletedBatchId.trim() !== ""))
             .map(r => attachResolvedFields(r));
 
+        // Carry-forward is still kept for compatibility, but month queries now use collectionMonthKey.
         applyImportedDateCarryForward(allDonors);
         allDonors.forEach(r => { r._resolvedEntryDate = getBestDateForRecord(r); });
 
@@ -1685,11 +1731,21 @@ async function loadDonors() {
         });
 
         populateGroupMonthOptions(allDonors);
+        populatePrintMonthOptions(allDonors);
+        const pm = document.getElementById("printMonthSelect");
+        if (pm && selectedMonth) pm.value = selectedMonth;
+
         renderTracking();
 
         const pms = document.getElementById("printMonthSelect").value;
-        if (pms) renderDuplicateMonthView(pms);
+        if (pms) hideDuplicateBox();
         else     hideDuplicateBox();
+
+        showMessage(selectedMonth
+            ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}. Select another month to load more.`
+            : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.`,
+            "success"
+        );
 
     } catch(e) {
         console.error(e);
@@ -1771,8 +1827,14 @@ window.saveEdit = async function(id) {
     if (walkInChecked)          donorTypes.push("WALK-IN");
     if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
 
+    const dateMeta = getMonthMetaFromIso(fields[0].value);
+
     const updatedData = {
         entryDate:              fields[0].value,
+        collectionYear:         dateMeta.collectionYear,
+        collectionMonth:        dateMeta.collectionMonth,
+        collectionMonthName:    dateMeta.collectionMonthName,
+        collectionMonthKey:     dateMeta.collectionMonthKey,
         mbdDetails:             toUpperTrim(mbdDetails),
         patientDirectedDetails: toUpperTrim(patientDirectedDetails),
         donorType:              donorTypes.join(", "),
@@ -2075,11 +2137,12 @@ window.exportOneMonthCsv = function(monthValue) {
 
 // ─── TOGGLE GROUPS ────────────────────────────────────────────────────────────
 window.toggleGroup = function(groupKey, bodyId, iconId) {
-    // SPEED FIX: do not simply unhide pre-rendered heavy tables.
-    // Change the collapsed state and rebuild only the part the user opened.
-    collapsedGroups[groupKey] = !isCollapsed(groupKey);
-    closeMultiFilterPopup();
-    renderTracking();
+    const body = document.getElementById(bodyId);
+    const icon = document.getElementById(iconId);
+    if (!body || !icon) return;
+    const willHide = !body.classList.contains("hidden");
+    if (willHide) { body.classList.add("hidden"); icon.textContent = "+"; collapsedGroups[groupKey] = true; }
+    else          { body.classList.remove("hidden"); icon.textContent = "−"; collapsedGroups[groupKey] = false; }
 };
 
 // Single-select header filter handler (sex/bloodType/etc.). Multi-selects use openMultiFilterPopup.
@@ -2437,13 +2500,13 @@ document.getElementById("reloadBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("searchInput").addEventListener("input", () => { hideDuplicateBox(); renderTracking(); });
-document.getElementById("groupMonthFilter").addEventListener("change", () => {
+document.getElementById("groupMonthFilter").addEventListener("change", async () => {
     hideDuplicateBox();
     // When the month changes, reset multi-filters that are scoped to a month
     headerFilters.entryDate = [];
     headerFilters.mbd = [];
     headerFilters.patientDirected = [];
-    renderTracking();
+    await loadDonors();
 });
 
 document.getElementById("printSelectedMonthBtn").addEventListener("click", () => {
@@ -2495,7 +2558,10 @@ document.addEventListener("input", e => {
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 auth.onAuthStateChanged(user => {
-    if (user) loadDonors();
+    if (user) {
+        initFastMonthSelectors();
+        loadDonors();
+    }
     else document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Please log in first.</div>`;
 });
 </script>
