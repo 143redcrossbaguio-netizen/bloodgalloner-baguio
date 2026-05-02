@@ -641,24 +641,7 @@
             </table>
         </div>
     </div>
-        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
-        <div class="duplicate-note"  id="duplicateNote"></div>
-        <div class="duplicate-wrap">
-            <table class="duplicate-table">
-                <thead>
-                    <tr>
-                        <th>Duplicate Group</th><th>Entry Date</th><th>Serial Number</th>
-                        <th>Surname</th><th>First Name</th><th>Middle Name</th>
-                        <th>Birthday</th><th>Blood Type</th><th>Donor Type</th>
-                        <th>MBD / Patient Directed</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="duplicateBody">
-                    <tr><td colspan="11">No duplicate data found.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+
 
     <main class="content-panel">
         <div id="trackingContainer"></div>
@@ -1534,6 +1517,13 @@ function renderTracking() {
                 </div>
                 <div id="year-body-${yi}" class="group-body ${yearCollapsed ? "hidden" : ""}">`;
 
+        // SPEED FIX: if the year is collapsed, do NOT build all month tables in the DOM.
+        // This keeps the page fast even when the database already contains many years of records.
+        if (yearCollapsed) {
+            html += `</div></div>`;
+            return;
+        }
+
         sortedMonths.forEach((month, mi) => {
             const monthBlock   = monthsObj[month];
             const records      = monthBlock.records;
@@ -1551,8 +1541,17 @@ function renderTracking() {
                     <div class="month-header" onclick="toggleGroup('${monthKey}','month-body-${yi}-${mi}','month-icon-${yi}-${mi}')">
                         <span>${escapeHtml(monthBlock.monthName)} (${realCount})</span>
                         <span id="month-icon-${yi}-${mi}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
-                    </div>
-                    <div id="month-body-${yi}-${mi}" class="group-body ${monthCollapsed ? "hidden" : ""}">
+                    </div>`;
+
+            // SPEED FIX: if the month is collapsed, render only the month header.
+            // The heavy table rows are created only after the user clicks the month.
+            if (monthCollapsed) {
+                html += `<div id="month-body-${yi}-${mi}" class="group-body hidden"></div></div>`;
+                return;
+            }
+
+            html += `
+                    <div id="month-body-${yi}-${mi}" class="group-body">
                         <div class="month-tools">
                             <button class="small-btn gray-btn"   onclick="printOneMonth('${monthValue}')">Print This Month</button>
                             <button class="small-btn green-btn"  onclick="exportOneMonthCsv('${monthValue}')">Export This Month CSV</button>
@@ -1667,6 +1666,8 @@ async function loadDonors() {
             document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Please log in first.</div>`;
             return;
         }
+
+        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading donor records... Please wait.</div>`;
 
         const snapshot = await db.collection("donorDatabase").get();
 
@@ -2074,12 +2075,11 @@ window.exportOneMonthCsv = function(monthValue) {
 
 // ─── TOGGLE GROUPS ────────────────────────────────────────────────────────────
 window.toggleGroup = function(groupKey, bodyId, iconId) {
-    const body = document.getElementById(bodyId);
-    const icon = document.getElementById(iconId);
-    if (!body || !icon) return;
-    const willHide = !body.classList.contains("hidden");
-    if (willHide) { body.classList.add("hidden"); icon.textContent = "+"; collapsedGroups[groupKey] = true; }
-    else          { body.classList.remove("hidden"); icon.textContent = "−"; collapsedGroups[groupKey] = false; }
+    // SPEED FIX: do not simply unhide pre-rendered heavy tables.
+    // Change the collapsed state and rebuild only the part the user opened.
+    collapsedGroups[groupKey] = !isCollapsed(groupKey);
+    closeMultiFilterPopup();
+    renderTracking();
 };
 
 // Single-select header filter handler (sex/bloodType/etc.). Multi-selects use openMultiFilterPopup.
