@@ -144,33 +144,27 @@
 }
 
         .city-suggest-wrap{position:relative}
-        .city-suggest-box{
+        .city-inline-wrap{position:relative;width:100%}
+        .city-inline-hint{
             position:absolute;
-            left:0; right:0; top:100%;
-            margin-top:4px;
-            background:#fff;
-            border:1px solid #cbd5e1;
-            border-radius:10px;
-            box-shadow:0 10px 24px rgba(15,23,42,0.18);
-            z-index:3000;
-            max-height:240px;
-            overflow:auto;
-            padding:4px;
-        }
-        .city-suggest-item{
-            display:flex;
-            justify-content:space-between;
-            gap:10px;
-            padding:9px 10px;
+            inset:0;
+            padding:8px 10px;
+            border:1px solid transparent;
             border-radius:8px;
-            cursor:pointer;
             font-size:13px;
-            font-weight:bold;
-            color:#1f2937;
+            line-height:normal;
+            color:#9ca3af;
+            background:#fff;
+            pointer-events:none;
+            white-space:pre;
+            overflow:hidden;
+            z-index:0;
         }
-        .city-suggest-item:hover,.city-suggest-item.active{background:#eff6ff;color:#0f52ba}
-        .city-suggest-count{font-size:11px;font-weight:bold;color:#64748b;white-space:nowrap}
-        .city-suggest-item.active .city-suggest-count{color:#0f52ba}
+        .city-inline-hint .typed-part{visibility:hidden}
+        .city-inline-hint .completion-part{color:#9ca3af}
+        #cityProvince{position:relative;z-index:1;background:transparent!important}
+        #cityProvince::placeholder{color:#9ca3af}
+        .city-inline-note{font-size:11px;color:#64748b;margin-top:4px}
 
     </style>
 </head>
@@ -289,7 +283,7 @@
                     <div class="field-group span-3"><label for="sex">10. Sex</label>
                         <select id="sex" required><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
                     <div class="field-group span-8"><label for="address">11. Address</label><input type="text" id="address" required></div>
-                    <div class="field-group span-4 city-suggest-wrap"><label for="cityProvince">12. Province / City</label><input type="text" id="cityProvince" name="cityProvinceManualOnly" autocomplete="new-password" autocapitalize="characters" spellcheck="false" placeholder="Type city/province (e.g. B → BAGUIO CITY)" required><div id="citySuggestBox" class="city-suggest-box hidden"></div><div class="helper-text">Type letters, use ↑/↓ then Enter, or click a suggestion.</div></div>
+                    <div class="field-group span-4 city-suggest-wrap"><label for="cityProvince">12. Province / City</label><div class="city-inline-wrap"><div id="cityInlineHint" class="city-inline-hint"></div><input type="text" id="cityProvince" name="cityProvinceManualOnly" autocomplete="new-password" autocapitalize="characters" spellcheck="false" placeholder="Type city/province" required></div><div class="city-inline-note">Press <b>Tab</b> or <b>Enter</b> to accept the gray suggestion.</div></div>
                     <div class="field-group span-6"><label for="occupation">13. Occupation</label><input type="text" id="occupation"></div>
                     <div class="field-group span-6"><label for="contactNumber">14. Contact Number</label><input type="text" id="contactNumber" inputmode="numeric"></div>
                     <div class="field-group span-6">
@@ -374,7 +368,7 @@ const nextSerialBtn=document.getElementById("nextSerialBtn"),clearSerialBatchBtn
 const serialBatchInfo=document.getElementById("serialBatchInfo"),serialBatchPreview=document.getElementById("serialBatchPreview");
 const rangeDonorTypeRadios=document.querySelectorAll('input[name="rangeDonorType"]'),rangeMbdBox=document.getElementById("rangeMbdBox"),rangeMbdDetails=document.getElementById("rangeMbdDetails"),rangePatientBox=document.getElementById("rangePatientBox"),rangePatientDetails=document.getElementById("rangePatientDetails"),rangeTypeInfo=document.getElementById("rangeTypeInfo");
 const timeStartedInput=document.getElementById("timeStarted"),timeEndedInput=document.getElementById("timeEnded"),timeHelperBox=document.getElementById("timeHelperBox");
-const cityProvinceInput=document.getElementById("cityProvince"),citySuggestBox=document.getElementById("citySuggestBox");
+const cityProvinceInput=document.getElementById("cityProvince"),cityInlineHint=document.getElementById("cityInlineHint");
 let currentUser=null,authReady=false,loadedDonorRecord=null,donorLookupResults=[],autoTypeSuggestion="",autoTypeReason="",isSaving=false,donorSearchDebounce=null;
 let citySuggestionLoaded=false;
 const AG_KEY="donorEntryActiveGroup",SB_KEY="donorEntrySerialBatch";
@@ -516,7 +510,7 @@ function normalizeCitySuggestion(v){
 }
 
 let citySuggestionItems=[];
-let citySuggestActiveIndex=-1;
+let currentCityInlineSuggestion="";
 
 function setCitySuggestionOptions(options){
     const unique=[];
@@ -530,7 +524,7 @@ function setCitySuggestionOptions(options){
         unique.push({value:city,count});
     });
     citySuggestionItems=unique.slice(0,120);
-    renderCitySuggestions();
+    renderCityInlineSuggestion();
 }
 
 function seedDefaultCitySuggestions(){
@@ -543,50 +537,39 @@ function seedDefaultCitySuggestions(){
     ]);
 }
 
-function getCityMatches(){
+function getBestCitySuggestion(){
     const q=normalizeCitySuggestion(cityProvinceInput.value);
-    if(!q)return [];
-    const starts=[], contains=[];
-    citySuggestionItems.forEach(item=>{
-        const val=normalizeCitySuggestion(item.value);
-        if(val.startsWith(q))starts.push(item);
-        else if(val.includes(q))contains.push(item);
-    });
-    return [...starts,...contains].slice(0,8);
+    if(!q)return null;
+    const exact=citySuggestionItems.find(item=>normalizeCitySuggestion(item.value)===q);
+    if(exact)return null;
+    const starts=citySuggestionItems.filter(item=>normalizeCitySuggestion(item.value).startsWith(q));
+    if(starts.length)return starts[0];
+    return null;
 }
 
-function renderCitySuggestions(){
-    if(!citySuggestBox)return;
-    const matches=getCityMatches();
-    if(!matches.length){
-        citySuggestBox.innerHTML="";
-        citySuggestBox.classList.add("hidden");
-        citySuggestActiveIndex=-1;
+function renderCityInlineSuggestion(){
+    if(!cityInlineHint)return;
+    const typed=String(cityProvinceInput.value||"");
+    const q=normalizeCitySuggestion(typed);
+    const best=getBestCitySuggestion();
+    if(!typed.trim()||!best){
+        currentCityInlineSuggestion="";
+        cityInlineHint.innerHTML="";
         return;
     }
-    if(citySuggestActiveIndex>=matches.length)citySuggestActiveIndex=0;
-    citySuggestBox.innerHTML=matches.map((item,i)=>`
-        <div class="city-suggest-item ${i===citySuggestActiveIndex?"active":""}" data-city="${esc(item.value)}">
-            <span>${esc(item.value)}</span>
-            <span class="city-suggest-count">${item.count?item.count+" previous":"suggested"}</span>
-        </div>`).join("");
-    citySuggestBox.classList.remove("hidden");
-}
-
-function closeCitySuggestions(){
-    if(citySuggestBox){
-        citySuggestBox.classList.add("hidden");
-        citySuggestBox.innerHTML="";
-    }
-    citySuggestActiveIndex=-1;
+    currentCityInlineSuggestion=normalizeCitySuggestion(best.value);
+    const completion=currentCityInlineSuggestion.slice(q.length);
+    cityInlineHint.innerHTML=`<span class="typed-part">${esc(typed)}</span><span class="completion-part">${esc(completion)}</span>`;
 }
 
 function acceptCitySuggestion(value){
-    const v=normalizeCitySuggestion(value);
-    if(!v)return;
+    const v=normalizeCitySuggestion(value||currentCityInlineSuggestion);
+    if(!v)return false;
     cityProvinceInput.value=v;
-    closeCitySuggestions();
+    currentCityInlineSuggestion="";
+    if(cityInlineHint)cityInlineHint.innerHTML="";
     cityProvinceInput.focus();
+    return true;
 }
 
 async function loadCityProvinceSuggestions(){
@@ -648,40 +631,18 @@ sendToGoogleSheets(data);
 
 let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
 donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();age.value="";setCatMode("");numberOfDonations.value="";patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
-cityProvinceInput.addEventListener("focus",()=>{ loadCityProvinceSuggestions(); renderCitySuggestions(); });
-cityProvinceInput.addEventListener("input",()=>{ if(!citySuggestionLoaded) loadCityProvinceSuggestions(); citySuggestActiveIndex=-1; renderCitySuggestions(); });
+cityProvinceInput.addEventListener("focus",()=>{ loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
+cityProvinceInput.addEventListener("input",()=>{ if(!citySuggestionLoaded) loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
+cityProvinceInput.addEventListener("blur",()=>{ if(cityInlineHint)cityInlineHint.innerHTML=""; });
 cityProvinceInput.addEventListener("keydown",e=>{
-    const matches=getCityMatches();
-    if(!matches.length)return;
-    if(e.key==="ArrowDown"){
+    if((e.key==="Enter"||e.key==="Tab")&&currentCityInlineSuggestion){
         e.preventDefault();
-        citySuggestActiveIndex=(citySuggestActiveIndex+1)%matches.length;
-        renderCitySuggestions();
-    }else if(e.key==="ArrowUp"){
-        e.preventDefault();
-        citySuggestActiveIndex=(citySuggestActiveIndex-1+matches.length)%matches.length;
-        renderCitySuggestions();
-    }else if(e.key==="Enter"||e.key==="Tab"){
-        if(citySuggestActiveIndex>=0){
-            e.preventDefault();
-            acceptCitySuggestion(matches[citySuggestActiveIndex].value);
-            if(e.key==="Tab")focusNext(cityProvinceInput);
-        }
+        acceptCitySuggestion(currentCityInlineSuggestion);
+        if(e.key==="Tab")focusNext(cityProvinceInput);
     }else if(e.key==="Escape"){
-        closeCitySuggestions();
+        currentCityInlineSuggestion="";
+        if(cityInlineHint)cityInlineHint.innerHTML="";
     }
-});
-if(citySuggestBox){
-    citySuggestBox.addEventListener("mousedown",e=>{
-        const item=e.target.closest(".city-suggest-item");
-        if(!item)return;
-        e.preventDefault();
-        acceptCitySuggestion(item.dataset.city||item.textContent||"");
-    });
-}
-document.addEventListener("mousedown",e=>{
-    if(e.target===cityProvinceInput || (citySuggestBox&&citySuggestBox.contains(e.target)))return;
-    closeCitySuggestions();
 });
 auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();setTimeout(loadCityProvinceSuggestions,800);}else setAuthInd("No logged in user detected.",false);});
 setTodayDate();setCatMode("");numberOfDonations.value="";updateAutoType();updateSerialUI();validateTimes();renderAG();renderBatchInfo();updateRangeFields();setRangeCollapsed(false);
