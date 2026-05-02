@@ -107,10 +107,29 @@
         .toolbar-actions {
             display: flex;
             gap: 8px;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             align-items: end;
             justify-content: flex-start;
             min-width: 0;
+        }
+
+        .tracking-filter-row {
+            grid-template-columns: minmax(340px, 1.7fr) 130px 170px 170px 96px;
+            gap: 10px;
+            align-items: end;
+        }
+        .search-wide { min-width: 0; }
+        .compact-filter { min-width: 0; }
+        .action-toolbar-row {
+            grid-template-columns: 1fr;
+            margin-top: 2px;
+        }
+        .action-toolbar-row .toolbar-actions { justify-content: flex-start; }
+        @media (max-width: 1200px) {
+            .tracking-filter-row { grid-template-columns: 1fr 120px 150px 155px 90px; }
+        }
+        @media (max-width: 900px) {
+            .tracking-filter-row { grid-template-columns: 1fr; }
         }
 
         .content-panel { min-width: 0; }
@@ -524,24 +543,30 @@
 <div class="page-wrap">
     <div class="top-summary">
         <div class="summary-grid">
-            <div class="top-controls-row">
-                <div class="field-group">
-                    <label for="searchInput">Search</label>
+            <div class="top-controls-row tracking-filter-row">
+                <div class="field-group search-wide">
+                    <label for="searchInput">Live Search</label>
                     <input type="text" id="searchInput" placeholder="Search donor, serial, blood type, contact, MBD, Walk-in, Patient Directed...">
                 </div>
-                <div class="field-group">
-                    <label for="printMonthSelect">Print / Duplicate Month</label>
-                    <select id="printMonthSelect"><option value="">Select month</option></select>
+                <div class="field-group compact-filter">
+                    <label for="trackingYearSelect">Year</label>
+                    <select id="trackingYearSelect"><option value="">All Years</option></select>
                 </div>
-                <button class="main-btn blue-btn" id="reloadBtn" type="button">Reload</button>
+                <div class="field-group compact-filter">
+                    <label for="trackingMonthSelect">Month</label>
+                    <select id="trackingMonthSelect"><option value="">Select Month</option></select>
+                </div>
+                <div class="field-group compact-filter">
+                    <label for="trackingDateFilter">Date Filter</label>
+                    <input type="date" id="trackingDateFilter">
+                </div>
+                <button class="main-btn blue-btn" id="reloadBtn" type="button">Load</button>
             </div>
-            <div class="second-controls-row">
-                <div class="field-group">
-                    <label for="groupMonthFilter">Month Filter</label>
-                    <select id="groupMonthFilter"><option value="">All Months</option></select>
-                </div>
+            <input type="hidden" id="groupMonthFilter" value="">
+            <input type="hidden" id="printMonthSelect" value="">
+            <div class="second-controls-row action-toolbar-row">
                 <div class="toolbar-actions">
-                    <button class="main-btn gray-btn"   id="printSelectedMonthBtn">Print</button>
+                    <button class="main-btn gray-btn"   id="printSelectedMonthBtn">Print Loaded Month</button>
                     <button class="main-btn green-btn"  id="exportCsvBtn">Export</button>
                     <button class="main-btn red-btn"    id="collapseAllBtn">Collapse</button>
                     <button class="main-btn blue-btn"   id="expandAllBtn">Expand</button>
@@ -745,25 +770,82 @@ function populateStaticMonthDropdown(selectId, firstLabel, includeSlowAll = fals
     const currentYear = now.getFullYear();
     const startYear = Math.max(2024, currentYear - 2);
     const endYear = currentYear + 6;
-    let html = includeSlowAll ? `<option value="">${firstLabel}</option>` : `<option value="">${firstLabel}</option>`;
+    let html = `<option value="">${firstLabel}</option>`;
     for (let y = endYear; y >= startYear; y--) {
         for (let m = 12; m >= 1; m--) {
             const key = `${y}-${String(m).padStart(2,"0")}`;
             html += `<option value="${key}">${MONTHS[m-1]} ${y}</option>`;
         }
     }
-    sel.innerHTML = html;
+    if (sel.tagName === "SELECT") sel.innerHTML = html;
     if (currentVal) sel.value = currentVal;
     if (!sel.value && selectId === "groupMonthFilter") sel.value = getCurrentMonthKey();
 }
 
+function populateYearMonthControls() {
+    const yearSel = document.getElementById("trackingYearSelect");
+    const monthSel = document.getElementById("trackingMonthSelect");
+    if (!yearSel || !monthSel) return;
+    const oldYear = yearSel.value;
+    const oldMonth = monthSel.value;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const startYear = Math.max(2024, currentYear - 2);
+    const endYear = currentYear + 6;
+    yearSel.innerHTML = `<option value="">All Years (SLOW)</option>`;
+    for (let y = endYear; y >= startYear; y--) yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+    monthSel.innerHTML = `<option value="">Select Month</option>`;
+    for (let m = 1; m <= 12; m++) monthSel.innerHTML += `<option value="${String(m).padStart(2,"0")}">${MONTHS[m-1]}</option>`;
+    if (oldYear) yearSel.value = oldYear;
+    if (oldMonth) monthSel.value = oldMonth;
+}
+
+function syncVisibleFiltersFromMonthKey(monthKey) {
+    const yearSel = document.getElementById("trackingYearSelect");
+    const monthSel = document.getElementById("trackingMonthSelect");
+    const g = document.getElementById("groupMonthFilter");
+    const p = document.getElementById("printMonthSelect");
+    if (g) g.value = monthKey || "";
+    if (p) p.value = monthKey || "";
+    if (yearSel && monthSel) {
+        if (monthKey && /^\d{4}-\d{2}$/.test(monthKey)) {
+            const [y,m] = monthKey.split("-");
+            yearSel.value = y;
+            monthSel.value = m;
+        } else {
+            yearSel.value = "";
+            monthSel.value = "";
+        }
+    }
+}
+
+function getSelectedMonthKeyFromVisibleFilters() {
+    const y = document.getElementById("trackingYearSelect")?.value || "";
+    const m = document.getElementById("trackingMonthSelect")?.value || "";
+    if (y && m) return `${y}-${m}`;
+    return "";
+}
+
+async function loadFromVisibleFilters() {
+    const dateVal = document.getElementById("trackingDateFilter")?.value || "";
+    if (dateVal && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+        const monthKey = dateVal.slice(0,7);
+        syncVisibleFiltersFromMonthKey(monthKey);
+        headerFilters.entryDate = [dateVal];
+    } else {
+        headerFilters.entryDate = [];
+        syncVisibleFiltersFromMonthKey(getSelectedMonthKeyFromVisibleFilters());
+    }
+    await loadDonors();
+}
+
 function initFastMonthSelectors() {
-    populateStaticMonthDropdown("groupMonthFilter", "All Months (SLOW)", true);
-    populateStaticMonthDropdown("printMonthSelect", "Select month", false);
+    populateYearMonthControls();
     const g = document.getElementById("groupMonthFilter");
     const p = document.getElementById("printMonthSelect");
     if (g && !g.value) g.value = getCurrentMonthKey();
     if (p && !p.value) p.value = g ? g.value : getCurrentMonthKey();
+    syncVisibleFiltersFromMonthKey(g ? g.value : getCurrentMonthKey());
 }
 
 // ─── STATUS ───────────────────────────────────────────────────────────────────
@@ -1299,13 +1381,16 @@ function groupDonors(records) {
 
 // ─── POPULATE DROPDOWNS ───────────────────────────────────────────────────────
 function populatePrintMonthOptions(records) {
-    // Fast mode uses a static month list so the page does not need to read all records just to build the dropdown.
-    populateStaticMonthDropdown("printMonthSelect", "Select month", false);
+    const printEl = document.getElementById("printMonthSelect");
+    const groupEl = document.getElementById("groupMonthFilter");
+    if (!printEl) return;
+    printEl.value = groupEl ? groupEl.value : (currentLoadedMonthKey || "");
 }
 
 function populateGroupMonthOptions(records) {
-    // Fast mode uses a static month list. Select a month to load only that month from Firebase.
-    populateStaticMonthDropdown("groupMonthFilter", "All Months (SLOW)", true);
+    // Month selection is now handled by the visible Year + Month controls.
+    const groupEl = document.getElementById("groupMonthFilter");
+    if (groupEl && currentLoadedMonthKey) groupEl.value = currentLoadedMonthKey;
 }
 
 // ─── HEADER FILTER HELPERS ───────────────────────────────────────────────────
@@ -1703,14 +1788,18 @@ async function loadDonors() {
 
         initFastMonthSelectors();
         const selectedMonth = document.getElementById("groupMonthFilter").value;
+        const selectedYear = document.getElementById("trackingYearSelect") ? document.getElementById("trackingYearSelect").value : "";
         currentLoadedMonthKey = selectedMonth || "";
-        isAllMonthsSlowMode = !selectedMonth;
+        isAllMonthsSlowMode = !selectedMonth && !selectedYear;
 
-        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${selectedMonth ? getMonthLabel(selectedMonth) : "all months (slow mode)"} records...</div>`;
+        const loadLabel = selectedMonth ? getMonthLabel(selectedMonth) : (selectedYear ? `year ${selectedYear}` : "all months (slow mode)");
+        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${loadLabel} records...</div>`;
 
         let queryRef = db.collection("donorDatabase");
         if (selectedMonth) {
             queryRef = queryRef.where("collectionMonthKey", "==", selectedMonth);
+        } else if (selectedYear) {
+            queryRef = queryRef.where("collectionYear", "==", Number(selectedYear));
         }
 
         const snapshot = await queryRef.get();
@@ -1743,7 +1832,9 @@ async function loadDonors() {
 
         showMessage(selectedMonth
             ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}. Select another month to load more.`
-            : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.`,
+            : (selectedYear
+                ? `Loaded ${allDonors.length} records for year ${selectedYear}. Choose a month for faster navigation.`
+                : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.`),
             "success"
         );
 
@@ -2495,14 +2586,33 @@ function buildBulkEditableRowCells(r) {
 // ─── BUTTON HANDLERS ─────────────────────────────────────────────────────────
 document.getElementById("reloadBtn").addEventListener("click", async () => {
     hideDuplicateBox();
-    await loadDonors();
+    await loadFromVisibleFilters();
     showMessage("Tracking data reloaded.", "success");
 });
 
 document.getElementById("searchInput").addEventListener("input", () => { hideDuplicateBox(); renderTracking(); });
-document.getElementById("groupMonthFilter").addEventListener("change", async () => {
+["trackingYearSelect", "trackingMonthSelect"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", async () => {
+        hideDuplicateBox();
+        const dateEl = document.getElementById("trackingDateFilter");
+        if (dateEl) dateEl.value = "";
+        headerFilters.entryDate = [];
+        headerFilters.mbd = [];
+        headerFilters.patientDirected = [];
+        await loadFromVisibleFilters();
+    });
+});
+const dateFilterEl = document.getElementById("trackingDateFilter");
+if (dateFilterEl) dateFilterEl.addEventListener("change", async () => {
     hideDuplicateBox();
-    // When the month changes, reset multi-filters that are scoped to a month
+    headerFilters.mbd = [];
+    headerFilters.patientDirected = [];
+    await loadFromVisibleFilters();
+});
+const legacyMonthFilter = document.getElementById("groupMonthFilter");
+if (legacyMonthFilter) legacyMonthFilter.addEventListener("change", async () => {
+    hideDuplicateBox();
     headerFilters.entryDate = [];
     headerFilters.mbd = [];
     headerFilters.patientDirected = [];
@@ -2511,7 +2621,7 @@ document.getElementById("groupMonthFilter").addEventListener("change", async () 
 
 document.getElementById("printSelectedMonthBtn").addEventListener("click", () => {
     const val = document.getElementById("printMonthSelect").value;
-    if (!val) { showMessage("Please select a month to print.", "error"); return; }
+    if (!val) { showMessage("Please choose a Year and Month first before printing.", "error"); return; }
     window.printOneMonth(val);
 });
 
