@@ -631,6 +631,25 @@ rangeMbdDetails.addEventListener("input",updateRangeFields); rangePatientDetails
 birthday.addEventListener("change",computeAge);
 entryDate.addEventListener("change",()=>{updateAutoType();renderAG();updateSerialPrefixByDate();});
 useSerialPrefix.addEventListener("change",updateSerialUI);
+
+// Real-time serial duplicate check — fires when user leaves the serial field
+// or presses Enter on it, so duplicate is caught BEFORE filling the rest of the form.
+serialNumberInput.addEventListener("blur", function() {
+    clearTimeout(_serialCheckDebounce);
+    _serialCheckDebounce = setTimeout(checkSerialRealTime, 300);
+});
+serialNumberInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        clearTimeout(_serialCheckDebounce);
+        _serialCheckDebounce = setTimeout(checkSerialRealTime, 100);
+    }
+});
+// Also clear the warning + field style when user starts typing a new serial
+serialNumberInput.addEventListener("input", function() {
+    clearDupWarning();
+    serialNumberInput.style.borderColor = "";
+    serialNumberInput.style.boxShadow   = "";
+});
 numberOfDonations.addEventListener("blur",normCountField);
 timeStartedInput.addEventListener("change",validateTimes); timeEndedInput.addEventListener("change",validateTimes);
 donorForm.addEventListener("keydown",function(e){if(e.key!=="Enter")return;if(e.target.tagName.toLowerCase()==="textarea")return;if(["button","submit","reset"].includes(e.target.type))return;e.preventDefault();focusNext(e.target);});
@@ -646,6 +665,51 @@ endGroupBtn.addEventListener("click",()=>{clrAG();renderAG();showMsg("Active gro
 // ============================================================
 // DUPLICATE DETECTION HELPERS
 // ============================================================
+
+// ── Real-time serial check: fires on blur/Enter of serial number field ──────
+let _serialCheckDebounce = null;
+
+async function checkSerialRealTime() {
+    clearDupWarning();
+    const finalSerial = getFinalSerial();
+    if (!finalSerial) return;
+    if (!authReady || !currentUser) return;
+
+    // Visual: mark the serial field as "checking"
+    serialNumberInput.style.borderColor = "#f59e0b";
+    serialNumberInput.style.boxShadow   = "0 0 0 3px rgba(245,158,11,0.18)";
+
+    try {
+        const snap = await db.collection("donorDatabase")
+            .where("serialNumber", "==", finalSerial)
+            .limit(3)
+            .get();
+
+        if (!snap.empty) {
+            const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Red border on serial field
+            serialNumberInput.style.borderColor = "#b91c1c";
+            serialNumberInput.style.boxShadow   = "0 0 0 3px rgba(185,28,28,0.22)";
+            showDupWarning(matches, "serial");
+            showMsg("⚠ Serial number already exists in tracking. Entry blocked until resolved.", "error");
+        } else {
+            // Green: clear
+            serialNumberInput.style.borderColor = "#16a34a";
+            serialNumberInput.style.boxShadow   = "0 0 0 3px rgba(22,163,74,0.18)";
+            // Reset after 2 seconds so it doesn't stay green forever
+            setTimeout(() => {
+                serialNumberInput.style.borderColor = "";
+                serialNumberInput.style.boxShadow   = "";
+            }, 2000);
+        }
+    } catch(err) {
+        // Silently ignore — will still be caught on submit
+        serialNumberInput.style.borderColor = "";
+        serialNumberInput.style.boxShadow   = "";
+        console.warn("Serial real-time check failed:", err.message);
+    }
+}
+
 function normDup(v){ return String(v||"").trim().toLowerCase().replace(/\s+/g," "); }
 function naKey(v){ return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
 
@@ -757,7 +821,8 @@ await db.collection("donorDatabase").add(data);
 sendToGoogleSheets(data);
 
 let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
-donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();age.value="";setCatMode("");numberOfDonations.value="";patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
+donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();
+        serialNumberInput.style.borderColor="";serialNumberInput.style.boxShadow="";age.value="";setCatMode("");numberOfDonations.value="";patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
 cityProvinceInput.addEventListener("focus",()=>{ loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
 cityProvinceInput.addEventListener("input",()=>{ if(!citySuggestionLoaded) loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
 cityProvinceInput.addEventListener("blur",()=>{ if(cityInlineHint)cityInlineHint.innerHTML=""; });
