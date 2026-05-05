@@ -75,6 +75,15 @@
         .status-message{margin-top:14px;padding:12px;border-radius:8px;font-weight:bold;display:none}
         .status-success{display:block;background:#e8f7e8;color:#1b5e20;border:1px solid #b7dfb9}
         .status-error{display:block;background:#fdeaea;color:#b71c1c;border:1px solid #efb7b7}
+        .dup-warning-box{display:none;margin-top:14px;padding:14px 16px;border-radius:10px;border:2px solid #b91c1c;background:#fff1f1;color:#7f1d1d}
+        .dup-warning-box.show{display:block}
+        .dup-warning-title{font-size:14px;font-weight:bold;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+        .dup-warning-title .dup-icon{font-size:18px}
+        .dup-warning-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+        .dup-warning-table th{background:#fca5a5;color:#7f1d1d;padding:6px 8px;text-align:left;font-weight:bold;border:1px solid #fca5a5}
+        .dup-warning-table td{padding:6px 8px;border:1px solid #fecaca;background:#fff7f7;vertical-align:top}
+        .dup-warning-note{margin-top:10px;font-size:12px;color:#991b1b;font-style:italic}
+        .dup-dismiss-btn{margin-top:10px;padding:7px 16px;background:#b91c1c;color:#fff;border:none;border-radius:7px;font-weight:bold;cursor:pointer;font-size:12px}
         .section-note{font-size:12px;color:#64748b;margin-top:-4px;margin-bottom:12px}
         .inline-toggle{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px}
         .inline-toggle label{display:flex;align-items:center;gap:6px;margin:0;font-weight:normal;cursor:pointer}
@@ -332,6 +341,12 @@
                     <button type="button" id="endGroupBtn" class="main-btn red-btn">End Active Group</button>
                 </div>
                 <div id="statusMessage" class="status-message"></div>
+                <div id="dupWarningBox" class="dup-warning-box" role="alert">
+                    <div class="dup-warning-title"><span class="dup-icon">&#9888;&#65039;</span><span id="dupWarningTitle">Duplicate Entry Detected</span></div>
+                    <div id="dupWarningBody"></div>
+                    <div class="dup-warning-note" id="dupWarningNote"></div>
+                    <button type="button" class="dup-dismiss-btn" onclick="document.getElementById('dupWarningBox').classList.remove('show')">Dismiss Warning</button>
+                </div>
             </form>
         </div>
     </div>
@@ -628,8 +643,113 @@ document.getElementById("reloadPageBtn").addEventListener("click",()=>window.loc
 startWalkInGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const count=parseInt(walkInCount.value||"0");if(count<=0){showMsg("Please enter a valid number of walk-in donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"Walk-in",organization:"",details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("Walk-in");renderAG();showMsg(`Walk-in group started for ${count} donors.`,"success");});
 startMbdGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const org=mbdDetails.value.trim(),count=parseInt(mbdCount.value||"0");if(!org){showMsg("Please enter MBD site / organization.","error");return;}if(count<=0){showMsg("Please enter a valid number of MBD donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"MBD",organization:org,details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("MBD");renderAG();showMsg(`MBD group started for ${count} donors under ${org}.`,"success");});
 endGroupBtn.addEventListener("click",()=>{clrAG();renderAG();showMsg("Active group ended manually.","success");});
-donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||""):"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select donor type.","error");return false;}if(selDonorType()==="Patient Directed"&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(selDonorType()==="MBD"&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:selDonorType()==="Patient Directed"?pdVal:"",mbdDetails:selDonorType()==="MBD"?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+// ============================================================
+// DUPLICATE DETECTION HELPERS
+// ============================================================
+function normDup(v){ return String(v||"").trim().toLowerCase().replace(/\s+/g," "); }
+function naKey(v){ return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
 
+function buildDupKey(surname,firstName,middleName,birthday,sex){
+    return [naKey(surname),naKey(firstName),naKey(middleName),String(birthday||"").trim(),normDup(sex)].join("|");
+}
+
+function showDupWarning(matches, matchType){
+    const box = document.getElementById("dupWarningBox");
+    const body = document.getElementById("dupWarningBody");
+    const note = document.getElementById("dupWarningNote");
+    const title = document.getElementById("dupWarningTitle");
+
+    if(matchType === "serial"){
+        title.textContent = "⚠ Duplicate Serial Number Detected";
+        note.textContent = "This serial number already exists in the tracking database. Please verify the serial number before proceeding. The entry has NOT been saved.";
+    } else {
+        title.textContent = "⚠ Duplicate Donor Identity Detected";
+        note.textContent = "A donor with the same Surname, First Name, Middle Name, Birthday, and Sex already has a record on this same date. Please verify before proceeding. The entry has NOT been saved.";
+    }
+
+    let rows = matches.map(m => `<tr>
+        <td>${esc(m.serialNumber||"")}</td>
+        <td>${esc(m.surname||"")}</td>
+        <td>${esc(m.firstName||"")}</td>
+        <td>${esc(m.middleName||"")}</td>
+        <td>${esc(m.birthday||"")}</td>
+        <td>${esc(m.sex||"")}</td>
+        <td>${esc(m.entryDate||"")}</td>
+    </tr>`).join("");
+
+    body.innerHTML = `<table class="dup-warning-table">
+        <thead><tr>
+            <th>Serial No.</th><th>Surname</th><th>First Name</th>
+            <th>Middle Name</th><th>Birthday</th><th>Sex</th><th>Entry Date</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+
+    box.classList.add("show");
+    box.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+function clearDupWarning(){
+    const box = document.getElementById("dupWarningBox");
+    if(box) box.classList.remove("show");
+}
+
+async function checkDuplicates(finalSerial, surname, firstName, middleName, birthday, sex, entryDateVal){
+    // Check serial number duplicate across ALL dates
+    const serialSnap = await db.collection("donorDatabase")
+        .where("serialNumber","==", finalSerial)
+        .limit(3)
+        .get();
+
+    if(!serialSnap.empty){
+        const matches = serialSnap.docs.map(d=>({id:d.id,...d.data()}));
+        showDupWarning(matches, "serial");
+        return {isDuplicate: true, type: "serial"};
+    }
+
+    // Check identity duplicate on the SAME entry date
+    const identitySnap = await db.collection("donorDatabase")
+        .where("entryDate","==", entryDateVal)
+        .get();
+
+    const newKey = buildDupKey(surname, firstName, middleName, birthday, sex);
+    const identityMatches = identitySnap.docs
+        .map(d=>({id:d.id,...d.data()}))
+        .filter(rec => buildDupKey(rec.surname, rec.firstName, rec.middleName, rec.birthday, rec.sex) === newKey);
+
+    if(identityMatches.length > 0){
+        showDupWarning(identityMatches, "identity");
+        return {isDuplicate: true, type: "identity"};
+    }
+
+    return {isDuplicate: false};
+}
+// ============================================================
+// END DUPLICATE DETECTION HELPERS
+// ============================================================
+
+donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();clearDupWarning();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||""):"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select donor type.","error");return false;}if(selDonorType()==="Patient Directed"&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(selDonorType()==="MBD"&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:selDonorType()==="Patient Directed"?pdVal:"",mbdDetails:selDonorType()==="MBD"?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+
+// ── DUPLICATE CHECK before saving ──────────────────────────
+setSaving(true);
+const dupResult = await checkDuplicates(
+    finalSerial,
+    data.surname,
+    data.firstName,
+    data.middleName,
+    data.birthday,
+    data.sex,
+    data.entryDate
+);
+if(dupResult.isDuplicate){
+    if(dupResult.type === "serial"){
+        showMsg("⚠ Save blocked: Serial number already exists in tracking. Check the warning below.", "error");
+    } else {
+        showMsg("⚠ Save blocked: Same donor identity already recorded on this date. Check the warning below.", "error");
+    }
+    setSaving(false);
+    return false;
+}
 // Save to Firebase first
 await db.collection("donorDatabase").add(data);
 
