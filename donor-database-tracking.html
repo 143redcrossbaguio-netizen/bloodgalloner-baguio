@@ -164,6 +164,42 @@
         .duplicate-table th, .duplicate-table td { border: 1px solid #d7d7d7; padding: 7px 8px; text-align: center; vertical-align: middle; white-space: nowrap; }
         .duplicate-table th { background: #f7f7f7; }
 
+        /* Auto-duplicate alert banner */
+        .auto-dup-banner {
+            display: none;
+            margin-bottom: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: #fff7ed;
+            border: 2px solid #f97316;
+            box-shadow: 0 3px 10px rgba(249,115,22,0.15);
+        }
+        .auto-dup-banner.show { display: block; }
+        .auto-dup-banner-title {
+            font-size: 14px; font-weight: bold; color: #9a3412;
+            margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+        }
+        .auto-dup-banner-list {
+            font-size: 12px; color: #7c2d12; margin-top: 6px;
+            max-height: 160px; overflow-y: auto;
+            border: 1px solid #fed7aa; border-radius: 6px;
+            background: #fff; padding: 6px 10px;
+        }
+        .auto-dup-banner-list li { margin-bottom: 3px; }
+        .auto-dup-banner-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .auto-dup-dismiss { padding: 5px 12px; background: #ea580c; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer; }
+
+        /* Date sub-header rows inside month tables */
+        .date-subheader-row td {
+            background: #e8f0fe !important;
+            color: #1e3a8a;
+            font-weight: bold;
+            font-size: 12px;
+            text-align: left !important;
+            padding: 5px 10px !important;
+            border-top: 2px solid #93c5fd !important;
+        }
+
         .year-group, .month-group {
             background: white;
             border: 1px solid #dbe3ec;
@@ -567,6 +603,14 @@
             <div class="second-controls-row action-toolbar-row">
                 <div class="toolbar-actions">
                     <button class="main-btn gray-btn"   id="printSelectedMonthBtn">Print Loaded Month</button>
+                    <select id="printPaperSize" style="height:42px;padding:0 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:bold;background:#fff;cursor:pointer;" title="Select print paper size">
+                        <option value="folio-land" selected>8.5×13 (Folio) Landscape</option>
+                        <option value="folio-port">8.5×13 (Folio) Portrait</option>
+                        <option value="letter-land">8.5×11 (Letter) Landscape</option>
+                        <option value="letter-port">8.5×11 (Letter) Portrait</option>
+                        <option value="a4-land">A4 Landscape</option>
+                        <option value="a4-port">A4 Portrait</option>
+                    </select>
                     <button class="main-btn green-btn"  id="exportCsvBtn">Export</button>
                     <button class="main-btn red-btn"    id="collapseAllBtn">Collapse</button>
                     <button class="main-btn blue-btn"   id="expandAllBtn">Expand</button>
@@ -646,6 +690,19 @@
         </div>
     </div>
     <!-- ─── END BULK EDIT PANEL ───────────────────────────────────────────────── -->
+
+    <!-- Auto-duplicate alert: shown automatically after every load -->
+    <div id="autoDupBanner" class="auto-dup-banner" role="alert">
+        <div class="auto-dup-banner-title">
+            <span>⚠️</span>
+            <span id="autoDupBannerTitle">Duplicate Records Detected in Loaded Month</span>
+        </div>
+        <ul class="auto-dup-banner-list" id="autoDupBannerList"></ul>
+        <div class="auto-dup-banner-actions">
+            <button class="auto-dup-dismiss" onclick="document.getElementById('autoDupBanner').classList.remove('show')">Dismiss</button>
+            <button class="auto-dup-dismiss" style="background:#1565c0;" onclick="showFullDuplicateFromBanner()">View Full Duplicate List</button>
+        </div>
+    </div>
 
     <div id="duplicateBox" class="duplicate-box">
         <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
@@ -855,6 +912,94 @@ function showMessage(message, type) {
     el.className    = "status-message";
     el.classList.add(type === "success" ? "status-success" : "status-error");
 }
+// ─── AUTO-DUPLICATE DETECTION ────────────────────────────────────────────────
+// Runs automatically after every loadDonors(). Shows a banner (not a button)
+// with serial-number duplicates AND identity duplicates (surname+first+middle+birthday+sex).
+
+function buildAutoDupIdentityKey(r) {
+    return [
+        String(r.serialNumber || "").trim().toLowerCase(),
+        String(r.surname      || "").trim().toLowerCase(),
+        String(r.firstName    || "").trim().toLowerCase(),
+        String(r.middleName   || "").trim().toLowerCase(),
+        String(r._resolvedBirthday || "").trim(),
+        String(r.sex          || "").trim().toLowerCase()
+    ].join("|");
+}
+
+function runAutoDuplicateDetection() {
+    if (!allDonors.length) return;
+
+    const monthKey = document.getElementById("groupMonthFilter").value;
+    const scope = monthKey
+        ? allDonors.filter(r => getYearMonth(r._resolvedEntryDate).monthKey === monthKey)
+        : allDonors;
+
+    // Group by serial number
+    const bySerial = {};
+    scope.forEach(r => {
+        const sn = String(r.serialNumber || "").trim().toUpperCase();
+        if (!sn) return;
+        if (!bySerial[sn]) bySerial[sn] = [];
+        bySerial[sn].push(r);
+    });
+
+    // Group by identity (surname+firstName+middleName+birthday+sex) on same date
+    const byIdentity = {};
+    scope.forEach(r => {
+        const dateKey = r._resolvedEntryDate || "unknown-date";
+        const key = dateKey + "|" + [
+            String(r.surname    || "").trim().toLowerCase(),
+            String(r.firstName  || "").trim().toLowerCase(),
+            String(r.middleName || "").trim().toLowerCase(),
+            String(r._resolvedBirthday || "").trim(),
+            String(r.sex        || "").trim().toLowerCase()
+        ].join("|");
+        if (!byIdentity[key]) byIdentity[key] = [];
+        byIdentity[key].push(r);
+    });
+
+    const dupSerials    = Object.entries(bySerial).filter(([,recs]) => recs.length > 1);
+    const dupIdentities = Object.entries(byIdentity).filter(([,recs]) => recs.length > 1);
+
+    const banner      = document.getElementById("autoDupBanner");
+    const bannerTitle = document.getElementById("autoDupBannerTitle");
+    const bannerList  = document.getElementById("autoDupBannerList");
+
+    if (!dupSerials.length && !dupIdentities.length) {
+        banner.classList.remove("show");
+        return;
+    }
+
+    const label = monthKey ? getMonthLabel(monthKey) : "loaded data";
+    let items = [];
+
+    dupSerials.forEach(([sn, recs]) => {
+        const names = recs.map(r =>
+            `${toUpperDisplay(r.surname)}, ${toUpperDisplay(r.firstName)} (${r._resolvedEntryDate || "?"})`
+        ).join(" · ");
+        items.push(`<li><b>Serial duplicate:</b> <b>${escapeHtml(sn)}</b> — ${escapeHtml(names)}</li>`);
+    });
+
+    dupIdentities.forEach(([key, recs]) => {
+        const r0 = recs[0];
+        const display = `${toUpperDisplay(r0.surname)}, ${toUpperDisplay(r0.firstName)} ${toUpperDisplay(r0.middleName || "")} | ${r0._resolvedBirthday || "?"} | ${toUpperDisplay(r0.sex || "")}`;
+        const serials = recs.map(r => toUpperDisplay(r.serialNumber || "?")).join(", ");
+        items.push(`<li><b>Identity duplicate on ${escapeHtml(r0._resolvedEntryDate || "?")}:</b> ${escapeHtml(display)} — Serials: ${escapeHtml(serials)}</li>`);
+    });
+
+    const total = dupSerials.length + dupIdentities.length;
+    bannerTitle.textContent = `⚠ ${total} duplicate group(s) detected in ${label}`;
+    bannerList.innerHTML = items.join("");
+    banner.classList.add("show");
+}
+
+// Called by "View Full Duplicate List" button in the banner
+window.showFullDuplicateFromBanner = function() {
+    const val = document.getElementById("printMonthSelect").value;
+    renderDuplicateMonthView(val || (currentLoadedMonthKey || ""));
+};
+
 function hideDuplicateBox() {
     document.getElementById("duplicateBox").classList.remove("show");
     document.getElementById("duplicateTitle").textContent = "Duplicate Data";
@@ -1291,8 +1436,9 @@ function compareByEntryDateAsc(a, b) {
     return String(a.serialNumber || "").localeCompare(String(b.serialNumber || ""), undefined, { numeric:true, sensitivity:"base" });
 }
 function applySerialSort(records) {
-    if (headerFilters.serialSort === "asc")  records.sort((a,b) => compareSerialNumbers(a,b));
+    // Default (no header filter chosen) = ascending serial order
     if (headerFilters.serialSort === "desc") records.sort((a,b) => compareSerialNumbers(b,a));
+    else records.sort((a,b) => compareSerialNumbers(a,b));  // asc is default
     return records;
 }
 
@@ -1718,7 +1864,19 @@ function renderTracking() {
                                 </thead>
                                 <tbody>`;
 
+            // ── Date sub-group rendering: insert a date separator row when the date changes ──
+            let _lastDateHeader = null;
+            const _TOTAL_COLS = 25; // number of <td> columns in the table (including actions)
             records.forEach(r => {
+                // Insert date sub-header when date changes
+                const _rDate = r._resolvedEntryDate || "";
+                if (_rDate !== _lastDateHeader) {
+                    _lastDateHeader = _rDate;
+                    const _dayLabel = _rDate ? formatDateForDisplay(_rDate) : "Unknown Date";
+                    const _dayCount = records.filter(x => (x._resolvedEntryDate || "") === _rDate).length;
+                    html += `<tr class="date-subheader-row"><td colspan="${_TOTAL_COLS}">📅 ${escapeHtml(_dayLabel)} &nbsp;—&nbsp; ${_dayCount} record(s)</td></tr>`;
+                }
+
                 const donorKey    = buildDonorKey(r);
                 const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(r.numberOfDonations);
                 const enteredVal  = resolveDonationCountValue(r.numberOfDonations);
@@ -1829,6 +1987,9 @@ async function loadDonors() {
         const pms = document.getElementById("printMonthSelect").value;
         if (pms) hideDuplicateBox();
         else     hideDuplicateBox();
+
+        // Auto-detect duplicates immediately after loading — no button needed
+        runAutoDuplicateDetection();
 
         showMessage(selectedMonth
             ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}. Select another month to load more.`
@@ -2100,13 +2261,79 @@ function buildPrintRows(records, includeRemarks) {
     }).join("");
 }
 
+// Paper size map: value -> CSS @page size string
+const PAPER_SIZE_MAP = {
+    "folio-land":  "8.5in 13in landscape",
+    "folio-port":  "8.5in 13in portrait",
+    "letter-land": "8.5in 11in landscape",
+    "letter-port": "8.5in 11in portrait",
+    "a4-land":     "A4 landscape",
+    "a4-port":     "A4 portrait"
+};
+
+function getSelectedPaperSize() {
+    const sel = document.getElementById("printPaperSize");
+    return sel ? (PAPER_SIZE_MAP[sel.value] || "8.5in 13in landscape") : "8.5in 13in landscape";
+}
+
 function buildPrintableTable(records, monthLabel) {
-    const dateRange    = getMonthPrintDateRange(records);
-    const includeRemarks = hasPrintableRemarks(records);
-    const rows         = buildPrintRows(records, includeRemarks);
+    // Always print in ASCENDING serial order (asc date, then asc serial within date)
+    const sorted = [...records].sort((a, b) => {
+        const dc = (a._resolvedEntryDate || "").localeCompare(b._resolvedEntryDate || "");
+        if (dc !== 0) return dc;
+        return String(a.serialNumber || "").localeCompare(String(b.serialNumber || ""), undefined, { numeric: true, sensitivity: "base" });
+    });
+
+    const dateRange      = getMonthPrintDateRange(sorted);
+    const includeRemarks = hasPrintableRemarks(sorted);
+    const paperSize      = getSelectedPaperSize();
+
+    // Build rows grouped by date with date sub-headers in print output
+    let rows = "";
+    let lastPrintDate = null;
+    sorted.forEach(r => {
+        const donorKey    = buildDonorKey(r);
+        const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(r.numberOfDonations);
+        const rDate = r._resolvedEntryDate || "";
+        if (rDate !== lastPrintDate) {
+            lastPrintDate = rDate;
+            const dayLabel  = rDate ? formatDateForDisplay(rDate) : "Unknown Date";
+            const dayCount  = sorted.filter(x => (x._resolvedEntryDate || "") === rDate).length;
+            const colSpan   = includeRemarks ? 24 : 23;
+            rows += `<tr class="date-sep"><td colspan="${colSpan}" style="background:#dde7f1;color:#1b3a6b;font-weight:bold;font-size:7px;text-align:left;padding:3px 5px;border-top:2px solid #93c5fd;">📅 ${escapeHtml(dayLabel)} — ${dayCount} record(s)</td></tr>`;
+        }
+        rows += `
+            <tr>
+                <td class="col-entry-date">${escapeHtml(formatPrintDate(r._resolvedEntryDate))}</td>
+                <td class="col-mbd">${escapeUpperHtml(isDonorType(r,"MBD")              ? getCategoryDisplay(r,"MBD")              : "")}</td>
+                <td class="col-walkin">${escapeUpperHtml(isDonorType(r,"WALK-IN")        ? getCategoryDisplay(r,"WALK-IN")          : "")}</td>
+                <td class="col-pd">${escapeUpperHtml(isDonorType(r,"PATIENT DIRECTED")   ? getCategoryDisplay(r,"PATIENT DIRECTED") : "")}</td>
+                <td class="col-surname">${escapeUpperHtml(getSurnameWithSuffix(r))}</td>
+                <td class="col-given print-no-wrap">${escapeUpperHtml(r.firstName)}</td>
+                <td class="col-middle">${escapeUpperHtml(r.middleName)}</td>
+                <td class="col-bday">${escapeHtml(formatPrintDate(r._resolvedBirthday))}</td>
+                <td class="col-age">${escapeHtml(r.age)}</td>
+                <td class="col-sex">${escapeHtml(abbreviateSex(r.sex))}</td>
+                <td class="col-contact">${escapeUpperHtml(r.contactNumber)}</td>
+                <td class="col-address print-address-cell">${escapeUpperHtml(r.address)}</td>
+                <td class="col-city">${escapeUpperHtml(r.cityProvince)}</td>
+                <td class="col-occ">${escapeUpperHtml(r.occupation)}</td>
+                <td class="col-donor-type">${escapeUpperHtml(r.donorCategory || "")}</td>
+                <td class="col-donations">${escapeHtml(latestTotal)}</td>
+                <td class="col-bt">${escapeHtml(r._resolvedBloodType)}</td>
+                <td class="col-serial print-no-wrap">${escapeUpperHtml(r.serialNumber)}</td>
+                <td class="col-amt">${escapeUpperHtml(r.amount)}</td>
+                <td class="col-bbused">${escapeUpperHtml(r.bloodBagBrand)}</td>
+                <td class="col-bagtype">${escapeHtml(abbreviateBloodBagType(r.bloodBagType))}</td>
+                <td class="col-ts">${escapeHtml(r._resolvedTimeStarted)}</td>
+                <td class="col-te">${escapeHtml(r._resolvedTimeEnded)}</td>
+                ${includeRemarks ? `<td class="col-remarks">${escapeUpperHtml(r.remarks)}</td>` : ""}
+            </tr>`;
+    });
+
     return `<!DOCTYPE html><html><head><title>Print ${monthLabel}</title>
     <style>
-        @page { size: 8.5in 13in landscape; margin: 6mm; }
+        @page { size: ${paperSize}; margin: 6mm; }
         * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; margin: 0; color: #111827; }
         h2 { margin: 0 0 4px 0; color: #8b0000; font-size: 15px; }
@@ -2127,7 +2354,7 @@ function buildPrintableTable(records, monthLabel) {
         tr, td, th { page-break-inside: avoid; }
     </style></head><body>
     <h2>Donor Database Tracking</h2>
-    <div class="sub">${monthLabel}</div>
+    <div class="sub">${monthLabel} &nbsp;|&nbsp; Paper: ${paperSize}</div>
     <div class="date-range">${escapeHtml(dateRange)}</div>
     <table>
         <thead><tr>
