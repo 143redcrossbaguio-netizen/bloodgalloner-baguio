@@ -174,28 +174,10 @@ margin:2px;
 .paidYesBtn{background:#2e7d32;}
 .paidNoBtn{background:#c62828;}
 
-.yearHeader{
-background:#b71c1c;
-color:white;
-padding:11px 16px;
-margin-top:24px;
-font-weight:bold;
-font-size:17px;
-border-radius:7px;
-cursor:pointer;
-display:flex;
-justify-content:space-between;
-align-items:center;
-border:none;
-letter-spacing:1px;
-}
-.yearContent{ display:none; }
-.yearContent.show{ display:block; }
-
 .monthHeader{
 background:#f0f0f0;
 padding:12px 14px;
-margin-top:12px;
+margin-top:20px;
 font-weight:bold;
 font-size:16px;
 border-radius:6px;
@@ -243,6 +225,33 @@ text-align:center;
 font-weight:bold;
 color:#666;
 }
+
+.searchResultsBanner{
+background:#1565c0;
+color:white;
+padding:10px 16px;
+border-radius:7px;
+font-weight:bold;
+font-size:14px;
+margin-bottom:10px;
+display:flex;
+align-items:center;
+justify-content:space-between;
+flex-wrap:wrap;
+gap:8px;
+}
+.searchResultsBanner span{ opacity:0.88; font-weight:normal; font-size:12px; }
+.searchClearBtn{
+background:white;
+color:#1565c0;
+border:none;
+border-radius:5px;
+padding:5px 12px;
+font-weight:bold;
+font-size:12px;
+cursor:pointer;
+}
+.searchClearBtn:hover{ background:#e3f2fd; }
 
 /* MODAL */
 .modal{
@@ -742,37 +751,6 @@ function safeUpper(v){
   return String(v || "").trim().toUpperCase();
 }
 
-// ── Human-readable label helpers ─────────────────────────────────────────────
-const _MONTH_NAMES = ["January","February","March","April","May","June",
-                      "July","August","September","October","November","December"];
-const _DAY_NAMES   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-
-function formatMonthLabel(monthKey){
-  // "2026-05" → "May 2026"
-  if(!monthKey || monthKey === "NO DATE") return "No Date";
-  const parts = monthKey.split("-");
-  if(parts.length < 2) return monthKey;
-  const yr  = parseInt(parts[0], 10);
-  const mo  = parseInt(parts[1], 10) - 1;
-  if(isNaN(yr)||isNaN(mo)||mo<0||mo>11) return monthKey;
-  return `${_MONTH_NAMES[mo]} ${yr}`;
-}
-
-function formatDateLabel(dateKey){
-  // "2026-05-01" → "May 1, 2026 — Friday"
-  if(!dateKey || dateKey === "NO DATE") return "No Date";
-  const parts = dateKey.split("-");
-  if(parts.length < 3) return dateKey;
-  const yr  = parseInt(parts[0], 10);
-  const mo  = parseInt(parts[1], 10) - 1;
-  const dy  = parseInt(parts[2], 10);
-  if(isNaN(yr)||isNaN(mo)||isNaN(dy)||mo<0||mo>11) return dateKey;
-  const d   = new Date(yr, mo, dy);
-  const dow = _DAY_NAMES[d.getDay()];
-  return `${_MONTH_NAMES[mo]} ${dy}, ${yr} — ${dow}`;
-}
-// ── end label helpers ─────────────────────────────────────────────────────────
-
 function getReleasingDuplicateKey(entry){
   return [
     safeUpper(entry.date),
@@ -995,15 +973,15 @@ function setView(view){
 
   if(view === "releasing"){
     showReleaseBtn.classList.add("activeBtn");
-    searchBox.placeholder = "Search Name / Facility";
+    searchBox.placeholder = "Search all records — Name, Facility, Blood Type...";
     uncheckAllBtn.style.display = "inline-block";
   }else if(view === "augmentation"){
     showAugmentationBtn.classList.add("activeBtn");
-    searchBox.placeholder = "Search Facility / Blood Type";
+    searchBox.placeholder = "Search all records — Facility, Blood Type...";
     uncheckAllBtn.style.display = "none";
   }else{
     showWaivedBtn.classList.add("activeBtn");
-    searchBox.placeholder = "Search Name / Facility / Waived Component";
+    searchBox.placeholder = "Search all records — Name, Facility, Waived Component...";
     uncheckAllBtn.style.display = "none";
   }
 
@@ -1166,13 +1144,202 @@ function getFilteredWaivedEntries(ignoreFilters = false){
   return filtered;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FLAT SEARCH RESULTS — used when search box has text
+// Shows ALL matching records across ALL years in a single flat table
+// ═══════════════════════════════════════════════════════════════════════════
+
+function isSearchActive(){
+  return searchBox.value.trim().length > 0;
+}
+
+function renderFlatSearchBanner(count, term){
+  const banner = document.createElement("div");
+  banner.className = "searchResultsBanner";
+  banner.innerHTML = `
+    <div>🔍 Search results for "<b>${escHtml(term)}</b>" — <b>${count}</b> record${count !== 1 ? "s" : ""} found across all years</div>
+    <button class="searchClearBtn" id="clearSearchBtn">✕ Clear Search</button>`;
+  return banner;
+}
+
+function escHtml(s){
+  return String(s||"").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+function renderFlatReleasingResults(entries){
+  const term = searchBox.value.trim();
+  container.innerHTML = "";
+  if(!entries.length){
+    container.innerHTML = `<div class="searchResultsBanner" style="background:#c62828;">🔍 No results found for "<b>${escHtml(term)}</b>" across all years.</div><div class="emptyMessage">Try a different name, facility, or blood type.</div>`;
+    document.getElementById("clearSearchBtn") && document.getElementById("clearSearchBtn").addEventListener("click", clearSearch);
+    return;
+  }
+  const banner = renderFlatSearchBanner(entries.length, term);
+  container.appendChild(banner);
+  document.getElementById("clearSearchBtn").addEventListener("click", clearSearch);
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead><tr>
+      <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th>
+      <th>AGE</th><th>SEX</th><th>BLOOD</th><th>OR</th><th>BOX CONTAINER</th>
+      <th>REQUESTED</th><th>ISSUED</th><th>COMPUTED TOTAL</th>
+      <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
+    </tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+  entries.forEach(entry => {
+    const computedTotal = computeReleasingTotal(entry);
+    const isChecked = checkedReleaseRows.has(entry.id);
+    const row = document.createElement("tr");
+    row.dataset.releaseId = entry.id;
+    if(isChecked) row.classList.add("checkedHighlight");
+    row.innerHTML = `
+      <td>${entry.date || ""}</td>
+      <td>${entry.facility || ""}</td>
+      <td>${entry.surname || ""}</td>
+      <td>${entry.firstname || ""}</td>
+      <td>${entry.age || ""}</td>
+      <td>${entry.sex || ""}</td>
+      <td>${entry.bloodtype || ""}</td>
+      <td>${entry.or || ""}</td>
+      <td>${entry.boxContainerQty || 0}</td>
+      <td class="componentBox">${formatComponents(entry.requests)}</td>
+      <td class="componentBox">${formatComponents(entry.issued)}</td>
+      <td>${computedTotal}</td>
+      <td>${entry.amountPaid || ""}</td>
+      <td>
+        <div class="discountWrap">
+          <span>${entry.discount || ""}</span>
+          <input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${isChecked ? "checked" : ""}>
+        </div>
+      </td>
+      <td>
+        <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+        <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+      </td>`;
+    tbody.appendChild(row);
+  });
+  container.appendChild(table);
+}
+
+function renderFlatAugmentationResults(entries){
+  const term = searchBox.value.trim();
+  container.innerHTML = "";
+  if(!entries.length){
+    container.innerHTML = `<div class="searchResultsBanner" style="background:#c62828;">🔍 No results found for "<b>${escHtml(term)}</b>" across all years.</div><div class="emptyMessage">Try a different facility or blood type.</div>`;
+    return;
+  }
+  const banner = renderFlatSearchBanner(entries.length, term);
+  container.appendChild(banner);
+  document.getElementById("clearSearchBtn").addEventListener("click", clearSearch);
+
+  const table = document.createElement("table");
+  table.className = "augTable";
+  table.innerHTML = `
+    <thead><tr>
+      <th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th>
+      <th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th>
+      <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
+    </tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+  entries.forEach(entry => {
+    const computedTotal = computeAugEntryTotal(entry);
+    const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${entry.date || ""}</td>
+      <td>${entry.facility || ""}</td>
+      <td>${entry.boxContainerQty || 0}</td>
+      <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
+      <td>${computedTotal}</td>
+      <td>${entry.amountPaid || ""}</td>
+      <td>${entry.discount || ""}</td>
+      <td>
+        <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+        <button class="actionBtn ${isPaid ? "paidYesBtn" : "paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${isPaid ? "YES" : "NO"}</button>
+        <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+      </td>`;
+    tbody.appendChild(row);
+  });
+  container.appendChild(table);
+}
+
+function renderFlatWaivedResults(entries){
+  const term = searchBox.value.trim();
+  container.innerHTML = "";
+  if(!entries.length){
+    container.innerHTML = `<div class="searchResultsBanner" style="background:#c62828;">🔍 No results found for "<b>${escHtml(term)}</b>" across all years.</div><div class="emptyMessage">Try a different name, facility, or component.</div>`;
+    return;
+  }
+  const banner = renderFlatSearchBanner(entries.length, term);
+  container.appendChild(banner);
+  document.getElementById("clearSearchBtn").addEventListener("click", clearSearch);
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead><tr>
+      <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th>
+      <th>AGE</th><th>SEX</th><th>BLOOD</th><th>OR</th>
+      <th>WAIVED COMPONENT</th><th>WAIVED UNIT</th>
+      <th>REQUESTED</th><th>ISSUED</th><th>COMPUTED TOTAL</th>
+      <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
+    </tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+  entries.forEach(entry => {
+    const computedTotal = computeReleasingTotal(entry);
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${entry.date || ""}</td>
+      <td>${entry.facility || ""}</td>
+      <td>${entry.surname || ""}</td>
+      <td>${entry.firstname || ""}</td>
+      <td>${entry.age || ""}</td>
+      <td>${entry.sex || ""}</td>
+      <td>${entry.bloodtype || ""}</td>
+      <td>${entry.or || ""}</td>
+      <td>${entry.waivedComponent || ""}</td>
+      <td>${entry.waivedUnit || 0}</td>
+      <td class="componentBox">${formatComponents(entry.requests)}</td>
+      <td class="componentBox">${formatComponents(entry.issued)}</td>
+      <td>${computedTotal}</td>
+      <td>${entry.amountPaid || ""}</td>
+      <td>${entry.discount || ""}</td>
+      <td>
+        <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+        <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+      </td>`;
+    tbody.appendChild(row);
+  });
+  container.appendChild(table);
+}
+
+function clearSearch(){
+  searchBox.value = "";
+  renderCurrentView();
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// END FLAT SEARCH RESULTS
+// ═══════════════════════════════════════════════════════════════════════════
+
 function renderCurrentView(){
-  if(currentView === "releasing"){
-    renderReleasingTable();
-  }else if(currentView === "augmentation"){
-    renderAugmentationTable();
-  }else{
-    renderWaivedTable();
+  if(isSearchActive()){
+    // Flat search mode — shows ALL years, no grouping
+    if(currentView === "releasing"){
+      renderFlatReleasingResults(getFilteredReleasingEntries());
+    }else if(currentView === "augmentation"){
+      renderFlatAugmentationResults(getFilteredAugmentationEntries());
+    }else{
+      renderFlatWaivedResults(getFilteredWaivedEntries());
+    }
+  } else {
+    // Normal grouped view (Year > Month > Date)
+    if(currentView === "releasing"){
+      renderReleasingTable();
+    }else if(currentView === "augmentation"){
+      renderAugmentationTable();
+    }else{
+      renderWaivedTable();
+    }
   }
   refreshDuplicateBox();
 }
@@ -1196,65 +1363,6 @@ function attachCollapseBehavior(header, content){
   });
 }
 
-// ── Shared: given a container element and groupedByMonth, renders Year>Month>Date ──
-function renderYearMonthDateInto(parentEl, groupedByMonth, renderDateContent){
-  // Group months by year
-  const groupedByYear = {};
-  Object.keys(groupedByMonth).forEach(month => {
-    const yr = month === "NO DATE" ? "No Date" : month.slice(0,4);
-    if(!groupedByYear[yr]) groupedByYear[yr] = [];
-    groupedByYear[yr].push(month);
-  });
-
-  Object.keys(groupedByYear).sort().reverse().forEach(year => {
-    const yearMonths   = groupedByYear[year];
-    const yearTotal    = yearMonths.reduce((s,m)=>s+groupedByMonth[m].length,0);
-
-    const yearHeader   = document.createElement("div");
-    yearHeader.className = "yearHeader";
-    yearHeader.innerHTML = `<span>📅 ${year} &nbsp;<span style="font-weight:normal;font-size:13px;opacity:0.85;">(${yearTotal} record${yearTotal!==1?"s":""})</span></span><span class="collapsibleIcon" style="color:white;">−</span>`;
-    const yearContent  = document.createElement("div");
-    yearContent.className = "yearContent show";
-    attachCollapseBehavior(yearHeader, yearContent);
-
-    yearMonths.sort().reverse().forEach(month => {
-      const monthEntries = groupedByMonth[month];
-      const monthHeader  = createCollapsibleHeader("monthHeader", formatMonthLabel(month), `${monthEntries.length} record${monthEntries.length!==1?"s":""}`);
-      const monthContent = document.createElement("div");
-      monthContent.className = "monthContent";
-
-      // Group by date
-      const groupedByDate = {};
-      monthEntries.forEach(entry => {
-        const dk = entry.date || "NO DATE";
-        if(!groupedByDate[dk]) groupedByDate[dk] = [];
-        groupedByDate[dk].push(entry);
-      });
-
-      Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
-        const dateEntries = groupedByDate[dateKey];
-        const dateHeader  = createCollapsibleHeader("dateHeader", formatDateLabel(dateKey), `${dateEntries.length} record${dateEntries.length!==1?"s":""}`);
-        const dateContent = document.createElement("div");
-        dateContent.className = "dateContent";
-
-        renderDateContent(dateContent, dateEntries);
-
-        attachCollapseBehavior(dateHeader, dateContent);
-        monthContent.appendChild(dateHeader);
-        monthContent.appendChild(dateContent);
-      });
-
-      attachCollapseBehavior(monthHeader, monthContent);
-      yearContent.appendChild(monthHeader);
-      yearContent.appendChild(monthContent);
-    });
-
-    parentEl.appendChild(yearHeader);
-    parentEl.appendChild(yearContent);
-  });
-}
-// ── end shared helper ─────────────────────────────────────────────────────────
-
 function renderReleasingTable(){
   const filtered = getFilteredReleasingEntries();
 
@@ -1273,49 +1381,104 @@ function renderReleasingTable(){
 
   container.innerHTML = "";
 
-  renderYearMonthDateInto(container, groupedByMonth, (dateContent, dateEntries) => {
-    const table = document.createElement("table");
-    table.innerHTML = `
-      <thead><tr>
-        <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th>
-        <th>AGE</th><th>SEX</th><th>BLOOD</th><th>OR</th><th>BOX CONTAINER</th>
-        <th>REQUESTED</th><th>ISSUED</th><th>COMPUTED TOTAL</th>
-        <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
-      </tr></thead><tbody></tbody>`;
-    const tbody = table.querySelector("tbody");
-    dateEntries.forEach(entry => {
-      const computedTotal = computeReleasingTotal(entry);
-      const isChecked = checkedReleaseRows.has(entry.id);
-      const row = document.createElement("tr");
-      row.dataset.releaseId = entry.id;
-      if(isChecked) row.classList.add("checkedHighlight");
-      row.innerHTML = `
-        <td>${entry.date || ""}</td>
-        <td>${entry.facility || ""}</td>
-        <td>${entry.surname || ""}</td>
-        <td>${entry.firstname || ""}</td>
-        <td>${entry.age || ""}</td>
-        <td>${entry.sex || ""}</td>
-        <td>${entry.bloodtype || ""}</td>
-        <td>${entry.or || ""}</td>
-        <td>${entry.boxContainerQty || 0}</td>
-        <td class="componentBox">${formatComponents(entry.requests)}</td>
-        <td class="componentBox">${formatComponents(entry.issued)}</td>
-        <td>${computedTotal}</td>
-        <td>${entry.amountPaid || ""}</td>
-        <td>
-          <div class="discountWrap">
-            <span>${entry.discount || ""}</span>
-            <input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${isChecked ? "checked" : ""}>
-          </div>
-        </td>
-        <td>
-          <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
-        </td>`;
-      tbody.appendChild(row);
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
+
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
+
+    const groupedByDate = {};
+
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
     });
-    dateContent.appendChild(table);
+
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>SURNAME</th>
+            <th>FIRST NAME</th>
+            <th>AGE</th>
+            <th>SEX</th>
+            <th>BLOOD</th>
+            <th>OR</th>
+            <th>BOX CONTAINER</th>
+            <th>REQUESTED</th>
+            <th>ISSUED</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeReleasingTotal(entry);
+        const isChecked = checkedReleaseRows.has(entry.id);
+
+        const row = document.createElement("tr");
+        row.dataset.releaseId = entry.id;
+        if(isChecked){
+          row.classList.add("checkedHighlight");
+        }
+
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.surname || ""}</td>
+          <td>${entry.firstname || ""}</td>
+          <td>${entry.age || ""}</td>
+          <td>${entry.sex || ""}</td>
+          <td>${entry.bloodtype || ""}</td>
+          <td>${entry.or || ""}</td>
+          <td>${entry.boxContainerQty || 0}</td>
+          <td class="componentBox">${formatComponents(entry.requests)}</td>
+          <td class="componentBox">${formatComponents(entry.issued)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>
+            <div class="discountWrap">
+              <span>${entry.discount || ""}</span>
+              <input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${isChecked ? "checked" : ""}>
+            </div>
+          </td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
   });
 }
 
@@ -1337,38 +1500,87 @@ function renderAugmentationTable(){
 
   container.innerHTML = "";
 
-  renderYearMonthDateInto(container, groupedByMonth, (dateContent, dateEntries) => {
-    const table = document.createElement("table");
-    table.className = "augTable";
-    table.innerHTML = `
-      <thead><tr>
-        <th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th>
-        <th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th>
-        <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
-      </tr></thead><tbody></tbody>`;
-    const tbody = table.querySelector("tbody");
-    dateEntries.forEach(entry => {
-      const computedTotal = computeAugEntryTotal(entry);
-      const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${entry.date || ""}</td>
-        <td>${entry.facility || ""}</td>
-        <td>${entry.boxContainerQty || 0}</td>
-        <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
-        <td>${computedTotal}</td>
-        <td>${entry.amountPaid || ""}</td>
-        <td>${entry.discount || ""}</td>
-        <td>
-          <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn ${isPaid ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${isPaid ? 'YES' : 'NO'}</button>
-          <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
-        </td>`;
-      tbody.appendChild(row);
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
+
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
+
+    const groupedByDate = {};
+
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
     });
-    dateContent.appendChild(table);
+
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+      table.className = "augTable";
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>BOX CONTAINER</th>
+            <th>AUGMENTATION DETAILS</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeAugEntryTotal(entry);
+        const isPaid = String(entry.augmentationPaid || "NO").toUpperCase() === "YES";
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.boxContainerQty || 0}</td>
+          <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>${entry.discount || ""}</td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn ${isPaid ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
+              PAID ${isPaid ? 'YES' : 'NO'}
+            </button>
+            <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
   });
 }
+
 
 function renderWaivedTable(){
   const filtered = getFilteredWaivedEntries();
@@ -1388,43 +1600,95 @@ function renderWaivedTable(){
 
   container.innerHTML = "";
 
-  renderYearMonthDateInto(container, groupedByMonth, (dateContent, dateEntries) => {
-    const table = document.createElement("table");
-    table.innerHTML = `
-      <thead><tr>
-        <th>DATE</th><th>FACILITY</th><th>SURNAME</th><th>FIRST NAME</th>
-        <th>AGE</th><th>SEX</th><th>BLOOD</th><th>OR</th>
-        <th>WAIVED COMPONENT</th><th>WAIVED UNIT</th>
-        <th>REQUESTED</th><th>ISSUED</th><th>COMPUTED TOTAL</th>
-        <th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th>
-      </tr></thead><tbody></tbody>`;
-    const tbody = table.querySelector("tbody");
-    dateEntries.forEach(entry => {
-      const computedTotal = computeReleasingTotal(entry);
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${entry.date || ""}</td>
-        <td>${entry.facility || ""}</td>
-        <td>${entry.surname || ""}</td>
-        <td>${entry.firstname || ""}</td>
-        <td>${entry.age || ""}</td>
-        <td>${entry.sex || ""}</td>
-        <td>${entry.bloodtype || ""}</td>
-        <td>${entry.or || ""}</td>
-        <td>${entry.waivedComponent || ""}</td>
-        <td>${entry.waivedUnit || 0}</td>
-        <td class="componentBox">${formatComponents(entry.requests)}</td>
-        <td class="componentBox">${formatComponents(entry.issued)}</td>
-        <td>${computedTotal}</td>
-        <td>${entry.amountPaid || ""}</td>
-        <td>${entry.discount || ""}</td>
-        <td>
-          <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
-          <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
-        </td>`;
-      tbody.appendChild(row);
+  Object.keys(groupedByMonth).sort().reverse().forEach(month => {
+    const monthEntries = groupedByMonth[month];
+
+    const monthHeader = createCollapsibleHeader("monthHeader", month, `${monthEntries.length} record${monthEntries.length > 1 ? "s" : ""}`);
+    const monthContent = document.createElement("div");
+    monthContent.className = "monthContent";
+
+    const groupedByDate = {};
+
+    monthEntries.forEach(entry => {
+      const dateKey = entry.date || "NO DATE";
+      if(!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(entry);
     });
-    dateContent.appendChild(table);
+
+    Object.keys(groupedByDate).sort().reverse().forEach(dateKey => {
+      const dateEntries = groupedByDate[dateKey];
+
+      const dateHeader = createCollapsibleHeader("dateHeader", dateKey, `${dateEntries.length} record${dateEntries.length > 1 ? "s" : ""}`);
+      const dateContent = document.createElement("div");
+      dateContent.className = "dateContent";
+
+      const table = document.createElement("table");
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>FACILITY</th>
+            <th>SURNAME</th>
+            <th>FIRST NAME</th>
+            <th>AGE</th>
+            <th>SEX</th>
+            <th>BLOOD</th>
+            <th>OR</th>
+            <th>WAIVED COMPONENT</th>
+            <th>WAIVED UNIT</th>
+            <th>REQUESTED</th>
+            <th>ISSUED</th>
+            <th>COMPUTED TOTAL</th>
+            <th>AMOUNT PAID</th>
+            <th>DISCOUNT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector("tbody");
+
+      dateEntries.forEach(entry => {
+        const computedTotal = computeReleasingTotal(entry);
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.date || ""}</td>
+          <td>${entry.facility || ""}</td>
+          <td>${entry.surname || ""}</td>
+          <td>${entry.firstname || ""}</td>
+          <td>${entry.age || ""}</td>
+          <td>${entry.sex || ""}</td>
+          <td>${entry.bloodtype || ""}</td>
+          <td>${entry.or || ""}</td>
+          <td>${entry.waivedComponent || ""}</td>
+          <td>${entry.waivedUnit || 0}</td>
+          <td class="componentBox">${formatComponents(entry.requests)}</td>
+          <td class="componentBox">${formatComponents(entry.issued)}</td>
+          <td>${computedTotal}</td>
+          <td>${entry.amountPaid || ""}</td>
+          <td>${entry.discount || ""}</td>
+          <td>
+            <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
+            <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      dateContent.appendChild(table);
+      attachCollapseBehavior(dateHeader, dateContent);
+
+      monthContent.appendChild(dateHeader);
+      monthContent.appendChild(dateContent);
+    });
+
+    attachCollapseBehavior(monthHeader, monthContent);
+
+    container.appendChild(monthHeader);
+    container.appendChild(monthContent);
   });
 }
 
