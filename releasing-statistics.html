@@ -182,10 +182,6 @@ color:#000;
 text-align:left;
 }
 
-.bt-zero{
-color:#bbb;
-}
-
 .totalRow{
 font-weight:bold;
 background:#f0f0f0;
@@ -342,38 +338,6 @@ margin-top:12px;
 display:block;
 }
 
-/* scrollable table wrapper */
-.tableScrollWrap{
-overflow-x:auto;
--webkit-overflow-scrolling:touch;
-margin-top:10px;
-border-radius:6px;
-}
-
-/* blood-type column header tint */
-.btColHeader{
-background:#37474f !important;
-}
-
-.btColSubHeader{
-background:#546e7a !important;
-color:#fff !important;
-}
-
-/* dashboard label showing active filter */
-.dashFilterLabel{
-display:inline-block;
-background:#00897b;
-color:white;
-font-size:11px;
-font-weight:bold;
-padding:3px 10px;
-border-radius:12px;
-margin-left:8px;
-vertical-align:middle;
-letter-spacing:0.5px;
-}
-
 @media (max-width: 1000px){
 .dashboardGrid{
 grid-template-columns:repeat(2,1fr);
@@ -424,7 +388,7 @@ display:block !important;
 <option value="">ALL MONTHS</option>
 </select>
 
-<input type="text" id="hospitalSearch" placeholder="SEARCH HOSPITAL">
+<input type="text" id="hospitalSearch" placeholder="SEARCH HOSPITAL (e.g. BGHMC, R1MC, NDCH…)">
 
 <button class="printBtn" onclick="window.print()">PRINT</button>
 <button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
@@ -613,16 +577,7 @@ function populateMonthFilter(){
     });
 
     const months = [...monthSet].sort().reverse();
-
-    // Preserve current selection; if none yet, default to current year-month
-    let current = monthFilter.value;
-    if(!current){
-        const now = new Date();
-        const yy = now.getFullYear();
-        const mm = String(now.getMonth()+1).padStart(2,"0");
-        const thisMonth = `${yy}-${mm}`;
-        current = months.includes(thisMonth) ? thisMonth : (months[0] || "");
-    }
+    const current = monthFilter.value;
 
     monthFilter.innerHTML = '<option value="">ALL MONTHS</option>';
 
@@ -633,10 +588,196 @@ function populateMonthFilter(){
         if(m === current) opt.selected = true;
         monthFilter.appendChild(opt);
     });
-
-    // Keep internal value in sync
-    if(current && monthFilter.value !== current) monthFilter.value = current;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// FACILITY ALIAS NORMALIZATION ENGINE
+// Maps mnemonics, abbreviations, partial names → canonical facility name.
+// Add new aliases here whenever a new shorthand is discovered.
+// ═══════════════════════════════════════════════════════════════════════
+
+const FACILITY_ALIASES = [
+    // ── Baguio / Benguet ────────────────────────────────────────────────
+    {
+        canonical: "BAGUIO GENERAL HOSPITAL AND MEDICAL CENTER",
+        aliases: [
+            "BGHMC","BGH","BAGUIO GENERAL","BAGUIO GEN","BAGUIO GENERAL HOSPITAL",
+            "BAGUIO GEN HOSP","B.G.H.M.C","B.G.H","BGMC","BAGUIO GENERAL MED CENTER"
+        ]
+    },
+    {
+        canonical: "NOTRE DAME DE CHARTRES HOSPITAL",
+        aliases: [
+            "NDCH","NOTRE DAME DE CHARTRES","NOTRE DAME CHARTRES",
+            "NOTRE DAME","ND CHARTRES","N.D.C.H","NDCH BAGUIO"
+        ]
+    },
+    {
+        canonical: "REGION 1 MEDICAL CENTER",
+        aliases: [
+            "R1MC","REGION 1 MED CENTER","REGION 1 MEDICAL","REGION I MEDICAL CENTER",
+            "REGION I MED CENTER","R1 MED CENTER","R-1MC","R1 MEDICAL CENTER",
+            "REGION1 MEDICAL CENTER","R.1.M.C","REGION 1MC"
+        ]
+    },
+    {
+        canonical: "SAINT LOUIS UNIVERSITY HOSPITAL",
+        aliases: [
+            "SLUH","SLU HOSPITAL","SLU HOSP","SAINT LOUIS UNIV HOSPITAL",
+            "ST LOUIS UNIVERSITY HOSPITAL","ST. LOUIS UNIVERSITY HOSPITAL",
+            "SLU","S.L.U.H"
+        ]
+    },
+    {
+        canonical: "BENGUET GENERAL HOSPITAL",
+        aliases: [
+            "BGH BENGUET","BENGUET GEN HOSP","BENGUET GENERAL","BGH-BENGUET",
+            "B.G.H BENGUET"
+        ]
+    },
+    {
+        canonical: "PINES CITY DOCTORS HOSPITAL",
+        aliases: [
+            "PCDH","PINES CITY DOCTORS","PINES DOCTORS","PINES CITY DOC HOSP",
+            "P.C.D.H","PINES CITY"
+        ]
+    },
+    {
+        canonical: "BAGUIO CITY HEALTH SERVICES OFFICE",
+        aliases: ["BCHSO","BAGUIO CHO","BAGUIO CITY HEALTH","BAGUIO HEALTH OFFICE","BCHSO BAGUIO"]
+    },
+    // ── Pangasinan ───────────────────────────────────────────────────────
+    {
+        canonical: "WESTERN PANGASINAN DISTRICT HOSPITAL",
+        aliases: [
+            "WPDH","WESTERN PANGASINAN","WEST PANGASINAN DISTRICT HOSP",
+            "WESTERN PANGASINAN DIST HOSP","W.P.D.H","WPDC","WESTERN PANGASINAN HOSPITAL"
+        ]
+    },
+    {
+        canonical: "EASTERN PANGASINAN DISTRICT HOSPITAL",
+        aliases: [
+            "EPDH","EASTERN PANGASINAN","EAST PANGASINAN DISTRICT HOSP",
+            "EASTERN PANGASINAN DIST HOSP","E.P.D.H","EASTERN PANGASINAN HOSPITAL"
+        ]
+    },
+    {
+        canonical: "DAGUPAN DOCTORS VILLAFLOR MEMORIAL HOSPITAL",
+        aliases: [
+            "DDVMH","DAGUPAN DOCTORS","VILLAFLOR MEMORIAL","DAGUPAN DOCTORS HOSP",
+            "D.D.V.M.H","DDVMH DAGUPAN"
+        ]
+    },
+    {
+        canonical: "URDANETA CITY GENERAL HOSPITAL",
+        aliases: [
+            "UCGH","URDANETA GENERAL","URDANETA CITY HOSP","URDANETA HOSPITAL",
+            "U.C.G.H"
+        ]
+    },
+    {
+        canonical: "PANGASINAN PROVINCIAL HOSPITAL",
+        aliases: [
+            "PPH","PANGASINAN PROV HOSP","PANGASINAN PROVINCIAL","PROV HOSP PANGASINAN",
+            "P.P.H"
+        ]
+    },
+    // ── La Union ─────────────────────────────────────────────────────────
+    {
+        canonical: "ILOCOS TRAINING AND REGIONAL MEDICAL CENTER",
+        aliases: [
+            "ITRMC","ILOCOS TRAINING","ILOCOS REGIONAL","ITRMC LA UNION",
+            "I.T.R.M.C","ILOCOS TRAINING AND REGIONAL"
+        ]
+    },
+    {
+        canonical: "DON MARIANO MARCOS MEMORIAL HOSPITAL",
+        aliases: [
+            "DMMMH","DON MARIANO MARCOS","DMMMH BATAC","D.M.M.M.H",
+            "DON MARIANO MARCOS MEMORIAL"
+        ]
+    },
+    // ── General ──────────────────────────────────────────────────────────
+    {
+        canonical: "PHILIPPINE GENERAL HOSPITAL",
+        aliases: ["PGH","PHIL GENERAL HOSPITAL","PHILIPPINE GEN HOSP","P.G.H"]
+    },
+    {
+        canonical: "PHILIPPINE HEART CENTER",
+        aliases: ["PHC","PHIL HEART CENTER","P.H.C"]
+    },
+    {
+        canonical: "NATIONAL KIDNEY AND TRANSPLANT INSTITUTE",
+        aliases: ["NKTI","NATIONAL KIDNEY","N.K.T.I","NAT KIDNEY TRANSPLANT"]
+    },
+    {
+        canonical: "LUNG CENTER OF THE PHILIPPINES",
+        aliases: ["LCP","LUNG CENTER","L.C.P","LUNG CENTER PHILS"]
+    },
+];
+
+// Build fast lookup map: normalized-alias → canonical
+const _ALIAS_MAP = {};
+FACILITY_ALIASES.forEach(entry => {
+    const canon = entry.canonical.toUpperCase().trim();
+    // canonical maps to itself
+    _ALIAS_MAP[canon] = canon;
+    // also map normalized canonical (no spaces/punctuation) to itself
+    _ALIAS_MAP[_normKey(canon)] = canon;
+    entry.aliases.forEach(alias => {
+        const a = alias.toUpperCase().trim();
+        _ALIAS_MAP[a] = canon;
+        _ALIAS_MAP[_normKey(a)] = canon;
+    });
+});
+
+function _normKey(s){
+    // Remove spaces, dots, dashes, parentheses for fuzzy key
+    return String(s||"").toUpperCase().replace(/[\s.\-()&,\/]+/g,"");
+}
+
+function normalizeFacility(raw){
+    if(!raw) return "UNKNOWN FACILITY";
+    const upper = raw.toUpperCase().trim();
+    if(!upper) return "UNKNOWN FACILITY";
+
+    // 1. Direct exact match
+    if(_ALIAS_MAP[upper]) return _ALIAS_MAP[upper];
+
+    // 2. Normalized (no-punctuation) match
+    const nk = _normKey(upper);
+    if(_ALIAS_MAP[nk]) return _ALIAS_MAP[nk];
+
+    // 3. Partial / contains match — check if input STARTS WITH a known alias
+    //    or if a known alias is fully contained in the input
+    for(const [alias, canon] of Object.entries(_ALIAS_MAP)){
+        if(alias.length < 3) continue; // skip too-short keys
+        // if the raw input starts with a known canonical/alias key
+        if(upper.startsWith(alias) || alias.startsWith(upper)){
+            return canon;
+        }
+    }
+
+    // 4. Token match — all tokens of a short alias appear in the input
+    for(const entry of FACILITY_ALIASES){
+        const canon = entry.canonical.toUpperCase().trim();
+        for(const alias of [entry.canonical, ...entry.aliases]){
+            const aliasUp = alias.toUpperCase().trim();
+            if(aliasUp.length >= 4 && upper.includes(aliasUp)){
+                return canon;
+            }
+            if(aliasUp.length >= 4 && aliasUp.includes(upper)){
+                return canon;
+            }
+        }
+    }
+
+    // 5. No match — return the raw value as-is (uppercased)
+    return upper;
+}
+// ═══════════════════════════════════════════════════════════════════════
+// END FACILITY ALIAS NORMALIZATION ENGINE
+// ═══════════════════════════════════════════════════════════════════════
 
 function buildReleasingStats(){
     const monthFilterValue = monthFilter.value;
@@ -665,10 +806,10 @@ function buildReleasingStats(){
         if(dateValue === "") return;
 
         const month = dateValue.slice(0,7);
-        const hospital = (entry.facility || "").toUpperCase();
+        const hospital = normalizeFacility(entry.facility);
 
         if(monthFilterValue && month !== monthFilterValue) return;
-        if(hospitalSearchValue && !hospital.includes(hospitalSearchValue)) return;
+        if(hospitalSearchValue && !hospital.includes(hospitalSearchValue) && !normalizeFacility(hospitalSearchValue).includes(hospitalSearchValue)) return;
 
         if(!grouped[month]){
             grouped[month] = {
@@ -681,8 +822,7 @@ function buildReleasingStats(){
                     issued:emptyComponent(),
                     actualIncome:0,
                     computedTotal:0,
-                    boxContainers:0,
-                    btRequested:{}
+                    boxContainers:0
                 }
             };
         }
@@ -696,8 +836,7 @@ function buildReleasingStats(){
                 issued:emptyComponent(),
                 boxContainers:0,
                 computedTotal:0,
-                patients:[],
-                btRequested:{}
+                patients:[]
             };
         }
 
@@ -729,15 +868,6 @@ function buildReleasingStats(){
         countComponents(h.issued, entry.issued);
         countComponents(grand.issued, entry.issued);
 
-        // Blood type requested tracking
-        const _bt = ((entry.bloodtype||"").toUpperCase().trim()) || "UNKNOWN";
-        const _btUnits = Array.isArray(entry.requests)
-            ? entry.requests.reduce((s,r)=>s+Number(r.qty||0),0) : 0;
-        if(_btUnits > 0){
-            h.btRequested[_bt] = (h.btRequested[_bt]||0) + _btUnits;
-            m.totals.btRequested[_bt] = (m.totals.btRequested[_bt]||0) + _btUnits;
-        }
-
         const amountPaid = Number(entry.amountPaid || 0);
         const discount = Number(entry.discount || 0);
         const actualIncome = amountPaid - discount;
@@ -757,7 +887,7 @@ function buildReleasingStats(){
 
         const patientDetail = {
             date: entry.date || "",
-            facility: entry.facility || "",
+            facility: normalizeFacility(entry.facility) || "",
             surname: entry.surname || "",
             firstname: entry.firstname || "",
             age: entry.age || "",
@@ -823,14 +953,10 @@ function smallComponentTable(title, data){
 
 function renderDashboard(grand){
     const isOpen = expandedMainSections.has("dashboard");
-    const mfv = monthFilter.value;
-    const filterLabel = mfv
-        ? `<span class="dashFilterLabel">${monthName(mfv)}</span>`
-        : `<span class="dashFilterLabel">ALL MONTHS</span>`;
     dashboardSection.innerHTML = `
         <div class="collapsibleSection">
             <div class="collapsibleHeader" data-main-section="dashboard">
-                <span>DASHBOARD SUMMARY ${filterLabel}</span>
+                <span>DASHBOARD SUMMARY</span>
                 <span>${isOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
             </div>
             <div class="collapsibleBody ${isOpen ? "open" : ""}">
@@ -1006,24 +1132,6 @@ function renderStatistics(){
         yearsMap[year].push(month);
     });
 
-    // On first render (no explicit expansions yet), auto-open current year + month
-    if(expandedYears.size === 0 && expandedMonths.size === 0){
-        const now = new Date();
-        const cy = String(now.getFullYear());
-        const cm = `${cy}-${String(now.getMonth()+1).padStart(2,"0")}`;
-        // Use the most recent year and the filtered month (or current) 
-        const autoYear = Object.keys(yearsMap).sort().reverse()[0] || cy;
-        expandedYears.add(autoYear);
-        // Auto-open the month that matches the filter or current month
-        const mfv2 = monthFilter.value;
-        const autoMonth = mfv2 || cm;
-        if(yearsMap[autoYear] && yearsMap[autoYear].includes(autoMonth)){
-            expandedMonths.add(autoMonth);
-        } else if(yearsMap[autoYear]){
-            expandedMonths.add(yearsMap[autoYear][0]);
-        }
-    }
-
     Object.keys(yearsMap).sort().reverse().forEach(year => {
         const yearOpen = expandedYears.has(year);
 
@@ -1073,12 +1181,6 @@ function renderStatistics(){
                 <b>COMPUTED TOTAL:</b> ${m.totals.computedTotal.toFixed(2)}
             `;
 
-            // Gather all BTs present for this month to know which columns to show
-            const _allBTs = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-
-            const tableWrap = document.createElement("div");
-            tableWrap.className = "tableScrollWrap";
-
             const table = document.createElement("table");
 
             table.innerHTML = `
@@ -1091,7 +1193,6 @@ function renderStatistics(){
                     <th rowspan="2">COMPUTED TOTAL</th>
                     <th colspan="5">REQUESTED</th>
                     <th colspan="5">ISSUED</th>
-                    <th colspan="8" class="btColHeader">BLOOD TYPE REQUESTED (UNITS)</th>
                 </tr>
 
                 <tr class="subHeader">
@@ -1106,8 +1207,6 @@ function renderStatistics(){
                     <th>PC</th>
                     <th>FFP</th>
                     <th>CRYO</th>
-
-                    <th class="btColSubHeader">A+</th><th class="btColSubHeader">A-</th><th class="btColSubHeader">B+</th><th class="btColSubHeader">B-</th><th class="btColSubHeader">AB+</th><th class="btColSubHeader">AB-</th><th class="btColSubHeader">O+</th><th class="btColSubHeader">O-</th>
                 </tr>
             `;
 
@@ -1138,15 +1237,6 @@ function renderStatistics(){
                     <td>${s.issued.PC}</td>
                     <td>${s.issued.FFP}</td>
                     <td>${s.issued.CRYO}</td>
-                    
-                    <td class="${(s.btRequested||{})["A+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["A+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["A-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["A-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["B+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["B+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["B-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["B-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["AB+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["AB+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["AB-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["AB-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["O+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["O+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["O-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["O-"]||0 || "—"}</td>
                 `;
                 table.appendChild(row);
 
@@ -1154,7 +1244,7 @@ function renderStatistics(){
                     const detailRow = document.createElement("tr");
                     detailRow.className = "hospitalDetailRow";
                     detailRow.innerHTML = `
-                        <td colspan="25">
+                        <td colspan="16">
                             <div class="hospitalDetailBox">
                                 <div class="hospitalDetailTitle">${hospital} PATIENT LIST AND FULL DETAILS</div>
                                 ${renderPatientDetailsTable(s.patients)}
@@ -1186,21 +1276,11 @@ function renderStatistics(){
                 <td>${m.totals.issued.PC}</td>
                 <td>${m.totals.issued.FFP}</td>
                 <td>${m.totals.issued.CRYO}</td>
-                
-                <td>${(m.totals.btRequested||{})["A+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["A-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["B+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["B-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["AB+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["AB-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["O+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["O-"]||0 || "—"}</td>
             `;
             table.appendChild(totalRow);
 
-            tableWrap.appendChild(table);
             body.appendChild(summary);
-            body.appendChild(tableWrap);
+            body.appendChild(table);
 
             wrapper.appendChild(header);
             wrapper.appendChild(body);
@@ -1366,12 +1446,7 @@ window.goBack = function(){
     window.location.href = "releasing.html";
 };
 
-monthFilter.addEventListener("change", () => {
-    // Reset expansions so auto-open logic fires for the new month
-    expandedYears.clear();
-    expandedMonths.clear();
-    refreshAll();
-});
+monthFilter.addEventListener("change", refreshAll);
 hospitalSearch.addEventListener("input", refreshAll);
 
 onAuthStateChanged(auth, async (user) => {
