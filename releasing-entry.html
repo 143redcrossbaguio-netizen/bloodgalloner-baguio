@@ -78,42 +78,6 @@ button{
 
 .save{background:#ff9800;color:white}
 .facilityBtn{background:#2e7d32;color:white}
-/* ── Facility autocomplete widget ───────────────────────────── */
-.fac-wrap{position:relative;width:100%;}
-.fac-wrap input[type=text]{width:100%;box-sizing:border-box;}
-/* Ghost/inline suggestion — sits behind the real input */
-.fac-ghost{
-  position:absolute;top:0;left:0;
-  width:100%;height:100%;
-  padding:inherit;
-  font:inherit;font-size:inherit;letter-spacing:inherit;
-  color:#aaa;
-  background:transparent;
-  border:1px solid transparent;
-  pointer-events:none;
-  white-space:nowrap;overflow:hidden;
-  display:flex;align-items:center;
-  padding-left:10px;padding-right:10px;
-  box-sizing:border-box;
-}
-/* Dropdown suggestion list */
-.fac-dropdown{
-  position:absolute;top:calc(100% + 2px);left:0;
-  width:100%;max-height:220px;overflow-y:auto;
-  background:#fff;border:1px solid #b0bec5;
-  border-radius:6px;z-index:9999;
-  box-shadow:0 4px 16px rgba(0,0,0,0.13);
-  display:none;
-}
-.fac-dropdown.open{display:block;}
-.fac-item{
-  padding:9px 12px;font-size:14px;cursor:pointer;
-  border-bottom:1px solid #f0f0f0;color:#1a1a1a;
-}
-.fac-item:last-child{border-bottom:none;}
-.fac-item .fac-match{font-weight:bold;color:#b71c1c;}
-.fac-item:hover,.fac-item.fac-active{background:#fce4e4;}
-/* ── end facility autocomplete ──────────────────────────────── */
 .trackingBtn{background:#1565c0;color:white}
 .back{background:#444;color:white}
 .addBtn{background:#2e7d32;color:white}
@@ -368,11 +332,7 @@ button{
 <input type="date" id="date">
 
 <label>FACILITY</label>
-<div class="fac-wrap" id="facWrapMain">
-  <span class="fac-ghost" id="facGhostMain" aria-hidden="true"></span>
-  <input type="text" id="facility" placeholder="Type facility name" required autocomplete="off">
-  <div class="fac-dropdown" id="facDropMain"></div>
-</div>
+<input type="text" id="facility" list="facilityList" placeholder="Type facility name" required>
 <datalist id="facilityList"></datalist>
 
 <div class="sectionSpacer"></div>
@@ -509,11 +469,7 @@ button{
     <input type="date" id="augDate">
 
     <label>FACILITY</label>
-    <div class="fac-wrap" id="facWrapAug">
-  <span class="fac-ghost" id="facGhostAug" aria-hidden="true"></span>
-  <input type="text" id="augFacility" placeholder="Type facility name" required autocomplete="off">
-  <div class="fac-dropdown" id="facDropAug"></div>
-</div>
+    <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name" required>
 
     <label>BOX CONTAINER</label>
     <input type="number" id="augBoxContainerQty" placeholder="Qty">
@@ -619,166 +575,18 @@ function setTodayDate(){
   if(augDate && !augDate.value) augDate.value = today;
 }
 
-// ── Facility autocomplete data ───────────────────────────────────────────────
-let _facilityNames = [];   // populated by loadFacilities()
-
-function _facEsc(s){ return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
-
-function _facBestMatch(typed){
-  if(!typed) return "";
-  const t = typed.toLowerCase();
-  return _facilityNames.find(n => n.toLowerCase().startsWith(t)) || "";
-}
-
-function _facFilterMatches(typed){
-  if(!typed) return [];
-  const t = typed.toLowerCase();
-  return _facilityNames.filter(n => n.toLowerCase().includes(t)).slice(0,10);
-}
-
-function _setupFacAutocomplete(inputId, ghostId, dropId){
-  const inp   = document.getElementById(inputId);
-  const ghost = document.getElementById(ghostId);
-  const drop  = document.getElementById(dropId);
-  if(!inp||!ghost||!drop) return;
-
-  let activeIdx = -1;
-
-  function getTyped(){ return inp.value; }
-
-  function updateGhost(){
-    const typed = getTyped();
-    const best  = _facBestMatch(typed);
-    if(best && typed && best.toLowerCase() !== typed.toLowerCase()){
-      // Show the full name but make the typed part invisible (same color as bg)
-      // We render the typed chars as transparent, rest as grey
-      ghost.textContent = best;
-    } else {
-      ghost.textContent = "";
-    }
-  }
-
-  function renderDrop(){
-    const typed   = getTyped();
-    const matches = _facFilterMatches(typed);
-    activeIdx     = -1;
-    if(!typed || !matches.length){ drop.classList.remove("open"); drop.innerHTML=""; return; }
-    const t = typed.toLowerCase();
-    drop.innerHTML = matches.map((name,i)=>{
-      const idx = name.toLowerCase().indexOf(t);
-      let html = _facEsc(name);
-      if(idx >= 0){
-        html = _facEsc(name.slice(0,idx))
-             + `<span class="fac-match">${_facEsc(name.slice(idx, idx+typed.length))}</span>`
-             + _facEsc(name.slice(idx+typed.length));
-      }
-      return `<div class="fac-item" data-val="${_facEsc(name)}" data-idx="${i}">${html}</div>`;
-    }).join("");
-    drop.classList.add("open");
-  }
-
-  function accept(value){
-    inp.value = value;
-    ghost.textContent = "";
-    drop.classList.remove("open");
-    drop.innerHTML = "";
-    activeIdx = -1;
-  }
-
-  inp.addEventListener("input", ()=>{ updateGhost(); renderDrop(); });
-
-  inp.addEventListener("keydown", e=>{
-    const items = drop.querySelectorAll(".fac-item");
-    if(e.key === "Tab" || e.key === "Enter"){
-      // Tab/Enter: accept inline ghost first, else active dropdown item, else first match
-      const best = _facBestMatch(getTyped());
-      if(drop.classList.contains("open") && activeIdx >= 0 && items[activeIdx]){
-        e.preventDefault();
-        accept(items[activeIdx].dataset.val);
-      } else if(best && getTyped()){
-        if(e.key === "Tab") e.preventDefault();
-        accept(best);
-      }
-      // If nothing matches, let Tab move normally
-      return;
-    }
-    if(e.key === "ArrowDown"){
-      e.preventDefault();
-      if(!drop.classList.contains("open")) renderDrop();
-      activeIdx = Math.min(activeIdx+1, items.length-1);
-      items.forEach((el,i)=>el.classList.toggle("fac-active", i===activeIdx));
-    }
-    if(e.key === "ArrowUp"){
-      e.preventDefault();
-      activeIdx = Math.max(activeIdx-1, -1);
-      items.forEach((el,i)=>el.classList.toggle("fac-active", i===activeIdx));
-    }
-    if(e.key === "Escape"){
-      drop.classList.remove("open"); ghost.textContent=""; activeIdx=-1;
-    }
-  });
-
-  drop.addEventListener("mousedown", e=>{
-    const item = e.target.closest(".fac-item");
-    if(item){ e.preventDefault(); accept(item.dataset.val); }
-  });
-
-  document.addEventListener("click", e=>{
-    if(!inp.contains(e.target) && !drop.contains(e.target)){
-      drop.classList.remove("open");
-      ghost.textContent="";
-    }
-  });
-
-  inp.addEventListener("focus", ()=>{ if(getTyped()) renderDrop(); });
-}
-
 function loadFacilities(){
   onValue(ref(db, "facilities"), (snapshot) => {
     facilityList.innerHTML = "";
-    _facilityNames = [];
 
     if (!snapshot.exists()) return;
 
     snapshot.forEach((child) => {
       const data = child.val();
-      const name = (data.name || "").trim();
-      if(!name) return;
-      _facilityNames.push(name);
-      // Keep datalist in sync for any fallback
       const option = document.createElement("option");
-      option.value = name;
+      option.value = data.name || "";
       facilityList.appendChild(option);
     });
-
-    // Sort alphabetically for best match ordering
-    _facilityNames.sort((a,b)=>a.localeCompare(b));
-
-    // Setup autocomplete for both fields after data is ready
-    _setupFacAutocomplete("facility",    "facGhostMain", "facDropMain");
-    _setupFacAutocomplete("augFacility", "facGhostAug",  "facDropAug");
-
-    // Sync ghost padding/font exactly to the real inputs
-    ["facility","augFacility"].forEach(id => {
-      const inp = document.getElementById(id);
-      const ghostId = id === "facility" ? "facGhostMain" : "facGhostAug";
-      const ghost = document.getElementById(ghostId);
-      if(!inp||!ghost) return;
-      const cs = window.getComputedStyle(inp);
-      ghost.style.paddingLeft   = cs.paddingLeft;
-      ghost.style.paddingRight  = cs.paddingRight;
-      ghost.style.paddingTop    = cs.paddingTop;
-      ghost.style.paddingBottom = cs.paddingBottom;
-      ghost.style.fontSize      = cs.fontSize;
-      ghost.style.fontFamily    = cs.fontFamily;
-      ghost.style.fontWeight    = cs.fontWeight;
-      ghost.style.letterSpacing = cs.letterSpacing;
-      ghost.style.lineHeight    = cs.lineHeight;
-      inp.style.background = "transparent";
-      inp.style.position   = "relative";
-      inp.style.zIndex     = "1";
-    });
-
   }, (error) => {
     console.error("Facility load error:", error);
   });
