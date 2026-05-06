@@ -338,6 +338,155 @@ margin-top:12px;
 display:block;
 }
 
+/* ── Blood Type per Facility Panel ────────────────────────────────── */
+.btSection{
+margin-top:16px;
+border:1px solid #b2dfdb;
+border-radius:8px;
+overflow:hidden;
+}
+
+.btSectionHeader{
+background:#004d40;
+color:white;
+padding:10px 14px;
+font-weight:bold;
+font-size:13px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+cursor:pointer;
+letter-spacing:0.5px;
+}
+
+.btSectionHeader:hover{
+background:#00695c;
+}
+
+.btSectionBody{
+display:none;
+background:#f8fffe;
+padding:14px;
+}
+
+.btSectionBody.open{
+display:block;
+}
+
+.btGrid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+gap:12px;
+margin-top:4px;
+}
+
+.btFacCard{
+background:#ffffff;
+border:1px solid #c8e6e1;
+border-radius:8px;
+overflow:hidden;
+box-shadow:0 1px 4px rgba(0,0,0,0.06);
+}
+
+.btFacName{
+background:#00897b;
+color:white;
+font-weight:bold;
+font-size:12px;
+padding:7px 10px;
+text-transform:uppercase;
+letter-spacing:0.3px;
+}
+
+.btFacTable{
+width:100%;
+border-collapse:collapse;
+font-size:12px;
+}
+
+.btFacTable th{
+background:#e0f2f1;
+color:#004d40;
+padding:5px 8px;
+text-align:center;
+border:1px solid #b2dfdb;
+font-size:11px;
+}
+
+.btFacTable td{
+padding:5px 8px;
+text-align:center;
+border:1px solid #e0f2f1;
+color:#333;
+}
+
+.btFacTable td.bt-label{
+text-align:left;
+font-weight:bold;
+color:#00695c;
+background:#f1fbf9;
+}
+
+.btFacTable tr:last-child td{
+font-weight:bold;
+background:#e0f2f1;
+color:#004d40;
+}
+
+.btFacTable .bt-zero{
+color:#ccc;
+}
+
+.btMonthTotal{
+margin-top:12px;
+border:1px solid #00897b;
+border-radius:8px;
+overflow:hidden;
+}
+
+.btMonthTotalHeader{
+background:#00695c;
+color:white;
+padding:7px 12px;
+font-weight:bold;
+font-size:12px;
+}
+
+.btMonthTotalTable{
+width:100%;
+border-collapse:collapse;
+font-size:12px;
+}
+
+.btMonthTotalTable th{
+background:#b2dfdb;
+color:#004d40;
+padding:6px 8px;
+text-align:center;
+border:1px solid #9fd4cd;
+font-size:11px;
+}
+
+.btMonthTotalTable td{
+padding:6px 8px;
+text-align:center;
+border:1px solid #e0f2f1;
+}
+
+.btMonthTotalTable td.bt-label{
+text-align:left;
+font-weight:bold;
+color:#004d40;
+background:#e0f2f1;
+}
+
+.btMonthTotalTable tr:last-child td{
+font-weight:bold;
+background:#c8e6e1;
+color:#004d40;
+}
+/* ── end Blood Type per Facility ──────────────────────────────────── */
+
 @media (max-width: 1000px){
 .dashboardGrid{
 grid-template-columns:repeat(2,1fr);
@@ -443,6 +592,91 @@ let expandedHospitalRows = new Set();
 let expandedMainSections = new Set(["dashboard","patientServed"]);
 let expandedYears = new Set();
 let expandedMonths = new Set();
+let expandedBtSections = new Set();
+
+// ── Blood Type per Facility renderer ────────────────────────────────────────
+const BT_ORDER = ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"];
+
+function renderBloodTypePerFacility(monthKey, hospitals, monthBtTotals){
+    const sectionKey = "bt__" + monthKey;
+    const isOpen = expandedBtSections.has(sectionKey);
+
+    // Gather all blood types present in this month
+    const allBTs = new Set();
+    Object.values(hospitals).forEach(h => {
+        Object.keys(h.bloodTypeRequested||{}).forEach(bt => allBTs.add(bt));
+    });
+    // Sort by BT_ORDER, then anything else alphabetically
+    const sortedBTs = [...allBTs].sort((a,b)=>{
+        const ai=BT_ORDER.indexOf(a), bi=BT_ORDER.indexOf(b);
+        if(ai===-1&&bi===-1) return a.localeCompare(b);
+        if(ai===-1) return 1; if(bi===-1) return -1;
+        return ai-bi;
+    });
+
+    if(sortedBTs.length===0) return "";
+
+    const facilityNames = Object.keys(hospitals).sort();
+
+    // Build per-facility cards
+    const facilityCards = facilityNames.map(fac => {
+        const btData = hospitals[fac].bloodTypeRequested || {};
+        const facTotal = Object.values(btData).reduce((s,v)=>s+v,0);
+        if(facTotal===0) return "";
+
+        const rows = sortedBTs.map(bt => {
+            const qty = btData[bt] || 0;
+            const cls = qty===0 ? "bt-zero" : "";
+            return `<tr>
+                <td class="bt-label">${bt}</td>
+                <td class="${cls}">${qty===0?"—":qty}</td>
+            </tr>`;
+        }).join("");
+
+        return `<div class="btFacCard">
+            <div class="btFacName">${fac}</div>
+            <table class="btFacTable">
+                <thead><tr><th>Blood Type</th><th>Units Requested</th></tr></thead>
+                <tbody>
+                    ${rows}
+                    <tr><td class="bt-label">TOTAL</td><td>${facTotal}</td></tr>
+                </tbody>
+            </table>
+        </div>`;
+    }).filter(Boolean).join("");
+
+    // Month total summary table
+    const monthTotalRows = sortedBTs.map(bt => {
+        const qty = monthBtTotals[bt] || 0;
+        const cls = qty===0 ? "bt-zero" : "";
+        return `<tr>
+            <td class="bt-label">${bt}</td>
+            <td class="${cls}">${qty===0?"—":qty}</td>
+        </tr>`;
+    }).join("");
+    const grandTotal = Object.values(monthBtTotals).reduce((s,v)=>s+v,0);
+
+    return `<div class="btSection">
+        <div class="btSectionHeader" data-bt-key="${sectionKey}">
+            <span>🩸 BLOOD TYPE REQUESTED PER FACILITY</span>
+            <span style="font-size:12px;font-weight:normal;">${isOpen?"▲ COLLAPSE":"▼ EXPAND"}</span>
+        </div>
+        <div class="btSectionBody ${isOpen?"open":""}">
+            <div class="btGrid">${facilityCards}</div>
+            <div class="btMonthTotal" style="margin-top:16px;">
+                <div class="btMonthTotalHeader">📊 MONTH TOTAL — ALL FACILITIES COMBINED</div>
+                <table class="btMonthTotalTable">
+                    <thead><tr><th>Blood Type</th><th>Total Units Requested</th></tr></thead>
+                    <tbody>
+                        ${monthTotalRows}
+                        <tr><td class="bt-label">GRAND TOTAL</td><td>${grandTotal}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>`;
+}
+// ── end Blood Type per Facility renderer ─────────────────────────────────────
 
 async function loadPrices(){
     try{
@@ -633,7 +867,8 @@ function buildReleasingStats(){
                     issued:emptyComponent(),
                     actualIncome:0,
                     computedTotal:0,
-                    boxContainers:0
+                    boxContainers:0,
+                    bloodTypeRequested:{}
                 }
             };
         }
@@ -647,7 +882,8 @@ function buildReleasingStats(){
                 issued:emptyComponent(),
                 boxContainers:0,
                 computedTotal:0,
-                patients:[]
+                patients:[],
+                bloodTypeRequested:{}
             };
         }
 
@@ -674,6 +910,19 @@ function buildReleasingStats(){
         countComponents(m.totals.requested, entry.requests);
         countComponents(h.requested, entry.requests);
         countComponents(grand.requested, entry.requests);
+
+        // Blood type requested tracking per facility and month
+        const entryBloodType = (entry.bloodtype || "UNKNOWN").toUpperCase().trim() || "UNKNOWN";
+        const totalRequestedUnits = Array.isArray(entry.requests)
+            ? entry.requests.reduce((s,r)=>s+Number(r.qty||0),0) : 0;
+
+        if(totalRequestedUnits > 0){
+            if(!h.bloodTypeRequested[entryBloodType]) h.bloodTypeRequested[entryBloodType] = 0;
+            h.bloodTypeRequested[entryBloodType] += totalRequestedUnits;
+
+            if(!m.totals.bloodTypeRequested[entryBloodType]) m.totals.bloodTypeRequested[entryBloodType] = 0;
+            m.totals.bloodTypeRequested[entryBloodType] += totalRequestedUnits;
+        }
 
         countComponents(m.totals.issued, entry.issued);
         countComponents(h.issued, entry.issued);
@@ -1093,6 +1342,14 @@ function renderStatistics(){
             body.appendChild(summary);
             body.appendChild(table);
 
+            // Blood Type per Facility panel — inserted after the main table
+            const btHtml = renderBloodTypePerFacility(month, m.hospitals, m.totals.bloodTypeRequested || {});
+            if(btHtml){
+                const btDiv = document.createElement("div");
+                btDiv.innerHTML = btHtml;
+                body.appendChild(btDiv);
+            }
+
             wrapper.appendChild(header);
             wrapper.appendChild(body);
             yearBody.appendChild(wrapper);
@@ -1162,6 +1419,18 @@ function attachExpandableEvents(){
                 expandedMonths.delete(key);
             }else{
                 expandedMonths.add(key);
+            }
+            renderStatistics();
+        };
+    });
+
+    document.querySelectorAll("[data-bt-key]").forEach(row => {
+        row.onclick = function(){
+            const key = this.dataset.btKey;
+            if(expandedBtSections.has(key)){
+                expandedBtSections.delete(key);
+            }else{
+                expandedBtSections.add(key);
             }
             renderStatistics();
         };
