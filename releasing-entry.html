@@ -78,6 +78,36 @@ button{
 
 .save{background:#ff9800;color:white}
 .facilityBtn{background:#2e7d32;color:white}
+
+/* ── Facility smart autocomplete ─────────────────────────────────── */
+.fac-wrap{position:relative;width:100%;}
+.fac-wrap input[type=text]{width:100%;box-sizing:border-box;position:relative;z-index:1;background:transparent;}
+.fac-ghost{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:flex;align-items:center;
+  padding:0 10px;box-sizing:border-box;
+  font-size:inherit;font-family:inherit;letter-spacing:inherit;
+  color:#aaa;pointer-events:none;white-space:nowrap;overflow:hidden;
+  z-index:0;
+}
+.fac-dropdown{
+  display:none;position:absolute;top:calc(100% + 2px);left:0;width:100%;
+  max-height:220px;overflow-y:auto;
+  background:#fff;border:1px solid #b0bec5;border-radius:6px;
+  z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.13);
+}
+.fac-dropdown.open{display:block;}
+.fac-item{padding:9px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid #f0f0f0;color:#1a1a1a;}
+.fac-item:last-child{border-bottom:none;}
+.fac-item .fac-match{font-weight:bold;color:#b71c1c;}
+.fac-item .fac-alias{font-size:11px;color:#888;margin-left:6px;}
+.fac-item:hover,.fac-item.fac-active{background:#fce4e4;}
+.fac-resolved{
+  display:none;font-size:11px;color:#2e7d32;font-style:italic;
+  margin-top:2px;
+}
+.fac-resolved.show{display:block;}
+/* ── end facility autocomplete ─────────────────────────────────── */
 .trackingBtn{background:#1565c0;color:white}
 .back{background:#444;color:white}
 .addBtn{background:#2e7d32;color:white}
@@ -453,7 +483,12 @@ button{
 <input type="date" id="date">
 
 <label>FACILITY</label>
-<input type="text" id="facility" list="facilityList" placeholder="Type facility name" required>
+<div class="fac-wrap" id="facWrapMain">
+  <span class="fac-ghost" id="facGhostMain" aria-hidden="true"></span>
+  <input type="text" id="facility" placeholder="Type facility name or acronym (e.g. BGHMC, R1MC)" required autocomplete="off">
+  <div class="fac-dropdown" id="facDropMain"></div>
+</div>
+<div class="fac-resolved" id="facResolvedMain"></div>
 <datalist id="facilityList"></datalist>
 
 <div class="sectionSpacer"></div>
@@ -590,7 +625,12 @@ button{
     <input type="date" id="augDate">
 
     <label>FACILITY</label>
-    <input type="text" id="augFacility" list="facilityList" placeholder="Type facility name" required>
+    <div class="fac-wrap" id="facWrapAug">
+      <span class="fac-ghost" id="facGhostAug" aria-hidden="true"></span>
+      <input type="text" id="augFacility" placeholder="Type facility name or acronym (e.g. NDCH, WPDH)" required autocomplete="off">
+      <div class="fac-dropdown" id="facDropAug"></div>
+    </div>
+    <div class="fac-resolved" id="facResolvedAug"></div>
 
     <label>BOX CONTAINER</label>
     <input type="number" id="augBoxContainerQty" placeholder="Qty">
@@ -742,20 +782,302 @@ function setTodayDate(){
   if(augDate && !augDate.value) augDate.value = today;
 }
 
+// ─── Facility data (loaded from Firebase, available to all devices) ──────────
+let _facilityNames  = [];   // canonical names, sorted A-Z
+let _facilityAliasMap = {}; // normalized-key → canonical name
+
+// Built-in aliases (always available even if not yet in Firebase aliases field)
+// Devices that open the site get these from code; Firebase aliases add on top.
+const _BUILTIN_ALIASES = [
+  { canonical:"BAGUIO GENERAL HOSPITAL AND MEDICAL CENTER",
+    aliases:["BGHMC","BGH","BAGUIO GENERAL","BAGUIO GEN","B.G.H.M.C","BGMC"] },
+  { canonical:"NOTRE DAME DE CHARTRES HOSPITAL",
+    aliases:["NDCH","NOTRE DAME DE CHARTRES","NOTRE DAME CHARTRES","ND CHARTRES","N.D.C.H"] },
+  { canonical:"REGION 1 MEDICAL CENTER",
+    aliases:["R1MC","REGION 1 MED CENTER","REGION I MEDICAL CENTER","R1 MED CENTER","R-1MC","R.1.M.C","REGION 1MC"] },
+  { canonical:"SAINT LOUIS UNIVERSITY HOSPITAL",
+    aliases:["SLUH","SLU HOSPITAL","SLU HOSP","SLU","S.L.U.H"] },
+  { canonical:"BENGUET GENERAL HOSPITAL",
+    aliases:["BGH BENGUET","BENGUET GEN HOSP","BENGUET GENERAL","BGH-BENGUET"] },
+  { canonical:"PINES CITY DOCTORS HOSPITAL",
+    aliases:["PCDH","PINES CITY DOCTORS","PINES DOCTORS","P.C.D.H"] },
+  { canonical:"WESTERN PANGASINAN DISTRICT HOSPITAL",
+    aliases:["WPDH","WESTERN PANGASINAN","W.P.D.H","WPDC"] },
+  { canonical:"EASTERN PANGASINAN DISTRICT HOSPITAL",
+    aliases:["EPDH","EASTERN PANGASINAN","E.P.D.H"] },
+  { canonical:"ILOCOS TRAINING AND REGIONAL MEDICAL CENTER",
+    aliases:["ITRMC","ILOCOS TRAINING","ILOCOS REGIONAL","I.T.R.M.C"] },
+  { canonical:"DON MARIANO MARCOS MEMORIAL HOSPITAL",
+    aliases:["DMMMH","DON MARIANO MARCOS","D.M.M.M.H"] },
+  { canonical:"PHILIPPINE GENERAL HOSPITAL",
+    aliases:["PGH","PHIL GENERAL HOSPITAL","P.G.H"] },
+  { canonical:"DAGUPAN DOCTORS VILLAFLOR MEMORIAL HOSPITAL",
+    aliases:["DDVMH","DAGUPAN DOCTORS","VILLAFLOR MEMORIAL","D.D.V.M.H"] },
+];
+
+function _facNormKey(s){
+  return String(s||"").toUpperCase().replace(/[\s.\-()&,\/]+/g,"");
+}
+
+function _buildAliasMap(names, extraAliases){
+  _facilityAliasMap = {};
+  // register all canonical names (self-map)
+  names.forEach(n => {
+    const u = n.toUpperCase().trim();
+    _facilityAliasMap[u] = u;
+    _facilityAliasMap[_facNormKey(u)] = u;
+  });
+  // built-in aliases
+  _BUILTIN_ALIASES.forEach(entry => {
+    const canon = entry.canonical.toUpperCase().trim();
+    // only map if canonical is in our list (or add it)
+    entry.aliases.forEach(a => {
+      const u = a.toUpperCase().trim();
+      _facilityAliasMap[u] = canon;
+      _facilityAliasMap[_facNormKey(u)] = canon;
+    });
+    // ensure canonical is self-mapped even if not in Firebase yet
+    _facilityAliasMap[canon] = canon;
+    _facilityAliasMap[_facNormKey(canon)] = canon;
+  });
+  // Firebase-stored aliases (per facility node)
+  extraAliases.forEach(({canonical, aliases}) => {
+    const canon = canonical.toUpperCase().trim();
+    (aliases||[]).forEach(a => {
+      const u = a.toUpperCase().trim();
+      _facilityAliasMap[u] = canon;
+      _facilityAliasMap[_facNormKey(u)] = canon;
+    });
+  });
+}
+
+function normalizeFacility(raw){
+  if(!raw) return "";
+  const upper = raw.toUpperCase().trim();
+  if(!upper) return "";
+  // 1. exact
+  if(_facilityAliasMap[upper]) return _facilityAliasMap[upper];
+  // 2. norm key
+  const nk = _facNormKey(upper);
+  if(_facilityAliasMap[nk]) return _facilityAliasMap[nk];
+  // 3. starts-with
+  for(const [k,v] of Object.entries(_facilityAliasMap)){
+    if(k.length >= 3 && (upper.startsWith(k) || k.startsWith(upper))) return v;
+  }
+  // 4. substring
+  for(const entry of _BUILTIN_ALIASES){
+    const canon = entry.canonical.toUpperCase().trim();
+    for(const alias of [entry.canonical,...entry.aliases]){
+      const a = alias.toUpperCase().trim();
+      if(a.length >= 4 && (upper.includes(a) || a.includes(upper))) return canon;
+    }
+  }
+  return upper;
+}
+
+function _facBestMatch(typed){
+  if(!typed) return "";
+  const t = typed.toLowerCase();
+  // 1. starts with typed
+  let m = _facilityNames.find(n => n.toLowerCase().startsWith(t));
+  if(m) return m;
+  // 2. any alias/key starts with typed (return its canonical)
+  for(const [k,v] of Object.entries(_facilityAliasMap)){
+    if(k.length >= 2 && k.toLowerCase().startsWith(t)){
+      // return the canonical name
+      return v;
+    }
+  }
+  return "";
+}
+
+function _facFilterMatches(typed){
+  if(!typed) return [];
+  const t = typed.toLowerCase();
+  const seen = new Set();
+  const results = [];
+  // names that contain the typed string
+  _facilityNames.forEach(n => {
+    if(n.toLowerCase().includes(t) && !seen.has(n)){ seen.add(n); results.push({name:n,alias:""}); }
+  });
+  // aliases that match
+  Object.entries(_facilityAliasMap).forEach(([k,v]) => {
+    if(k.length < 2) return;
+    if(k.toLowerCase().startsWith(t) && !seen.has(v)){
+      seen.add(v);
+      results.push({name:v, alias:k !== _facNormKey(v) ? k : ""});
+    }
+  });
+  return results.slice(0,12);
+}
+
+function _facEsc(s){ return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+function _setupFacAutocomplete(inputId, ghostId, dropId, resolvedId){
+  const inp     = document.getElementById(inputId);
+  const ghost   = document.getElementById(ghostId);
+  const drop    = document.getElementById(dropId);
+  const resolved= document.getElementById(resolvedId);
+  if(!inp||!ghost||!drop) return;
+
+  let activeIdx = -1;
+  let _setupDone = false;
+
+  function syncGhostStyle(){
+    if(_setupDone) return; _setupDone = true;
+    const cs = window.getComputedStyle(inp);
+    ghost.style.paddingLeft  = cs.paddingLeft;
+    ghost.style.paddingRight = cs.paddingRight;
+    ghost.style.paddingTop   = cs.paddingTop;
+    ghost.style.paddingBottom= cs.paddingBottom;
+    ghost.style.fontSize     = cs.fontSize;
+    ghost.style.fontFamily   = cs.fontFamily;
+    ghost.style.fontWeight   = cs.fontWeight;
+    ghost.style.lineHeight   = cs.lineHeight;
+    inp.style.background     = "transparent";
+    inp.style.position       = "relative";
+    inp.style.zIndex         = "1";
+  }
+
+  function updateGhost(){
+    syncGhostStyle();
+    const typed = inp.value;
+    const best  = _facBestMatch(typed);
+    ghost.textContent = (best && typed && best.toLowerCase() !== typed.toLowerCase()) ? best : "";
+  }
+
+  function showResolved(canonical){
+    if(!resolved) return;
+    if(canonical && canonical.toUpperCase() !== inp.value.toUpperCase()){
+      resolved.textContent = "→ Will save as: " + canonical;
+      resolved.classList.add("show");
+    } else {
+      resolved.classList.remove("show");
+    }
+  }
+
+  function renderDrop(){
+    const typed   = inp.value;
+    const matches = _facFilterMatches(typed);
+    activeIdx     = -1;
+    if(!typed || !matches.length){ drop.classList.remove("open"); drop.innerHTML=""; return; }
+    const t = typed.toLowerCase();
+    drop.innerHTML = matches.map((m,i)=>{
+      const idx = m.name.toLowerCase().indexOf(t);
+      let html = _facEsc(m.name);
+      if(idx>=0) html = _facEsc(m.name.slice(0,idx))
+        +`<span class="fac-match">${_facEsc(m.name.slice(idx,idx+typed.length))}</span>`
+        +_facEsc(m.name.slice(idx+typed.length));
+      const aliasTag = m.alias ? `<span class="fac-alias">${_facEsc(m.alias)}</span>` : "";
+      return `<div class="fac-item" data-val="${_facEsc(m.name)}" data-idx="${i}">${html}${aliasTag}</div>`;
+    }).join("");
+    drop.classList.add("open");
+  }
+
+  function accept(value){
+    inp.value = value;
+    ghost.textContent = "";
+    drop.classList.remove("open");
+    drop.innerHTML = "";
+    activeIdx = -1;
+    showResolved(normalizeFacility(value));
+  }
+
+  inp.addEventListener("input", ()=>{ updateGhost(); renderDrop(); showResolved(normalizeFacility(inp.value)); });
+
+  inp.addEventListener("keydown", e=>{
+    const items = drop.querySelectorAll(".fac-item");
+    if(e.key==="Tab"||e.key==="Enter"){
+      if(drop.classList.contains("open") && activeIdx>=0 && items[activeIdx]){
+        e.preventDefault(); accept(items[activeIdx].dataset.val); return;
+      }
+      const best = _facBestMatch(inp.value);
+      if(best && inp.value){
+        if(e.key==="Tab") e.preventDefault();
+        accept(best); return;
+      }
+    }
+    if(e.key==="ArrowDown"){
+      e.preventDefault();
+      if(!drop.classList.contains("open")) renderDrop();
+      activeIdx = Math.min(activeIdx+1,(drop.querySelectorAll(".fac-item").length)-1);
+      drop.querySelectorAll(".fac-item").forEach((el,i)=>el.classList.toggle("fac-active",i===activeIdx));
+    }
+    if(e.key==="ArrowUp"){
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx-1,-1);
+      drop.querySelectorAll(".fac-item").forEach((el,i)=>el.classList.toggle("fac-active",i===activeIdx));
+    }
+    if(e.key==="Escape"){ drop.classList.remove("open"); ghost.textContent=""; activeIdx=-1; }
+  });
+
+  drop.addEventListener("mousedown", e=>{
+    const item = e.target.closest(".fac-item");
+    if(item){ e.preventDefault(); accept(item.dataset.val); }
+  });
+
+  inp.addEventListener("blur", ()=>{
+    setTimeout(()=>{ drop.classList.remove("open"); },150);
+    // on blur, show resolved canonical
+    showResolved(normalizeFacility(inp.value));
+  });
+
+  inp.addEventListener("focus", ()=>{ if(inp.value) renderDrop(); });
+
+  document.addEventListener("click", e=>{
+    if(!inp.contains(e.target)&&!drop.contains(e.target)){
+      drop.classList.remove("open"); ghost.textContent="";
+    }
+  });
+}
+
 function loadFacilities(){
   onValue(ref(db, "facilities"), (snapshot) => {
     facilityList.innerHTML = "";
+    _facilityNames = [];
+    const extraAliases = [];
 
-    if (!snapshot.exists()) return;
+    if(!snapshot.exists()){
+      // still build alias map from built-ins even if Firebase has no facilities yet
+      _buildAliasMap([], []);
+      _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
+      _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
+      return;
+    }
 
     snapshot.forEach((child) => {
-      const data = child.val();
+      const data  = child.val();
+      const name  = (data.name || "").trim();
+      if(!name) return;
+      _facilityNames.push(name.toUpperCase());
+
+      // read aliases stored in Firebase (array or comma string)
+      if(data.aliases){
+        const rawAliases = Array.isArray(data.aliases)
+          ? data.aliases
+          : String(data.aliases).split(",").map(s=>s.trim()).filter(Boolean);
+        if(rawAliases.length) extraAliases.push({canonical:name.toUpperCase(), aliases:rawAliases});
+      }
+
+      // keep datalist for fallback
       const option = document.createElement("option");
-      option.value = data.name || "";
+      option.value = name;
       facilityList.appendChild(option);
     });
+
+    _facilityNames.sort((a,b)=>a.localeCompare(b));
+    _buildAliasMap(_facilityNames, extraAliases);
+
+    // Setup autocomplete for both fields (works on any device that opens the site)
+    _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
+    _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
+
   }, (error) => {
     console.error("Facility load error:", error);
+    // still setup with built-ins only
+    _buildAliasMap([], []);
+    _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
+    _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
   });
 }
 
@@ -1436,7 +1758,7 @@ saveBtn.addEventListener("click", async () => {
 
   const entryData = {
     date: document.getElementById("date").value,
-    facility: facilityValue.toUpperCase(),
+    facility: normalizeFacility(facilityValue),
     surname: document.getElementById("surname").value.toUpperCase(),
     firstname: document.getElementById("firstname").value.toUpperCase(),
     age: document.getElementById("age").value,
@@ -1698,7 +2020,7 @@ window.saveAugmentation = async function(){
 
   const augmentationData = {
     date: document.getElementById("augDate").value,
-    facility: augFacilityValue.toUpperCase(),
+    facility: normalizeFacility(augFacilityValue),
     boxContainerQty: document.getElementById("augBoxContainerQty").value || 0,
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
