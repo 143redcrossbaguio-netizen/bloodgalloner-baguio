@@ -874,9 +874,19 @@ function dailyDrop(mk,s){
       const d=parseDate(dk);
       const lbl=d?`${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`:dk;
       const bd=s.dailyBreakdown?.[dk]||{walkIn:0,patientDirected:0,mbd:{}};
-      const mbdNames=Object.keys(bd.mbd||{}).sort();
+      // RENDER-TIME MERGE: re-collapse MBD partner names through normKey here so
+      // any leftover variants in the in-memory breakdown (e.g. "P PARK" + "PEOPLE'S PARK"
+      // both registered as aliases of "PEOPLES PARK") show as a SINGLE pill with the
+      // summed count. This is a safety net on top of the build-time normalization in
+      // applyDonor() — important when records were imported before aliases were set up.
+      const mergedMbd={};
+      Object.keys(bd.mbd||{}).forEach(rawName=>{
+        const canon=normKey(rawName)||rawName;
+        mergedMbd[canon]=(mergedMbd[canon]||0)+(bd.mbd[rawName]||0);
+      });
+      const mbdNames=Object.keys(mergedMbd).sort();
       const mbdHtml=mbdNames.length
-        ? mbdNames.map(name=>`<span class="daily-pill">${escH(name)}: ${n(bd.mbd[name])}</span>`).join("")
+        ? mbdNames.map(name=>`<span class="daily-pill">${escH(name)}: ${n(mergedMbd[name])}</span>`).join("")
         : `<span class="daily-pill">None</span>`;
       return`<div class="daily-row"><span>${escH(lbl)}</span><span class="daily-count">${n(s.dailyCounts[dk])}</span></div>
         <div class="daily-detail">
