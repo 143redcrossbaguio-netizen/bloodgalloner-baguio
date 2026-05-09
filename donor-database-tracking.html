@@ -1436,9 +1436,26 @@ function compareByEntryDateAsc(a, b) {
     return String(a.serialNumber || "").localeCompare(String(b.serialNumber || ""), undefined, { numeric:true, sensitivity:"base" });
 }
 function applySerialSort(records) {
-    // Default (no header filter chosen) = ascending serial order
-    if (headerFilters.serialSort === "desc") records.sort((a,b) => compareSerialNumbers(b,a));
-    else records.sort((a,b) => compareSerialNumbers(a,b));  // asc is default
+    // Primary sort: ENTRY DATE (newest first) — this is what makes the per-date
+    // sub-header in the rendered table show ONCE per date instead of repeating.
+    // The screenshot showed "05-09-2026" then "05-08-2026" then "05-09-2026"
+    // again because records were ordered by serial number only, with mixed
+    // dates. Sorting by date first groups every date into one contiguous block.
+    //
+    // Secondary sort: SERIAL NUMBER (asc/desc per the user's header filter).
+    const serialDir = headerFilters.serialSort === "desc" ? -1 : 1;
+    records.sort((a, b) => {
+        const da = a._resolvedEntryDate || "";
+        const db = b._resolvedEntryDate || "";
+        // Newest date first (descending). Empty/unknown dates sort last.
+        if (da !== db) {
+            if (!da) return 1;
+            if (!db) return -1;
+            return db.localeCompare(da);
+        }
+        // Same date → fall back to serial-number order
+        return serialDir === 1 ? compareSerialNumbers(a, b) : compareSerialNumbers(b, a);
+    });
     return records;
 }
 
@@ -1623,12 +1640,83 @@ function getMultiFilterOptions(filterKey, baseDonors, year, month) {
     return [];
 }
 
+// ─── PARTNER ALIAS NORMALIZATION ─────────────────────────────────────────────
+// Encoders type the same partner many ways. Classic example: Peoples Park
+// (a.k.a. Malcolm Square) gets typed as PP, P.PARK, P PARK, PEOPLES PARK,
+// MALCOLM, MALCOLM SQUARE — all the same place. Without normalization the
+// same partner shows up as 4-5 separate filter options and breaks counts.
+//
+// The alias map is loaded from Firestore (the "partnerOrganizations" collection
+// — managed in partner-organization.html). Each org doc has:
+//   { name: "PEOPLES PARK", aliases: ["PP","P.PARK","MALCOLM","MALCOLM SQUARE"] }
+// To add/edit aliases, use the Partner Organization page — no code edit needed.
+let partnerAliasIndex = []; // [{canonical, aliasesNormalized:[...]}]
+
+function _aliasNormalize(s) {
+    return String(s || "")
+        .toUpperCase()
+        .replace(/['`]+/g, "")          // drop apostrophes: PEOPLE'S → PEOPLES
+        .replace(/[.\-_,]+/g, " ")      // other punctuation → space (so P.PARK == P PARK)
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+async function loadPartnerAliasIndex() {
+    try {
+        const snap = await db.collection("partnerOrganizations").get();
+        const idx = [];
+        snap.forEach(docSnap => {
+            const d = docSnap.data() || {};
+            const canonical = String(d.name || "").trim().toUpperCase();
+            if (!canonical) return;
+            const aliasesNorm = Array.isArray(d.aliases)
+                ? d.aliases.map(a => _aliasNormalize(a)).filter(Boolean)
+                : [];
+            // The canonical name itself is always considered an alias of itself
+            const allAliases = [...new Set([_aliasNormalize(canonical), ...aliasesNorm])];
+            idx.push({ canonical, aliasesNormalized: allAliases });
+        });
+        partnerAliasIndex = idx;
+        console.log(`[partner-aliases] Loaded ${idx.length} partner organizations.`);
+    } catch (e) {
+        console.warn("[partner-aliases] Failed to load partner alias index:", e);
+        partnerAliasIndex = [];
+    }
+}
+
+function resolvePartnerAlias(stripped) {
+    const norm = _aliasNormalize(stripped);
+    if (!norm || !partnerAliasIndex.length) return stripped;
+    // Exact match first (strongest, and the only path single-token aliases like
+    // "PP" or "SLU" can ever match — they must equal the input exactly).
+    for (const entry of partnerAliasIndex) {
+        if (entry.aliasesNormalized.includes(norm)) return entry.canonical;
+    }
+    // Word-bounded substring fallback — but ONLY for multi-token aliases.
+    // This lets "PEOPLES PARK ANNEX" still resolve to PEOPLES PARK via "PEOPLES PARK",
+    // while preventing single-token aliases like "PP" or "SLU" from greedily matching
+    // unrelated strings (e.g. "PP MAINTENANCE", "SLUSH FUND" should NOT collapse).
+    for (const entry of partnerAliasIndex) {
+        for (const a of entry.aliasesNormalized) {
+            if (!a || !a.includes(" ")) continue; // skip single-token aliases here
+            const padded = ` ${norm} `;
+            if (padded.includes(` ${a} `)) return entry.canonical;
+        }
+    }
+    return stripped;
+}
+
 // Strip leading/trailing sequence numbers from MBD/Patient-Directed names
-// so "1-LOYALTY", "1 LOYALTY", "LOYALTY-1", "LOYALTY 1" all become "LOYALTY".
+// so "1-LOYALTY", "1 LOYALTY", "LOYALTY-1", "LOYALTY 1" all become "LOYALTY",
+// then collapse known partner aliases (PP / P.PARK / MALCOLM → PEOPLES PARK)
+// using the Firestore-loaded alias index.
 // Examples:
 //   "1-LOYALTY"          -> "LOYALTY"
 //   "LOYALTY-23"         -> "LOYALTY"
 //   "PEOPLES PARK-7"     -> "PEOPLES PARK"
+//   "P.PARK-2"           -> "PEOPLES PARK"   (if PP/P.PARK is registered as alias)
+//   "PP-3"               -> "PEOPLES PARK"
+//   "MALCOLM SQUARE-1"   -> "PEOPLES PARK"
 //   "5 SLU"              -> "SLU"
 //   "BAGUIO CITY HALL"   -> "BAGUIO CITY HALL"  (no number, unchanged)
 function stripGroupingNumbers(raw) {
@@ -1637,6 +1725,8 @@ function stripGroupingNumbers(raw) {
     s = s.replace(/[\s\-_]+\d+\s*$/g, "").trim();
     // Strip leading "<digits><sep>" e.g. "1-", "23 ", "5_"
     s = s.replace(/^\s*\d+[\s\-_]+/g, "").trim();
+    // Resolve partner aliases (requires partnerAliasIndex to be loaded)
+    s = resolvePartnerAlias(s);
     return s;
 }
 
@@ -2894,9 +2984,12 @@ document.addEventListener("input", e => {
 });
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-auth.onAuthStateChanged(user => {
+auth.onAuthStateChanged(async (user) => {
     if (user) {
         initFastMonthSelectors();
+        // Load partner aliases FIRST so stripGroupingNumbers() can resolve
+        // PP / P.PARK / MALCOLM → PEOPLES PARK from the very first render.
+        await loadPartnerAliasIndex();
         loadDonors();
     }
     else document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Please log in first.</div>`;
