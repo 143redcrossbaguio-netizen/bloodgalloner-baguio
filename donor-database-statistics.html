@@ -246,7 +246,7 @@ async function initPage(){
   const ver=++initVersion;
   try{
     setStatus("Loading statistics…","info");
-    await Promise.allSettled([loadDonors(ver),loadMappings(ver),loadReleasing(ver)]);
+    await Promise.allSettled([loadDonors(ver),loadMappings(ver),loadReleasing(ver),loadPartnerAliasIndex()]);
     if(ver!==initVersion)return;
     populateFilters();
     attachEvents();
@@ -534,6 +534,59 @@ function parseNum(v){
 }
 
 // ─── GROUP MAPPING ────────────────────────────────────────────────────────────
+
+// Partner alias index — loaded from the "partnerOrganizations" Firestore collection
+// (managed in partner-organization.html). Each org doc has an `aliases` array, e.g.
+//   { name: "PEOPLES PARK", aliases: ["PP","P.PARK","MALCOLM","MALCOLM SQUARE"] }
+// All alias variants collapse onto the canonical Organization Name in stats.
+let partnerAliasIndex=[]; // [{canonical, aliasesNormalized:[...]}]
+
+function _aliasNormalize(s){
+  return String(s||"").toUpperCase()
+    .replace(/['`]+/g,"")          // drop apostrophes: PEOPLE'S → PEOPLES
+    .replace(/[.\-_,]+/g," ")      // other punctuation → space
+    .replace(/\s+/g," ").trim();
+}
+async function loadPartnerAliasIndex(){
+  try{
+    const snap=await fs.collection("partnerOrganizations").get();
+    const idx=[];
+    snap.forEach(docSnap=>{
+      const d=docSnap.data()||{};
+      const canonical=String(d.name||"").trim().toUpperCase();
+      if(!canonical)return;
+      const aliasesNorm=Array.isArray(d.aliases)
+        ? d.aliases.map(a=>_aliasNormalize(a)).filter(Boolean)
+        : [];
+      const all=[...new Set([_aliasNormalize(canonical),...aliasesNorm])];
+      idx.push({canonical,aliasesNormalized:all});
+    });
+    partnerAliasIndex=idx;
+    console.log(`[partner-aliases] Loaded ${idx.length} partner organizations.`);
+  }catch(e){
+    console.warn("[partner-aliases] Failed to load partner alias index:",e);
+    partnerAliasIndex=[];
+  }
+}
+function resolvePartnerAlias(stripped){
+  const norm=_aliasNormalize(stripped);
+  if(!norm||!partnerAliasIndex.length)return stripped;
+  // Exact match first (only path single-token aliases like "PP"/"SLU" can match)
+  for(const entry of partnerAliasIndex){
+    if(entry.aliasesNormalized.includes(norm))return entry.canonical;
+  }
+  // Word-bounded substring fallback — multi-token aliases ONLY (so "PEOPLES PARK ANNEX"
+  // still resolves to PEOPLES PARK, but "PP" alone won't false-match "PP MAINTENANCE").
+  for(const entry of partnerAliasIndex){
+    for(const a of entry.aliasesNormalized){
+      if(!a||!a.includes(" "))continue;
+      const padded=` ${norm} `;
+      if(padded.includes(` ${a} `))return entry.canonical;
+    }
+  }
+  return stripped;
+}
+
 function normKey(v){
   let s=String(v||"").toUpperCase().trim();
   s=s.replace(/\(.*?\)/g," ").replace(/[_.,/\\]+/g," ")
@@ -541,6 +594,8 @@ function normKey(v){
      .replace(/\bNO\.?\s*\d+\b/g," ").replace(/\b#\s*\d+\b/g," ")
      .replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g," ")
      .replace(/\s+/g," ").trim();
+  // Collapse known partner aliases (PP / P.PARK / MALCOLM → PEOPLES PARK, etc.)
+  s=resolvePartnerAlias(s);
   return s;
 }
 function smartName(v){return normKey(v||"");}
@@ -607,7 +662,11 @@ function applyDonor(s,r){
       if(pType==="Walk-in") dbd.walkIn++;
       else if(pType==="Patient Directed") dbd.patientDirected++;
       else if(pType==="MBD"){
-        const gname=String(r.mbdDetails||"MBD").trim().toUpperCase()||"MBD";
+        // Pass through normKey so PP / P.PARK / MALCOLM SQUARE all roll up to
+        // PEOPLES PARK (or whatever canonical name is set in partner-organization.html)
+        // instead of showing the same partner under multiple separate keys.
+        const rawName=String(r.mbdDetails||"MBD").trim().toUpperCase()||"MBD";
+        const gname=normKey(rawName)||rawName;
         dbd.mbd[gname]=(dbd.mbd[gname]||0)+1;
       }
     }
