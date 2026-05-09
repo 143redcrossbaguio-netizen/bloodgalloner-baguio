@@ -164,6 +164,66 @@
         .duplicate-table th, .duplicate-table td { border: 1px solid #d7d7d7; padding: 7px 8px; text-align: center; vertical-align: middle; white-space: nowrap; }
         .duplicate-table th { background: #f7f7f7; }
 
+        /* Skipped Serials panel */
+        .skipped-box {
+            display: none;
+            margin-bottom: 12px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #fff;
+            border: 2px solid #6b21a8;
+            box-shadow: 0 3px 10px rgba(107,33,168,0.15);
+        }
+        .skipped-box.show { display: block; }
+        .skipped-title { font-size: 16px; font-weight: bold; color: #6b21a8; margin-bottom: 4px; }
+        .skipped-sub   { font-size: 12px; color: #475569; margin-bottom: 12px; }
+        .skipped-prefix-block {
+            background: #faf5ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+        .skipped-prefix-head {
+            font-weight: bold;
+            color: #4c1d95;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        .skipped-meta {
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+        .skipped-meta b { color: #1f2937; }
+        .skipped-list {
+            background: #fff;
+            border: 1px solid #d8b4fe;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            color: #4c1d95;
+            max-height: 200px;
+            overflow-y: auto;
+            word-break: break-all;
+            line-height: 1.7;
+        }
+        .skipped-empty {
+            color: #15803d;
+            font-weight: bold;
+            font-size: 12px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+        .skipped-dismiss {
+            background: #6b21a8; color: #fff; border: none; border-radius: 6px;
+            padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer;
+            margin-top: 4px;
+        }
+
         /* Auto-duplicate alert banner */
         .auto-dup-banner {
             display: none;
@@ -742,6 +802,14 @@
         </div>
     </div>
 
+    <!-- Skipped Serials panel -->
+    <div id="skippedBox" class="skipped-box">
+        <div class="skipped-title" id="skippedTitle">Skipped Serial Numbers</div>
+        <div class="skipped-sub"  id="skippedSub">From the first to the latest serial number recorded this month.</div>
+        <div id="skippedContent"></div>
+        <button class="skipped-dismiss" onclick="document.getElementById('skippedBox').classList.remove('show')">Close</button>
+    </div>
+
     <main class="content-panel">
         <div id="trackingContainer"></div>
     </main>
@@ -1012,6 +1080,163 @@ function showDuplicateBox(title, note, rowsHtml) {
     document.getElementById("duplicateBody").innerHTML    = rowsHtml;
     document.getElementById("duplicateBox").classList.add("show");
 }
+
+// ─── SKIPPED SERIAL NUMBERS ──────────────────────────────────────────────────
+// For a given month, group all serial numbers by their alpha PREFIX (so e.g.
+// "BC-001" and "WB-001" are analysed as separate sequences), then within each
+// prefix find the min and max numeric value present and list which numbers in
+// that range are NOT in the data.
+//
+// Range = [first serial of the month, latest serial of the month]. The "latest
+// date" boundary is implicit: we only consider serials whose record's entry
+// date falls within the month, so the max numeric value is by construction
+// the latest one issued during that month. Skipped serials are those missing
+// integers between min and max.
+function parseSerialForSkipAnalysis(serial) {
+    const s = String(serial || "").trim().toUpperCase();
+    if (!s) return null;
+    // Match a trailing run of digits, with everything before it as a prefix.
+    // Examples:
+    //   "001"          -> prefix "",      pad 3,  num 1
+    //   "00001"        -> prefix "",      pad 5,  num 1
+    //   "BC-001"       -> prefix "BC-",   pad 3,  num 1
+    //   "BC 001"       -> prefix "BC ",   pad 3,  num 1
+    //   "BC001"        -> prefix "BC",    pad 3,  num 1
+    //   "ABC-2025-001" -> prefix "ABC-2025-", pad 3, num 1
+    const m = s.match(/^(.*?)(\d+)\s*$/);
+    if (!m) return null;
+    const numStr = m[2];
+    const num = Number(numStr);
+    if (!isFinite(num)) return null;
+    return {
+        prefix: m[1],          // alpha-ish prefix preserved with whatever separator
+        padWidth: numStr.length,
+        num
+    };
+}
+
+function formatSerialFromParts(prefix, num, padWidth) {
+    return prefix + String(num).padStart(padWidth, "0");
+}
+
+function getSkippedSerialsForMonth(monthValue) {
+    // monthValue is "YYYY-MM"
+    const monthRecs = allDonors.filter(r => {
+        const ym = getYearMonth(r._resolvedEntryDate);
+        return `${ym.year}-${String(ym.month).padStart(2,"0")}` === monthValue;
+    });
+
+    if (!monthRecs.length) return { groups: [], unparseable: [], totalRecords: 0 };
+
+    // Bucket parsed serials by prefix
+    const buckets = {}; // prefix -> { padWidth (max), nums: Set, samples: [{num, serialRaw, date}] }
+    const unparseable = [];
+
+    monthRecs.forEach(r => {
+        const raw = String(r.serialNumber || "").trim();
+        if (!raw) return; // blank serial — skip silently (can't infer anything)
+        const parsed = parseSerialForSkipAnalysis(raw);
+        if (!parsed) {
+            unparseable.push({ serial: raw, date: r._resolvedEntryDate || "" });
+            return;
+        }
+        if (!buckets[parsed.prefix]) {
+            buckets[parsed.prefix] = { padWidth: parsed.padWidth, nums: new Set() };
+        }
+        const b = buckets[parsed.prefix];
+        b.nums.add(parsed.num);
+        // Use the largest pad width seen so reconstructed missing serials match user's style
+        if (parsed.padWidth > b.padWidth) b.padWidth = parsed.padWidth;
+    });
+
+    // Build per-prefix analysis
+    const groups = Object.keys(buckets)
+        .sort((a, b) => a.localeCompare(b))
+        .map(prefix => {
+            const { padWidth, nums } = buckets[prefix];
+            const sortedNums = [...nums].sort((a, b) => a - b);
+            const minNum = sortedNums[0];
+            const maxNum = sortedNums[sortedNums.length - 1];
+            const missing = [];
+            for (let i = minNum; i <= maxNum; i++) {
+                if (!nums.has(i)) missing.push(i);
+            }
+            return {
+                prefix,
+                padWidth,
+                minNum,
+                maxNum,
+                presentCount: sortedNums.length,
+                rangeSize: maxNum - minNum + 1,
+                missing,
+                missingFormatted: missing.map(n => formatSerialFromParts(prefix, n, padWidth)),
+                minFormatted: formatSerialFromParts(prefix, minNum, padWidth),
+                maxFormatted: formatSerialFromParts(prefix, maxNum, padWidth)
+            };
+        });
+
+    return { groups, unparseable, totalRecords: monthRecs.length };
+}
+
+window.showSkippedSerials = function(monthValue) {
+    if (!monthValue) {
+        showMessage("Please select a month first.", "error");
+        return;
+    }
+    const analysis = getSkippedSerialsForMonth(monthValue);
+    const parts = monthValue.split("-");
+    const monthLabel = `${MONTHS[parseInt(parts[1],10)-1]} ${parts[0]}`;
+
+    document.getElementById("skippedTitle").textContent = `Skipped Serial Numbers — ${monthLabel}`;
+
+    if (!analysis.totalRecords) {
+        document.getElementById("skippedSub").textContent = "No records found for this month.";
+        document.getElementById("skippedContent").innerHTML = `<div class="skipped-empty">Nothing to analyse.</div>`;
+        document.getElementById("skippedBox").classList.add("show");
+        document.getElementById("skippedBox").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+    }
+
+    const totalMissing = analysis.groups.reduce((a, g) => a + g.missing.length, 0);
+    document.getElementById("skippedSub").textContent =
+        `Range covers each serial sequence's first to latest entry this month. ` +
+        `Records analysed: ${analysis.totalRecords}. Total skipped: ${totalMissing}.`;
+
+    let html = "";
+    if (!analysis.groups.length) {
+        html += `<div class="skipped-empty">No serial numbers parseable into a numeric sequence — nothing to check.</div>`;
+    } else {
+        analysis.groups.forEach(g => {
+            const prefixDisplay = g.prefix ? escapeHtml(g.prefix) : `<i style="color:#94a3b8">(no prefix)</i>`;
+            html += `<div class="skipped-prefix-block">`;
+            html += `  <div class="skipped-prefix-head">Prefix: ${prefixDisplay}</div>`;
+            html += `  <div class="skipped-meta">`;
+            html += `    <b>First:</b> ${escapeHtml(g.minFormatted)} &nbsp;|&nbsp; `;
+            html += `    <b>Latest:</b> ${escapeHtml(g.maxFormatted)} &nbsp;|&nbsp; `;
+            html += `    <b>Recorded:</b> ${g.presentCount} of ${g.rangeSize} &nbsp;|&nbsp; `;
+            html += `    <b>Skipped:</b> ${g.missing.length}`;
+            html += `  </div>`;
+            if (g.missing.length === 0) {
+                html += `  <div class="skipped-empty">✓ No skipped serials in this range.</div>`;
+            } else {
+                html += `  <div class="skipped-list">${g.missingFormatted.map(escapeHtml).join(", ")}</div>`;
+            }
+            html += `</div>`;
+        });
+    }
+
+    if (analysis.unparseable.length) {
+        const sample = analysis.unparseable.slice(0, 8).map(u => escapeHtml(u.serial)).join(", ");
+        const more = analysis.unparseable.length > 8 ? ` ... and ${analysis.unparseable.length - 8} more` : "";
+        html += `<div style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-top:6px;">`;
+        html += `<b>Note:</b> ${analysis.unparseable.length} serial number(s) had no numeric portion and were excluded: ${sample}${more}`;
+        html += `</div>`;
+    }
+
+    document.getElementById("skippedContent").innerHTML = html;
+    document.getElementById("skippedBox").classList.add("show");
+    document.getElementById("skippedBox").scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 function escapeHtml(text) {
@@ -1911,6 +2136,7 @@ function renderTracking() {
                             <button class="small-btn gray-btn"   onclick="printOneMonth('${monthValue}')">Print This Month</button>
                             <button class="small-btn green-btn"  onclick="exportOneMonthCsv('${monthValue}')">Export This Month CSV</button>
                             <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValue}')">Show Duplicates This Month</button>
+                            <button class="small-btn purple-btn" onclick="showSkippedSerials('${monthValue}')">Show Skipped Serials</button>
                         </div>
                         <div class="subtotal-bar">
                             <span>Entries: ${realCount}</span>
