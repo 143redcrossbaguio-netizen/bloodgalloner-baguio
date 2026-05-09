@@ -72,31 +72,94 @@ color:#b30000;
 .summary-bar{
 display:flex;
 flex-wrap:wrap;
-gap:10px;
-margin-bottom:15px;
+gap:0;
+margin-bottom:0;
+border-bottom:3px solid #e2e8f0;
+padding-bottom:0;
 }
 
 .summary-box{
-background:#fff4f4;
-border:1px solid #e0b4b4;
-padding:10px 14px;
-border-radius:8px;
+background:#f8fafc;
+border:1px solid #e2e8f0;
+border-bottom:3px solid transparent;
+margin-bottom:-3px; /* overlap the bar's bottom border so active tab "merges" with it */
+padding:11px 18px 13px 18px;
+border-radius:10px 10px 0 0;
 font-weight:bold;
-color:#b30000;
+color:#475569;
 cursor:pointer;
 user-select:none;
 transition:all .15s ease;
+position:relative;
+font-size:13px;
+display:flex;
+align-items:center;
+gap:8px;
 }
 
-.summary-box:hover{
-transform:translateY(-1px);
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
+.summary-box:hover:not(.active){
+background:#eef2f7;
+color:#1f2937;
+}
+
+.summary-box .tab-count{
+display:inline-block;
+min-width:24px;
+text-align:center;
+padding:1px 7px;
+border-radius:10px;
+background:rgba(0,0,0,0.08);
+font-size:12px;
+font-weight:700;
 }
 
 .summary-box.active{
-background:#b30000;
-border-color:#b30000;
-color:white;
+background:#fff;
+border-color:#cbd5e1;
+border-bottom:3px solid #fff;
+color:#0f172a;
+box-shadow:0 -2px 6px rgba(0,0,0,0.04);
+}
+
+/* Per-category accent on the active tab */
+.summary-box.active.tab-galloner{ color:#1565c0; border-top:3px solid #1565c0; padding-top:9px; }
+.summary-box.active.tab-galloner .tab-count{ background:#1565c0; color:#fff; }
+.summary-box.active.tab-bronze{   color:#8d4925; border-top:3px solid #8d4925; padding-top:9px; }
+.summary-box.active.tab-bronze .tab-count{   background:#8d4925; color:#fff; }
+.summary-box.active.tab-silver{   color:#475569; border-top:3px solid #94a3b8; padding-top:9px; }
+.summary-box.active.tab-silver .tab-count{   background:#64748b; color:#fff; }
+.summary-box.active.tab-gold{     color:#a16207; border-top:3px solid #d4af37; padding-top:9px; }
+.summary-box.active.tab-gold .tab-count{     background:#d4af37; color:#fff; }
+.summary-box.active.tab-all{      color:#b30000; border-top:3px solid #b30000; padding-top:9px; }
+.summary-box.active.tab-all .tab-count{      background:#b30000; color:#fff; }
+
+/* Visual cue for which tab you're viewing — shown above the toolbar */
+.tab-context-banner{
+margin-top:14px;
+margin-bottom:14px;
+padding:10px 14px;
+border-radius:8px;
+font-size:13px;
+font-weight:600;
+color:#1f2937;
+background:#fefce8;
+border:1px solid #fde68a;
+display:flex;
+flex-wrap:wrap;
+align-items:center;
+justify-content:space-between;
+gap:8px;
+}
+.tab-context-banner.tab-galloner{ background:#eff6ff; border-color:#93c5fd; color:#1e40af; }
+.tab-context-banner.tab-bronze  { background:#fff7ed; border-color:#fdba74; color:#7c2d12; }
+.tab-context-banner.tab-silver  { background:#f8fafc; border-color:#cbd5e1; color:#334155; }
+.tab-context-banner.tab-gold    { background:#fffbeb; border-color:#fcd34d; color:#92400e; }
+.tab-context-banner.tab-all     { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+
+.tab-context-banner .tab-context-meta{
+font-weight:400;
+font-size:12px;
+opacity:0.85;
 }
 
 .controls-row{
@@ -426,6 +489,7 @@ font-weight:bold;
 .src-donors{background:#e3f2fd;color:#0d47a1;}
 .src-database{background:#fce4ec;color:#880e4f;}
 .src-merged{background:#e8f5e9;color:#1b5e20;}
+.src-fuzzy{background:#fff8e1;color:#92400e;}
 
 @media (max-width: 900px){
 .serial-detail-layout{
@@ -521,11 +585,17 @@ grid-template-columns:1fr;
 <div id="statusBar" class="status-bar"></div>
 
 <div class="summary-bar">
-<div class="summary-box active" id="summaryAll" onclick="applySummaryFilter('')">Eligible Donors: <span id="totalEligibleBox">0</span></div>
-<div class="summary-box" id="summaryGalloner" onclick="applySummaryFilter('galloner')">Galloner: <span id="gallonerBox">0</span></div>
-<div class="summary-box" id="summaryBronze" onclick="applySummaryFilter('bronze')">Bronze: <span id="bronzeBox">0</span></div>
-<div class="summary-box" id="summarySilver" onclick="applySummaryFilter('silver')">Silver: <span id="silverBox">0</span></div>
-<div class="summary-box" id="summaryGold" onclick="applySummaryFilter('gold')">Gold: <span id="goldBox">0</span></div>
+<div class="summary-box tab-all active" id="summaryAll" onclick="applySummaryFilter('')">All Eligible <span class="tab-count" id="totalEligibleBox">0</span></div>
+<div class="summary-box tab-galloner" id="summaryGalloner" onclick="applySummaryFilter('galloner')">Galloner <span class="tab-count" id="gallonerBox">0</span></div>
+<div class="summary-box tab-bronze" id="summaryBronze" onclick="applySummaryFilter('bronze')">Bronze <span class="tab-count" id="bronzeBox">0</span></div>
+<div class="summary-box tab-silver" id="summarySilver" onclick="applySummaryFilter('silver')">Silver <span class="tab-count" id="silverBox">0</span></div>
+<div class="summary-box tab-gold" id="summaryGold" onclick="applySummaryFilter('gold')">Gold <span class="tab-count" id="goldBox">0</span></div>
+</div>
+
+<!-- Tells the user which tab they're viewing and how many records are in scope -->
+<div id="tabContextBanner" class="tab-context-banner tab-all">
+<div><span id="tabContextLabel">Viewing: All Eligible Donors</span></div>
+<div class="tab-context-meta" id="tabContextMeta">Showing every donor that has reached at least the Galloner threshold.</div>
 </div>
 
 <div class="controls-row">
@@ -1006,6 +1076,104 @@ bucket.detailRows.push(row);
 }
 }
 
+// ─── FUZZY NAME MATCHING ─────────────────────────────────────────────────────
+// Some encoders typo donor names (e.g. MARIA vs MARYA, JOHN vs JON), creating
+// duplicate buckets that split the donation count. We tolerate small typos
+// when OTHER strong identifiers also match — birthday is the anchor.
+//
+// Rule of thumb: same birthday + close-enough names = same person.
+// Without the birthday anchor, fuzzy matching is too risky (lots of common
+// name typo-collisions aren't actually the same person).
+
+// Levenshtein edit distance with early-exit if it exceeds maxDist (perf).
+function levenshteinBounded(a, b, maxDist){
+let s = String(a || ""), t = String(b || "");
+if(s === t) return 0;
+let n = s.length, m = t.length;
+if(Math.abs(n - m) > maxDist) return maxDist + 1;
+if(n === 0) return m;
+if(m === 0) return n;
+
+let prev = new Array(m + 1);
+let curr = new Array(m + 1);
+for(let j = 0; j <= m; j++) prev[j] = j;
+
+for(let i = 1; i <= n; i++){
+curr[0] = i;
+let rowMin = curr[0];
+let si = s.charCodeAt(i - 1);
+for(let j = 1; j <= m; j++){
+let cost = (si === t.charCodeAt(j - 1)) ? 0 : 1;
+let val = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+curr[j] = val;
+if(val < rowMin) rowMin = val;
+}
+// Early exit: if every value in this row already exceeds maxDist, the
+// final answer can only get larger.
+if(rowMin > maxDist) return maxDist + 1;
+let tmp = prev; prev = curr; curr = tmp;
+}
+return prev[m];
+}
+
+// Adaptive thresholds: short names tolerate fewer edits than long ones, so a
+// 1-letter typo in JON/JON is too aggressive but a 2-letter typo in JONATHAN
+// is reasonable. Returns true if the names are considered "close enough".
+function namesAreFuzzyClose(a, b, kind){
+// kind: "first" or "surname"
+let A = normalizeText(a), B = normalizeText(b);
+if(!A || !B) return false;
+if(A === B) return true;
+
+// Exact-substring match (handles "JOHN" vs "JOHNNY" — same root)
+if(A.length >= 4 && B.length >= 4 && (A.startsWith(B) || B.startsWith(A))) return true;
+
+let len = Math.max(A.length, B.length);
+// Choose max allowed edit distance based on length
+let maxDist;
+if(kind === "surname"){
+// Surnames: stricter (shouldn't differ by much)
+if(len <= 4) maxDist = 0;        // 4-char surname must match exactly
+else if(len <= 7) maxDist = 1;   // 5-7 chars: allow 1 typo
+else maxDist = 2;                // 8+ chars: allow 2 typos
+} else {
+// First names: a touch more lenient
+if(len <= 3) maxDist = 0;
+else if(len <= 5) maxDist = 1;   // MARIA / MARYA → 1 edit, allowed
+else if(len <= 8) maxDist = 2;
+else maxDist = 2;                // cap at 2 even for long names
+}
+
+let dist = levenshteinBounded(A, B, maxDist);
+return dist <= maxDist;
+}
+
+// Tries to find an existing aggregate (in noMiddleMap) that fuzzy-matches a
+// record. Returns the bucket if exactly one good match exists, null otherwise
+// (so we don't auto-merge ambiguous cases).
+function findFuzzyAggregate(noMiddleMap, firstName, surname, birthday){
+let bday = normalizeBirthday(birthday);
+if(!bday) return null; // birthday gate: no birthday → don't fuzzy-merge
+
+let candidates = [];
+let keys = Object.keys(noMiddleMap);
+for(let i = 0; i < keys.length; i++){
+let bucket = noMiddleMap[keys[i]];
+if(!bucket || normalizeBirthday(bucket.birthday) !== bday) continue;
+if(!namesAreFuzzyClose(firstName, bucket.firstName, "first")) continue;
+if(!namesAreFuzzyClose(surname, bucket.surname, "surname")) continue;
+candidates.push(bucket);
+}
+
+// Reject if ambiguous (more than one different person fuzzy-matches) — too
+// risky to auto-merge. Multiple buckets all pointing at the SAME person via
+// different keys would still all be the same fingerprint set, but in
+// practice "more than one candidate with same birthday + close names" is
+// almost always the case where we want to be conservative.
+if(candidates.length === 1) return candidates[0];
+return null;
+}
+
 function aggregateDonorDatabase(records){
 let fullMap = {};
 let noMiddleMap = {};
@@ -1025,7 +1193,21 @@ let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
 let nameOnlyKey = buildNameOnlyKey(firstName,surname);
 
 if(!fullMap[fullKey]) fullMap[fullKey] = makeAggregate(firstName,middleName,surname,birthday);
-if(!noMiddleMap[noMiddleKey]) noMiddleMap[noMiddleKey] = makeAggregate(firstName,middleName,surname,birthday);
+
+// FUZZY UPGRADE for noMiddleMap: before creating a new bucket for an exact
+// firstname+surname+birthday combo, see if there's an existing bucket that
+// fuzzy-matches (typo tolerance for MARIA/MARYA, JOHN/JON, etc. with same
+// birthday). If so, alias this key onto that existing bucket so all the
+// donations consolidate into one record.
+if(!noMiddleMap[noMiddleKey]){
+let fuzzyBucket = findFuzzyAggregate(noMiddleMap, firstName, surname, birthday);
+if(fuzzyBucket){
+noMiddleMap[noMiddleKey] = fuzzyBucket; // alias — both keys now point to the same bucket
+} else {
+noMiddleMap[noMiddleKey] = makeAggregate(firstName,middleName,surname,birthday);
+}
+}
+
 if(!nameOnlyMap[nameOnlyKey]) nameOnlyMap[nameOnlyKey] = makeAggregate(firstName,middleName,surname,birthday);
 
 applyRecordToAggregate(fullMap[fullKey], record);
@@ -1107,6 +1289,12 @@ let nameOnlyKey = buildNameOnlyKey(firstName,surname);
 
 if(aggregates.fullMap[fullKey]) return aggregateToResult(aggregates.fullMap[fullKey], "Exact Match");
 if(aggregates.noMiddleMap[noMiddleKey]) return aggregateToResult(aggregates.noMiddleMap[noMiddleKey], "No Middle Name Match");
+
+// Fuzzy match (typo tolerance, same birthday required) — catches encoder
+// typos like MARIA vs MARYA so donation counts consolidate.
+let fuzzyBucket = findFuzzyAggregate(aggregates.noMiddleMap, firstName, surname, birthday);
+if(fuzzyBucket) return aggregateToResult(fuzzyBucket, "Fuzzy Match (typo tolerated)");
+
 if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.nameOnlyMap[nameOnlyKey], "Name Only Match");
 
 return aggregateToResult(null, "No Match");
@@ -1255,7 +1443,99 @@ detailRows: dedupeDetailRows(bucket.detailRows || [])
 });
 });
 
+// ─── FUZZY POST-PASS ─────────────────────────────────────────────────────
+// If the donors collection itself has typo-duplicates (e.g. one doc as
+// MARIA SANTOS and another as MARYA SANTOS, same birthday), Phase 1 produces
+// two separate items. Walk mergedList and consolidate any pairs that
+// fuzzy-match. The "winner" keeps the editable id; the loser's serials,
+// detail rows, donation count, doc-ids merge into the winner.
+mergedList = consolidateFuzzyDuplicates(mergedList);
+
 return mergedList;
+}
+
+// Walks a list of merged items and combines fuzzy duplicates (same birthday,
+// near-identical names) into a single record. Sums donation evidence,
+// preserves the highest count and the most informative source label.
+function consolidateFuzzyDuplicates(items){
+let result = [];
+let merged = new Set(); // indices already absorbed into a winner
+
+for(let i = 0; i < items.length; i++){
+if(merged.has(i)) continue;
+let winner = items[i];
+let winnerSerials = Array.isArray(winner.serials) ? [...winner.serials] : [];
+let winnerDetails = Array.isArray(winner.detailRows) ? [...winner.detailRows] : [];
+let winnerDocIds = Array.isArray(winner.donorDatabaseDocIds) ? [...winner.donorDatabaseDocIds] : [];
+let bestCount = winner.smartDonationCount || 0;
+let bestMatchedRows = winner.smartMatchedRows || 0;
+let didMerge = false;
+
+for(let j = i + 1; j < items.length; j++){
+if(merged.has(j)) continue;
+let cand = items[j];
+
+// Both must have a usable birthday — birthday is the safety anchor.
+let bdayW = normalizeBirthday(winner.birthday);
+let bdayC = normalizeBirthday(cand.birthday);
+if(!bdayW || bdayW !== bdayC) continue;
+
+if(!namesAreFuzzyClose(winner.firstName, cand.firstName, "first")) continue;
+if(!namesAreFuzzyClose(winner.surname, cand.surname, "surname")) continue;
+
+// Merge: combine serials, detail rows, doc ids, and pick the higher count.
+merged.add(j);
+didMerge = true;
+
+if(Array.isArray(cand.serials)){
+for(let k = 0; k < cand.serials.length; k++) winnerSerials.push(cand.serials[k]);
+}
+if(Array.isArray(cand.detailRows)){
+for(let k = 0; k < cand.detailRows.length; k++) winnerDetails.push(cand.detailRows[k]);
+}
+if(Array.isArray(cand.donorDatabaseDocIds)){
+for(let k = 0; k < cand.donorDatabaseDocIds.length; k++) winnerDocIds.push(cand.donorDatabaseDocIds[k]);
+}
+if((cand.smartDonationCount || 0) > bestCount) bestCount = cand.smartDonationCount;
+if((cand.smartMatchedRows || 0) > bestMatchedRows) bestMatchedRows = cand.smartMatchedRows;
+
+// Prefer winner fields when blank
+if(!winner.bloodType && cand.bloodType) winner.bloodType = cand.bloodType;
+if(!winner.rhFactor && cand.rhFactor) winner.rhFactor = cand.rhFactor;
+if(!winner.contact && cand.contact) winner.contact = cand.contact;
+if(!winner.middleName && cand.middleName) winner.middleName = cand.middleName;
+if(!winner.id && cand.id) winner.id = cand.id;
+if(!winner.remarks && cand.remarks) winner.remarks = cand.remarks;
+if((winner.awardStatus || "NOT AWARDED") !== "AWARDED" && cand.awardStatus === "AWARDED"){
+winner.awardStatus = "AWARDED";
+if(cand.yearAwarded && !winner.yearAwarded) winner.yearAwarded = cand.yearAwarded;
+}
+}
+
+if(didMerge){
+winner.serials = buildSerialsArrayFromDetailRows([
+...mergeSerialRowsFromDonors(winnerSerials),
+...winnerDetails
+]);
+winner.detailRows = dedupeDetailRows(winnerDetails);
+winner.donorDatabaseDocIds = Array.from(new Set(winnerDocIds));
+winner.smartDonationCount = bestCount;
+winner.smartMatchedRows = bestMatchedRows;
+winner.serialCount = winner.serials.length;
+winner.badgeLevel = getBadgeLevel(bestCount);
+// Tag the source so the user can see this row was auto-consolidated
+let existing = safeText(winner.smartMatchSource || "");
+if(existing && !/Consolidated/i.test(existing)){
+winner.smartMatchSource = existing + " + Consolidated (typo)";
+} else if(!existing){
+winner.smartMatchSource = "Consolidated (typo)";
+}
+}
+
+result.push(winner);
+}
+
+return result;
 }
 
 function timeoutPromise(ms, label){
@@ -1353,16 +1633,39 @@ for(let i=0;i<ids.length;i++){
 document.getElementById(ids[i]).classList.remove("active");
 }
 
+let banner = document.getElementById("tabContextBanner");
+let label = document.getElementById("tabContextLabel");
+let meta = document.getElementById("tabContextMeta");
+// Reset banner classes to base
+if(banner){
+banner.className = "tab-context-banner";
+}
+
 if(value === "galloner"){
 document.getElementById("summaryGalloner").classList.add("active");
+if(banner){ banner.classList.add("tab-galloner"); }
+if(label){ label.textContent = "Viewing: Galloner Tab"; }
+if(meta){ meta.textContent = `Donations ${categoryLimits.galloner}–${categoryLimits.bronze - 1}. All filters and print/export buttons below act on this tab only.`; }
 }else if(value === "bronze"){
 document.getElementById("summaryBronze").classList.add("active");
+if(banner){ banner.classList.add("tab-bronze"); }
+if(label){ label.textContent = "Viewing: Bronze Tab"; }
+if(meta){ meta.textContent = `Donations ${categoryLimits.bronze}–${categoryLimits.silver - 1}. All filters and print/export buttons below act on this tab only.`; }
 }else if(value === "silver"){
 document.getElementById("summarySilver").classList.add("active");
+if(banner){ banner.classList.add("tab-silver"); }
+if(label){ label.textContent = "Viewing: Silver Tab"; }
+if(meta){ meta.textContent = `Donations ${categoryLimits.silver}–${categoryLimits.gold - 1}. All filters and print/export buttons below act on this tab only.`; }
 }else if(value === "gold"){
 document.getElementById("summaryGold").classList.add("active");
+if(banner){ banner.classList.add("tab-gold"); }
+if(label){ label.textContent = "Viewing: Gold Tab"; }
+if(meta){ meta.textContent = `Donations ${categoryLimits.gold}+. All filters and print/export buttons below act on this tab only.`; }
 }else{
 document.getElementById("summaryAll").classList.add("active");
+if(banner){ banner.classList.add("tab-all"); }
+if(label){ label.textContent = "Viewing: All Eligible Donors"; }
+if(meta){ meta.textContent = "Every donor that has reached at least the Galloner threshold. Click a tab above to focus on one category."; }
 }
 }
 
@@ -1448,15 +1751,28 @@ return getSortableName(a).localeCompare(getSortableName(b));
 });
 
 updateSummary();
+syncSummaryFromBadgeFilter(); // keep the banner / active-tab state in sync after every render
 renderTable();
 }
 
 function updateSummary(){
+// "All Eligible" tab count = number of records in the current visible
+// filter (so the user sees how many records they're looking at).
 document.getElementById("totalEligibleBox").innerText = filteredDonorsData.length;
-document.getElementById("gallonerBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner && d.smartDonationCount < categoryLimits.bronze).length;
-document.getElementById("bronzeBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.bronze && d.smartDonationCount < categoryLimits.silver).length;
-document.getElementById("silverBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.silver && d.smartDonationCount < categoryLimits.gold).length;
-document.getElementById("goldBox").innerText = filteredDonorsData.filter(d => d.smartDonationCount >= categoryLimits.gold).length;
+
+// Per-category tab counts are TOTALS across the whole donorsData set.
+// They don't shrink when you type into the search box or pick a blood
+// type — that would make the tabs feel inconsistent. Tab counts should
+// always answer the question "how many bronze-level donors do I have
+// overall?" — not "how many match my current filter".
+//
+// This means clicking "Bronze (29)" always lands on a tab labelled
+// Bronze (29), and any subsequent narrowing happens inside that tab.
+let allEligible = donorsData.filter(d => d.smartDonationCount >= categoryLimits.galloner);
+document.getElementById("gallonerBox").innerText = allEligible.filter(d => d.smartDonationCount >= categoryLimits.galloner && d.smartDonationCount < categoryLimits.bronze).length;
+document.getElementById("bronzeBox").innerText   = allEligible.filter(d => d.smartDonationCount >= categoryLimits.bronze   && d.smartDonationCount < categoryLimits.silver).length;
+document.getElementById("silverBox").innerText   = allEligible.filter(d => d.smartDonationCount >= categoryLimits.silver   && d.smartDonationCount < categoryLimits.gold).length;
+document.getElementById("goldBox").innerText     = allEligible.filter(d => d.smartDonationCount >= categoryLimits.gold).length;
 }
 
 function renderAwardCell(d){
