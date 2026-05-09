@@ -148,9 +148,17 @@
 
     <div class="entry-box">
         <input type="text" id="orgName" placeholder="Organization Name">
+        <input type="text" id="orgAliases" placeholder="Aliases (comma-separated, e.g. PP, P.PARK, MALCOLM)" style="min-width:340px">
         <input type="number" id="numDonors" placeholder="Number of Donors">
         <input type="date" id="orgDate">
         <button class="add-btn" id="addBtn">Add Organization</button>
+    </div>
+
+    <div style="background:#fff8e1;border:1px solid #ffe082;color:#5d4037;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;">
+        <strong>💡 Tip:</strong> Aliases let the system recognize different ways encoders type the same partner.
+        Example — for <em>Peoples Park</em> (also called Malcolm Square), set Aliases to:
+        <code style="background:#fff;padding:1px 5px;border-radius:3px">PP, P.PARK, P PARK, MALCOLM, MALCOLM SQUARE</code>.
+        Then on the Tracking and Statistics pages, all those variants will be grouped under the canonical Organization Name.
     </div>
 
     <table>
@@ -158,6 +166,7 @@
             <tr>
                 <th>#</th>
                 <th>Organization</th>
+                <th>Aliases</th>
                 <th>Date</th>
                 <th>Number of Donors</th>
                 <th>Total (ml)</th>
@@ -189,6 +198,7 @@ const db = getFirestore(app);
 
 const searchInput = document.getElementById("searchInput");
 const orgNameInput = document.getElementById("orgName");
+const orgAliasesInput = document.getElementById("orgAliases");
 const numDonorsInput = document.getElementById("numDonors");
 const orgDateInput = document.getElementById("orgDate");
 const addBtn = document.getElementById("addBtn");
@@ -198,6 +208,22 @@ const dashboardBtn = document.getElementById("dashboardBtn");
 const orgTable = document.getElementById("orgTable");
 
 let organizations = [];
+
+/* ALIASES — parse "PP, P.PARK, MALCOLM" → ["PP","P.PARK","MALCOLM"] (uppercase, trimmed, deduped) */
+function parseAliases(raw){
+    if(!raw) return [];
+    return [...new Set(
+        String(raw).split(/[,;|]+/)
+            .map(s => s.trim().toUpperCase())
+            .filter(s => s.length > 0)
+    )];
+}
+function formatAliases(arr){
+    return Array.isArray(arr) ? arr.join(", ") : "";
+}
+function escapeHtml(s){
+    return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
 
 /* LOAD */
 async function loadOrganizations(){
@@ -210,6 +236,7 @@ async function loadOrganizations(){
             const data = docSnap.data();
             data.id = docSnap.id;
             if(!Array.isArray(data.history)) data.history = [];
+            if(!Array.isArray(data.aliases)) data.aliases = [];
             organizations.push(data);
         });
 
@@ -231,16 +258,20 @@ function renderTable(){
     orgTable.innerHTML = "";
 
     if(organizations.length === 0){
-        orgTable.innerHTML = `<tr><td colspan="6" class="empty-message">No partner organizations found.</td></tr>`;
+        orgTable.innerHTML = `<tr><td colspan="7" class="empty-message">No partner organizations found.</td></tr>`;
         return;
     }
 
     organizations.forEach((org,index) => {
+        const aliasText = (org.aliases && org.aliases.length)
+            ? escapeHtml(org.aliases.join(", "))
+            : `<span style="color:#999;font-style:italic">— none —</span>`;
         orgTable.innerHTML += `
         <tr>
             <td>${index + 1}</td>
-            <td class="name-cell">${org.name || ""}</td>
-            <td>${org.date || ""}</td>
+            <td class="name-cell">${escapeHtml(org.name || "")}</td>
+            <td style="text-align:left;font-size:13px;color:#444">${aliasText}</td>
+            <td>${escapeHtml(org.date || "")}</td>
             <td>${org.numDonors || 0}</td>
             <td class="total-ml">${calculateTotalML(org.numDonors)}</td>
             <td>
@@ -262,6 +293,7 @@ async function addOrganization(){
     }
 
     const name = orgNameInput.value.trim();
+    const aliases = parseAliases(orgAliasesInput.value);
     const numDonors = parseInt(numDonorsInput.value, 10);
     const date = orgDateInput.value;
 
@@ -272,6 +304,7 @@ async function addOrganization(){
 
     const newData = {
         name,
+        aliases,
         numDonors,
         date,
         history: [
@@ -294,6 +327,7 @@ async function addOrganization(){
         renderTable();
 
         orgNameInput.value = "";
+        orgAliasesInput.value = "";
         numDonorsInput.value = "";
         orgDateInput.value = "";
 
@@ -337,9 +371,11 @@ window.viewOrganization = function(id){
     viewRow.classList.add("view-row");
 
     viewRow.innerHTML = `
-        <td colspan="6">
+        <td colspan="7">
             <div class="history-box">
-                <strong>${org.name}</strong><br><br>
+                <strong>${escapeHtml(org.name)}</strong><br>
+                ${(org.aliases && org.aliases.length) ? `<span style="color:#555;font-size:13px"><strong>Aliases:</strong> ${escapeHtml(org.aliases.join(", "))}</span><br>` : ""}
+                <br>
                 ${historyHTML}
                 <br>
                 <strong>Total Donors:</strong> ${org.numDonors}<br>
@@ -365,12 +401,21 @@ window.editOrganization = function(id){
     const editRow = document.createElement("tr");
     editRow.classList.add("edit-row");
 
+    const org = organizations.find(o => o.id === id);
+    const currentAliases = (org && org.aliases) ? org.aliases.join(", ") : "";
+
     editRow.innerHTML = `
-        <td colspan="6">
-            <input type="number" id="editDonors-${id}" placeholder="Add Donors">
-            <input type="date" id="editDate-${id}">
-            <button class="save-inline-btn" onclick="saveEdit('${id}')">Save</button>
-            <button class="cancel-inline-btn" onclick="this.closest('tr').remove()">Cancel</button>
+        <td colspan="7">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                <input type="text" id="editAliases-${id}" placeholder="Aliases (comma-separated)" value="${escapeHtml(currentAliases)}" style="min-width:300px;padding:8px;border:1px solid #ccc;border-radius:5px;">
+                <input type="number" id="editDonors-${id}" placeholder="Add Donors" style="padding:8px;border:1px solid #ccc;border-radius:5px;">
+                <input type="date" id="editDate-${id}" style="padding:8px;border:1px solid #ccc;border-radius:5px;">
+                <button class="save-inline-btn" onclick="saveEdit('${id}')">Save</button>
+                <button class="cancel-inline-btn" onclick="this.closest('tr').remove()">Cancel</button>
+            </div>
+            <div style="font-size:12px;color:#666;margin-top:6px;">
+                Aliases are saved on every Save click. Add Donors + Date are only added if both are filled in (leave blank to update aliases only).
+            </div>
         </td>
     `;
 
@@ -384,11 +429,16 @@ window.saveEdit = async function(id){
         return;
     }
 
-    const addDonors = parseInt(document.getElementById(`editDonors-${id}`).value, 10);
+    const newAliases = parseAliases(document.getElementById(`editAliases-${id}`).value);
+    const addDonorsRaw = document.getElementById(`editDonors-${id}`).value;
     const newDate = document.getElementById(`editDate-${id}`).value;
 
-    if(isNaN(addDonors) || addDonors <= 0 || !newDate){
-        alert("Enter donors and date.");
+    const addDonors = parseInt(addDonorsRaw, 10);
+    const wantDonationUpdate = !isNaN(addDonors) && addDonors > 0 && newDate;
+    const wantPartialDonation = (!isNaN(addDonors) && addDonors > 0) || newDate;
+
+    if(wantPartialDonation && !wantDonationUpdate){
+        alert("To add donors, fill BOTH 'Add Donors' and 'Date'. Leave both blank to update aliases only.");
         return;
     }
 
@@ -396,27 +446,26 @@ window.saveEdit = async function(id){
     if(orgIndex === -1) return;
 
     const org = organizations[orgIndex];
-    const updatedDonors = Number(org.numDonors || 0) + addDonors;
+    const updatePayload = { aliases: newAliases };
 
-    if(!Array.isArray(org.history)){
-        org.history = [];
+    if(wantDonationUpdate){
+        const updatedDonors = Number(org.numDonors || 0) + addDonors;
+        if(!Array.isArray(org.history)) org.history = [];
+        org.history.push({ donors: addDonors, date: newDate });
+        updatePayload.numDonors = updatedDonors;
+        updatePayload.date = newDate;
+        updatePayload.history = org.history;
     }
 
-    org.history.push({
-        donors: addDonors,
-        date: newDate
-    });
-
     try{
-        await updateDoc(doc(db, "partnerOrganizations", id), {
-            numDonors: updatedDonors,
-            date: newDate,
-            history: org.history
-        });
+        await updateDoc(doc(db, "partnerOrganizations", id), updatePayload);
 
-        organizations[orgIndex].numDonors = updatedDonors;
-        organizations[orgIndex].date = newDate;
-        organizations[orgIndex].history = org.history;
+        organizations[orgIndex].aliases = newAliases;
+        if(wantDonationUpdate){
+            organizations[orgIndex].numDonors = updatePayload.numDonors;
+            organizations[orgIndex].date = newDate;
+            organizations[orgIndex].history = org.history;
+        }
 
         organizations.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
         renderTable();
@@ -460,10 +509,11 @@ function searchOrg(){
 
 /* EXPORT */
 function exportCSV(){
-    let csv = "Organization,Date,Number of Donors,Total (ml)\n";
+    let csv = "Organization,Aliases,Date,Number of Donors,Total (ml)\n";
 
     organizations.forEach(org => {
-        csv += `"${org.name || ""}","${org.date || ""}","${org.numDonors || 0}","${calculateTotalML(org.numDonors)}"\n`;
+        const aliases = (org.aliases && org.aliases.length) ? org.aliases.join("; ") : "";
+        csv += `"${(org.name || "").replace(/"/g,'""')}","${aliases.replace(/"/g,'""')}","${org.date || ""}","${org.numDonors || 0}","${calculateTotalML(org.numDonors)}"\n`;
     });
 
     const blob = new Blob([csv], {type:"text/csv"});
