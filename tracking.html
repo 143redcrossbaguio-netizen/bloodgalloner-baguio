@@ -322,6 +322,139 @@ flex-shrink:0;
 .print-menu-item.dot-gold::before{     background:#d4af37; }
 .print-menu-item.dot-warn::before{     background:#dc2626; }
 
+/* ─── Inline Edit Modal ─────────────────────────────────────────────── */
+.edit-modal-overlay{
+display:none;
+position:fixed;
+inset:0;
+background:rgba(15,23,42,0.55);
+z-index:9000;
+align-items:center;
+justify-content:center;
+padding:20px;
+overflow-y:auto;
+}
+.edit-modal-overlay.show{ display:flex; }
+.edit-modal{
+background:#fff;
+border-radius:12px;
+width:100%;
+max-width:640px;
+box-shadow:0 20px 60px rgba(0,0,0,0.3);
+display:flex;
+flex-direction:column;
+max-height:calc(100vh - 40px);
+}
+.edit-modal-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:16px 20px;
+border-bottom:1px solid #e5e7eb;
+flex-shrink:0;
+}
+.edit-modal-title{
+font-size:18px;
+font-weight:700;
+color:#0f172a;
+}
+.edit-modal-close{
+background:none;
+border:none;
+font-size:26px;
+color:#64748b;
+cursor:pointer;
+padding:0;
+width:32px;
+height:32px;
+border-radius:6px;
+line-height:1;
+}
+.edit-modal-close:hover{ background:#f1f5f9; color:#0f172a; }
+.edit-modal-body{
+padding:18px 20px;
+overflow-y:auto;
+flex:1 1 auto;
+}
+.edit-form-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px 16px;
+}
+.edit-form-grid label{
+display:flex;
+flex-direction:column;
+font-size:12px;
+font-weight:600;
+color:#475569;
+gap:4px;
+}
+.edit-form-grid label.full-width{ grid-column:1/-1; }
+.edit-form-grid input,
+.edit-form-grid select,
+.edit-form-grid textarea{
+font-size:14px;
+font-weight:400;
+color:#0f172a;
+border:1px solid #cbd5e1;
+border-radius:6px;
+padding:8px 10px;
+background:#fff;
+font-family:inherit;
+}
+.edit-form-grid input:focus,
+.edit-form-grid select:focus,
+.edit-form-grid textarea:focus{
+outline:2px solid #3b82f6;
+outline-offset:-1px;
+border-color:#3b82f6;
+}
+.edit-form-grid textarea{ resize:vertical; min-height:60px; }
+.edit-modal-status{
+margin-top:14px;
+padding:8px 12px;
+border-radius:6px;
+font-size:13px;
+display:none;
+}
+.edit-modal-status.error{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca; display:block; }
+.edit-modal-status.success{ background:#dcfce7; color:#14532d; border:1px solid #bbf7d0; display:block; }
+.edit-modal-status.loading{ background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; display:block; }
+.edit-modal-footer{
+display:flex;
+justify-content:flex-end;
+gap:10px;
+padding:14px 20px;
+border-top:1px solid #e5e7eb;
+flex-shrink:0;
+}
+.edit-cancel-btn{
+background:#e5e7eb;
+color:#1f2937;
+border:none;
+padding:9px 18px;
+border-radius:6px;
+font-size:13px;
+font-weight:600;
+cursor:pointer;
+}
+.edit-cancel-btn:hover{ background:#d1d5db; }
+.edit-save-btn{
+background:#1565c0;
+color:#fff;
+border:none;
+padding:9px 22px;
+border-radius:6px;
+font-size:13px;
+font-weight:700;
+cursor:pointer;
+}
+.edit-save-btn:hover:not(:disabled){ background:#0d47a1; }
+.edit-save-btn:disabled{ background:#94a3b8; cursor:not-allowed; }
+@media (max-width: 600px){
+.edit-form-grid{ grid-template-columns:1fr; }
+}
+
 table{
 width:100%;
 border-collapse:collapse;
@@ -780,6 +913,59 @@ grid-template-columns:1fr;
 </div>
 
 <div id="emptyBox" class="empty-box" style="display:none;">No eligible donors found.</div>
+
+<!-- ─── INLINE EDIT MODAL ────────────────────────────────────────────────
+     Edits happen here without redirecting. Saves directly to Firestore from
+     this page, then closes back to the table. The previous flow (redirect
+     to donor-entry.html) was prone to "save not working" and "back button
+     not working" issues, since two separate pages had to be perfectly synced.
+     Keeping it all inline removes those failure modes entirely. -->
+<div id="editModalOverlay" class="edit-modal-overlay" onclick="closeEditModalOnBackdrop(event)">
+<div class="edit-modal" role="dialog" aria-labelledby="editModalTitle">
+<div class="edit-modal-header">
+<div class="edit-modal-title" id="editModalTitle">Edit Donor</div>
+<button class="edit-modal-close" type="button" onclick="closeEditModal()" aria-label="Close">×</button>
+</div>
+<div class="edit-modal-body">
+<div class="edit-form-grid">
+<label>First Name<input id="editFirstName" type="text"></label>
+<label>Middle Name<input id="editMiddleName" type="text"></label>
+<label>Surname<input id="editSurname" type="text"></label>
+<label>Birthday<input id="editBirthday" type="date"></label>
+<label>Blood Type
+<select id="editBloodType">
+<option value="">—</option>
+<option value="A">A</option>
+<option value="B">B</option>
+<option value="AB">AB</option>
+<option value="O">O</option>
+</select>
+</label>
+<label>RH Factor
+<select id="editRhFactor">
+<option value="">—</option>
+<option value="POS">POS</option>
+<option value="NEG">NEG</option>
+</select>
+</label>
+<label>Contact<input id="editContact" type="text" inputmode="tel"></label>
+<label>Award Status
+<select id="editAwardStatus">
+<option value="NOT AWARDED">NOT AWARDED</option>
+<option value="AWARDED">AWARDED</option>
+</select>
+</label>
+<label>Year Awarded<input id="editYearAwarded" type="number" min="1900" max="2999"></label>
+<label class="full-width">Remarks<textarea id="editRemarks" rows="3"></textarea></label>
+</div>
+<div id="editModalStatus" class="edit-modal-status"></div>
+</div>
+<div class="edit-modal-footer">
+<button class="edit-cancel-btn" type="button" onclick="closeEditModal()">Cancel</button>
+<button class="edit-save-btn" id="editSaveBtn" type="button" onclick="saveEditModal()">Save Changes</button>
+</div>
+</div>
+</div>
 
 </div>
 
@@ -1909,77 +2095,89 @@ timeoutPromise(timeoutMs, collectionName)
 }
 
 // ─── PERSISTENT CACHE (stale-while-revalidate) ───────────────────────────────
-// Reading from Firestore over the network is the dominant cost when the page
-// loads. localStorage caches the last fetched data so a returning user sees
-// the table within ~10ms while a fresh fetch happens in the background. When
-// the fresh result arrives, the table is re-rendered with the latest data.
-// Cache invalidates after CACHE_MAX_AGE_MS or whenever the user edits/saves.
-const CACHE_KEY_DONORS    = "tracking_cache_donors_v1";
-const CACHE_KEY_DATABASE  = "tracking_cache_donorDatabase_v1";
-const CACHE_KEY_TIMESTAMP = "tracking_cache_ts_v1";
-const CACHE_MAX_AGE_MS    = 24 * 60 * 60 * 1000; // 24h — but we always also revalidate
+// Reading from Firestore + running the merge is the dominant cost on page
+// load. localStorage caches the FINAL merged donorsData so a returning user
+// sees the table almost instantly while a fresh fetch happens in the
+// background. When the fresh result arrives, the table re-renders.
+//
+// Caching the merged result (not raw docs) is a huge win on big datasets:
+// it skips the aggregateDonorDatabase + fuzzy-consolidation work, which on
+// 5000+ records is the slowest part of the pipeline.
+const CACHE_KEY_MERGED    = "tracking_cache_merged_v2";
+const CACHE_KEY_TIMESTAMP = "tracking_cache_ts_v2";
+const CACHE_MAX_AGE_MS    = 24 * 60 * 60 * 1000; // 24h — we still revalidate every load
 
 function readCache(){
 try{
 let ts = parseInt(localStorage.getItem(CACHE_KEY_TIMESTAMP) || "0", 10);
 if(!ts) return null;
 if(Date.now() - ts > CACHE_MAX_AGE_MS) return null;
-let donors = JSON.parse(localStorage.getItem(CACHE_KEY_DONORS) || "null");
-let database = JSON.parse(localStorage.getItem(CACHE_KEY_DATABASE) || "null");
-if(!Array.isArray(donors)) return null;
-return {
-donors: donors,
-database: Array.isArray(database) ? database : [],
-ageMs: Date.now() - ts
-};
+let mergedJson = localStorage.getItem(CACHE_KEY_MERGED);
+if(!mergedJson) return null;
+let merged = JSON.parse(mergedJson);
+if(!Array.isArray(merged)) return null;
+return { merged, ageMs: Date.now() - ts };
 }catch(e){
 console.warn("Cache read failed:", e);
 return null;
 }
 }
 
-function writeCache(donorsDocs, donorDatabaseDocs){
+function writeCache(mergedData){
 try{
-// localStorage has ~5MB limit. Strip server timestamps and big nested
-// objects that can't be safely re-serialized.
-let safeDonors = donorsDocs.map(d => {
-let out = {};
-Object.keys(d).forEach(k => {
-let v = d[k];
-if(v && typeof v === "object" && typeof v.toDate === "function"){
-out[k] = v.toDate().toISOString();
-} else {
-out[k] = v;
+if(!Array.isArray(mergedData)) return;
+// Strip detail rows for cache compactness — they're large and easily
+// regenerated on the next fresh fetch. We keep the donor identity +
+// counts + serial summary so the cache hit can render the table
+// faithfully even before the network returns.
+let slim = mergedData.map(d => ({
+id: d.id || "",
+firstName: d.firstName || "",
+middleName: d.middleName || "",
+surname: d.surname || "",
+birthday: d.birthday || "",
+bloodType: d.bloodType || "",
+rhFactor: d.rhFactor || "",
+contact: d.contact || "",
+serialCount: d.serialCount || 0,
+remarks: d.remarks || "",
+awardStatus: d.awardStatus || "NOT AWARDED",
+yearAwarded: d.yearAwarded || "",
+smartDonationCount: d.smartDonationCount || 0,
+smartMatchedRows: d.smartMatchedRows || 0,
+smartMatchSource: d.smartMatchSource || "",
+badgeLevel: d.badgeLevel || "",
+canEdit: !!d.canEdit,
+canDelete: !!d.canDelete,
+donorDatabaseDocIds: Array.isArray(d.donorDatabaseDocIds) ? d.donorDatabaseDocIds : [],
+detailRows: [],   // dropped on purpose — regenerated on fresh fetch
+serials: [],
+latestDonationDate: d.latestDonationDate || "",
+latestRecordCount: d.latestRecordCount || 0
+}));
+let json = JSON.stringify(slim);
+// Skip caching if it's too big — localStorage is synchronous and ~5MB
+// per origin. For very large databases, we let the network fetch handle
+// it instead of paying the JSON parse/stringify cost.
+if(json.length > 3 * 1024 * 1024){
+console.info("[cache] Skipping write: payload too large (", (json.length/1024/1024).toFixed(1), "MB)");
+return;
 }
-});
-return out;
-});
-let safeDatabase = donorDatabaseDocs.map(d => {
-let out = {};
-Object.keys(d).forEach(k => {
-let v = d[k];
-if(v && typeof v === "object" && typeof v.toDate === "function"){
-out[k] = v.toDate().toISOString();
-} else {
-out[k] = v;
-}
-});
-return out;
-});
-localStorage.setItem(CACHE_KEY_DONORS, JSON.stringify(safeDonors));
-localStorage.setItem(CACHE_KEY_DATABASE, JSON.stringify(safeDatabase));
+localStorage.setItem(CACHE_KEY_MERGED, json);
 localStorage.setItem(CACHE_KEY_TIMESTAMP, String(Date.now()));
 }catch(e){
-// Cache is best-effort — quota errors etc. are silent
 console.warn("Cache write failed (non-fatal):", e);
 }
 }
 
 function invalidateCache(){
 try{
-localStorage.removeItem(CACHE_KEY_DONORS);
-localStorage.removeItem(CACHE_KEY_DATABASE);
+localStorage.removeItem(CACHE_KEY_MERGED);
 localStorage.removeItem(CACHE_KEY_TIMESTAMP);
+// Also remove the old v1 keys in case they're still around
+localStorage.removeItem("tracking_cache_donors_v1");
+localStorage.removeItem("tracking_cache_donorDatabase_v1");
+localStorage.removeItem("tracking_cache_ts_v1");
 }catch(e){ /* noop */ }
 }
 
@@ -1994,16 +2192,16 @@ return;
 
 isLoading = true;
 
-// ─── Step 1: Show cached data IMMEDIATELY (stale-while-revalidate) ────────
-// If we have a recent cache, render it now so the user sees the table
-// within ~10ms instead of waiting for the network. We then refresh in
-// the background and re-render with the fresh data.
+// ─── Step 1: Show cached MERGED data IMMEDIATELY (stale-while-revalidate)
+// We cache the already-merged result so cache hit is just JSON.parse →
+// render — skipping the aggregation + fuzzy work entirely. On a returning
+// visit the user sees the table almost instantly.
 let cached = readCache();
 let renderedFromCache = false;
-if(cached){
+if(cached && Array.isArray(cached.merged)){
 try{
 setStatus("Showing cached data — refreshing in background...", "loading");
-donorsData = mergeBothCollections(cached.donors, cached.database);
+donorsData = cached.merged;
 applyFiltersAndRender();
 renderedFromCache = true;
 }catch(e){
@@ -2017,9 +2215,8 @@ setStatus("Loading eligible awardees...", "loading");
 
 try{
 // ─── Step 2: Parallel network fetch ───────────────────────────────────
-// Old code awaited donors THEN donorDatabase serially. Doing them in
-// parallel cuts the network wall-clock time by roughly half whenever
-// the two collections take similar time (which is usually the case).
+// donors and donorDatabase are fetched in parallel via Promise.allSettled
+// so one slow collection doesn't block the other.
 let [donorsResult, databaseResult] = await Promise.allSettled([
 getCollectionWithTimeout("donors", 12000),
 getCollectionWithTimeout("donorDatabase", 15000)
@@ -2078,8 +2275,10 @@ donorDatabaseDocs.push(data);
 donorsData = mergeBothCollections(donorsDocs, donorDatabaseDocs);
 applyFiltersAndRender();
 
-// ─── Step 5: Persist cache for the next page load ─────────────────────
-writeCache(donorsDocs, donorDatabaseDocs);
+// ─── Step 5: Persist MERGED cache for the next page load ──────────────
+// Cache the final merged result, not raw docs. On the next visit the
+// cache hit can render directly without re-running the merge pipeline.
+writeCache(donorsData);
 
 if(donorDatabaseDocs.length > 0){
 setStatus(`Loaded successfully. Eligible donors: ${donorsData.length}. donors: ${donorsDocs.length}, donorDatabase: ${donorDatabaseDocs.length}`, "success");
@@ -2671,8 +2870,16 @@ alert("Error saving remarks.");
 });
 }
 
+// ─── EDIT FLOW (inline modal) ────────────────────────────────────────────────
+// Opens the edit modal with the donor's current values. Saves directly to
+// Firestore without redirecting to a separate edit page — eliminates the
+// previous "edits don't save" / "back button doesn't work" failure modes
+// that came from juggling state across two pages.
+let editingDonorIndex = -1; // index into filteredDonorsData while modal is open
+
 async function editEligibleDonor(index){
 let donor = filteredDonorsData[index];
+if(!donor){ alert("Could not find that donor record."); return; }
 
 if(!auth.currentUser){
 alert("You are not logged in.");
@@ -2680,55 +2887,13 @@ window.location.href = "index.html";
 return;
 }
 
-try{
+// Make sure there is a 'donors' doc to write to. If this donor only exists
+// in donorDatabase (no donors-collection id), create a stub donors doc so
+// the eligible-tracking edits have a stable place to live. The stub copies
+// over the current snapshot of the merged record.
 let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
-
-if(donor.id){
-let donorRef = db.collection("donors").doc(donor.id);
-let existingDoc = await donorRef.get();
-let existingData = existingDoc.exists ? (existingDoc.data() || {}) : {};
-let existingSerials = Array.isArray(existingData.serials) ? existingData.serials : [];
-
-let merged = {};
-for(let i=0;i<existingSerials.length;i++){
-let s = existingSerials[i] || {};
-let key = [safeText(s.serial), safeText(s.date)].join("|");
-if(key !== "|"){
-merged[key] = {
-serial: safeText(s.serial),
-date: safeText(s.date)
-};
-}
-}
-for(let i=0;i<serialsToSync.length;i++){
-let s = serialsToSync[i] || {};
-let key = [safeText(s.serial), safeText(s.date)].join("|");
-if(key !== "|"){
-merged[key] = {
-serial: safeText(s.serial),
-date: safeText(s.date)
-};
-}
-}
-
-await donorRef.update({
-firstName: donor.firstName || "",
-middleName: donor.middleName || "",
-surname: donor.surname || "",
-birthday: donor.birthday || "",
-bloodType: donor.bloodType || "",
-rhFactor: donor.rhFactor || "",
-contact: donor.contact || "",
-remarks: donor.remarks || existingData.remarks || "",
-awardStatus: donor.awardStatus || existingData.awardStatus || "NOT AWARDED",
-yearAwarded: donor.yearAwarded || existingData.yearAwarded || "",
-serials: Object.values(merged)
-});
-
-window.location.href = "donor-entry.html?editId=" + donor.id;
-return;
-}
-
+if(!donor.id){
+try{
 let docRef = await db.collection("donors").add({
 firstName: donor.firstName || "",
 middleName: donor.middleName || "",
@@ -2744,13 +2909,128 @@ serials: serialsToSync,
 createdFrom: "eligible-awardees-tracking",
 createdAt: firebase.firestore.FieldValue.serverTimestamp()
 });
+donor.id = docRef.id;
+// Mirror the new id back into donorsData so saving updates the right record
+let realIdx = donorsData.indexOf(donor);
+if(realIdx >= 0) donorsData[realIdx].id = docRef.id;
+}catch(e){
+console.error("Could not create donors stub:", e);
+alert("Failed to create an editable record: " + e.message);
+return;
+}
+}
 
-window.location.href = "donor-entry.html?editId=" + docRef.id;
+// Populate modal fields
+document.getElementById("editFirstName").value   = donor.firstName   || "";
+document.getElementById("editMiddleName").value  = donor.middleName  || "";
+document.getElementById("editSurname").value     = donor.surname     || "";
+document.getElementById("editBirthday").value    = normalizeBirthday(donor.birthday) || "";
+document.getElementById("editBloodType").value   = (donor.bloodType  || "").toUpperCase();
+document.getElementById("editRhFactor").value    = (donor.rhFactor   || "").toUpperCase();
+document.getElementById("editContact").value     = donor.contact     || "";
+document.getElementById("editAwardStatus").value = (donor.awardStatus || "NOT AWARDED").toUpperCase();
+document.getElementById("editYearAwarded").value = donor.yearAwarded || "";
+document.getElementById("editRemarks").value     = donor.remarks     || "";
+
+// Reset status and open
+let status = document.getElementById("editModalStatus");
+status.className = "edit-modal-status";
+status.textContent = "";
+
+editingDonorIndex = index;
+document.getElementById("editModalOverlay").classList.add("show");
+// Focus first field
+setTimeout(()=> document.getElementById("editFirstName").focus(), 50);
+}
+
+function closeEditModal(){
+document.getElementById("editModalOverlay").classList.remove("show");
+editingDonorIndex = -1;
+}
+function closeEditModalOnBackdrop(ev){
+// Only close if the backdrop itself was clicked, not the modal contents
+if(ev.target && ev.target.id === "editModalOverlay") closeEditModal();
+}
+
+async function saveEditModal(){
+if(editingDonorIndex < 0) return;
+let donor = filteredDonorsData[editingDonorIndex];
+if(!donor || !donor.id){
+alert("This donor record can't be edited (no document id).");
+return;
+}
+
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+let saveBtn = document.getElementById("editSaveBtn");
+let status = document.getElementById("editModalStatus");
+
+let updates = {
+firstName:   document.getElementById("editFirstName").value.trim(),
+middleName:  document.getElementById("editMiddleName").value.trim(),
+surname:     document.getElementById("editSurname").value.trim(),
+birthday:    document.getElementById("editBirthday").value.trim(),
+bloodType:   document.getElementById("editBloodType").value.trim(),
+rhFactor:    document.getElementById("editRhFactor").value.trim(),
+contact:     document.getElementById("editContact").value.trim(),
+awardStatus: document.getElementById("editAwardStatus").value.trim() || "NOT AWARDED",
+yearAwarded: document.getElementById("editYearAwarded").value.trim(),
+remarks:     document.getElementById("editRemarks").value
+};
+
+if(!updates.firstName || !updates.surname){
+status.className = "edit-modal-status error";
+status.textContent = "First name and surname are required.";
+return;
+}
+
+saveBtn.disabled = true;
+status.className = "edit-modal-status loading";
+status.textContent = "Saving...";
+
+try{
+await db.collection("donors").doc(donor.id).update(updates);
+
+// Apply updates to the in-memory record so the table re-renders
+// immediately without waiting for a full re-fetch.
+Object.keys(updates).forEach(k => { donor[k] = updates[k]; });
+let realIdx = donorsData.indexOf(donor);
+if(realIdx === -1){
+// donor in filteredDonorsData might be a different object than donorsData entry — find by id
+realIdx = donorsData.findIndex(d => d.id === donor.id);
+if(realIdx >= 0) Object.keys(updates).forEach(k => { donorsData[realIdx][k] = updates[k]; });
+}
+
+// Invalidate the persistent cache so a future page-load fetches fresh data
+invalidateCache();
+
+status.className = "edit-modal-status success";
+status.textContent = "Saved!";
+
+applyFiltersAndRender();
+
+// Close after a brief flash so the user sees the success message
+setTimeout(closeEditModal, 600);
 }catch(error){
-console.error("Create or sync donor record error:", error);
-alert("Error preparing donor for edit.");
+console.error("Save edit error:", error);
+status.className = "edit-modal-status error";
+status.textContent = "Failed to save: " + error.message;
+}finally{
+saveBtn.disabled = false;
 }
 }
+
+// Close modal on Escape key
+document.addEventListener("keydown", function(ev){
+if(ev.key === "Escape"){
+let overlay = document.getElementById("editModalOverlay");
+if(overlay && overlay.classList.contains("show")) closeEditModal();
+}
+});
 
 async function deleteEligibleDonor(index){
 let donor = filteredDonorsData[index];
