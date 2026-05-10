@@ -995,6 +995,20 @@ function getPossibleContact(data){
 return data.contact || data.contactNumber || data.mobile || data.phone || data.contactNo || "";
 }
 
+// Normalize a phone/contact number for IDENTITY matching only. Strips every
+// non-digit so "0921-432-1989", "+639214321989", "9214321989" all reduce to
+// the same string. Returns "" for inputs that have fewer than 6 digits — too
+// short to reliably identify a person (and likely a partial entry).
+function normalizeContact(value){
+let digits = String(value || "").replace(/[^0-9]/g, "");
+// Strip leading "63" (PH country code) and "0" so all formats normalize equal:
+// "09214321989", "+639214321989", "639214321989", "9214321989" → same.
+if(digits.length >= 12 && digits.startsWith("63")) digits = digits.slice(2);
+if(digits.length >= 11 && digits.startsWith("0")) digits = digits.slice(1);
+if(digits.length < 6) return ""; // too short to be a useful identity signal
+return digits;
+}
+
 function buildFullKey(firstName,surname,birthday,middleName=""){
 return [
 normalizeText(firstName),
@@ -1152,6 +1166,12 @@ bloodType: "",
 rhFactor: "",
 contact: "",
 maxDonationCount: 0,
+// "Latest record" tracking — for a more accurate count than just max().
+// Some encoders update the donation-count field each entry; if that's
+// the case the LATEST entry's count is the truest current count.
+// Falls back to maxDonationCount when no dated records exist.
+latestDonationDate: "",      // YYYY-MM-DD of the most recent donation
+latestRecordCount: 0,        // donation count from that latest record
 fingerprints: new Set(),
 docIds: [],
 detailRows: []
@@ -1164,6 +1184,19 @@ let fp = buildUniqueDonationFingerprint(record);
 bucket.fingerprints.add(fp);
 
 if(count > bucket.maxDonationCount) bucket.maxDonationCount = count;
+
+// Track the LATEST record's count separately. If this record's donation
+// date is newer than what we've seen for this bucket so far, its
+// donation-count field is the truest "current" count of how many times
+// the donor has donated. We DON'T require the count to be higher — even
+// a lower count from a newer record might be more accurate (e.g. if an
+// older record had a typo'd inflated number).
+let recDate = normalizeBirthday(getPossibleDonationDate(record));
+if(recDate && recDate >= (bucket.latestDonationDate || "")){
+bucket.latestDonationDate = recDate;
+if(count > 0) bucket.latestRecordCount = count;
+}
+
 if(!bucket.bloodType && getPossibleBloodType(record)) bucket.bloodType = getPossibleBloodType(record);
 if(!bucket.rhFactor && getPossibleRhFactor(record)) bucket.rhFactor = getPossibleRhFactor(record);
 if(!bucket.contact && getPossibleContact(record)) bucket.contact = getPossibleContact(record);
@@ -1257,48 +1290,89 @@ let dist = levenshteinBounded(A, B, maxDist);
 return dist <= maxDist;
 }
 
-// Tries to find an existing aggregate that fuzzy-matches a record. Returns
-// the bucket if exactly one good match exists, null otherwise (so we don't
-// auto-merge ambiguous cases).
+// Tries to find an existing aggregate that matches a record by combining
+// fuzzy name matching with a CORROBORATING strong signal (any one of:
+// matching birthday, matching contact number, or exact full-name match).
 //
-// PERFORMANCE: We use a birthday index when available (a Map from
-// normalized birthday → array of buckets). This turns the lookup from O(N)
-// scan over every aggregate into O(K) where K = number of buckets sharing
-// the candidate's exact birthday — typically 1-3. With ~2000 records this
-// is the difference between O(N²) (4M Levenshtein calls) and O(N·K) (a few
-// thousand). The plain-map fallback path is preserved for callers that
-// don't have an index built.
-function findFuzzyAggregate(noMiddleMap, firstName, surname, birthday, birthdayIndex){
+// The new rule: fuzzy names alone are NOT enough — there must be at least
+// one other identity signal that agrees. This catches the cases where:
+//   • Same name, different birthday entry → contact match still merges
+//   • Typo'd name, missing birthday → contact match still merges
+//   • Exact name match, missing both → don't merge (fuzzy could be coincidence)
+//
+// Returns the bucket if exactly one good match exists.
+//
+// PERFORMANCE: Lookups iterate a SMALL candidate set. We try birthday-first
+// (normally the strongest filter), then contact-first if no birthday, then
+// fall back to scanning all buckets only as a last resort.
+function findFuzzyAggregate(noMiddleMap, firstName, surname, birthday, contact, middleName, indexes){
 let bday = normalizeBirthday(birthday);
-if(!bday) return null; // birthday gate: no birthday → don't fuzzy-merge
+let phone = normalizeContact(contact);
+let firstNorm = normalizeText(firstName);
+let surnameNorm = normalizeText(surname);
+let middleNorm = normalizeText(middleName || "");
 
-let bucketsToScan;
-if(birthdayIndex && birthdayIndex.has && birthdayIndex.has(bday)){
-// Fast path — only the buckets sharing this exact birthday
-bucketsToScan = birthdayIndex.get(bday);
-} else if(birthdayIndex && birthdayIndex.has){
-// Index exists but no birthday match → no fuzzy candidates
-return null;
-} else {
-// Slow path (only used when index hasn't been built — kept for safety)
-bucketsToScan = [];
+// Need ENOUGH name signal to even consider — empty names can't match anyone.
+if(!firstNorm || !surnameNorm) return null;
+
+// Build the candidate pool — combine birthday-shared and contact-shared
+// buckets so we don't miss either side. Dedupe via a Set.
+let candidatePool = new Set();
+if(indexes && bday && indexes.byBirthday && indexes.byBirthday.has(bday)){
+indexes.byBirthday.get(bday).forEach(b => candidatePool.add(b));
+}
+if(indexes && phone && indexes.byContact && indexes.byContact.has(phone)){
+indexes.byContact.get(phone).forEach(b => candidatePool.add(b));
+}
+
+// If we have NO indexed candidates at all and no birthday/contact to anchor,
+// we cannot safely fuzzy-merge — would produce false positives.
+if(candidatePool.size === 0){
+if(!bday && !phone){
+// Last-resort: scan all buckets to find an EXACT full-name match
+// (firstName + surname + middleName + birthday all equal). This is
+// just a safety net — it shouldn't match anything that the fullKey
+// lookup wouldn't already have caught, but if middle-name spelling
+// differs by punctuation, we still recover here.
 let keys = Object.keys(noMiddleMap);
 for(let i = 0; i < keys.length; i++){
-let bucket = noMiddleMap[keys[i]];
-if(bucket && normalizeBirthday(bucket.birthday) === bday) bucketsToScan.push(bucket);
+let b = noMiddleMap[keys[i]];
+if(!b) continue;
+if(normalizeText(b.firstName) === firstNorm
+&& normalizeText(b.surname) === surnameNorm
+&& normalizeText(b.middleName) === middleNorm
+&& normalizeBirthday(b.birthday) === bday){
+candidatePool.add(b);
+}
+}
 }
 }
 
 let candidates = [];
-for(let i = 0; i < bucketsToScan.length; i++){
-let bucket = bucketsToScan[i];
-if(!bucket) continue;
-if(!namesAreFuzzyClose(firstName, bucket.firstName, "first")) continue;
-if(!namesAreFuzzyClose(surname, bucket.surname, "surname")) continue;
-candidates.push(bucket);
+candidatePool.forEach(bucket => {
+if(!bucket) return;
+if(!namesAreFuzzyClose(firstName, bucket.firstName, "first")) return;
+if(!namesAreFuzzyClose(surname, bucket.surname, "surname")) return;
+
+// Names are close — now check for at least ONE corroborating signal.
+let signals = 0;
+let bucketBday = normalizeBirthday(bucket.birthday);
+let bucketPhone = normalizeContact(bucket.contact);
+if(bday && bucketBday && bday === bucketBday) signals++;
+if(phone && bucketPhone && phone === bucketPhone) signals++;
+// Exact full-name (incl. middle) — strong identity signal even without
+// birthday/contact, when names match perfectly post-normalization.
+if(normalizeText(bucket.firstName) === firstNorm
+&& normalizeText(bucket.surname) === surnameNorm
+&& normalizeText(bucket.middleName) === middleNorm){
+signals++;
 }
 
+if(signals >= 1) candidates.push(bucket);
+});
+
 if(candidates.length === 1) return candidates[0];
+// More than one candidate = ambiguous — don't auto-merge (safety).
 return null;
 }
 
@@ -1306,10 +1380,13 @@ function aggregateDonorDatabase(records){
 let fullMap = {};
 let noMiddleMap = {};
 let nameOnlyMap = {};
-// Birthday index — fast lookup for fuzzy matching: maps normalized birthday
-// → array of noMiddleMap buckets that share that birthday. Built lazily as
-// we go so we never rescan the whole map.
-let birthdayIndex = new Map();
+// Identity indexes — fast lookup for fuzzy matching: maps a strong identity
+// signal (birthday, contact) → array of noMiddleMap buckets that match.
+// Two indexes used together let us catch records that share EITHER a
+// birthday OR a contact number with an existing bucket.
+let byBirthday = new Map();
+let byContact  = new Map();
+let indexes = { byBirthday, byContact };
 
 for(let i=0;i<records.length;i++){
 let record = records[i];
@@ -1317,6 +1394,7 @@ let firstName = getPossibleFirstName(record);
 let middleName = getPossibleMiddleName(record);
 let surname = getPossibleSurname(record);
 let birthday = getPossibleBirthday(record);
+let contact = getPossibleContact(record);
 
 if(!normalizeText(firstName) || !normalizeText(surname)) continue;
 
@@ -1328,21 +1406,31 @@ if(!fullMap[fullKey]) fullMap[fullKey] = makeAggregate(firstName,middleName,surn
 
 // FUZZY UPGRADE for noMiddleMap: before creating a new bucket for an exact
 // firstname+surname+birthday combo, see if there's an existing bucket that
-// fuzzy-matches (typo tolerance for MARIA/MARYA, JOHN/JON, etc. with same
-// birthday). If so, alias this key onto that existing bucket so all the
-// donations consolidate into one record.
+// fuzzy-matches WITH at least one corroborating signal (birthday/contact/
+// exact full name). If so, alias this key onto that existing bucket so all
+// the donations consolidate into one record.
 if(!noMiddleMap[noMiddleKey]){
-let fuzzyBucket = findFuzzyAggregate(noMiddleMap, firstName, surname, birthday, birthdayIndex);
+let fuzzyBucket = findFuzzyAggregate(noMiddleMap, firstName, surname, birthday, contact, middleName, indexes);
 if(fuzzyBucket){
 noMiddleMap[noMiddleKey] = fuzzyBucket; // alias — both keys now point to the same bucket
 } else {
 let newBucket = makeAggregate(firstName,middleName,surname,birthday);
+// Carry the contact through immediately so the index has it on the
+// very first record (otherwise the contact index never indexes a
+// bucket whose first record is the only record).
+if(!newBucket.contact && contact) newBucket.contact = safeText(contact);
 noMiddleMap[noMiddleKey] = newBucket;
-// Add the new bucket to the birthday index for fast future fuzzy lookups
+// Add the new bucket to BOTH indexes for fast future fuzzy lookups
 let bday = normalizeBirthday(birthday);
 if(bday){
-let arr = birthdayIndex.get(bday);
-if(!arr){ arr = []; birthdayIndex.set(bday, arr); }
+let arr = byBirthday.get(bday);
+if(!arr){ arr = []; byBirthday.set(bday, arr); }
+arr.push(newBucket);
+}
+let phone = normalizeContact(contact);
+if(phone){
+let arr = byContact.get(phone);
+if(!arr){ arr = []; byContact.set(phone, arr); }
 arr.push(newBucket);
 }
 }
@@ -1353,9 +1441,19 @@ if(!nameOnlyMap[nameOnlyKey]) nameOnlyMap[nameOnlyKey] = makeAggregate(firstName
 applyRecordToAggregate(fullMap[fullKey], record);
 applyRecordToAggregate(noMiddleMap[noMiddleKey], record);
 applyRecordToAggregate(nameOnlyMap[nameOnlyKey], record);
+
+// After applying, the bucket may have just acquired its first contact —
+// add it to the contact index now so subsequent records can find it.
+let bucket = noMiddleMap[noMiddleKey];
+let bucketPhone = normalizeContact(bucket.contact);
+if(bucketPhone){
+let arr = byContact.get(bucketPhone);
+if(!arr){ arr = []; byContact.set(bucketPhone, arr); }
+if(arr.indexOf(bucket) === -1) arr.push(bucket);
+}
 }
 
-return { fullMap, noMiddleMap, nameOnlyMap, birthdayIndex };
+return { fullMap, noMiddleMap, nameOnlyMap, indexes };
 }
 
 function dedupeDetailRows(rows){
@@ -1398,12 +1496,25 @@ bloodType: "",
 rhFactor: "",
 contact: "",
 detailRows: [],
-docIds: []
+docIds: [],
+latestDonationDate: "",
+latestRecordCount: 0
 };
 }
 
 let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
-let finalCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+
+// Smartest count = max(latest-record count, max-ever-seen count, serial evidence).
+// Serial evidence is the FLOOR (we have proof of N donations from N distinct
+// fingerprints, so the donor has at least donated that many times).
+// The latest record's count is usually the most up-to-date number, but if a
+// previous record happened to have a higher number, max() preserves it as
+// belt-and-suspenders for buggy data.
+let finalCount = Math.max(
+bucket.latestRecordCount || 0,
+bucket.maxDonationCount  || 0,
+matchedRows              || 0
+);
 
 return {
 source: source,
@@ -1413,7 +1524,9 @@ bloodType: bucket.bloodType || "",
 rhFactor: bucket.rhFactor || "",
 contact: bucket.contact || "",
 detailRows: dedupeDetailRows(bucket.detailRows || []),
-docIds: Array.from(new Set(bucket.docIds || []))
+docIds: Array.from(new Set(bucket.docIds || [])),
+latestDonationDate: bucket.latestDonationDate || "",
+latestRecordCount: bucket.latestRecordCount || 0
 };
 }
 
@@ -1422,6 +1535,7 @@ let firstName = getPossibleFirstName(donor);
 let middleName = getPossibleMiddleName(donor);
 let surname = getPossibleSurname(donor);
 let birthday = getPossibleBirthday(donor);
+let contact = getPossibleContact(donor);
 
 let fullKey = buildFullKey(firstName,surname,birthday,middleName);
 let noMiddleKey = buildNoMiddleKey(firstName,surname,birthday);
@@ -1430,10 +1544,11 @@ let nameOnlyKey = buildNameOnlyKey(firstName,surname);
 if(aggregates.fullMap[fullKey]) return aggregateToResult(aggregates.fullMap[fullKey], "Exact Match");
 if(aggregates.noMiddleMap[noMiddleKey]) return aggregateToResult(aggregates.noMiddleMap[noMiddleKey], "No Middle Name Match");
 
-// Fuzzy match (typo tolerance, same birthday required) — catches encoder
-// typos like MARIA vs MARYA so donation counts consolidate.
-let fuzzyBucket = findFuzzyAggregate(aggregates.noMiddleMap, firstName, surname, birthday, aggregates.birthdayIndex);
-if(fuzzyBucket) return aggregateToResult(fuzzyBucket, "Fuzzy Match (typo tolerated)");
+// Smart fuzzy match — close-enough names + at least one corroborating signal
+// (matching birthday OR contact OR exact full-name). Catches encoder typos
+// like MARIA vs MARYA or LEONARDO duplicates with same contact.
+let fuzzyBucket = findFuzzyAggregate(aggregates.noMiddleMap, firstName, surname, birthday, contact, middleName, aggregates.indexes);
+if(fuzzyBucket) return aggregateToResult(fuzzyBucket, "Smart Match (identity-corroborated)");
 
 if(aggregates.nameOnlyMap[nameOnlyKey]) return aggregateToResult(aggregates.nameOnlyMap[nameOnlyKey], "Name Only Match");
 
@@ -1502,7 +1617,16 @@ let birthday = getPossibleBirthday(data);
 let donorSide = inferDonorsCollectionCount(data);
 let aggregateResult = getAggregateResultForDonor(data, aggregates);
 
-let finalCount = Math.max(donorSide.count || 0, aggregateResult.countFromDatabase || 0);
+// Smart count = max of (latest-record count from DB aggregates, donors-side
+// count, and the records-evidence floor from countFromDatabase).
+// The latest-record value reflects the most current encoded "no. of
+// donations" — usually the truest current count when encoders update that
+// field on each visit.
+let finalCount = Math.max(
+donorSide.count || 0,
+aggregateResult.countFromDatabase || 0,
+aggregateResult.latestRecordCount || 0
+);
 
 let sourceLabel = "Donors Only";
 if(aggregateResult.countFromDatabase > 0 && donorSide.count > 0){
@@ -1539,7 +1663,12 @@ badgeLevel: getBadgeLevel(finalCount),
 canEdit: true,
 canDelete: true,
 donorDatabaseDocIds: aggregateResult.docIds || [],
-detailRows: mergedDetailRows
+detailRows: mergedDetailRows,
+// Carry the latest-record info onto the item so the post-pass can use it
+// when consolidating duplicates (whichever item has the most recent
+// donation date wins as the canonical count).
+latestDonationDate: aggregateResult.latestDonationDate || "",
+latestRecordCount: aggregateResult.latestRecordCount || 0
 };
 
 if(item.smartDonationCount >= categoryLimits.galloner){
@@ -1549,12 +1678,22 @@ mergedList.push(item);
 usedFullKeys.add(buildFullKey(firstName,surname,birthday,middleName));
 }
 
+// Phase 2: emit donorDatabase-only items for fullMap buckets the donors
+// collection didn't touch. If the same person has multiple fullMap buckets
+// (different middle-name spellings, etc.) this emits multiple items —
+// `consolidateFuzzyDuplicates` cleans those up afterward using the
+// multi-signal identity check (name + birthday/contact/full-name match).
 Object.keys(aggregates.fullMap).forEach(key=>{
 if(usedFullKeys.has(key)) return;
 
 let bucket = aggregates.fullMap[key];
 let matchedRows = bucket.fingerprints ? bucket.fingerprints.size : 0;
-let smartDonationCount = Math.max(bucket.maxDonationCount || 0, matchedRows || 0);
+// Same prefer-latest count math as Phase 1.
+let smartDonationCount = Math.max(
+bucket.latestRecordCount || 0,
+bucket.maxDonationCount  || 0,
+matchedRows              || 0
+);
 
 if(smartDonationCount < categoryLimits.galloner) return;
 
@@ -1579,7 +1718,9 @@ badgeLevel: getBadgeLevel(smartDonationCount),
 canEdit: true,
 canDelete: true,
 donorDatabaseDocIds: Array.from(new Set(bucket.docIds || [])),
-detailRows: dedupeDetailRows(bucket.detailRows || [])
+detailRows: dedupeDetailRows(bucket.detailRows || []),
+latestDonationDate: bucket.latestDonationDate || "",
+latestRecordCount: bucket.latestRecordCount || 0
 });
 });
 
@@ -1594,39 +1735,65 @@ mergedList = consolidateFuzzyDuplicates(mergedList);
 return mergedList;
 }
 
-// Walks a list of merged items and combines fuzzy duplicates (same birthday,
-// near-identical names) into a single record. Sums donation evidence,
-// preserves the highest count and the most informative source label.
+// Walks a list of merged items and combines fuzzy duplicates into a single
+// record. Identity = close names + at least one corroborating signal
+// (matching birthday OR matching contact OR exact full-name match).
 //
-// PERFORMANCE: We bucket items by normalized birthday first, then only
-// fuzzy-compare within each birthday bucket. With ~2000 unique birthdays
-// each bucket has ~1 item on average, turning the comparison from O(N²)
-// to O(N) typical case.
+// PERFORMANCE: We bucket items by both birthday and contact, then only
+// fuzzy-compare within those buckets. This catches duplicates the original
+// merge passes missed (Phase 1 + Phase 2 producing two separate items for
+// the same donor when their middle names or other fields differ slightly).
 function consolidateFuzzyDuplicates(items){
-// Bucket by birthday — items with no/blank birthday are passed through
-// untouched (the fuzzy gate already requires birthday).
-let bdayBuckets = new Map(); // birthday → array of item indices
-let unmergeable = []; // items with no birthday — pass through as-is
+// Build candidate-pair set: any two items that share a birthday OR share
+// a contact number OR have an exact full name match are considered for
+// fuzzy comparison. We then verify with namesAreFuzzyClose().
+let bdayBuckets = new Map();    // birthday → array of item indices
+let contactBuckets = new Map(); // normalized phone → array of item indices
+let nameBuckets = new Map();    // first|surname|middle → array of item indices
 
 for(let i = 0; i < items.length; i++){
-let bday = normalizeBirthday(items[i].birthday);
-if(!bday){
-unmergeable.push(i);
-continue;
-}
+let it = items[i];
+let bday = normalizeBirthday(it.birthday);
+let phone = normalizeContact(it.contact);
+let nameKey = normalizeText(it.firstName) + "|" + normalizeText(it.surname) + "|" + normalizeText(it.middleName || "");
+
+if(bday){
 let arr = bdayBuckets.get(bday);
 if(!arr){ arr = []; bdayBuckets.set(bday, arr); }
 arr.push(i);
 }
+if(phone){
+let arr = contactBuckets.get(phone);
+if(!arr){ arr = []; contactBuckets.set(phone, arr); }
+arr.push(i);
+}
+if(nameKey !== "||" && nameKey.split("|").filter(Boolean).length >= 2){
+let arr = nameBuckets.get(nameKey);
+if(!arr){ arr = []; nameBuckets.set(nameKey, arr); }
+arr.push(i);
+}
+}
 
+// Build a map: index i → set of indices it should be compared against
+let comparePairs = new Map();
+function addPairs(group){
+for(let a = 0; a < group.length; a++){
+for(let b = a+1; b < group.length; b++){
+let lo = Math.min(group[a], group[b]), hi = Math.max(group[a], group[b]);
+let s = comparePairs.get(lo);
+if(!s){ s = new Set(); comparePairs.set(lo, s); }
+s.add(hi);
+}
+}
+}
+bdayBuckets.forEach(addPairs);
+contactBuckets.forEach(addPairs);
+nameBuckets.forEach(addPairs);
+
+let merged = new Set();
 let result = [];
-let merged = new Set(); // indices already absorbed into a winner
 
-// Process each birthday bucket independently — only items inside the
-// same bucket can possibly fuzzy-merge.
-bdayBuckets.forEach(indices => {
-for(let ii = 0; ii < indices.length; ii++){
-let i = indices[ii];
+for(let i = 0; i < items.length; i++){
 if(merged.has(i)) continue;
 let winner = items[i];
 let winnerSerials = Array.isArray(winner.serials) ? [...winner.serials] : [];
@@ -1636,15 +1803,30 @@ let bestCount = winner.smartDonationCount || 0;
 let bestMatchedRows = winner.smartMatchedRows || 0;
 let didMerge = false;
 
-for(let jj = ii + 1; jj < indices.length; jj++){
-let j = indices[jj];
-if(merged.has(j)) continue;
+let candidateIndices = comparePairs.get(i);
+if(candidateIndices){
+candidateIndices.forEach(j => {
+if(merged.has(j)) return;
 let cand = items[j];
 
-if(!namesAreFuzzyClose(winner.firstName, cand.firstName, "first")) continue;
-if(!namesAreFuzzyClose(winner.surname, cand.surname, "surname")) continue;
+if(!namesAreFuzzyClose(winner.firstName, cand.firstName, "first")) return;
+if(!namesAreFuzzyClose(winner.surname,   cand.surname,   "surname")) return;
 
-// Merge: combine serials, detail rows, doc ids, and pick the higher count.
+// Names close — now confirm at least one corroborating signal.
+let bdayW = normalizeBirthday(winner.birthday), bdayC = normalizeBirthday(cand.birthday);
+let phoneW = normalizeContact(winner.contact), phoneC = normalizeContact(cand.contact);
+let nameMatchExact = (
+normalizeText(winner.firstName)  === normalizeText(cand.firstName)
+&& normalizeText(winner.surname)    === normalizeText(cand.surname)
+&& normalizeText(winner.middleName || "") === normalizeText(cand.middleName || "")
+);
+let signals = 0;
+if(bdayW && bdayC && bdayW === bdayC) signals++;
+if(phoneW && phoneC && phoneW === phoneC) signals++;
+if(nameMatchExact) signals++;
+if(signals < 1) return;
+
+// Merge.
 merged.add(j);
 didMerge = true;
 
@@ -1660,16 +1842,30 @@ for(let k = 0; k < cand.donorDatabaseDocIds.length; k++) winnerDocIds.push(cand.
 if((cand.smartDonationCount || 0) > bestCount) bestCount = cand.smartDonationCount;
 if((cand.smartMatchedRows || 0) > bestMatchedRows) bestMatchedRows = cand.smartMatchedRows;
 
+// Prefer the latest-record's count if available — that's the truest "current"
+// number. If the candidate has a more recent latestDonationDate, use ITS count.
+let dW = winner.latestDonationDate || "", dC = cand.latestDonationDate || "";
+if(dC && dC > dW){
+winner.latestDonationDate = dC;
+if((cand.latestRecordCount || 0) > 0){
+winner.latestRecordCount = cand.latestRecordCount;
+if(cand.latestRecordCount > bestCount) bestCount = cand.latestRecordCount;
+}
+}
+
+// Carry forward whichever fields the winner is missing.
 if(!winner.bloodType && cand.bloodType) winner.bloodType = cand.bloodType;
 if(!winner.rhFactor && cand.rhFactor) winner.rhFactor = cand.rhFactor;
 if(!winner.contact && cand.contact) winner.contact = cand.contact;
 if(!winner.middleName && cand.middleName) winner.middleName = cand.middleName;
+if(!winner.birthday && cand.birthday) winner.birthday = cand.birthday;
 if(!winner.id && cand.id) winner.id = cand.id;
 if(!winner.remarks && cand.remarks) winner.remarks = cand.remarks;
 if((winner.awardStatus || "NOT AWARDED") !== "AWARDED" && cand.awardStatus === "AWARDED"){
 winner.awardStatus = "AWARDED";
 if(cand.yearAwarded && !winner.yearAwarded) winner.yearAwarded = cand.yearAwarded;
 }
+});
 }
 
 if(didMerge){
@@ -1685,18 +1881,14 @@ winner.serialCount = winner.serials.length;
 winner.badgeLevel = getBadgeLevel(bestCount);
 let existing = safeText(winner.smartMatchSource || "");
 if(existing && !/Consolidated/i.test(existing)){
-winner.smartMatchSource = existing + " + Consolidated (typo)";
+winner.smartMatchSource = existing + " + Consolidated";
 } else if(!existing){
-winner.smartMatchSource = "Consolidated (typo)";
+winner.smartMatchSource = "Consolidated";
 }
 }
 
 result.push(winner);
 }
-});
-
-// Pass through items with no birthday (we don't fuzzy-merge them anyway).
-unmergeable.forEach(i => result.push(items[i]));
 
 return result;
 }
