@@ -223,6 +223,8 @@ font-weight:bold;
 
 .top-btn{background:#b30000;}
 .reload-btn{background:#1565c0;}
+.rebuild-btn{background:#00897b;}
+.rebuild-btn:disabled{background:#80cbc4;cursor:not-allowed;}
 .edit-btn{background:#1565c0;}
 .delete-btn{background:#c62828;}
 .view-btn{background:#6a1b9a;}
@@ -1011,6 +1013,7 @@ grid-template-columns:1fr;
 <button class="to-award-btn" onclick="showToBeAwardedThisYear()">To Be Awarded This Year</button>
 <button class="top-btn" onclick="clearAwardFilters()">Clear Award Filter</button>
 <button class="reload-btn" onclick="invalidateCache(); fetchEligibleDonors()">Reload</button>
+<button class="rebuild-btn" id="rebuildAggregatesBtn" onclick="rebuildAggregateCaches()" title="Re-scan the full donorDatabase and refresh every donor's cached counts. Run after bulk donorDatabase imports.">⟳ Rebuild Aggregates</button>
 <button class="top-btn" onclick="goDashboard()">Return to Dashboard</button>
 
 <!-- Print / Export menu — single button replaces a cramped row of 8 buttons -->
@@ -2336,6 +2339,150 @@ localStorage.removeItem("tracking_cache_ts_v1");
 }catch(e){ /* noop */ }
 }
 
+// ─── CACHE-FIRST DATA LAYER ──────────────────────────────────────────────────
+// Loading was dominated by the donorDatabase fetch (10s of MB on full chapters).
+// We now precompute an aggregate cache on each donor doc — see donor-entry's
+// saveDonorEntry + the rebuildAggregateCaches action below — so the normal
+// page load only fetches the donors collection. donorDatabase is lazy-loaded
+// only when (a) the user clicks View Serials, or (b) the user clicks
+// Rebuild Aggregates.
+
+const CACHE_VERSION = 1;
+
+// Builds a tracking-shape item from a donor doc, using cached aggregate fields
+// when present and falling back to donors-side numbers when they aren't yet
+// (e.g. on first page load after deploying this version of the page).
+function buildItemFromCachedDonor(d){
+let serialCount = Array.isArray(d.serials) ? d.serials.length : 0;
+let cachedSmart = Number(d.cachedSmartCount || 0);
+let cachedSerial = Number(d.cachedSerialCount || 0);
+let cachedTotal = Number(d.cachedTotalSerials || 0);
+let hasCache = (typeof d.cachedSmartCount === "number") || (typeof d.cachedSerialCount === "number");
+let smartCount = hasCache ? cachedSmart : Math.max(serialCount, getRecordDonationCount(d));
+let serialDisplayCount = hasCache ? Math.max(cachedTotal, cachedSerial, serialCount) : serialCount;
+
+let sourceLabel;
+if(hasCache && d.cachedSmartMatchSource){
+sourceLabel = String(d.cachedSmartMatchSource);
+} else if(serialCount > 0){
+sourceLabel = "Donors Only (rebuild needed)";
+} else {
+sourceLabel = "No Cache";
+}
+
+return {
+id: d.id || "",
+firstName: safeText(d.firstName || d.firstname || d.givenName || ""),
+middleName: safeText(d.middleName || d.middlename || ""),
+surname: safeText(d.surname || d.lastName || d.lastname || ""),
+birthday: d.birthday || d.birthDate || d.dateOfBirth || "",
+bloodType: safeText(d.bloodType || ""),
+rhFactor: safeText(d.rhFactor || ""),
+contact: safeText(d.contact || d.contactNumber || ""),
+serials: Array.isArray(d.serials) ? d.serials : [],
+serialCount: serialDisplayCount,
+remarks: safeText(d.remarks || ""),
+awardStatus: safeText(d.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED",
+yearAwarded: safeText(d.yearAwarded || ""),
+smartDonationCount: smartCount,
+smartMatchedRows: Number(d.cachedMatchedRows || 0),
+smartMatchSource: sourceLabel,
+badgeLevel: getBadgeLevel(smartCount),
+canEdit: true,
+canDelete: true,
+donorDatabaseDocIds: Array.isArray(d.cachedDonorDatabaseDocIds) ? d.cachedDonorDatabaseDocIds.slice() : [],
+// detailRows is loaded lazily — see ensureDetailRowsLoaded(). Empty here.
+detailRows: [],
+detailRowsLoaded: false,
+latestDonationDate: safeText(d.cachedLatestDonationDate || ""),
+latestRecordCount: Number(d.cachedLatestRecordCount || 0),
+hasCache: hasCache,
+cachedAt: d.cachedAt || null
+};
+}
+
+// Singleton lazy-loader for the full donorDatabase collection. Only triggered
+// when the user opens View Serials or runs Rebuild. The result is held in
+// memory for the rest of the session — repeat opens are instant.
+let _dbLoadPromise = null;
+let _dbDocs = null;
+function getCachedDonorDatabase(){ return _dbDocs; }
+async function ensureDonorDatabaseLoaded(){
+if(_dbDocs) return _dbDocs;
+if(_dbLoadPromise) return _dbLoadPromise;
+_dbLoadPromise = (async () => {
+let snap = await getCollectionWithTimeout("donorDatabase", 20000);
+let docs = [];
+if(typeof snap.forEach === "function"){
+snap.forEach(doc=>{
+let data = doc.data() || {};
+data.id = doc.id;
+docs.push(data);
+});
+}else if(Array.isArray(snap.docs)){
+for(let i=0;i<snap.docs.length;i++){
+let doc = snap.docs[i];
+if(typeof doc.data === "function"){
+let data = doc.data() || {};
+data.id = doc.id;
+docs.push(data);
+}
+}
+}
+// Apply manual-merge overrides (same as before, but in memory only)
+for(let i=0;i<docs.length;i++){
+let rec = docs[i];
+if(!rec || !rec.manualMergedInto) continue;
+if(rec.manualMergedIntoFirstName) rec.firstName = rec.manualMergedIntoFirstName;
+if(rec.manualMergedIntoSurname)   rec.surname   = rec.manualMergedIntoSurname;
+if(rec.manualMergedIntoMiddleName !== undefined && rec.manualMergedIntoMiddleName !== null){
+rec.middleName = rec.manualMergedIntoMiddleName;
+}
+if(rec.manualMergedIntoBirthday)  rec.birthday  = rec.manualMergedIntoBirthday;
+}
+_dbDocs = docs;
+return docs;
+})();
+return _dbLoadPromise;
+}
+
+// Resets the lazy donorDatabase cache. Call after a rebuild or after any
+// write that could change donorDatabase contents.
+function resetDonorDatabaseCache(){
+_dbLoadPromise = null;
+_dbDocs = null;
+}
+
+// On-demand detail-rows builder. Given a tracking item that was built from
+// donor-doc cache (no detailRows), this fetches donorDatabase if needed and
+// reconstructs detailRows + matched docIds for THAT donor only.
+async function ensureDetailRowsLoaded(item){
+if(item.detailRowsLoaded) return item;
+
+let db = await ensureDonorDatabaseLoaded();
+let aggregates = aggregateDonorDatabase(db);
+let donorLike = {
+firstName: item.firstName, middleName: item.middleName,
+surname: item.surname, birthday: item.birthday, contact: item.contact
+};
+let aggregateResult = getAggregateResultForDonor(donorLike, aggregates);
+
+let mergedDetail = dedupeDetailRows([
+...mergeSerialRowsFromDonors(item.serials),
+...(aggregateResult.detailRows || [])
+]);
+item.detailRows = mergedDetail;
+item.detailRowsLoaded = true;
+
+// Opportunistically refresh the donorDatabaseDocIds list — the rebuild
+// might not have run yet, but this gives manual-merge accurate fingerprints.
+if((!item.donorDatabaseDocIds || item.donorDatabaseDocIds.length === 0)
+&& aggregateResult.docIds && aggregateResult.docIds.length){
+item.donorDatabaseDocIds = aggregateResult.docIds.slice();
+}
+return item;
+}
+
 async function fetchEligibleDonors(){
 if(isLoading) return;
 
@@ -2350,50 +2497,13 @@ return;
 }
 
 isLoading = true;
-
-// ─── Step 1: Show cached MERGED data IMMEDIATELY (stale-while-revalidate)
-// We cache the already-merged result so cache hit is just JSON.parse →
-// render — skipping the aggregation + fuzzy work entirely. On a returning
-// visit the user sees the table almost instantly.
-let cached = readCache();
-let renderedFromCache = false;
-if(cached && Array.isArray(cached.merged)){
-try{
-setStatus("Showing cached data — refreshing in background...", "loading");
-donorsData = cached.merged;
-applyFiltersAndRender();
-renderedFromCache = true;
-}catch(e){
-console.warn("Failed to render from cache:", e);
-}
-}
-
-if(!renderedFromCache){
 setStatus("Loading eligible awardees...", "loading");
-}
 
 try{
-// ─── Step 2: Parallel network fetch ───────────────────────────────────
-// donors and donorDatabase are fetched in parallel via Promise.allSettled
-// so one slow collection doesn't block the other.
-let [donorsResult, databaseResult] = await Promise.allSettled([
-getCollectionWithTimeout("donors", 12000),
-getCollectionWithTimeout("donorDatabase", 15000)
-]);
-
-if(donorsResult.status === "rejected"){
-throw donorsResult.reason || new Error("donors collection failed to load");
-}
-
-let donorsSnap = donorsResult.value;
-let donorDatabaseSnap;
-if(databaseResult.status === "fulfilled"){
-donorDatabaseSnap = databaseResult.value;
-} else {
-console.error("donorDatabase load warning:", databaseResult.reason);
-donorDatabaseSnap = { docs: [] };
-}
-
+// Only fetch donors — donorDatabase is lazy. The cache fields on each
+// donor doc carry the smart count, source label, and matched row count
+// that the table needs.
+let donorsSnap = await getCollectionWithTimeout("donors", 12000);
 let donorsDocs = [];
 donorsSnap.forEach(doc=>{
 let data = doc.data() || {};
@@ -2401,40 +2511,72 @@ data.id = doc.id;
 donorsDocs.push(data);
 });
 
-// ─── Step 3: Render donors-only IMMEDIATELY ───────────────────────────
-// If we didn't render from cache, the donors collection alone is enough
-// to start showing meaningful data. donorDatabase only enriches the
-// counts — render now so the user sees something rather than an
-// indefinite loading spinner while parsing the larger collection.
-if(!renderedFromCache){
-donorsData = mergeBothCollections(donorsDocs, []);
+// Build merged items from cache fields. Donors with no cache fall back
+// to their own serials.length, and are flagged so the UI can suggest a
+// rebuild.
+let items = donorsDocs.map(buildItemFromCachedDonor)
+.filter(it => it.smartDonationCount >= categoryLimits.galloner);
+
+donorsData = items;
 applyFiltersAndRender();
-setStatus("Refining counts from donor database...", "loading");
+
+// Surface stale-cache or no-cache state so the user knows to rebuild.
+let noCache = items.filter(it => !it.hasCache).length;
+let total = items.length;
+let extraNote = noCache > 0
+? ` ⚠ ${noCache} of ${total} eligible donor${total===1?"":"s"} have no cached aggregate yet — click "Rebuild Aggregates" to scan donorDatabase.`
+: "";
+setStatus(`Loaded ${total} eligible donor${total===1?"":"s"} from cache.${extraNote}`, noCache > 0 ? "loading" : "success");
+
+// Reset stale in-memory donorDatabase cache so a fresh View Serials/
+// Rebuild gets current data.
+resetDonorDatabaseCache();
+}catch(error){
+console.error("Fetch eligible donors error:", error);
+donorsData = [];
+applyFiltersAndRender();
+setStatus("Failed to load eligible donors: " + error.message, "error");
+}finally{
+isLoading = false;
 }
+}
+
+// ─── REBUILD AGGREGATES ──────────────────────────────────────────────────────
+// This is the slow path. It runs the full pipeline (fetch both collections,
+// aggregate, fuzzy-match, consolidate) and writes the result back to each
+// donor doc's cache fields. For donorDatabase-only eligible people, it
+// creates stub donor docs. After it finishes, regular page loads see all
+// eligible donors via cache alone.
+let rebuildInProgress = false;
+async function rebuildAggregateCaches(){
+if(rebuildInProgress) return;
+if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+if(!confirm("Rebuild aggregate cache?\n\nThis fetches the full donorDatabase, recomputes counts for every eligible donor, and writes the results back. Run this after a donorDatabase import or once a week. It can take 10–30 seconds depending on data size.")) return;
+
+rebuildInProgress = true;
+let rebuildBtn = document.getElementById("rebuildAggregatesBtn");
+if(rebuildBtn) rebuildBtn.disabled = true;
+setStatus("Rebuild step 1/4: fetching donors + donorDatabase...", "loading");
+
+try{
+let [donorsResult, databaseResult] = await Promise.allSettled([
+getCollectionWithTimeout("donors", 15000),
+getCollectionWithTimeout("donorDatabase", 30000)
+]);
+
+if(donorsResult.status === "rejected") throw donorsResult.reason || new Error("donors fetch failed");
+if(databaseResult.status === "rejected") throw databaseResult.reason || new Error("donorDatabase fetch failed");
+
+let donorsDocs = [];
+donorsResult.value.forEach(doc => { let d = doc.data() || {}; d.id = doc.id; donorsDocs.push(d); });
 
 let donorDatabaseDocs = [];
-if(typeof donorDatabaseSnap.forEach === "function"){
-donorDatabaseSnap.forEach(doc=>{
-let data = doc.data() || {};
-data.id = doc.id;
-donorDatabaseDocs.push(data);
-});
-}else if(Array.isArray(donorDatabaseSnap.docs)){
-for(let i=0;i<donorDatabaseSnap.docs.length;i++){
-let doc = donorDatabaseSnap.docs[i];
-if(typeof doc.data === "function"){
-let data = doc.data() || {};
-data.id = doc.id;
-donorDatabaseDocs.push(data);
-}
-}
+let dbSnap = databaseResult.value;
+if(typeof dbSnap.forEach === "function"){
+dbSnap.forEach(doc => { let d = doc.data() || {}; d.id = doc.id; donorDatabaseDocs.push(d); });
 }
 
-// ─── MANUAL-MERGE OVERRIDE ────────────────────────────────────────────
-// If a donorDatabase doc was manually merged into another donor, override
-// its in-memory identity fields with the target's signature so the
-// aggregation step buckets it under the target. The on-disk document is
-// untouched — these overrides exist only in memory for this load.
+// Apply manual-merge overrides before aggregation
 for(let i=0;i<donorDatabaseDocs.length;i++){
 let rec = donorDatabaseDocs[i];
 if(!rec || !rec.manualMergedInto) continue;
@@ -2446,29 +2588,95 @@ rec.middleName = rec.manualMergedIntoMiddleName;
 if(rec.manualMergedIntoBirthday)  rec.birthday  = rec.manualMergedIntoBirthday;
 }
 
-// ─── Step 4: Final merge with full data ───────────────────────────────
-donorsData = mergeBothCollections(donorsDocs, donorDatabaseDocs);
-applyFiltersAndRender();
+setStatus("Rebuild step 2/4: aggregating...", "loading");
+let merged = mergeBothCollections(donorsDocs, donorDatabaseDocs);
 
-// ─── Step 5: Persist MERGED cache for the next page load ──────────────
-// Cache the final merged result, not raw docs. On the next visit the
-// cache hit can render directly without re-running the merge pipeline.
-writeCache(donorsData);
+// Persist the freshly-loaded donorDatabase for the rest of the session.
+_dbDocs = donorDatabaseDocs;
+_dbLoadPromise = Promise.resolve(donorDatabaseDocs);
 
-if(donorDatabaseDocs.length > 0){
-setStatus(`Loaded successfully. Eligible donors: ${donorsData.length}. donors: ${donorsDocs.length}, donorDatabase: ${donorDatabaseDocs.length}`, "success");
-}else{
-setStatus(`Loaded donors collection. donorDatabase was unavailable, so only donors-side eligible counts are shown. Eligible donors: ${donorsData.length}`, "error");
+setStatus("Rebuild step 3/4: writing donor caches...", "loading");
+
+// Build cache-field updates for each merged item. Batch them in groups
+// of 400 (under Firestore's 500-per-batch limit) so writes are efficient.
+let toWrite = []; // { docId, payload, isNew }
+for(let i=0;i<merged.length;i++){
+let item = merged[i];
+let cachePayload = {
+cachedSmartCount: item.smartDonationCount || 0,
+cachedSerialCount: (Array.isArray(item.serials) ? item.serials.length : 0),
+cachedTotalSerials: Math.max(
+(Array.isArray(item.serials) ? item.serials.length : 0),
+(Array.isArray(item.detailRows) ? item.detailRows.filter(r => safeText(r.serial)).length : 0)
+),
+cachedSmartMatchSource: item.smartMatchSource || "",
+cachedMatchedRows: item.smartMatchedRows || 0,
+cachedDonorDatabaseDocIds: Array.isArray(item.donorDatabaseDocIds)
+? Array.from(new Set(item.donorDatabaseDocIds)).slice(0, 500) // bound array size
+: [],
+cachedLatestDonationDate: item.latestDonationDate || "",
+cachedLatestRecordCount: item.latestRecordCount || 0,
+cachedAt: firebase.firestore.FieldValue.serverTimestamp(),
+cachedVersion: CACHE_VERSION
+};
+
+if(item.id){
+// Update existing donor doc with new cache fields only (merge:true)
+toWrite.push({ docId: item.id, payload: cachePayload, isNew: false });
+} else {
+// donorDatabase-only person who hit the threshold — create a stub donor
+// doc so future page loads include them without scanning donorDatabase.
+let stubPayload = Object.assign({
+firstName: item.firstName || "",
+middleName: item.middleName || "",
+surname: item.surname || "",
+birthday: item.birthday || "",
+bloodType: item.bloodType || "",
+rhFactor: item.rhFactor || "",
+contact: item.contact || "",
+remarks: item.remarks || "",
+awardStatus: item.awardStatus || "NOT AWARDED",
+yearAwarded: item.yearAwarded || "",
+serials: Array.isArray(item.serials) ? item.serials : [],
+isStubFromDonorDatabase: true,
+createdFrom: "rebuild-aggregates",
+createdAt: firebase.firestore.FieldValue.serverTimestamp()
+}, cachePayload);
+toWrite.push({ docId: null, payload: stubPayload, isNew: true });
 }
+}
+
+// Use Firestore batched writes for efficiency. Each batch covers up to 400 docs.
+let written = 0;
+let i = 0;
+while(i < toWrite.length){
+let batch = db.batch();
+let count = 0;
+while(count < 400 && i < toWrite.length){
+let entry = toWrite[i];
+if(entry.isNew){
+let ref = db.collection("donors").doc(); // auto-id
+batch.set(ref, entry.payload);
+} else {
+batch.set(db.collection("donors").doc(entry.docId), entry.payload, { merge: true });
+}
+count++; i++;
+}
+await batch.commit();
+written += count;
+setStatus(`Rebuild step 3/4: writing donor caches (${written}/${toWrite.length})...`, "loading");
+}
+
+setStatus("Rebuild step 4/4: reloading from cache...", "loading");
+await fetchEligibleDonors();
+setStatus(`Rebuild complete. Wrote cache for ${written} donor${written===1?"":"s"}.`, "success");
 }catch(error){
-console.error("Fetch eligible donors error:", error);
-if(!renderedFromCache){
-donorsData = [];
-applyFiltersAndRender();
-}
-setStatus("Failed to load eligible donors: " + error.message + (renderedFromCache ? " (showing cached data)" : ""), "error");
+console.error("Rebuild error:", error);
+setStatus("Rebuild failed: " + error.message, "error");
+alert("Rebuild failed: " + error.message);
 }finally{
-isLoading = false;
+rebuildInProgress = false;
+if(rebuildBtn) rebuildBtn.disabled = false;
 }
 }
 
@@ -2702,11 +2910,27 @@ ${badge}
 table.innerHTML = parts.join("");
 }
 
-function toggleSerial(index){
+async function toggleSerial(index){
 let row = document.getElementById("serialRow"+index);
 if(!row) return;
 
 if(row.style.display === "none"){
+let donor = filteredDonorsData[index];
+let needsLazyLoad = donor && donor.hasCache && !donor.detailRowsLoaded;
+if(needsLazyLoad){
+// Show the row immediately with a "loading" placeholder so the user
+// sees feedback even while we're fetching donorDatabase the first time.
+row.style.display = "table-row";
+let container = document.getElementById("serialList"+index);
+if(container) container.innerHTML = '<div style="padding:14px;color:#666;font-style:italic;">Loading serial details from donor database…</div>';
+try{
+await ensureDetailRowsLoaded(donor);
+}catch(err){
+if(container) container.innerHTML = '<div style="padding:14px;color:#b30000;">Could not load serial details: ' + escapeHtml(err.message) + '</div>';
+console.error("ensureDetailRowsLoaded error:", err);
+return;
+}
+}
 renderSerialAndRemarks(index);
 row.style.display = "table-row";
 }else{
@@ -2714,9 +2938,18 @@ row.style.display = "none";
 }
 }
 
-function openRemarksOnly(index){
+async function openRemarksOnly(index){
 let row = document.getElementById("serialRow"+index);
 if(!row) return;
+
+let donor = filteredDonorsData[index];
+let needsLazyLoad = donor && donor.hasCache && !donor.detailRowsLoaded;
+if(needsLazyLoad){
+row.style.display = "table-row";
+let container = document.getElementById("serialList"+index);
+if(container) container.innerHTML = '<div style="padding:14px;color:#666;font-style:italic;">Loading…</div>';
+try{ await ensureDetailRowsLoaded(donor); }catch(err){ console.error(err); }
+}
 
 if(row.style.display === "none"){
 row.style.display = "table-row";
@@ -2941,6 +3174,13 @@ let donor = filteredDonorsData[index];
 
 if(donor.id){
 return donor.id;
+}
+
+// Donor came from the agg cache with no donors-doc id and no detailRows
+// yet — pull them so the stub we create carries the donor's full serial
+// history instead of being empty.
+if(donor.hasCache && !donor.detailRowsLoaded){
+try{ await ensureDetailRowsLoaded(donor); }catch(err){ console.warn("Detail load before stub failed:", err); }
 }
 
 let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
@@ -3188,6 +3428,9 @@ return;
 // in donorDatabase (no donors-collection id), create a stub donors doc so
 // the eligible-tracking edits have a stable place to live. The stub copies
 // over the current snapshot of the merged record.
+if(!donor.id && donor.hasCache && !donor.detailRowsLoaded){
+try{ await ensureDetailRowsLoaded(donor); }catch(err){ console.warn("Detail load before edit failed:", err); }
+}
 let serialsToSync = buildSerialsArrayFromDetailRows(donor.detailRows || []);
 if(!donor.id){
 try{
@@ -3428,7 +3671,7 @@ let combined = buildSerialsArrayFromDetailRows([
 return combined;
 }
 
-function openMergeConfirm(sourceIndex){
+async function openMergeConfirm(sourceIndex){
 let target = filteredDonorsData[mergeTargetIndex];
 let source = filteredDonorsData[sourceIndex];
 if(!target || !source){
@@ -3442,6 +3685,26 @@ return;
 }
 
 pendingMergeSourceIndex = sourceIndex;
+
+// Cache-aware donors carry empty detailRows until expanded. Load both
+// sides' details now so the merge preview shows the real combined total
+// and the actual merge writes the union, not a half-empty set.
+let needLoadT = target.hasCache && !target.detailRowsLoaded;
+let needLoadS = source.hasCache && !source.detailRowsLoaded;
+if(needLoadT || needLoadS){
+let summaryEl = document.getElementById("mergeModalSummary");
+if(summaryEl) summaryEl.innerHTML = '<em style="color:#64748b;">Loading both donors\' serial details…</em>';
+document.getElementById("mergeModalOverlay").classList.add("show");
+try{
+if(needLoadT) await ensureDetailRowsLoaded(target);
+if(needLoadS) await ensureDetailRowsLoaded(source);
+}catch(err){
+console.error("Could not load detail rows for merge:", err);
+let statusEl = document.getElementById("mergeModalStatus");
+if(statusEl){ statusEl.className = "edit-modal-status error"; statusEl.textContent = "Could not load donor details: " + err.message; }
+return;
+}
+}
 
 let combined = combinedSerialPreview(target, source);
 let sourceDbDocCount = Array.isArray(source.donorDatabaseDocIds) ? source.donorDatabaseDocIds.length : 0;
