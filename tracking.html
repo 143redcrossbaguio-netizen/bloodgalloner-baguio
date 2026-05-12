@@ -718,6 +718,120 @@ font-weight:bold;
 .src-merged{background:#e8f5e9;color:#1b5e20;}
 .src-fuzzy{background:#fff8e1;color:#92400e;}
 
+/* ─── Add-serial panel inside View Serials ───────────────────────────── */
+.add-serial-panel{
+margin-top:14px;
+padding:12px;
+border:1px dashed #b30000;
+border-radius:8px;
+background:#fff8f8;
+}
+.add-serial-title{
+font-weight:bold;
+color:#b30000;
+font-size:13px;
+margin-bottom:8px;
+}
+.add-serial-row{
+display:grid;
+grid-template-columns:1.4fr 1fr auto;
+gap:8px;
+align-items:center;
+}
+.add-serial-row input[type="text"],
+.add-serial-row input[type="date"]{
+padding:8px 10px;
+border:1px solid #ccc;
+border-radius:6px;
+font-size:13px;
+width:100%;
+box-sizing:border-box;
+}
+.add-serial-btn{
+background:#1565c0;
+color:#fff;
+padding:8px 14px;
+font-size:13px;
+border:none;
+border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+}
+.add-serial-btn:hover:not(:disabled){ background:#0d47a1; }
+.add-serial-btn:disabled{ background:#94a3b8; cursor:not-allowed; }
+.add-serial-hint{
+font-size:11px;
+color:#666;
+margin-top:6px;
+}
+.add-serial-status{
+margin-top:8px;
+font-size:12px;
+font-weight:bold;
+min-height:1em;
+}
+.add-serial-status.success{ color:#1b5e20; }
+.add-serial-status.error{ color:#b30000; }
+.add-serial-status.loading{ color:#1f4f8a; }
+@media (max-width: 700px){
+.add-serial-row{ grid-template-columns:1fr; }
+}
+
+/* ─── Merge button + selection banner ────────────────────────────────── */
+.merge-btn{ background:#6d4c41; }
+.merge-btn-target{ background:#ef6c00; }
+.merge-btn-target-cancel{ background:#9e9e9e; }
+.merge-banner{
+display:none;
+margin:0 0 14px 0;
+padding:12px 16px;
+border:1px solid #ef6c00;
+border-radius:8px;
+background:#fff3e0;
+color:#7a3d00;
+font-size:13px;
+align-items:center;
+justify-content:space-between;
+gap:10px;
+flex-wrap:wrap;
+}
+.merge-banner.show{ display:flex; }
+.merge-banner-text{ flex:1 1 auto; min-width:0; }
+.merge-banner-name{ font-weight:bold; }
+.merge-cancel-btn{
+background:#9e9e9e;
+color:#fff;
+border:none;
+padding:7px 14px;
+border-radius:6px;
+font-weight:bold;
+cursor:pointer;
+font-size:12px;
+}
+.merge-target-row td{ background:#fff3e0 !important; }
+.merge-source-candidate-row td{ background:#fffde7 !important; }
+.merge-summary-card{
+margin:6px 0 12px 0;
+padding:10px 12px;
+border-radius:8px;
+background:#f8fafc;
+border:1px solid #e2e8f0;
+font-size:13px;
+line-height:1.5;
+}
+.merge-arrow{
+font-size:18px;
+color:#ef6c00;
+margin:0 6px;
+}
+.merge-summary-list{
+margin:8px 0 0 0;
+padding-left:20px;
+font-size:12px;
+color:#475569;
+}
+.merge-summary-list li{ margin-bottom:3px; }
+
 @media (max-width: 900px){
 .serial-detail-layout{
 grid-template-columns:1fr;
@@ -829,6 +943,35 @@ grid-template-columns:1fr;
 <div id="tabContextBanner" class="tab-context-banner tab-galloner">
 <div><span id="tabContextLabel">Viewing: Galloner Tab</span></div>
 <div class="tab-context-meta" id="tabContextMeta">Click a category above to switch.</div>
+</div>
+
+<!-- Manual-merge banner — appears once a merge target is picked.
+     Stays visible until the user picks a second donor or cancels. -->
+<div id="mergeBanner" class="merge-banner">
+<div class="merge-banner-text">
+🔀 <strong>Merging into:</strong> <span class="merge-banner-name" id="mergeBannerName">—</span>
+<br><small>Click <em>Merge into target</em> on the row that should be absorbed into this one.</small>
+</div>
+<button class="merge-cancel-btn" onclick="cancelMerge()">Cancel merge</button>
+</div>
+
+<!-- Manual-merge confirmation modal — confirms the absorb direction before
+     touching Firestore. -->
+<div id="mergeModalOverlay" class="edit-modal-overlay" onclick="closeMergeModalOnBackdrop(event)">
+<div class="edit-modal" role="dialog" aria-labelledby="mergeModalTitle">
+<div class="edit-modal-header">
+<div class="edit-modal-title" id="mergeModalTitle">Confirm Manual Merge</div>
+<button class="edit-modal-close" type="button" onclick="closeMergeModal()" aria-label="Close">×</button>
+</div>
+<div class="edit-modal-body">
+<div id="mergeModalSummary" class="merge-summary-card"></div>
+<div id="mergeModalStatus" class="edit-modal-status"></div>
+</div>
+<div class="edit-modal-footer">
+<button class="edit-cancel-btn" type="button" onclick="closeMergeModal()">Cancel</button>
+<button class="edit-save-btn" id="mergeConfirmBtn" type="button" onclick="confirmMerge()">Merge donors</button>
+</div>
+</div>
 </div>
 
 <div class="controls-row">
@@ -944,8 +1087,8 @@ grid-template-columns:1fr;
 <label>RH Factor
 <select id="editRhFactor">
 <option value="">—</option>
-<option value="POS">POS</option>
-<option value="NEG">NEG</option>
+<option value="+">Positive (+)</option>
+<option value="-">Negative (-)</option>
 </select>
 </label>
 <label>Contact<input id="editContact" type="text" inputmode="tel"></label>
@@ -1046,6 +1189,18 @@ return `"${text.replace(/"/g,'""')}"`;
 
 function safeText(value){
 return String(value || "").trim();
+}
+
+// rhFactor was historically stored as "+"/"-" by donor-entry.html, but the
+// original tracking edit modal stored "POS"/"NEG". Normalize anything we
+// encounter back to "+"/"-" so the edit modal's <select> can actually
+// pre-select the correct option (otherwise it appears blank, and saving
+// overwrites the donor's rhFactor with "").
+function normalizeRhFactor(value){
+let v = safeText(value).toUpperCase();
+if(v === "+" || v === "POS" || v === "POSITIVE" || v === "P") return "+";
+if(v === "-" || v === "NEG" || v === "NEGATIVE" || v === "N") return "-";
+return "";
 }
 
 function normalizeText(value){
@@ -2184,6 +2339,10 @@ localStorage.removeItem("tracking_cache_ts_v1");
 async function fetchEligibleDonors(){
 if(isLoading) return;
 
+// Reset any half-done merge selection — the indices won't be valid after
+// a fresh fetch.
+if(mergeTargetIndex !== -1){ mergeTargetIndex = -1; pendingMergeSourceIndex = -1; updateMergeBanner(); }
+
 if(!auth.currentUser){
 alert("You are not logged in.");
 window.location.href = "index.html";
@@ -2271,6 +2430,22 @@ donorDatabaseDocs.push(data);
 }
 }
 
+// ─── MANUAL-MERGE OVERRIDE ────────────────────────────────────────────
+// If a donorDatabase doc was manually merged into another donor, override
+// its in-memory identity fields with the target's signature so the
+// aggregation step buckets it under the target. The on-disk document is
+// untouched — these overrides exist only in memory for this load.
+for(let i=0;i<donorDatabaseDocs.length;i++){
+let rec = donorDatabaseDocs[i];
+if(!rec || !rec.manualMergedInto) continue;
+if(rec.manualMergedIntoFirstName) rec.firstName = rec.manualMergedIntoFirstName;
+if(rec.manualMergedIntoSurname)   rec.surname   = rec.manualMergedIntoSurname;
+if(rec.manualMergedIntoMiddleName !== undefined && rec.manualMergedIntoMiddleName !== null){
+rec.middleName = rec.manualMergedIntoMiddleName;
+}
+if(rec.manualMergedIntoBirthday)  rec.birthday  = rec.manualMergedIntoBirthday;
+}
+
 // ─── Step 4: Final merge with full data ───────────────────────────────
 donorsData = mergeBothCollections(donorsDocs, donorDatabaseDocs);
 applyFiltersAndRender();
@@ -2298,6 +2473,10 @@ isLoading = false;
 }
 
 function applySummaryFilter(level){
+// Switching tabs clears any in-progress merge selection — the target would
+// almost certainly be off-screen anyway, and leaving the banner up gets
+// confusing.
+if(mergeTargetIndex !== -1){ mergeTargetIndex = -1; pendingMergeSourceIndex = -1; updateMergeBanner(); }
 document.getElementById("badgeFilter").value = level;
 syncSummaryFromBadgeFilter();
 applyFiltersAndRender();
@@ -2488,7 +2667,7 @@ if(safeText(allRows[r].serial) !== "") serialsWithValue++;
 }
 let serialCountDisplay = serialsWithValue > 0 ? serialsWithValue : Number(d.serialCount || 0);
 
-parts[index] = `<tr>
+parts[index] = `<tr class="${index === mergeTargetIndex ? 'merge-target-row' : (mergeTargetIndex >= 0 ? 'merge-source-candidate-row' : '')}">
 <td>${index+1}</td>
 <td class="name-cell">
 ${escapeHtml(getFullName(d))}
@@ -2509,6 +2688,7 @@ ${badge}
 <td>
 <button class="remarks-btn" onclick="openRemarksOnly(${index})">Remarks</button>
 <button class="edit-btn" onclick="editEligibleDonor(${index})">Edit</button>
+<button class="${getMergeButtonClass(index)}" onclick="onMergeButtonClick(${index})">${getMergeButtonLabel(index)}</button>
 <button class="delete-btn" onclick="deleteEligibleDonor(${index})">Delete</button>
 </td>
 </tr>
@@ -2728,6 +2908,20 @@ ${rawSerialRows}
 <span style="display:inline-block;margin-right:10px;"><span class="serial-source-badge src-database">DB</span> = from donorDatabase</span>
 <span style="display:inline-block;"><span style="background:#f0fff0;padding:2px 6px;border:1px solid #c8e6c9;border-radius:4px;font-size:11px;">Green row</span> = extra from donors array</span>
 </div>
+
+<!-- Inline "add a serial" panel — saves directly into the donor's
+     donors-collection record. If the donor is donorDatabase-only, a
+     stub donors doc is created first (same pattern as Edit / Award). -->
+<div class="add-serial-panel">
+<div class="add-serial-title">Add Another Serial Number</div>
+<div class="add-serial-row">
+<input type="text" id="newSerialInput${index}" placeholder="Serial number" autocomplete="off">
+<input type="date" id="newSerialDate${index}">
+<button class="add-serial-btn" onclick="addSerialFromDetail(${index})">Add Serial</button>
+</div>
+<div class="add-serial-hint">Saved directly to this donor's record. The table above will refresh once saved.</div>
+<div id="addSerialStatus${index}" class="add-serial-status"></div>
+</div>
 </div>
 
 <div>
@@ -2736,6 +2930,10 @@ ${remarksSection}
 </div>
 </div>
 `;
+
+// Default the new-serial date to today for convenience
+let newDateInput = document.getElementById("newSerialDate"+index);
+if(newDateInput) newDateInput.valueAsDate = new Date();
 }
 
 async function ensureDonorRecordForAward(index){
@@ -2870,6 +3068,105 @@ alert("Error saving remarks.");
 });
 }
 
+async function addSerialFromDetail(index){
+let donor = filteredDonorsData[index];
+if(!donor){ return; }
+
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+let serialInput = document.getElementById("newSerialInput"+index);
+let dateInput = document.getElementById("newSerialDate"+index);
+let statusEl = document.getElementById("addSerialStatus"+index);
+
+let serial = safeText(serialInput ? serialInput.value : "");
+let date = safeText(dateInput ? dateInput.value : "");
+
+function showStatus(msg, cls){
+if(!statusEl) return;
+statusEl.className = "add-serial-status" + (cls ? " " + cls : "");
+statusEl.textContent = msg || "";
+}
+
+if(!serial || !date){
+showStatus("Please enter both serial number and date.", "error");
+return;
+}
+
+let btn = statusEl ? statusEl.parentElement.querySelector(".add-serial-btn") : null;
+if(btn) btn.disabled = true;
+showStatus("Saving serial...", "loading");
+
+try{
+// Make sure the donor has a donors-collection doc to write to
+let donorId = await ensureDonorRecordForAward(index);
+
+// Pull existing serials, append, dedupe by serial+date
+let existingSerials = Array.isArray(donor.serials) ? donor.serials.slice() : [];
+let key = (s,d) => [safeText(s).toLowerCase(), safeText(d)].join("|");
+let already = existingSerials.some(s => key(s.serial || s.serialNumber, s.date || s.entryDate) === key(serial, date));
+if(already){
+showStatus("That serial+date is already saved for this donor.", "error");
+if(btn) btn.disabled = false;
+return;
+}
+
+let newEntry = { serial: serial, date: date };
+let combined = existingSerials.concat([newEntry]);
+
+await db.collection("donors").doc(donorId).set({
+serials: combined,
+updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+}, { merge:true });
+
+// Update in-memory representation
+donor.serials = combined;
+donor.serialCount = combined.length;
+if(!Array.isArray(donor.detailRows)) donor.detailRows = [];
+donor.detailRows.push({
+docId: "",
+source: "donors",
+serial: serial,
+date: date,
+count: 0
+});
+// Mirror to the canonical donorsData entry too
+let realIdx = donorsData.indexOf(donor);
+if(realIdx === -1) realIdx = donorsData.findIndex(d => d.id === donorId);
+if(realIdx >= 0){
+donorsData[realIdx].serials = combined;
+donorsData[realIdx].serialCount = combined.length;
+donorsData[realIdx].detailRows = donor.detailRows;
+}
+
+invalidateCache();
+
+showStatus("Serial added.", "success");
+if(serialInput) serialInput.value = "";
+if(dateInput) dateInput.valueAsDate = new Date();
+
+// Re-render the panel so the new serial appears in the table immediately
+applyFiltersAndRender();
+let reopenedIndex = filteredDonorsData.findIndex(x => x === donor || x.id === donorId);
+if(reopenedIndex > -1){
+let reopenedRow = document.getElementById("serialRow"+reopenedIndex);
+if(reopenedRow){
+reopenedRow.style.display = "table-row";
+renderSerialAndRemarks(reopenedIndex);
+}
+}
+}catch(error){
+console.error("Add serial error:", error);
+showStatus("Failed to add serial: " + error.message, "error");
+}finally{
+if(btn) btn.disabled = false;
+}
+}
+
+
 // ─── EDIT FLOW (inline modal) ────────────────────────────────────────────────
 // Opens the edit modal with the donor's current values. Saves directly to
 // Firestore without redirecting to a separate edit page — eliminates the
@@ -2926,7 +3223,7 @@ document.getElementById("editMiddleName").value  = donor.middleName  || "";
 document.getElementById("editSurname").value     = donor.surname     || "";
 document.getElementById("editBirthday").value    = normalizeBirthday(donor.birthday) || "";
 document.getElementById("editBloodType").value   = (donor.bloodType  || "").toUpperCase();
-document.getElementById("editRhFactor").value    = (donor.rhFactor   || "").toUpperCase();
+document.getElementById("editRhFactor").value    = normalizeRhFactor(donor.rhFactor);
 document.getElementById("editContact").value     = donor.contact     || "";
 document.getElementById("editAwardStatus").value = (donor.awardStatus || "NOT AWARDED").toUpperCase();
 document.getElementById("editYearAwarded").value = donor.yearAwarded || "";
@@ -2956,7 +3253,7 @@ async function saveEditModal(){
 if(editingDonorIndex < 0) return;
 let donor = filteredDonorsData[editingDonorIndex];
 if(!donor || !donor.id){
-alert("This donor record can't be edited (no document id).");
+alert("This donor record can't be edited (no document id). Try reloading and editing again.");
 return;
 }
 
@@ -2970,17 +3267,20 @@ let saveBtn = document.getElementById("editSaveBtn");
 let status = document.getElementById("editModalStatus");
 
 let updates = {
-firstName:   document.getElementById("editFirstName").value.trim(),
-middleName:  document.getElementById("editMiddleName").value.trim(),
-surname:     document.getElementById("editSurname").value.trim(),
-birthday:    document.getElementById("editBirthday").value.trim(),
-bloodType:   document.getElementById("editBloodType").value.trim(),
-rhFactor:    document.getElementById("editRhFactor").value.trim(),
-contact:     document.getElementById("editContact").value.trim(),
-awardStatus: document.getElementById("editAwardStatus").value.trim() || "NOT AWARDED",
-yearAwarded: document.getElementById("editYearAwarded").value.trim(),
+firstName:   safeText(document.getElementById("editFirstName").value),
+middleName:  safeText(document.getElementById("editMiddleName").value),
+surname:     safeText(document.getElementById("editSurname").value),
+birthday:    safeText(document.getElementById("editBirthday").value),
+bloodType:   safeText(document.getElementById("editBloodType").value),
+rhFactor:    normalizeRhFactor(document.getElementById("editRhFactor").value),
+contact:     safeText(document.getElementById("editContact").value),
+awardStatus: safeText(document.getElementById("editAwardStatus").value).toUpperCase() || "NOT AWARDED",
+yearAwarded: safeText(document.getElementById("editYearAwarded").value),
 remarks:     document.getElementById("editRemarks").value
 };
+
+// NOT AWARDED should never carry a year — keep the data tidy
+if(updates.awardStatus !== "AWARDED") updates.yearAwarded = "";
 
 if(!updates.firstName || !updates.surname){
 status.className = "edit-modal-status error";
@@ -2993,7 +3293,11 @@ status.className = "edit-modal-status loading";
 status.textContent = "Saving...";
 
 try{
-await db.collection("donors").doc(donor.id).update(updates);
+// Stamp updatedAt so other tools can tell something changed
+let payload = Object.assign({}, updates, {
+updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+});
+await db.collection("donors").doc(donor.id).set(payload, { merge:true });
 
 // Apply updates to the in-memory record so the table re-renders
 // immediately without waiting for a full re-fetch.
@@ -3013,8 +3317,14 @@ status.textContent = "Saved!";
 
 applyFiltersAndRender();
 
-// Close after a brief flash so the user sees the success message
-setTimeout(closeEditModal, 600);
+// Close after a brief flash so the user sees the success message,
+// then trigger a background refresh so re-aggregated counts catch up
+// (renaming a donor can change donorDatabase matches and therefore the
+// smartDonationCount).
+setTimeout(function(){
+closeEditModal();
+fetchEligibleDonors();
+}, 600);
 }catch(error){
 console.error("Save edit error:", error);
 status.className = "edit-modal-status error";
@@ -3031,6 +3341,252 @@ let overlay = document.getElementById("editModalOverlay");
 if(overlay && overlay.classList.contains("show")) closeEditModal();
 }
 });
+
+// ─── MANUAL MERGE ────────────────────────────────────────────────────────────
+// The auto-merge pipeline misses some duplicates — different birthday
+// entries, heavy name typos, etc. Manual merge lets the user explicitly say
+// "these two rows are the same person":
+//   1. Click "Merge…" on the row to KEEP. It becomes the target. A banner
+//      appears and every other row's Merge button switches to "Merge into
+//      target".
+//   2. Click "Merge into target" on the row to ABSORB. A confirmation modal
+//      shows what will be combined.
+//   3. On confirm: target's donors-doc gets the union of serials, source's
+//      donors-doc (if any) is deleted, and source's donorDatabase docs are
+//      tagged with `manualMergedInto` so future page-loads re-route them to
+//      the target's aggregation bucket instead of producing a fresh row.
+let mergeTargetIndex = -1;
+let pendingMergeSourceIndex = -1;
+
+function getMergeButtonLabel(index){
+if(mergeTargetIndex === -1) return "Merge…";
+if(mergeTargetIndex === index) return "Cancel merge";
+return "Merge into target";
+}
+function getMergeButtonClass(index){
+if(mergeTargetIndex === -1) return "merge-btn";
+if(mergeTargetIndex === index) return "merge-btn-target-cancel";
+return "merge-btn-target";
+}
+
+function updateMergeBanner(){
+let banner = document.getElementById("mergeBanner");
+if(!banner) return;
+if(mergeTargetIndex === -1){
+banner.classList.remove("show");
+return;
+}
+let donor = filteredDonorsData[mergeTargetIndex];
+if(!donor){
+mergeTargetIndex = -1;
+banner.classList.remove("show");
+return;
+}
+let nameEl = document.getElementById("mergeBannerName");
+if(nameEl) nameEl.textContent = getFullName(donor);
+banner.classList.add("show");
+}
+
+function onMergeButtonClick(index){
+if(mergeTargetIndex === -1){
+// Step 1: pick this row as target
+mergeTargetIndex = index;
+updateMergeBanner();
+renderTable();
+return;
+}
+if(mergeTargetIndex === index){
+// Step 1b: clicking the same row again cancels
+cancelMerge();
+return;
+}
+// Step 2: this is the source — open confirm modal
+openMergeConfirm(index);
+}
+
+function cancelMerge(){
+mergeTargetIndex = -1;
+pendingMergeSourceIndex = -1;
+updateMergeBanner();
+renderTable();
+}
+
+function summarizeDonorForMerge(d){
+let serialCount = Array.isArray(d.serials) ? d.serials.length : 0;
+let detailCount = Array.isArray(d.detailRows) ? d.detailRows.filter(r => safeText(r.serial)).length : 0;
+let visible = Math.max(serialCount, detailCount);
+return `${escapeHtml(getFullName(d) || "—")} <small style="color:#64748b;">(${visible} serial${visible===1?"":"s"}, ${escapeHtml(d.bloodType||"?")}${escapeHtml(d.rhFactor||"")}, ${escapeHtml(d.contact||"no contact")})</small>`;
+}
+
+function combinedSerialPreview(target, source){
+let combined = buildSerialsArrayFromDetailRows([
+...mergeSerialRowsFromDonors(target.serials || []),
+...(Array.isArray(target.detailRows) ? target.detailRows : []),
+...mergeSerialRowsFromDonors(source.serials || []),
+...(Array.isArray(source.detailRows) ? source.detailRows : [])
+]);
+return combined;
+}
+
+function openMergeConfirm(sourceIndex){
+let target = filteredDonorsData[mergeTargetIndex];
+let source = filteredDonorsData[sourceIndex];
+if(!target || !source){
+alert("Could not find both donor rows. Please reload and try again.");
+cancelMerge();
+return;
+}
+if(target === source || mergeTargetIndex === sourceIndex){
+alert("Target and source are the same row.");
+return;
+}
+
+pendingMergeSourceIndex = sourceIndex;
+
+let combined = combinedSerialPreview(target, source);
+let sourceDbDocCount = Array.isArray(source.donorDatabaseDocIds) ? source.donorDatabaseDocIds.length : 0;
+let summaryEl = document.getElementById("mergeModalSummary");
+if(summaryEl){
+summaryEl.innerHTML = `
+<div><strong>Absorb</strong> ${summarizeDonorForMerge(source)}
+<span class="merge-arrow">→</span>
+<strong>into</strong> ${summarizeDonorForMerge(target)}</div>
+<ul class="merge-summary-list">
+<li>Combined serial total after merge: <strong>${combined.length}</strong></li>
+<li>The target's donor record will gain ${Math.max(0, combined.length - (Array.isArray(target.serials) ? target.serials.length : 0))} new serial entr${combined.length === 1 ? "y" : "ies"} from the source.</li>
+<li>The source's <em>donors</em> record (if any) will be <strong>deleted</strong>.</li>
+<li>${sourceDbDocCount} donor-database record${sourceDbDocCount===1?"":"s"} from the source will be tagged so future reloads count them under the target.</li>
+<li>The source's contact / blood type will be copied to the target only if the target is missing those fields.</li>
+</ul>
+`;
+}
+let statusEl = document.getElementById("mergeModalStatus");
+if(statusEl){ statusEl.className = "edit-modal-status"; statusEl.textContent = ""; }
+let btn = document.getElementById("mergeConfirmBtn");
+if(btn) btn.disabled = false;
+document.getElementById("mergeModalOverlay").classList.add("show");
+}
+
+function closeMergeModal(){
+document.getElementById("mergeModalOverlay").classList.remove("show");
+pendingMergeSourceIndex = -1;
+}
+function closeMergeModalOnBackdrop(ev){
+if(ev.target && ev.target.id === "mergeModalOverlay") closeMergeModal();
+}
+
+async function confirmMerge(){
+if(mergeTargetIndex < 0 || pendingMergeSourceIndex < 0){
+closeMergeModal();
+return;
+}
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+let target = filteredDonorsData[mergeTargetIndex];
+let source = filteredDonorsData[pendingMergeSourceIndex];
+if(!target || !source){
+alert("Could not find both donor rows.");
+closeMergeModal();
+return;
+}
+
+let btn = document.getElementById("mergeConfirmBtn");
+let status = document.getElementById("mergeModalStatus");
+function showStatus(msg, cls){
+if(!status) return;
+status.className = "edit-modal-status" + (cls ? " " + cls : "");
+status.textContent = msg || "";
+}
+if(btn) btn.disabled = true;
+showStatus("Merging…", "loading");
+
+try{
+// 1. Ensure the target has a donors-collection record (create stub if needed).
+let targetId = await ensureDonorRecordForAward(mergeTargetIndex);
+if(!targetId) throw new Error("Could not establish a donors record for the target.");
+
+// 2. Build the union of serials from both donors.
+let combinedSerials = combinedSerialPreview(target, source);
+
+// 3. Fields we'd like to forward from source IF target is missing them.
+let forwardable = {};
+["bloodType","rhFactor","contact","middleName","birthday"].forEach(k => {
+if(!safeText(target[k]) && safeText(source[k])) forwardable[k] = safeText(source[k]);
+});
+if(safeText(source.remarks) && !safeText(target.remarks)){
+forwardable.remarks = safeText(source.remarks);
+}
+if(safeText(source.awardStatus).toUpperCase() === "AWARDED"
+&& safeText(target.awardStatus).toUpperCase() !== "AWARDED"){
+forwardable.awardStatus = "AWARDED";
+if(safeText(source.yearAwarded) && !safeText(target.yearAwarded)){
+forwardable.yearAwarded = safeText(source.yearAwarded);
+}
+}
+
+// 4. Update the target's donors doc with the combined serials + forwardables.
+let updatePayload = Object.assign({}, forwardable, {
+serials: combinedSerials,
+updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+lastManualMergeAt: firebase.firestore.FieldValue.serverTimestamp()
+});
+await db.collection("donors").doc(targetId).set(updatePayload, { merge:true });
+
+// 5. Tag the source's donorDatabase docs so future fetches route them to
+//    the target's bucket. We store the target's identity inline so the
+//    routing doesn't depend on the target's doc id (which is fine, but
+//    name fields are more debug-friendly).
+let dbDocIds = Array.isArray(source.donorDatabaseDocIds) ? source.donorDatabaseDocIds : [];
+let mergeTag = {
+manualMergedInto: targetId,
+manualMergedIntoFirstName: safeText(target.firstName),
+manualMergedIntoMiddleName: safeText(target.middleName),
+manualMergedIntoSurname: safeText(target.surname),
+manualMergedIntoBirthday: normalizeBirthday(target.birthday),
+manualMergedAt: firebase.firestore.FieldValue.serverTimestamp()
+};
+for(let i=0;i<dbDocIds.length;i++){
+let dbId = dbDocIds[i];
+if(!dbId) continue;
+try{
+await db.collection("donorDatabase").doc(dbId).set(mergeTag, { merge:true });
+}catch(err){
+console.warn("Failed to tag donorDatabase doc", dbId, err);
+}
+}
+
+// 6. If the source has its own donors-collection doc, delete it now that
+//    its serials are safely in the target.
+if(source.id && source.id !== targetId){
+try{
+await db.collection("donors").doc(source.id).delete();
+}catch(err){
+console.warn("Failed to delete source donors doc", source.id, err);
+}
+}
+
+invalidateCache();
+showStatus("Merged. Refreshing…", "success");
+
+// 7. Reset merge state and refresh from Firestore so the user sees the
+//    merged result and the source row disappears.
+setTimeout(function(){
+mergeTargetIndex = -1;
+pendingMergeSourceIndex = -1;
+closeMergeModal();
+updateMergeBanner();
+fetchEligibleDonors();
+}, 500);
+}catch(error){
+console.error("Manual merge error:", error);
+showStatus("Failed to merge: " + error.message, "error");
+if(btn) btn.disabled = false;
+}
+}
 
 async function deleteEligibleDonor(index){
 let donor = filteredDonorsData[index];
