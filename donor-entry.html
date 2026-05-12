@@ -345,8 +345,13 @@ async function saveDonorEntry(){
   if(!auth.currentUser){ alert("You are not logged in."); window.location.href="index.html"; return; }
   if(!validateDonorInfo()) return;
   if(serialEntries.length===0){ alert("Please add at least one serial entry before saving."); return; }
+  let saveBtn = document.querySelector(".save-btn");
   let d=getDonorInfo();
   if(d.awardStatus === "NOT AWARDED") d.yearAwarded = "";
+  // Use the CURRENT serial table as the source of truth. The old behaviour
+  // unioned with existingDonorData.serials, which silently resurrected any
+  // serial the user had just deleted before pressing Save.
+  let serialsToSave = mergeSerials([], serialEntries);
   let payload={
     surname:d.surname,
     firstName:d.firstName,
@@ -358,10 +363,11 @@ async function saveDonorEntry(){
     remarks:d.remarks,
     awardStatus:d.awardStatus || "NOT AWARDED",
     yearAwarded:d.yearAwarded || "",
-    serials: mergeSerials(existingDonorData ? existingDonorData.serials : [], serialEntries),
+    serials: serialsToSave,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   try{
+    if(saveBtn) saveBtn.disabled = true;
     setStatus("Saving donor entry...","loading");
     if(editId){
       await db.collection("donors").doc(editId).set(payload,{merge:true});
@@ -371,16 +377,25 @@ async function saveDonorEntry(){
       let docRef = await db.collection("donors").add(payload);
       editId = docRef.id;
       existingDonorData = payload;
+      // Reflect the editId in the URL so a refresh keeps the user editing
+      // the same donor instead of starting a brand-new entry.
+      try{
+        let newUrl = window.location.pathname + "?editId=" + encodeURIComponent(editId);
+        window.history.replaceState({}, document.title, newUrl);
+      }catch(e){ /* non-fatal */ }
       document.getElementById("modePill").innerText = "Edit Donor Entry";
       setStatus("Donor entry saved successfully.","success");
     }
+    // Refresh from the canonical record so the table mirrors what's on disk
     serialEntries=[];
     await loadEditRecordIfAny();
     renderSerialTable();
   }catch(error){
     console.error(error);
     setStatus("Error saving donor entry: " + error.message,"error");
-    alert("Error saving donor entry.");
+    alert("Error saving donor entry: " + error.message);
+  }finally{
+    if(saveBtn) saveBtn.disabled = false;
   }
 }
 function clearForm(){
@@ -397,7 +412,7 @@ function clearForm(){
   setStatus("","loading");
 }
 function goToGallonersTracking(){
-  window.location.href = "galloners-tracking.html";
+  window.location.href = "tracking.html";
 }
 async function loadEditRecordIfAny(){
   if(!editId) return;
