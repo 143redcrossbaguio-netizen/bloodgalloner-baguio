@@ -640,18 +640,26 @@ function mkStats(){
 }
 
 // ─── APPLY ONE RECORD ─────────────────────────────────────────────────────────
+// A donor can belong to MULTIPLE categories on the same record — e.g. a Walk-in
+// who is also a Patient Directed donor. The old code picked one "primary" type
+// via primaryType() and added their bag counts to only that bucket, so the
+// other category(ies) were silently dropped from the per-category breakdowns.
+//
+// New behaviour: bag counts are added to EVERY type the record belongs to.
+// totalDonors still increments once per record (no double-counting of people).
+// Per-category column totals can now legitimately sum to more than totalDonors
+// when overlap exists — that's correct: column totals are "donations counted
+// in this category", not "unique donors".
 function applyDonor(s,r){
   const iso  =getDate(r);
-  const pType=primaryType(r);
-  const grp  =pType==="MBD"?String(r.mbdDetails||"").trim().toUpperCase()||"MBD":
-               pType==="Patient Directed"?String(r.patientDirectedDetails||"").trim().toUpperCase()||"PATIENT DIRECTED":"WALK-IN";
-  const map  =pType==="MBD"?bestMap(grp):null;
+  const types=getDonorTypes(r);                // all categories this record falls into
+  const pType=primaryType(r);                  // kept for the daily-breakdown dominant label
   const bt   =getBT(r);
   const bag  =getBag(r);
   const bags =bagC(bag);
   const hasBag=!!bag;
 
-  // total donor count — every categorized entry
+  // Donor entry count — every categorized record, ONCE per record.
   if(isCategorized(r)){
     s.totalDonors++;
     if(iso){
@@ -659,9 +667,11 @@ function applyDonor(s,r){
       if(!s.dailyBreakdown[iso]) s.dailyBreakdown[iso]={total:0,walkIn:0,patientDirected:0,mbd:{}};
       const dbd=s.dailyBreakdown[iso];
       dbd.total++;
-      if(pType==="Walk-in") dbd.walkIn++;
-      else if(pType==="Patient Directed") dbd.patientDirected++;
-      else if(pType==="MBD"){
+      // Daily per-category counts: count this record in EACH category it
+      // belongs to, so the daily breakdown matches the per-category totals.
+      if(types.includes("Walk-in")) dbd.walkIn++;
+      if(types.includes("Patient Directed")) dbd.patientDirected++;
+      if(types.includes("MBD")){
         // Pass through normKey so PP / P.PARK / MALCOLM SQUARE all roll up to
         // PEOPLES PARK (or whatever canonical name is set in partner-organization.html)
         // instead of showing the same partner under multiple separate keys.
@@ -676,11 +686,23 @@ function applyDonor(s,r){
     s.bloodType[bt]=(s.bloodType[bt]||0)+1;
     if(s.bagTypeBloodType[bag]) s.bagTypeBloodType[bag][bt]=(s.bagTypeBloodType[bag][bt]||0)+1;
 
-    if(pType==="MBD"){
+    // Apply bags to EACH type this record belongs to. A donor who is both
+    // Walk-in and Patient Directed contributes their bags to both columns;
+    // a Walk-in + MBD contributes to both Walk-in and MBD.
+    if(types.includes("MBD")){
+      const grp =String(r.mbdDetails||"").trim().toUpperCase()||"MBD";
+      const map =bestMap(grp);
       addBag(s.fieldDonation["Total MBD"],bags);
-      const cat=map?(map.category||"Unmapped"):"Unmapped";
+
+      // Category resolution: if no explicit mapping exists, default the
+      // category to "Group" (not "Unmapped"). This way new MBD groups show
+      // up in the Group breakdown immediately, and a background sync will
+      // create a placeholder donorGroupCategories doc so future edits
+      // (changing category / adding place) are possible without re-typing.
+      let cat=map?(map.category||"Group"):"Group";
       if(!s.fieldDonation[cat])s.fieldDonation[cat]={S:0,D:0,T:0,Q:0};
       addBag(s.fieldDonation[cat],bags);
+
       const d=parseDate(iso);
       const dd=d?`${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}`:"";
       const dname=map?(map.partnerName||grp||"Unspecified"):smartName(grp||"Unspecified");
@@ -690,9 +712,24 @@ function applyDonor(s,r){
       else if(cat==="RC143 / BRGY Base")s.fieldDetails.rc143.push(det);
       else if(cat==="Pledge 25")s.fieldDetails.pledge25.push(det);
       else s.fieldDetails.unmapped.push(det);
-    }else if(pType==="Walk-in"){
+
+      // Record this group name as a candidate for auto-mapping creation if
+      // it has no donorGroupCategories doc yet. The actual write is deferred
+      // and batched in buildStats() after aggregation completes — see
+      // _missingGroupNames on the stats object.
+      if(!map){
+        const canon=smartName(grp)||grp;
+        if(canon){
+          if(!s._missingGroupNames) s._missingGroupNames={};
+          // Track the canonical display name once per unique group
+          if(!s._missingGroupNames[canon]) s._missingGroupNames[canon]=true;
+        }
+      }
+    }
+    if(types.includes("Walk-in")){
       addBag(s.officeBleeding["Walk-in"],bags);
-    }else if(pType==="Patient Directed"){
+    }
+    if(types.includes("Patient Directed")){
       addBag(s.officeBleeding["Patient Directed"],bags);
     }
 
@@ -835,10 +872,82 @@ function buildStats(){
       ⚠️ No donor type: <b>${diagNoCat}</b>
     `);
     setStatus(`Statistics loaded — ${donorRecords.length} active records, ${diagCat} categorized.`,"ok");
+
+    // Fire-and-forget: auto-create donorGroupCategories docs for any MBD
+    // groups that appeared in the data but have no mapping yet. They default
+    // to category="Group" and place="" — the admin can later edit them in
+    // the Group Mapping panel to reclassify (RC143 / Pledge 25) or add a
+    // place. Deduplicated across all months so each unique name writes once
+    // per buildStats() call.
+    autoCreateMissingGroupMappings(grouped);
   }catch(e){
     console.error(e);
     document.getElementById("reportContainer").innerHTML=`<div class="empty">Error: ${escH(e.message||String(e))}</div>`;
     setStatus("Failed to build statistics: "+e.message,"error");
+  }
+}
+
+// Walks the grouped stats and creates a donorGroupCategories doc for each
+// previously-unseen MBD group name. Skips silently on auth or rule errors so
+// a failure here never blocks the stats display. Reloads the category list at
+// the end so the Group Mapping panel reflects the new entries immediately.
+let _autoMapInFlight=false;
+async function autoCreateMissingGroupMappings(grouped){
+  if(_autoMapInFlight) return;
+  if(!fs || !auth || !auth.currentUser) return;
+
+  // Collect every unique unmapped group name across all months
+  const unique={};
+  Object.keys(grouped||{}).forEach(y=>{
+    Object.keys(grouped[y]||{}).forEach(k=>{
+      const miss=grouped[y][k]._missingGroupNames||{};
+      Object.keys(miss).forEach(name=>{ if(name) unique[name]=true; });
+    });
+  });
+  const names=Object.keys(unique);
+  if(!names.length) return;
+
+  // Re-check against the current categoryMappings — bestMap() uses
+  // partial-match logic, so a name like "PEOPLES PARK" might still resolve
+  // to an existing alias even though we flagged it as missing. Only write
+  // docs for names that genuinely have no mapping.
+  const toCreate=names.filter(n=>!bestMap(n));
+  if(!toCreate.length) return;
+
+  _autoMapInFlight=true;
+  try{
+    // Use a Firestore batched write so all new mappings land atomically.
+    // Each new doc gets a server-generated id; partnerName is the canonical
+    // display form, normalizedKey is the lookup key that bestMap() uses.
+    const batch=fs.batch();
+    const stamps={
+      createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      autoCreated:true,
+      autoCreatedFrom:"donor-database-statistics"
+    };
+    toCreate.forEach(name=>{
+      const ref=fs.collection("donorGroupCategories").doc();
+      batch.set(ref,{
+        partnerName:smartName(name),
+        category:"Group",
+        place:"",
+        normalizedKey:normKey(name),
+        ...stamps
+      });
+    });
+    await batch.commit();
+
+    // Reload mappings + repaint the Group Mapping list and (silently) rebuild
+    // stats so the new categories take effect right away.
+    await loadMappings(initVersion);
+    renderMappings();
+    setStatus(`Statistics loaded — auto-added ${toCreate.length} new group${toCreate.length===1?"":"s"} to Group Mapping (category: Group, place: blank).`,"ok");
+  }catch(e){
+    console.warn("autoCreateMissingGroupMappings failed:",e);
+    // Non-fatal — stats are already on screen. Don't disrupt the user.
+  }finally{
+    _autoMapInFlight=false;
   }
 }
 
