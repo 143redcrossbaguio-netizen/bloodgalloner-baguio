@@ -200,6 +200,19 @@
             <button class="btn-gray" onclick="clearMappingEditor()">Cancel</button>
           </div></div>
       </div>
+
+      <!-- Retroactive duplicate-finder. Scans existing mappings using the
+           same heuristics that prevent new duplicates from being created,
+           and offers a one-click merge per candidate pair. -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+        <button class="btn-blue" onclick="findDuplicateMappings()">Find Possible Duplicates</button>
+        <span style="font-size:12px;color:#6b7280;font-weight:600">Detects same-place variants like "DA" / "Dept. of Agriculture" or "CAMDAS" / "Brgy. CAMDAS" so you can merge them.</span>
+      </div>
+      <div id="duplicatePanel" style="display:none;border:1px solid #d6dde6;border-radius:12px;padding:10px;margin-bottom:12px;background:#fffbeb">
+        <div style="font-weight:700;color:#92400e;margin-bottom:8px" id="duplicatePanelTitle">Duplicate suggestions</div>
+        <div id="duplicateResults"></div>
+      </div>
+
       <div id="mappingList" class="map-list"><div class="empty">No mappings yet.</div></div>
     </div>
   </div>
@@ -599,10 +612,134 @@ function normKey(v){
   return s;
 }
 function smartName(v){return normKey(v||"");}
+
+// ─── SMART GROUP-NAME MATCHING ───────────────────────────────────────────────
+// Real-world data has many ways to write the same group:
+//   "DA" / "Department of Agriculture"           — acronym
+//   "CAMDAS" / "BRGY CAMDAS"                     — bare vs prefixed
+//   "GLOBAL" / "GLOBAL MULTIPURPOSE"             — short form vs full
+//   "P PARK" / "PEOPLES PARK" / "MALCOLM SQUARE" — local nicknames
+//
+// The old bestMap() only did exact + naive substring, so each variant created
+// its own donorGroupCategories doc and showed as a separate row. We now apply
+// a layered match (exact → alias → acronym → word-bounded substring → token
+// overlap) and report a confidence score so the auto-create flow can decide
+// whether to merge into an existing mapping (high confidence) or create a new
+// doc (no good candidate).
+
+// Stop words that don't contribute to identity — used by both acronym and
+// token-set matching so "Department OF Agriculture" still matches "DA".
+const SMART_STOP_WORDS = new Set([
+  "OF","AND","THE","FOR","TO","ON","OR","AT","BY","IN","AS","A","AN",
+  "BRGY","BARANGAY","STO","STA","ST","CITY","MUN","MUNICIPALITY","PROVINCE","PROV"
+]);
+
+// Split a normalized name into significant content words.
+// "BRGY CAMDAS LA TRINIDAD" → ["CAMDAS","LA","TRINIDAD"]
+function smartTokens(name){
+  return _aliasNormalize(name)
+    .split(/\s+/)
+    .filter(t => t && t.length >= 2 && !SMART_STOP_WORDS.has(t));
+}
+
+// Build the acronym for a multi-word name. "Department of Agriculture" → "DA".
+// Stop words (OF, THE, ...) are skipped so the acronym matches how people
+// actually write it.
+function smartAcronym(name){
+  return _aliasNormalize(name)
+    .split(/\s+/)
+    .filter(t => t && !SMART_STOP_WORDS.has(t))
+    .map(t => t[0])
+    .join("");
+}
+
+// Test whether `short` is a word-bounded prefix or suffix of `long`.
+// Match: "GLOBAL" inside "GLOBAL MULTIPURPOSE" (prefix), "CAMDAS" inside
+// "BRGY CAMDAS" (suffix). No match: "PARK" inside "PARKING LOT" (no boundary).
+function smartIsWordBoundedEdge(short, long){
+  if(!short || !long) return false;
+  if(short.length < 3) return false;       // single/double-letter would over-match
+  if(short.length >= long.length) return false;
+  return long === short ||
+         long.startsWith(short + " ") ||
+         long.endsWith(" " + short);
+}
+
+// Returns { mapping, confidence } where confidence ∈ {1.0, 0.9, 0.8, 0.7, 0.6, 0}.
+// confidence ≥ 0.8 is "safe to auto-merge into this mapping (and add an
+// alias)". Lower scores are suggestions for the duplicate-cleanup UI.
+function smartFindMapping(name){
+  const n = normKey(name||"");
+  if(!n) return { mapping:null, confidence:0, reason:"empty" };
+
+  // 1.0 — exact normalized name match
+  let hit = categoryMappings.find(x => normKey(x.partnerName||x.name||"") === n);
+  if(hit) return { mapping:hit, confidence:1.0, reason:"exact" };
+
+  // 0.95 — match against the mapping doc's own `aliases` array
+  hit = categoryMappings.find(x => Array.isArray(x.aliases) &&
+        x.aliases.some(a => _aliasNormalize(a) === _aliasNormalize(n)));
+  if(hit) return { mapping:hit, confidence:0.95, reason:"alias" };
+
+  const nNorm   = _aliasNormalize(n);
+  const nTokens = smartTokens(n);
+
+  // 0.9 — acronym match. The input is a short uppercase token (≤4 letters)
+  //       and equals the acronym of an existing multi-word mapping.
+  if(/^[A-Z]{2,4}$/.test(nNorm) && nTokens.length <= 1){
+    hit = categoryMappings.find(x => {
+      const cand = normKey(x.partnerName||x.name||"");
+      const candTokens = smartTokens(cand);
+      if(candTokens.length < 2) return false;
+      return smartAcronym(cand) === nNorm;
+    });
+    if(hit) return { mapping:hit, confidence:0.9, reason:"acronym→full" };
+  }
+  // 0.9 — reverse acronym: the existing mapping is the short form, the
+  //       input is the full multi-word name whose acronym matches.
+  if(nTokens.length >= 2){
+    const inputAcr = smartAcronym(n);
+    hit = categoryMappings.find(x => {
+      const cand = _aliasNormalize(x.partnerName||x.name||"");
+      return /^[A-Z]{2,4}$/.test(cand) && cand === inputAcr;
+    });
+    if(hit) return { mapping:hit, confidence:0.9, reason:"full→acronym" };
+  }
+
+  // 0.8 — word-bounded substring (BRGY CAMDAS ↔ CAMDAS, GLOBAL ↔ GLOBAL MULTI)
+  hit = categoryMappings.find(x => {
+    const cand = normKey(x.partnerName||x.name||"");
+    if(!cand) return false;
+    const candNorm = _aliasNormalize(cand);
+    return smartIsWordBoundedEdge(nNorm, candNorm) ||
+           smartIsWordBoundedEdge(candNorm, nNorm);
+  });
+  if(hit) return { mapping:hit, confidence:0.8, reason:"word-edge" };
+
+  // 0.7 — significant token overlap. The smaller set is a subset of the
+  //       larger AND shares at least one ≥3-char content word.
+  if(nTokens.length >= 1){
+    hit = categoryMappings.find(x => {
+      const candTokens = smartTokens(normKey(x.partnerName||x.name||""));
+      if(!candTokens.length) return false;
+      const small = nTokens.length <= candTokens.length ? nTokens : candTokens;
+      const large = nTokens.length <= candTokens.length ? candTokens : nTokens;
+      // All small-set tokens must be in large; require at least one ≥3-char
+      // token to count (so "LA" / "STA" alone don't trigger).
+      if(!small.every(t => large.includes(t))) return false;
+      return small.some(t => t.length >= 3);
+    });
+    if(hit) return { mapping:hit, confidence:0.7, reason:"token-overlap" };
+  }
+
+  return { mapping:null, confidence:0, reason:"none" };
+}
+
+// Backwards-compatible wrapper used by applyDonor and rendering. Returns the
+// best mapping at confidence ≥ 0.7 (anything weaker is treated as "no map").
 function bestMap(name){
-  const n=normKey(name||""); if(!n)return null;
-  return categoryMappings.find(x=>normKey(x.partnerName||x.name||"")===n)||
-    categoryMappings.find(x=>{const t=normKey(x.partnerName||x.name||"");return t&&(t.includes(n)||n.includes(t));})||null;
+  const r = smartFindMapping(name);
+  return (r.confidence >= 0.7) ? r.mapping : null;
 }
 
 // ─── COMPONENT DERIVATION ─────────────────────────────────────────────────────
@@ -691,7 +828,8 @@ function applyDonor(s,r){
     // a Walk-in + MBD contributes to both Walk-in and MBD.
     if(types.includes("MBD")){
       const grp =String(r.mbdDetails||"").trim().toUpperCase()||"MBD";
-      const map =bestMap(grp);
+      const smart = smartFindMapping(grp);
+      const map = (smart.confidence >= 0.7) ? smart.mapping : null;
       addBag(s.fieldDonation["Total MBD"],bags);
 
       // Category resolution: if no explicit mapping exists, default the
@@ -713,15 +851,26 @@ function applyDonor(s,r){
       else if(cat==="Pledge 25")s.fieldDetails.pledge25.push(det);
       else s.fieldDetails.unmapped.push(det);
 
-      // Record this group name as a candidate for auto-mapping creation if
-      // it has no donorGroupCategories doc yet. The actual write is deferred
-      // and batched in buildStats() after aggregation completes — see
-      // _missingGroupNames on the stats object.
-      if(!map){
+      // Two follow-ups tracked for the post-aggregation auto-sync:
+      //   • _missingGroupNames: names with NO mapping (create new docs).
+      //   • _resolvedVariants: names that DID match an existing mapping but
+      //     under a variant the mapping hasn't seen before (acronym,
+      //     prefix/suffix, etc) — these get appended to that mapping's
+      //     aliases array so subsequent loads hit the exact-alias path
+      //     (confidence 0.95) without re-running the heuristics.
+      if(map && smart.confidence > 0 && smart.confidence < 1.0){
+        const variant = smartName(grp);
+        const canonicalNorm = smartName(map.partnerName||map.name||"");
+        const existingAliasNorms = (map.aliases||[]).map(a=>smartName(a));
+        if(variant && variant !== canonicalNorm && !existingAliasNorms.includes(variant)){
+          if(!s._resolvedVariants) s._resolvedVariants={};
+          if(!s._resolvedVariants[map.id]) s._resolvedVariants[map.id]={};
+          s._resolvedVariants[map.id][variant]=true;
+        }
+      } else if(!map){
         const canon=smartName(grp)||grp;
         if(canon){
           if(!s._missingGroupNames) s._missingGroupNames={};
-          // Track the canonical display name once per unique group
           if(!s._missingGroupNames[canon]) s._missingGroupNames[canon]=true;
         }
       }
@@ -891,6 +1040,12 @@ function buildStats(){
 // previously-unseen MBD group name. Skips silently on auth or rule errors so
 // a failure here never blocks the stats display. Reloads the category list at
 // the end so the Group Mapping panel reflects the new entries immediately.
+//
+// Smart-match-aware: before creating a brand-new doc for an unmapped name,
+// runs smartFindMapping() on it. If a high-confidence existing mapping turns
+// up ("DA" → "DEPARTMENT OF AGRICULTURE", etc.), the new name is appended to
+// that mapping's `aliases` array instead of creating a duplicate doc. This
+// silently collapses variants over time without admin intervention.
 let _autoMapInFlight=false;
 async function autoCreateMissingGroupMappings(grouped){
   if(_autoMapInFlight) return;
@@ -898,51 +1053,97 @@ async function autoCreateMissingGroupMappings(grouped){
 
   // Collect every unique unmapped group name across all months
   const unique={};
+  // Collect resolved variants (heuristic match found a mapping under a
+  // different name → record the variant so it becomes an explicit alias).
+  // Shape: { mappingDocId: Set(variantName) }
+  const variants={};
   Object.keys(grouped||{}).forEach(y=>{
     Object.keys(grouped[y]||{}).forEach(k=>{
       const miss=grouped[y][k]._missingGroupNames||{};
       Object.keys(miss).forEach(name=>{ if(name) unique[name]=true; });
+      const rv=grouped[y][k]._resolvedVariants||{};
+      Object.keys(rv).forEach(id=>{
+        if(!variants[id]) variants[id]=new Set();
+        Object.keys(rv[id]).forEach(v=>variants[id].add(v));
+      });
     });
   });
   const names=Object.keys(unique);
-  if(!names.length) return;
 
-  // Re-check against the current categoryMappings — bestMap() uses
-  // partial-match logic, so a name like "PEOPLES PARK" might still resolve
-  // to an existing alias even though we flagged it as missing. Only write
-  // docs for names that genuinely have no mapping.
-  const toCreate=names.filter(n=>!bestMap(n));
-  if(!toCreate.length) return;
+  // For each unmapped name: try a smart match. If confidence ≥ 0.8, queue an
+  // alias-add on the matched mapping. Otherwise queue a brand-new doc.
+  const aliasAdds = {}; // mappingDocId → Set of new aliases
+  // Pre-populate from _resolvedVariants (these were already matched at
+  // confidence ≥ 0.7 during applyDonor — promote them to aliases).
+  Object.keys(variants).forEach(id => { aliasAdds[id] = new Set([...variants[id]]); });
+
+  const toCreate = [];
+  let mergedCount = 0;
+  Object.keys(variants).forEach(id => { mergedCount += variants[id].size; });
+
+  for(const name of names){
+    const r = smartFindMapping(name);
+    if(r.mapping && r.confidence >= 0.8 && r.confidence < 1.0){
+      const id = r.mapping.id;
+      if(!aliasAdds[id]) aliasAdds[id] = new Set();
+      aliasAdds[id].add(smartName(name));
+      mergedCount++;
+    } else if(!r.mapping){
+      toCreate.push(name);
+    }
+  }
+
+  if(!toCreate.length && !Object.keys(aliasAdds).length) return;
 
   _autoMapInFlight=true;
   try{
-    // Use a Firestore batched write so all new mappings land atomically.
-    // Each new doc gets a server-generated id; partnerName is the canonical
-    // display form, normalizedKey is the lookup key that bestMap() uses.
     const batch=fs.batch();
     const stamps={
-      createdAt:firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-      autoCreated:true,
-      autoCreatedFrom:"donor-database-statistics"
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
+
+    // Add aliases to existing mappings
+    Object.keys(aliasAdds).forEach(id => {
+      const existing = (categoryMappings.find(x => x.id === id) || {}).aliases || [];
+      const merged = Array.from(new Set([
+        ...existing.map(a => smartName(a)).filter(Boolean),
+        ...aliasAdds[id]
+      ])).slice(0, 50); // cap aliases per doc to keep size sane
+      batch.update(fs.collection("donorGroupCategories").doc(id),
+                   Object.assign({ aliases: merged }, stamps));
+    });
+
+    // Create brand-new mappings for genuinely-new names
+    const createStamps = Object.assign({
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      autoCreated: true,
+      autoCreatedFrom: "donor-database-statistics"
+    }, stamps);
     toCreate.forEach(name=>{
       const ref=fs.collection("donorGroupCategories").doc();
       batch.set(ref,{
-        partnerName:smartName(name),
-        category:"Group",
-        place:"",
-        normalizedKey:normKey(name),
-        ...stamps
+        partnerName: smartName(name),
+        category: "Group",
+        place: "",
+        normalizedKey: normKey(name),
+        aliases: [],
+        ...createStamps
       });
     });
+
     await batch.commit();
 
     // Reload mappings + repaint the Group Mapping list and (silently) rebuild
     // stats so the new categories take effect right away.
     await loadMappings(initVersion);
     renderMappings();
-    setStatus(`Statistics loaded — auto-added ${toCreate.length} new group${toCreate.length===1?"":"s"} to Group Mapping (category: Group, place: blank).`,"ok");
+
+    const msgParts = [];
+    if(toCreate.length) msgParts.push(`added ${toCreate.length} new group${toCreate.length===1?"":"s"}`);
+    if(mergedCount)     msgParts.push(`merged ${mergedCount} variant${mergedCount===1?"":"s"} into existing groups`);
+    if(msgParts.length){
+      setStatus(`Statistics loaded — ${msgParts.join(", ")} in Group Mapping. Heuristics: acronym, prefix/suffix, token-overlap.`,"ok");
+    }
   }catch(e){
     console.warn("autoCreateMissingGroupMappings failed:",e);
     // Non-fatal — stats are already on screen. Don't disrupt the user.
@@ -1271,6 +1472,138 @@ function clearMappingEditor(){
 function cancelInlineEdit(){inlineEditId=null;renderMappings();}
 function startInlineEdit(id){inlineEditId=id;renderMappings();}
 
+// ─── DUPLICATE FINDER + MANUAL MERGE ─────────────────────────────────────────
+// Scans every pair of existing mappings using smartFindMapping's heuristics
+// and lists pairs that look like the same group. The admin then clicks Merge
+// per pair: the side with more aliases / earlier createdAt is kept as the
+// canonical, the other's partnerName + any aliases are added to the keeper's
+// aliases array, and the other doc is deleted.
+function findDuplicateMappings(){
+  const panel=document.getElementById("duplicatePanel");
+  const out=document.getElementById("duplicateResults");
+  const title=document.getElementById("duplicatePanelTitle");
+
+  if(!categoryMappings.length){
+    panel.style.display="block";
+    title.textContent="Duplicate suggestions";
+    out.innerHTML=`<div class="empty">No mappings yet — nothing to scan.</div>`;
+    return;
+  }
+
+  // Build candidate pairs. For each mapping, temporarily remove it from the
+  // search corpus and ask smartFindMapping whether any OTHER mapping matches
+  // it. We dedupe pairs (A↔B and B↔A both surface) by keeping the lower id.
+  const originalMappings=categoryMappings;
+  const pairs={};
+  for(let i=0;i<originalMappings.length;i++){
+    const me=originalMappings[i];
+    const myName=me.partnerName||me.name||"";
+    if(!myName) continue;
+    // search against everyone except me
+    categoryMappings=originalMappings.filter((_,j)=>j!==i);
+    const r=smartFindMapping(myName);
+    categoryMappings=originalMappings; // restore
+    if(!r.mapping || r.confidence < 0.7) continue;
+    if(r.confidence >= 1.0 || r.confidence >= 0.95) {
+      // 1.0 = literally same normalized name (unusual — already deduped by
+      // saveMapping but possible from manual imports). 0.95 = alias hit.
+      // Both of these are STRONG dupes worth flagging.
+    }
+    const a=me.id, b=r.mapping.id;
+    const key = a < b ? `${a}__${b}` : `${b}__${a}`;
+    if(pairs[key]) continue; // already noted
+    pairs[key]={ a:me, b:r.mapping, confidence:r.confidence, reason:r.reason };
+  }
+
+  const list=Object.values(pairs).sort((x,y)=>y.confidence-x.confidence);
+  if(!list.length){
+    panel.style.display="block";
+    title.textContent="Duplicate suggestions";
+    out.innerHTML=`<div class="empty">No likely duplicates found. ✓</div>`;
+    return;
+  }
+
+  const reasonLabel = (r) => {
+    if(r==="exact")          return "exact match (already same name)";
+    if(r==="alias")          return "already listed as alias";
+    if(r==="acronym→full")   return "acronym matches full name";
+    if(r==="full→acronym")   return "full name acronym matches";
+    if(r==="word-edge")      return "shorter is prefix/suffix";
+    if(r==="token-overlap")  return "significant word overlap";
+    return r||"heuristic match";
+  };
+
+  panel.style.display="block";
+  title.textContent=`Duplicate suggestions — ${list.length} candidate pair${list.length===1?"":"s"} found`;
+  out.innerHTML = list.map(p => {
+    const aName = escH(p.a.partnerName||p.a.name||"");
+    const bName = escH(p.b.partnerName||p.b.name||"");
+    const aliases = (m) => (Array.isArray(m.aliases) && m.aliases.length)
+      ? ` <small style="color:#6b7280">[${escH(m.aliases.slice(0,4).join(", "))}${m.aliases.length>4?"…":""}]</small>`
+      : "";
+    return `<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;padding:8px 10px;border-bottom:1px solid #f1ddc8;align-items:center;font-size:13px">
+      <div><strong>${aName}</strong>${aliases(p.a)}</div>
+      <div><strong>${bName}</strong>${aliases(p.b)}</div>
+      <div style="font-size:11px;color:#92400e">${reasonLabel(p.reason)} (${Math.round(p.confidence*100)}%)</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-blue" style="padding:6px 10px;font-size:12px" onclick="mergeMappingPair('${escJ(p.a.id)}','${escJ(p.b.id)}')">Merge →</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function mergeMappingPair(idA, idB){
+  const a=categoryMappings.find(x=>x.id===idA);
+  const b=categoryMappings.find(x=>x.id===idB);
+  if(!a||!b){ alert("One of the mappings was not found. Try Find Duplicates again."); return; }
+
+  // Pick canonical: more aliases > human-edited > longer-name > alphabetic.
+  // Longer name wins on ties because "PEOPLES PARK" is more descriptive than
+  // "P PARK" — the short form is almost always the variant, not the canonical.
+  function _score(m){
+    const aliasCount = Array.isArray(m.aliases) ? m.aliases.length : 0;
+    const nameLen = (m.partnerName||m.name||"").length;
+    return aliasCount*1000 + (m.autoCreated?0:100) + nameLen;
+  }
+  const sa = _score(a), sb = _score(b);
+  const keep   = sa >= sb ? a : b;
+  const remove = keep === a ? b : a;
+  const keepName   = keep.partnerName||keep.name||"";
+  const removeName = remove.partnerName||remove.name||"";
+
+  if(!confirm(`Merge:\n   "${removeName}" → into → "${keepName}"\n\n"${removeName}" will be added as an alias of "${keepName}" and its mapping doc will be deleted. Both names will continue to count under "${keepName}" in stats. Continue?`)) return;
+
+  try{
+    const existingAliases = Array.isArray(keep.aliases) ? keep.aliases.slice() : [];
+    const removedAliases  = Array.isArray(remove.aliases) ? remove.aliases : [];
+    const merged = Array.from(new Set([
+      ...existingAliases.map(a=>smartName(a)).filter(Boolean),
+      ...removedAliases.map(a=>smartName(a)).filter(Boolean),
+      smartName(removeName)
+    ].filter(a => a && a !== smartName(keepName)))).slice(0, 50);
+
+    const batch=fs.batch();
+    batch.update(fs.collection("donorGroupCategories").doc(keep.id), {
+      aliases: merged,
+      mergedFrom: firebase.firestore.FieldValue.arrayUnion
+        ? firebase.firestore.FieldValue.arrayUnion(removeName)
+        : (keep.mergedFrom || []).concat([removeName]),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    batch.delete(fs.collection("donorGroupCategories").doc(remove.id));
+    await batch.commit();
+
+    await loadMappings(initVersion);
+    renderMappings();
+    findDuplicateMappings(); // refresh suggestions
+    buildStats();            // refresh counts (collapsed under the keeper now)
+    setStatus(`Merged "${removeName}" into "${keepName}".`,"ok");
+  }catch(e){
+    console.error(e);
+    alert("Failed to merge: " + (e.message||e));
+  }
+}
+
 async function deleteMapping(id){
   if(!confirm("Delete this mapping?"))return;
   try{
@@ -1299,7 +1632,13 @@ function renderMappings(){
         </div>
       </div>`;
     return`<div class="map-row">
-      <div><strong>${escH(item.partnerName||item.name||"")}</strong></div>
+      <div>
+        <strong>${escH(item.partnerName||item.name||"")}</strong>
+        ${Array.isArray(item.aliases)&&item.aliases.length
+          ? `<div style="font-size:11px;color:#6b7280;margin-top:3px"><b>aliases:</b> ${escH(item.aliases.slice(0,6).join(", "))}${item.aliases.length>6?` <em>(+${item.aliases.length-6} more)</em>`:""}</div>`
+          : ""}
+        ${item.autoCreated?`<div style="font-size:10px;color:#92400e;margin-top:2px"><em>auto-added</em></div>`:""}
+      </div>
       <div>${escH(item.category||"Unmapped")}</div>
       <div>${escH(item.place||"")}</div>
       <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
