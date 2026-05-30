@@ -10,6 +10,7 @@ margin:0;
 font-family:Arial;
 background:#f4f4f4;
 color:#333;
+overflow:scroll;
 }
 
 header{
@@ -245,6 +246,8 @@ background:#f8fffe;
 border:1px solid #b2dfdb;
 border-top:none;
 padding:12px;
+overflow:scroll;
+max-height:70vh;
 }
 
 .patientDetailTitle{
@@ -339,10 +342,11 @@ display:block;
 }
 
 .tableScrollWrap{
-overflow-x:auto;
+overflow:scroll;
 -webkit-overflow-scrolling:touch;
 margin-top:10px;
 border-radius:6px;
+max-height:70vh;
 }
 
 .btColHeader{
@@ -850,6 +854,7 @@ function buildReleasingStats(){
             or: entry.or || "",
             requestedText: formatComponentsPlain(entry.requests),
             issuedText: formatComponentsPlain(entry.issued),
+            issuedList: Array.isArray(entry.issued) ? entry.issued : [],
             amountPaid: amountPaid,
             discount: discount,
             netAmount: actualIncome,
@@ -954,6 +959,37 @@ function renderDashboard(grand){
     `;
 }
 
+function componentTotalsFromPatientEntries(entries){
+    const totals = emptyComponent();
+    (Array.isArray(entries) ? entries : []).forEach(item => {
+        countComponents(totals, item.issuedList);
+    });
+    return totals;
+}
+
+function renderIssuedComponentTotalTable(entries, title){
+    const totals = componentTotalsFromPatientEntries(entries);
+    return `
+        <div class="patientDetailTitle" style="margin-top:12px;">${title}</div>
+        <table class="detailTable">
+            <tr>
+                <th>WB</th>
+                <th>PRBC</th>
+                <th>PC</th>
+                <th>FFP</th>
+                <th>CRYO</th>
+            </tr>
+            <tr class="totalRow">
+                <td>${totals.WB}</td>
+                <td>${totals.PRBC}</td>
+                <td>${totals.PC}</td>
+                <td>${totals.FFP}</td>
+                <td>${totals.CRYO}</td>
+            </tr>
+        </table>
+    `;
+}
+
 function renderPatientDetailsTable(entries){
     if(!entries.length){
         return `<div class="muted">No patient records found.</div>`;
@@ -1039,6 +1075,7 @@ function renderPatientServedTable(patientServed){
                                 <div class="patientDetailWrap">
                                     <div class="patientDetailTitle">DISCOUNTED PATIENT DETAILS</div>
                                     ${renderPatientDetailsTable(patientServed.discounted.entries)}
+                                    ${renderIssuedComponentTotalTable(patientServed.discounted.entries, "DISCOUNTED ISSUED COMPONENT TOTAL")}
                                 </div>
                             </td>
                         </tr>
