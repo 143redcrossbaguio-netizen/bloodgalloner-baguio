@@ -280,6 +280,14 @@ td:first-child,th:first-child{
                 </select>
             </div>
 
+            <div class="field">
+                <label for="deferralType">Deferral Type</label>
+                <div class="deferral-wrap">
+                    <input type="text" id="deferralType" autocomplete="off" placeholder="T = Temporary, P = Permanent">
+                    <div id="typeGhost" class="ghostHint"></div>
+                </div>
+            </div>
+
             <div class="field span-6">
                 <label for="deferralReason">Deferral</label>
                 <div class="deferral-wrap">
@@ -328,6 +336,7 @@ let currentUser = null;
 let donorIndex = [];
 let selectedDonorId = "";
 let selectedDeferralCanonical = "";
+let selectedDeferralType = "";
 
 const COMMON_DEFERRALS = [
     {label:"Low Hemoglobin / Anemia", keys:["h","hb","low hb","low hemoglobin","hemoglobin","haemoglobin","anemia","anaemia","low hematocrit","low hct"]},
@@ -392,6 +401,11 @@ const COMMON_DEFERRALS = [
     {label:"Failed Venipuncture / Poor Vein", keys:["failed vein","poor vein","vein","venipuncture failed"]},
     {label:"No Valid Identification", keys:["no id","no identification","invalid id"]},
     {label:"Incomplete Consent / Donor Refusal", keys:["no consent","refused","donor refusal","incomplete consent"]}
+];
+
+const DEFERRAL_TYPES = [
+    {label:"Temporary", code:"T", keys:["t","temp","temporary"]},
+    {label:"Permanent", code:"P", keys:["p","perm","permanent"]}
 ];
 
 function setStatus(msg,type){
@@ -564,6 +578,74 @@ function findDeferralMatches(query){
         .slice(0,8);
 }
 
+function deferralTypeScore(option, query){
+    const q = norm(query);
+    if(!q) return 0;
+
+    if(q === option.code.toLowerCase()) return 1000;
+
+    const label = norm(option.label);
+    const keys = option.keys.map(norm);
+
+    if(label.startsWith(q)) return 900;
+    if(keys.some(k => k === q)) return 850;
+    if(keys.some(k => k.startsWith(q))) return 820;
+    if(label.includes(q)) return 620;
+    if(keys.some(k => k.includes(q))) return 600;
+
+    return 0;
+}
+
+function findDeferralTypeMatches(query){
+    return DEFERRAL_TYPES
+        .map(opt => ({...opt, score:deferralTypeScore(opt, query)}))
+        .filter(opt => opt.score > 0)
+        .sort((a,b) => b.score - a.score || a.label.localeCompare(b.label))
+        .slice(0,2);
+}
+
+function normalizeDeferralType(value){
+    const q = norm(value);
+    if(!q) return "";
+    const exact = DEFERRAL_TYPES.find(t => norm(t.label) === q || t.code.toLowerCase() === q || t.keys.map(norm).includes(q));
+    return exact ? exact.label : "";
+}
+
+function updateTypeSuggestions(){
+    const input = document.getElementById("deferralType");
+    const ghost = document.getElementById("typeGhost");
+    const q = input.value.trim();
+
+    if(selectedDeferralType && norm(selectedDeferralType) !== norm(q)){
+        selectedDeferralType = "";
+    }
+
+    const matches = findDeferralTypeMatches(q);
+    const best = matches[0];
+
+    if(!q || !best || norm(best.label) === norm(q)){
+        ghost.classList.remove("show");
+        ghost.innerHTML = "";
+        return;
+    }
+
+    ghost.innerHTML = `<span class="ghostKey">Predictive text:</span> <span class="ghostMain">${esc(best.label)}</span> <span class="ghostKey">— press Enter or Tab to fill</span>`;
+    ghost.classList.add("show");
+}
+
+function getFormFocusables(){
+    return Array.from(document.querySelectorAll("#liveSearch, #deferralDate, #surname, #firstName, #age, #sex, #deferralType, #deferralReason, button"))
+        .filter(el => !el.disabled && el.offsetParent !== null);
+}
+
+function moveToNextField(current){
+    const fields = getFormFocusables();
+    const index = fields.indexOf(current);
+    if(index >= 0 && fields[index + 1]){
+        fields[index + 1].focus();
+    }
+}
+
 function updateDeferralSuggestions(){
     const input = document.getElementById("deferralReason");
     const ghost = document.getElementById("deferralGhost");
@@ -594,24 +676,34 @@ function updateDeferralSuggestions(){
     chips.classList.add("open");
 }
 
-window.acceptDeferral = function(label){
+window.acceptDeferral = function(label, keepFocus = true){
     document.getElementById("deferralReason").value = label;
     selectedDeferralCanonical = label;
     updateDeferralSuggestions();
-    document.getElementById("deferralReason").focus();
+    if(keepFocus) document.getElementById("deferralReason").focus();
+};
+
+window.acceptDeferralType = function(label, keepFocus = true){
+    document.getElementById("deferralType").value = label;
+    selectedDeferralType = label;
+    updateTypeSuggestions();
+    if(keepFocus) document.getElementById("deferralType").focus();
 };
 
 window.clearForm = function(){
     selectedDonorId = "";
     selectedDeferralCanonical = "";
+    selectedDeferralType = "";
     document.getElementById("deferralDate").value = todayISO();
     document.getElementById("liveSearch").value = "";
     document.getElementById("surname").value = "";
     document.getElementById("firstName").value = "";
     document.getElementById("age").value = "";
     document.getElementById("sex").value = "";
+    document.getElementById("deferralType").value = "";
     document.getElementById("deferralReason").value = "";
     document.getElementById("donorSuggestBox").classList.remove("open");
+    updateTypeSuggestions();
     updateDeferralSuggestions();
 };
 
@@ -626,6 +718,8 @@ window.saveDeferral = async function(){
     const firstName = document.getElementById("firstName").value.trim().toUpperCase();
     const age = parseAge(document.getElementById("age").value);
     const sex = document.getElementById("sex").value;
+    const typedType = document.getElementById("deferralType").value.trim();
+    const deferralType = selectedDeferralType || normalizeDeferralType(typedType);
     const typedDeferral = document.getElementById("deferralReason").value.trim();
     const best = findDeferralMatches(typedDeferral)[0];
     const canonicalDeferral = selectedDeferralCanonical || (best ? best.label : typedDeferral);
@@ -644,6 +738,10 @@ window.saveDeferral = async function(){
     }
     if(!sex){
         setStatus("Please select sex.","error");
+        return;
+    }
+    if(!deferralType){
+        setStatus("Please enter deferral type: T for Temporary or P for Permanent.","error");
         return;
     }
     if(!typedDeferral){
@@ -665,6 +763,8 @@ window.saveDeferral = async function(){
             firstName,
             age:Number(age),
             sex,
+            deferralType,
+            deferralTypeCode:deferralType === "Temporary" ? "T" : "P",
             deferral:typedDeferral,
             deferralCanonical:canonicalDeferral,
             createdAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -710,6 +810,7 @@ window.loadRecentDeferrals = async function(){
                             <th>FIRST NAME</th>
                             <th>AGE</th>
                             <th>SEX</th>
+                            <th>TYPE</th>
                             <th>DEFERRAL</th>
                             <th>SMART CATEGORY</th>
                         </tr>
@@ -722,6 +823,7 @@ window.loadRecentDeferrals = async function(){
                                 <td>${esc(r.firstName || "")}</td>
                                 <td>${esc(r.age ?? "")}</td>
                                 <td>${esc(r.sex || "")}</td>
+                                <td>${esc(r.deferralType || "")}</td>
                                 <td>${esc(r.deferral || "")}</td>
                                 <td>${esc(r.deferralCanonical || "")}</td>
                             </tr>
@@ -740,14 +842,58 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("deferralDate").value = todayISO();
 
     document.getElementById("liveSearch").addEventListener("input", renderDonorSuggestions);
+    document.getElementById("deferralType").addEventListener("input", updateTypeSuggestions);
+    document.getElementById("deferralType").addEventListener("keydown", e => {
+        const best = findDeferralTypeMatches(e.target.value)[0];
+        const acceptKey = e.key === "Tab" || e.key === "Enter";
+
+        if(acceptKey && best && e.target.value.trim() && norm(best.label) !== norm(e.target.value)){
+            if(e.key === "Tab"){
+                acceptDeferralType(best.label, false);
+            }else{
+                e.preventDefault();
+                acceptDeferralType(best.label, false);
+                moveToNextField(e.target);
+            }
+            return;
+        }
+
+        if(e.key === "Enter"){
+            e.preventDefault();
+            moveToNextField(e.target);
+        }
+    });
+
     document.getElementById("deferralReason").addEventListener("input", updateDeferralSuggestions);
     document.getElementById("deferralReason").addEventListener("keydown", e => {
         const best = findDeferralMatches(e.target.value)[0];
         const acceptKey = e.key === "Tab" || e.key === "Enter" || e.key === " " || e.code === "Space";
+
         if(acceptKey && best && e.target.value.trim() && norm(best.label) !== norm(e.target.value)){
-            e.preventDefault();
-            acceptDeferral(best.label);
+            if(e.key === "Tab"){
+                acceptDeferral(best.label, false);
+            }else{
+                e.preventDefault();
+                acceptDeferral(best.label);
+                if(e.key === "Enter") moveToNextField(e.target);
+            }
+            return;
         }
+
+        if(e.key === "Enter"){
+            e.preventDefault();
+            moveToNextField(e.target);
+        }
+    });
+
+    ["deferralDate","surname","firstName","age","sex"].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener("keydown", e => {
+            if(e.key === "Enter"){
+                e.preventDefault();
+                moveToNextField(e.target);
+            }
+        });
     });
 
     document.addEventListener("click", e => {
