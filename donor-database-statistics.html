@@ -80,6 +80,8 @@
     .sub-row{background:#f3f4f6!important;font-weight:700}
     .empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d6dde6;border-radius:10px}
     .search-note{margin:8px 12px;padding:10px 12px;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px}
+    .extra-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:900px){.extra-summary-grid{grid-template-columns:1fr}}
     @media(max-width:1200px){.toolbar,.summary-year-grid,.map-form,.map-row{grid-template-columns:1fr 1fr}}
     @media(max-width:760px){.toolbar,.summary-year-grid,.map-form,.map-row{grid-template-columns:1fr}}
   
@@ -221,6 +223,11 @@
     <div id="reportContainer"></div>
   </div>
 
+  <div class="card">
+    <h3 style="margin-top:0;color:#991b1b">Deferrals / UB-QNS Summary</h3>
+    <div id="extraSummaryContainer"></div>
+  </div>
+
 </div>
 <script>
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
@@ -238,7 +245,7 @@ if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(), fs=firebase.firestore(), rtdb=firebase.database();
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-let allRecords=[],donorRecords=[],releasingRecords=[],categoryMappings=[];
+let allRecords=[],donorRecords=[],releasingRecords=[],categoryMappings=[],deferralRecords=[];
 let groupedCache=null,eventsAttached=false,inlineEditId=null;
 let initInFlight=false,initQueued=false,initVersion=0,domBooted=false,filtersInitialized=false;
 
@@ -259,7 +266,7 @@ async function initPage(){
   const ver=++initVersion;
   try{
     setStatus("Loading statistics…","info");
-    await Promise.allSettled([loadDonors(ver),loadMappings(ver),loadReleasing(ver),loadPartnerAliasIndex()]);
+    await Promise.allSettled([loadDonors(ver),loadMappings(ver),loadReleasing(ver),loadDeferrals(ver),loadPartnerAliasIndex()]);
     if(ver!==initVersion)return;
     populateFilters();
     attachEvents();
@@ -331,6 +338,30 @@ async function loadMappings(ver){
     snap.forEach(doc=>local.push({id:doc.id,...doc.data()}));
   }catch(e){}
   if(ver===initVersion) categoryMappings=local;
+}
+
+async function loadDeferrals(ver){
+  const y=document.getElementById("filterYear")?.value||"ALL";
+  const m=document.getElementById("filterMonth")?.value||"ALL";
+  let ref=fs.collection("donorDeferrals");
+
+  try{
+    if(y!=="ALL" && m!=="ALL"){
+      ref=ref.where("collectionMonthKey","==",`${y}-${String(m).padStart(2,"0")}`);
+    }else if(y!=="ALL"){
+      ref=ref.where("collectionYear","==",Number(y));
+    }else if(m!=="ALL"){
+      ref=ref.where("collectionMonth","==",Number(m));
+    }
+
+    const snap=await ref.get();
+    const local=[];
+    snap.forEach(doc=>local.push({id:doc.id,...doc.data()}));
+    if(ver===initVersion) deferralRecords=local;
+  }catch(e){
+    console.warn("Failed to load donor deferrals:",e);
+    if(ver===initVersion) deferralRecords=[];
+  }
 }
 
 async function loadReleasing(ver){
@@ -1054,6 +1085,7 @@ function buildStats(){
     const q=String(document.getElementById("searchText").value||"").trim();
     if(q)renderSearchReport(grouped,q);
     else renderReport(grouped);
+    renderExtraSummary(donors);
 
     // Show diagnostic bar
     showDebug(`
@@ -1298,6 +1330,121 @@ function renderSexTable(g){
     <tr><th>Month</th><th>Male</th><th>Female</th><th>Total</th></tr>
     ${months.map(s=>`<tr><td>${escH(mLabel(s._meta||{}))}</td><td>${n(s.sex["Male"])}</td><td>${n(s.sex["Female"])}</td><td>${n((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td></tr>`).join("")}
   </table></div>`;
+}
+
+function normalizeAmountStatus(v){
+  const s=String(v||"").toUpperCase().trim();
+  if(!s)return"";
+  if(s.includes("QNS")||s.includes("QUANTITY NOT SUFFICIENT")||s.includes("QUANTITY INSUFFICIENT"))return"QNS";
+  if(s==="UB"||s.includes("UNSUCCESSFUL BLEED")||s.includes("UNSUCCESSFUL BLEEDING")||s.includes("UNDERBLEED")||s.includes("UNDER BLEED"))return"UB";
+  if(s.includes("450"))return"450 ML";
+  return s;
+}
+
+function normalizeDeferralType(v){
+  let s=String(v||"").trim();
+  if(!s)return"Unspecified / Not indicated";
+  const nrm=s.toLowerCase().replace(/[^a-z0-9+ -]/g," ").replace(/\s+/g," ").trim();
+  if(/low.*(hb|hgb|hemoglobin|haemoglobin|hematocrit|hct)|anemia|anaemia/.test(nrm))return"Low Hemoglobin / Anemia";
+  if(/high.*(hb|hgb|hemoglobin|haemoglobin|hematocrit|hct)|polycy/.test(nrm))return"High Hemoglobin / Polycythemia";
+  if(/hypertension|high bp|blood pressure high|elevated blood pressure/.test(nrm))return"Hypertension / High Blood Pressure";
+  if(/hypotension|low bp|blood pressure low/.test(nrm))return"Hypotension / Low Blood Pressure";
+  if(/dental|tooth|extraction|root canal|oral surgery/.test(nrm))return"Dental Procedure / Tooth Extraction";
+  if(/fever|febrile|temperature/.test(nrm))return"Fever";
+  if(/cough|cold|colds|sore throat|runny nose|upper respiratory/.test(nrm))return"Cough / Colds";
+  if(/flu|influenza|malaise|chills/.test(nrm))return"Flu-like Symptoms / Influenza";
+  if(/covid|coronavirus|sars/.test(nrm))return"COVID-19 Infection / Exposure";
+  if(/dengue/.test(nrm))return"Dengue Infection / Recent Dengue";
+  if(/malaria/.test(nrm))return"Malaria Risk / Malaria History";
+  if(/vaccine|vaccination|immuni[sz]ation|booster/.test(nrm))return"Recent Vaccination";
+  if(/antibiotic|infection treatment|amoxicillin|azithromycin/.test(nrm))return"Antibiotic Intake / Current Infection Treatment";
+  if(/medication|medicine|meds|drug intake|maintenance drug/.test(nrm))return"Medication Deferral";
+  if(/aspirin|antiplatelet|clopidogrel/.test(nrm))return"Aspirin / Antiplatelet Intake";
+  if(/anticoagulant|blood thinner|warfarin|heparin|rivaroxaban|apixaban/.test(nrm))return"Anticoagulant / Blood Thinner";
+  if(/surgery|operation|post op|operative/.test(nrm))return"Recent Surgery";
+  if(/tattoo|body art/.test(nrm))return"Tattoo";
+  if(/piercing/.test(nrm))return"Piercing";
+  if(/pregnan|gravida/.test(nrm))return"Pregnancy";
+  if(/breastfeeding|lactat/.test(nrm))return"Breastfeeding / Lactation";
+  if(/menstruation|period|dysmenorrhea|heavy flow/.test(nrm))return"Menstruation with Symptoms";
+  if(/underweight|low weight|below weight/.test(nrm))return"Underweight / Low Body Weight";
+  if(/minor|underage|below age|age below/.test(nrm))return"Age Below Eligible Limit";
+  if(/overage|above age|senior age/.test(nrm))return"Age Above Eligible Limit";
+  if(/recent donation|interval|donated recently|less than/.test(nrm))return"Recent Blood Donation Interval";
+  if(/alcohol|liquor|drunk|intoxicated|hangover/.test(nrm))return"Alcohol Intake";
+  if(/sleep|fatigue|tired/.test(nrm))return"Lack of Sleep / Fatigue";
+  if(/hiv|aids/.test(nrm))return"HIV / AIDS Risk or Infection";
+  if(/hepatitis|hep b|hbv|hep c|hcv/.test(nrm))return"Hepatitis B / Hepatitis C";
+  if(/syphilis|vdrl|rpr|treponema/.test(nrm))return"Syphilis / Reactive Screening History";
+  if(/tuberculosis|\btb\b|ptb/.test(nrm))return"Tuberculosis";
+  if(/diabetes|insulin|high sugar|uncontrolled sugar/.test(nrm))return"Diabetes Mellitus - Uncontrolled / Insulin Use";
+  if(/heart|cardiac|angina|arrhythmia|myocardial/.test(nrm))return"Heart Disease / Cardiac Condition";
+  if(/stroke|cva|cerebrovascular/.test(nrm))return"Stroke / Cerebrovascular Disease";
+  if(/cancer|malignan|tumou?r|chemotherapy/.test(nrm))return"Cancer / Malignancy";
+  if(/epilepsy|seizure|convulsion/.test(nrm))return"Epilepsy / Seizure";
+  if(/asthma|wheezing|respiratory distress/.test(nrm))return"Asthma Attack / Respiratory Distress";
+  if(/kidney|renal|dialysis/.test(nrm))return"Kidney Disease";
+  if(/liver|cirrhosis|jaundice/.test(nrm))return"Liver Disease";
+  if(/wound|boil|abscess|cellulitis|skin infection/.test(nrm))return"Skin Infection / Open Wound";
+  if(/poor vein|failed vein|venipuncture failed|vein/.test(nrm))return"Failed Venipuncture / Poor Vein";
+  return s.replace(/\s+/g," ").trim().replace(/\b\w/g,c=>c.toUpperCase());
+}
+
+function getFilteredDeferrals(){
+  const y=document.getElementById("filterYear").value;
+  const m=document.getElementById("filterMonth").value;
+  return deferralRecords.filter(r=>{
+    const d=parseDate(r.date||r.deferralDate||r.entryDate||r.createdAt||null);
+    const p=parts(d);
+    if(!p.year)return false;
+    if(y!=="ALL"&&String(p.year)!==y)return false;
+    if(m!=="ALL"&&String(p.month)!==m)return false;
+    return true;
+  });
+}
+
+function renderExtraSummary(donors){
+  const el=document.getElementById("extraSummaryContainer");
+  if(!el)return;
+
+  const amountStats={"450 ML":0,"QNS":0,"UB":0,"Other / Blank":0};
+  (donors||[]).forEach(r=>{
+    const amt=normalizeAmountStatus(r.amount||r.collectionAmount||r.bloodAmount||r.volume||"");
+    if(amt==="450 ML"||amt==="QNS"||amt==="UB")amountStats[amt]++;
+    else amountStats["Other / Blank"]++;
+  });
+
+  const defStats={};
+  getFilteredDeferrals().forEach(r=>{
+    const key=normalizeDeferralType(r.deferralCanonical||r.deferral||r.reason||r.deferralReason||"");
+    defStats[key]=(defStats[key]||0)+1;
+  });
+  const defRows=Object.keys(defStats).sort((a,b)=>defStats[b]-defStats[a]||a.localeCompare(b));
+  const defTotal=defRows.reduce((a,k)=>a+defStats[k],0);
+  const amountTotal=Object.values(amountStats).reduce((a,b)=>a+b,0);
+
+  el.innerHTML=`
+    <div class="extra-summary-grid">
+      <div class="table-wrap">
+        <table>
+          <tr class="sub-row"><td colspan="2">Deferral Count Per Type</td></tr>
+          <tr><th>Deferral Type</th><th>Count</th></tr>
+          ${defRows.length?defRows.map(k=>`<tr><td>${escH(k)}</td><td>${n(defStats[k])}</td></tr>`).join(""):`<tr><td colspan="2">No deferrals recorded for the selected filter.</td></tr>`}
+          <tr class="sub-row"><td>Total Deferrals</td><td>${n(defTotal)}</td></tr>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <tr class="sub-row"><td colspan="2">Amount Status Count</td></tr>
+          <tr><th>Amount</th><th>Count</th></tr>
+          <tr><td>450 ML</td><td>${n(amountStats["450 ML"])}</td></tr>
+          <tr><td>QNS</td><td>${n(amountStats["QNS"])}</td></tr>
+          <tr><td>UB</td><td>${n(amountStats["UB"])}</td></tr>
+          <tr><td>Other / Blank</td><td>${n(amountStats["Other / Blank"])}</td></tr>
+          <tr class="sub-row"><td>Total Amount Records</td><td>${n(amountTotal)}</td></tr>
+        </table>
+      </div>
+    </div>`;
 }
 
 function fieldTable(title,label,rows){
