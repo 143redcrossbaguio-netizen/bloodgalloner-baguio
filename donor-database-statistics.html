@@ -426,12 +426,24 @@ function dayOnly(val,base){
 function applyCarryForward(records){
   const grps={};
   records.forEach(r=>{
-    const key=[r?.importMeta?.batchId||"",r?.importMeta?.sourceFile||"",r?.importMeta?.sourceSheet||""].join("|");
+    const batchId=String(r?.importMeta?.batchId||"");
+    const sourceFile=String(r?.importMeta?.sourceFile||"");
+    const sourceSheet=String(r?.importMeta?.sourceSheet||"");
+
+    // Match donor-database-tracking.html: only imported rows with import metadata
+    // use carry-forward. Manually entered / edited rows must keep their own date
+    // and must not inherit the date from another unrelated record.
+    if(!batchId&&!sourceFile&&!sourceSheet)return;
+
+    const key=[batchId,sourceFile,sourceSheet].join("|");
     if(!grps[key])grps[key]=[];
     grps[key].push(r);
   });
   Object.values(grps).forEach(items=>{
-    items.sort((a,b)=>Number(a?.importMeta?.sourceRowNumber||0)-Number(b?.importMeta?.sourceRowNumber||0));
+    items.sort((a,b)=>
+      Number(a?.importMeta?.sourceRowNumber||0)-Number(b?.importMeta?.sourceRowNumber||0) ||
+      String(a.serialNumber||"").localeCompare(String(b.serialNumber||""),undefined,{numeric:true,sensitivity:"base"})
+    );
     let last="";
     items.forEach(r=>{
       const exp=directDate(r), base=sourceBase(r);
@@ -441,12 +453,20 @@ function applyCarryForward(records){
       else if(dOnly){r._erd=dOnly;last=dOnly;}
       else if(last){r._erd=last;}
       else if(base){r._erd=base;last=base;}
+      if(!last&&r._erd)last=r._erd;
     });
   });
 }
 
 function getDate(r){
-  return r._erd||directDate(r)||sourceBase(r)||"";
+  if(r._erd)return r._erd;
+  const direct=directDate(r);
+  if(direct)return direct;
+  const base=sourceBase(r);
+  const raw=r.entryDate||r.donationDate||r.date||r.bleedingDate||"";
+  const dOnly=dayOnly(raw,base);
+  if(dOnly)return dOnly;
+  return base||"";
 }
 
 // ─── DONOR TYPE RESOLUTION ────────────────────────────────────────────────────
@@ -1175,15 +1195,23 @@ function flatMonths(g){const r=[];Object.keys(g).sort((a,b)=>b.localeCompare(a))
 function combineRows(rows){
   const map={};
   (rows||[]).forEach(r=>{
-    const k=normKey(r.name||"");
-    if(!map[k])map[k]={name:k||r.name||"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0,totalDonors:0};
+    const nameKey=normKey(r.name||"");
+    const d=parseDate(r.rawDate||r.date||"");
+    const dateKey=toISO(d)||String(r.rawDate||r.date||"").trim();
+    const k=`${nameKey}__${dateKey}`;
+    if(!map[k])map[k]={name:nameKey||r.name||"",place:"",date:r.date||"",rawDate:d,"450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0,totalDonors:0};
     map[k]["450 cc S"]+=Number(r["450 cc S"]||0); map[k]["450 cc D"]+=Number(r["450 cc D"]||0);
     map[k]["450 cc T"]+=Number(r["450 cc T"]||0); map[k]["450 cc Q"]+=Number(r["450 cc Q"]||0);
     map[k].totalDonors+=Number(r.totalDonors||0);
     if(!map[k].place&&r.place)map[k].place=r.place;
     if(!map[k].date&&r.date)map[k].date=r.date;
   });
-  return Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
+  return Object.values(map).sort((a,b)=>{
+    const nc=String(a.name||"").localeCompare(String(b.name||""));
+    if(nc)return nc;
+    const at=a.rawDate?.getTime?.()||0, bt=b.rawDate?.getTime?.()||0;
+    return at-bt||String(a.date||"").localeCompare(String(b.date||""));
+  });
 }
 
 function dailyDrop(mk,s){
