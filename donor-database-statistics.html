@@ -66,7 +66,12 @@
     .month-head{background:linear-gradient(90deg,#eff6ff,#f8fafc);color:#1e3a8a}
     .year-content,.month-content{display:none;padding:16px}
     .year-content.open,.month-content.open{display:block}
-    .sheet-title{padding:10px 12px;font-weight:800;border-bottom:1px solid #d6dde6}
+    .sheet-title{padding:10px 12px;font-weight:800;border-bottom:1px solid #d6dde6;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .sheet-title:hover{filter:brightness(.98)}
+    .sheet-label{display:inline-block}
+    .sheet-toggle{font-size:13px;font-weight:900;min-width:22px;text-align:center}
+    .sheet-content{display:none}
+    .sheet-content.open{display:block}
     .ta{background:linear-gradient(90deg,#fee2e2,#fff1f2)}.tb{background:linear-gradient(90deg,#fef3c7,#fff7ed)}
     .tc{background:linear-gradient(90deg,#dcfce7,#ecfdf5)}.td{background:linear-gradient(90deg,#dbeafe,#eff6ff)}
     .te{background:linear-gradient(90deg,#ede9fe,#f5f3ff)}.tf{background:linear-gradient(90deg,#fae8ff,#fdf4ff)}
@@ -1238,6 +1243,43 @@ function sumDF(rows,f){return(rows||[]).reduce((a,b)=>a+(Number(b[f])||0),0);}
 function mLabel(meta){return`${MONTHS[(meta.month||1)-1]} ${meta.year||""}`.trim();}
 function flatMonths(g){const r=[];Object.keys(g).sort((a,b)=>b.localeCompare(a)).forEach(y=>Object.keys(g[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>r.push(g[y][k])));return r;}
 
+
+const COLLAPSE_STORE_KEY="donorDatabaseStatsCollapseState";
+let reportCollapseState=loadReportCollapseState();
+function loadReportCollapseState(){
+  try{
+    const raw=localStorage.getItem(COLLAPSE_STORE_KEY);
+    return raw?JSON.parse(raw):{};
+  }catch(e){return {};}
+}
+function saveReportCollapseState(){
+  try{localStorage.setItem(COLLAPSE_STORE_KEY,JSON.stringify(reportCollapseState));}catch(e){}
+}
+function getReportCollapseState(key,defaultOpen=true){
+  return Object.prototype.hasOwnProperty.call(reportCollapseState,key)?reportCollapseState[key]!==false:defaultOpen;
+}
+function collapsibleBlock(key,title,cls,inner,defaultOpen=true){
+  const open=getReportCollapseState(key,defaultOpen);
+  const openCls=open?"open":"";
+  const arrow=open?"▲":"▼";
+  return`<div class="sheet-block ${openCls}" data-collapse-key="${escH(key)}">
+    <div class="sheet-title ${cls||""}" onclick="toggleReportCollapse('${escJ(key)}',this)"><span class="sheet-label">${escH(title)}</span><span class="sheet-toggle">${arrow}</span></div>
+    <div class="sheet-content ${openCls}">${inner}</div>
+  </div>`;
+}
+function toggleReportCollapse(key,head){
+  const content=head?.nextElementSibling;
+  if(!content)return;
+  const block=head.closest(".sheet-block");
+  const nowOpen=!content.classList.contains("open");
+  content.classList.toggle("open",nowOpen);
+  if(block)block.classList.toggle("open",nowOpen);
+  const arrow=head.querySelector(".sheet-toggle");
+  if(arrow)arrow.textContent=nowOpen?"▲":"▼";
+  reportCollapseState[key]=nowOpen;
+  saveReportCollapseState();
+}
+
 function combineRows(rows){
   const map={};
   (rows||[]).forEach(r=>{
@@ -1423,28 +1465,29 @@ function renderExtraSummary(donors){
   const defTotal=defRows.reduce((a,k)=>a+defStats[k],0);
   const amountTotal=Object.values(amountStats).reduce((a,b)=>a+b,0);
 
-  el.innerHTML=`
-    <div class="extra-summary-grid">
-      <div class="table-wrap">
-        <table>
-          <tr class="sub-row"><td colspan="2">Deferral Count Per Type</td></tr>
-          <tr><th>Deferral Type</th><th>Count</th></tr>
-          ${defRows.length?defRows.map(k=>`<tr><td>${escH(k)}</td><td>${n(defStats[k])}</td></tr>`).join(""):`<tr><td colspan="2">No deferrals recorded for the selected filter.</td></tr>`}
-          <tr class="sub-row"><td>Total Deferrals</td><td>${n(defTotal)}</td></tr>
-        </table>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <tr class="sub-row"><td colspan="2">Amount Status Count</td></tr>
-          <tr><th>Amount</th><th>Count</th></tr>
-          <tr><td>450 ML</td><td>${n(amountStats["450 ML"])}</td></tr>
-          <tr><td>QNS</td><td>${n(amountStats["QNS"])}</td></tr>
-          <tr><td>UB</td><td>${n(amountStats["UB"])}</td></tr>
-          <tr><td>Other / Blank</td><td>${n(amountStats["Other / Blank"])}</td></tr>
-          <tr class="sub-row"><td>Total Amount Records</td><td>${n(amountTotal)}</td></tr>
-        </table>
-      </div>
-    </div>`;
+  const deferralTable=`<div class="table-wrap">
+    <table>
+      <tr><th>Deferral Type</th><th>Count</th></tr>
+      ${defRows.length?defRows.map(k=>`<tr><td>${escH(k)}</td><td>${n(defStats[k])}</td></tr>`).join(""):`<tr><td colspan="2">No deferrals recorded for the selected filter.</td></tr>`}
+      <tr class="sub-row"><td>Total Deferrals</td><td>${n(defTotal)}</td></tr>
+    </table>
+  </div>`;
+
+  const amountTable=`<div class="table-wrap">
+    <table>
+      <tr><th>Amount</th><th>Count</th></tr>
+      <tr><td>450 ML</td><td>${n(amountStats["450 ML"])}</td></tr>
+      <tr><td>QNS</td><td>${n(amountStats["QNS"])}</td></tr>
+      <tr><td>UB</td><td>${n(amountStats["UB"])}</td></tr>
+      <tr><td>Other / Blank</td><td>${n(amountStats["Other / Blank"])}</td></tr>
+      <tr class="sub-row"><td>Total Amount Records</td><td>${n(amountTotal)}</td></tr>
+    </table>
+  </div>`;
+
+  el.innerHTML=`<div class="extra-summary-grid">
+    ${collapsibleBlock("extra:deferrals",`Deferral Count Per Type — ${n(defTotal)}`,"tf",deferralTable,true)}
+    ${collapsibleBlock("extra:amount",`Amount Status Count — ${n(amountTotal)}`,"te",amountTable,true)}
+  </div>`;
 }
 
 function fieldTable(title,label,rows){
@@ -1508,70 +1551,73 @@ function renderReport(g){
     return`<div class="year-block">
       <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month group(s)</span></div>
       <div class="year-content ${yi===0?"open":""}">
-        ${mks.map((k,mi)=>{const s=g[y][k];const mn=MONTHS[(s._meta.month||1)-1];return`
-          <div class="month-block">
+        ${mks.map((k,mi)=>{
+          const s=g[y][k];
+          const mn=MONTHS[(s._meta.month||1)-1];
+          const baseKey=`report:${y}:${k}`;
+
+          const officeHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+            <tr><td>1. Walk-in</td><td>${n(s.officeBleeding["Walk-in"].S)}</td><td>${n(s.officeBleeding["Walk-in"].D)}</td><td>${n(s.officeBleeding["Walk-in"].T)}</td><td>${n(s.officeBleeding["Walk-in"].Q)}</td></tr>
+            <tr><td>2. Patient-directed</td><td>${n(s.officeBleeding["Patient Directed"].S)}</td><td>${n(s.officeBleeding["Patient Directed"].D)}</td><td>${n(s.officeBleeding["Patient Directed"].T)}</td><td>${n(s.officeBleeding["Patient Directed"].Q)}</td></tr>
+            <tr class="sub-row"><td>Total</td>
+              <td>${n(s.officeBleeding["Walk-in"].S+s.officeBleeding["Patient Directed"].S)}</td>
+              <td>${n(s.officeBleeding["Walk-in"].D+s.officeBleeding["Patient Directed"].D)}</td>
+              <td>${n(s.officeBleeding["Walk-in"].T+s.officeBleeding["Patient Directed"].T)}</td>
+              <td>${n(s.officeBleeding["Walk-in"].Q+s.officeBleeding["Patient Directed"].Q)}</td>
+            </tr>
+          </table></div>`;
+
+          const fieldHtml=`${fieldTable("Group","Group",combineRows(s.fieldDetails.group))}
+            ${fieldTable("RC143 or Brgy base","RC143 / BRGY Base",combineRows(s.fieldDetails.rc143))}
+            ${fieldTable("Pledge 25","Pledge 25",combineRows(s.fieldDetails.pledge25))}`;
+
+          const bloodTypeHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
+            ${["O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"].map(bt=>`<tr><td>${bt}</td><td>${n(s.bagTypeBloodType.S[bt]||0)}</td><td>${n(s.bagTypeBloodType.D[bt]||0)}</td><td>${n(s.bagTypeBloodType.T[bt]||0)}</td><td>${n(s.bagTypeBloodType.Q[bt]||0)}</td></tr>`).join("")}
+            <tr class="sub-row"><td>Total</td><td>${n(sumBC(s,"S"))}</td><td>${n(sumBC(s,"D"))}</td><td>${n(sumBC(s,"T"))}</td><td>${n(sumBC(s,"Q"))}</td></tr>
+          </table></div>`;
+
+          const componentHtml=`<div class="table-wrap"><table>
+            <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
+            <tr class="sub-row"><td>No. of components prepared</td><td>${n(s.components["450 cc"])}</td><td>${n(s.components["PRBC"])}</td><td>${n(s.components["FFP"])}</td><td>${n(s.components["PC"])}</td><td>${n(s.components["CRYO"])}</td></tr>
+            ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt=>`<tr><td>${bt}</td><td>${n(s.componentBloodType["450 cc"][bt]||0)}</td><td>${n(s.componentBloodType["PRBC"][bt]||0)}</td><td>${n(s.componentBloodType["FFP"][bt]||0)}</td><td>${n(s.componentBloodType["PC"][bt]||0)}</td><td>${n(s.componentBloodType["CRYO"][bt]||0)}</td></tr>`).join("")}
+            <tr class="sub-row"><td>Unknown</td><td>${n(s.componentBloodType["450 cc"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PRBC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["FFP"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["CRYO"]["Unknown"]||0)}</td></tr>
+          </table></div>`;
+
+          const requestHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
+            <tr><td>Requested Only</td><td>${n(s.requests["450 cc"])}</td><td>${n(s.requests["PRBC"])}</td><td>${n(s.requests["FFP"])}</td><td>${n(s.requests["PC"])}</td><td>${n(s.requests["CRYO"])}</td></tr>
+          </table></div>`;
+
+          const sexHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
+            <tr><td>Donors</td><td>${n(s.sex["Male"])}</td><td>${n(s.sex["Female"])}</td><td>${n((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td></tr>
+          </table></div>`;
+
+          const frequencyHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
+            <tr><td>Donors</td><td>${n(s.frequency["First-time donors"])}</td><td>${n(s.frequency["Repeat non-regular"])}</td><td>${n(s.frequency["Repeat regular"])}</td><td>${n(s.frequency["Total"])}</td></tr>
+          </table></div>`;
+
+          const ageHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>16-17</th><th>18-20</th><th>21-30</th><th>31-40</th><th>41-50</th><th>51-60</th><th>60-65</th><th>66 & above</th><th>Total</th></tr>
+            <tr><td>Male</td><td>${n(s.ageSex["16-17"].Male)}</td><td>${n(s.ageSex["18-20"].Male)}</td><td>${n(s.ageSex["21-30"].Male)}</td><td>${n(s.ageSex["31-40"].Male)}</td><td>${n(s.ageSex["41-50"].Male)}</td><td>${n(s.ageSex["51-60"].Male)}</td><td>${n(s.ageSex["60-65"].Male)}</td><td>${n(s.ageSex["66 & above"].Male)}</td><td>${n(Object.values(s.ageSex).reduce((a,b)=>a+(b.Male||0),0))}</td></tr>
+            <tr><td>Female</td><td>${n(s.ageSex["16-17"].Female)}</td><td>${n(s.ageSex["18-20"].Female)}</td><td>${n(s.ageSex["21-30"].Female)}</td><td>${n(s.ageSex["31-40"].Female)}</td><td>${n(s.ageSex["41-50"].Female)}</td><td>${n(s.ageSex["51-60"].Female)}</td><td>${n(s.ageSex["60-65"].Female)}</td><td>${n(s.ageSex["66 & above"].Female)}</td><td>${n(Object.values(s.ageSex).reduce((a,b)=>a+(b.Female||0),0))}</td></tr>
+            <tr class="sub-row"><td>Total</td><td>${n(s.age["16-17"])}</td><td>${n(s.age["18-20"])}</td><td>${n(s.age["21-30"])}</td><td>${n(s.age["31-40"])}</td><td>${n(s.age["41-50"])}</td><td>${n(s.age["51-60"])}</td><td>${n(s.age["60-65"])}</td><td>${n(s.age["66 & above"])}</td><td>${n(s.age["Total"])}</td></tr>
+          </table></div>`;
+
+          return`<div class="month-block">
             <div class="month-head" onclick="tNext(this)"><span>${mn}</span><span>${n(s.totalDonors)} donor entries</span></div>
             <div class="month-content ${yi===0&&mi===0?"open":""}">
-
-              <div class="sheet-block"><div class="sheet-title ta">A. Office Bleeding</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                <tr><td>1. Walk-in</td><td>${n(s.officeBleeding["Walk-in"].S)}</td><td>${n(s.officeBleeding["Walk-in"].D)}</td><td>${n(s.officeBleeding["Walk-in"].T)}</td><td>${n(s.officeBleeding["Walk-in"].Q)}</td></tr>
-                <tr><td>2. Patient-directed</td><td>${n(s.officeBleeding["Patient Directed"].S)}</td><td>${n(s.officeBleeding["Patient Directed"].D)}</td><td>${n(s.officeBleeding["Patient Directed"].T)}</td><td>${n(s.officeBleeding["Patient Directed"].Q)}</td></tr>
-                <tr class="sub-row"><td>Total</td>
-                  <td>${n(s.officeBleeding["Walk-in"].S+s.officeBleeding["Patient Directed"].S)}</td>
-                  <td>${n(s.officeBleeding["Walk-in"].D+s.officeBleeding["Patient Directed"].D)}</td>
-                  <td>${n(s.officeBleeding["Walk-in"].T+s.officeBleeding["Patient Directed"].T)}</td>
-                  <td>${n(s.officeBleeding["Walk-in"].Q+s.officeBleeding["Patient Directed"].Q)}</td>
-                </tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title tb">B. Field Donation</div>
-                ${fieldTable("Group","Group",combineRows(s.fieldDetails.group))}
-                ${fieldTable("RC143 or Brgy base","RC143 / BRGY Base",combineRows(s.fieldDetails.rc143))}
-                ${fieldTable("Pledge 25","Pledge 25",combineRows(s.fieldDetails.pledge25))}
-              </div>
-
-              <div class="sheet-block"><div class="sheet-title tc">II. Blood Type Distribution of Blood Collection</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-                ${["O+","A+","B+","AB+","O-","A-","B-","AB-","Unknown"].map(bt=>`<tr><td>${bt}</td><td>${n(s.bagTypeBloodType.S[bt]||0)}</td><td>${n(s.bagTypeBloodType.D[bt]||0)}</td><td>${n(s.bagTypeBloodType.T[bt]||0)}</td><td>${n(s.bagTypeBloodType.Q[bt]||0)}</td></tr>`).join("")}
-                <tr class="sub-row"><td>Total</td><td>${n(sumBC(s,"S"))}</td><td>${n(sumBC(s,"D"))}</td><td>${n(sumBC(s,"T"))}</td><td>${n(sumBC(s,"Q"))}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title td">III. Component Preparation</div>
-              <div class="table-wrap"><table>
-                <tr><th>Components</th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>Cryoppt.</th></tr>
-                <tr class="sub-row"><td>No. of components prepared</td><td>${n(s.components["450 cc"])}</td><td>${n(s.components["PRBC"])}</td><td>${n(s.components["FFP"])}</td><td>${n(s.components["PC"])}</td><td>${n(s.components["CRYO"])}</td></tr>
-                ${["O+","A+","B+","AB+","O-","A-","B-","AB-"].map(bt=>`<tr><td>${bt}</td><td>${n(s.componentBloodType["450 cc"][bt]||0)}</td><td>${n(s.componentBloodType["PRBC"][bt]||0)}</td><td>${n(s.componentBloodType["FFP"][bt]||0)}</td><td>${n(s.componentBloodType["PC"][bt]||0)}</td><td>${n(s.componentBloodType["CRYO"][bt]||0)}</td></tr>`).join("")}
-                <tr class="sub-row"><td>Unknown</td><td>${n(s.componentBloodType["450 cc"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PRBC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["FFP"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["PC"]["Unknown"]||0)}</td><td>${n(s.componentBloodType["CRYO"]["Unknown"]||0)}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title te">IV. Blood Requests Received</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>450 cc</th><th>PRBC</th><th>FFP</th><th>PC</th><th>CRYO</th></tr>
-                <tr><td>Requested Only</td><td>${n(s.requests["450 cc"])}</td><td>${n(s.requests["PRBC"])}</td><td>${n(s.requests["FFP"])}</td><td>${n(s.requests["PC"])}</td><td>${n(s.requests["CRYO"])}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title tf">V. Sex Distribution of Donors</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>Male</th><th>Female</th><th>Total No. of Donors</th></tr>
-                <tr><td>Donors</td><td>${n(s.sex["Male"])}</td><td>${n(s.sex["Female"])}</td><td>${n((s.sex["Male"]||0)+(s.sex["Female"]||0))}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title tg">VI. Distribution of Donors according to Frequency of Donation</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>First-time donors</th><th>Repeat non-regular</th><th>Repeat regular</th><th>Total</th></tr>
-                <tr><td>Donors</td><td>${n(s.frequency["First-time donors"])}</td><td>${n(s.frequency["Repeat non-regular"])}</td><td>${n(s.frequency["Repeat regular"])}</td><td>${n(s.frequency["Total"])}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title th">VII. Distribution of Donors By Age Group</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>16-17</th><th>18-20</th><th>21-30</th><th>31-40</th><th>41-50</th><th>51-60</th><th>60-65</th><th>66 & above</th><th>Total</th></tr>
-                <tr><td>Male</td><td>${n(s.ageSex["16-17"].Male)}</td><td>${n(s.ageSex["18-20"].Male)}</td><td>${n(s.ageSex["21-30"].Male)}</td><td>${n(s.ageSex["31-40"].Male)}</td><td>${n(s.ageSex["41-50"].Male)}</td><td>${n(s.ageSex["51-60"].Male)}</td><td>${n(s.ageSex["60-65"].Male)}</td><td>${n(s.ageSex["66 & above"].Male)}</td><td>${n(Object.values(s.ageSex).reduce((a,b)=>a+(b.Male||0),0))}</td></tr>
-                <tr><td>Female</td><td>${n(s.ageSex["16-17"].Female)}</td><td>${n(s.ageSex["18-20"].Female)}</td><td>${n(s.ageSex["21-30"].Female)}</td><td>${n(s.ageSex["31-40"].Female)}</td><td>${n(s.ageSex["41-50"].Female)}</td><td>${n(s.ageSex["51-60"].Female)}</td><td>${n(s.ageSex["60-65"].Female)}</td><td>${n(s.ageSex["66 & above"].Female)}</td><td>${n(Object.values(s.ageSex).reduce((a,b)=>a+(b.Female||0),0))}</td></tr>
-                <tr class="sub-row"><td>Total</td><td>${n(s.age["16-17"])}</td><td>${n(s.age["18-20"])}</td><td>${n(s.age["21-30"])}</td><td>${n(s.age["31-40"])}</td><td>${n(s.age["41-50"])}</td><td>${n(s.age["51-60"])}</td><td>${n(s.age["60-65"])}</td><td>${n(s.age["66 & above"])}</td><td>${n(s.age["Total"])}</td></tr>
-              </table></div></div>
+              ${collapsibleBlock(`${baseKey}:A`,"A. Office Bleeding","ta",officeHtml,true)}
+              ${collapsibleBlock(`${baseKey}:B`,"B. Field Donation","tb",fieldHtml,true)}
+              ${collapsibleBlock(`${baseKey}:II`,"II. Blood Type Distribution of Blood Collection","tc",bloodTypeHtml,true)}
+              ${collapsibleBlock(`${baseKey}:III`,"III. Component Preparation","td",componentHtml,true)}
+              ${collapsibleBlock(`${baseKey}:IV`,"IV. Blood Requests Received","te",requestHtml,true)}
+              ${collapsibleBlock(`${baseKey}:V`,"V. Sex Distribution of Donors","tf",sexHtml,true)}
+              ${collapsibleBlock(`${baseKey}:VI`,"VI. Distribution of Donors according to Frequency of Donation","tg",frequencyHtml,true)}
+              ${collapsibleBlock(`${baseKey}:VII`,"VII. Distribution of Donors By Age Group","th",ageHtml,true)}
 
               <div class="sheet-block"><div class="sheet-title ti">VIII. Donor Statistics by Age Range</div>
               <div class="table-wrap"><table>
