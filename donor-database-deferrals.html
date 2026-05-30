@@ -49,6 +49,7 @@ header{
 .field.span-2{grid-column:span 2}
 .field.span-3{grid-column:span 3}
 .field.span-6{grid-column:span 6}
+.top-live-search{margin-bottom:12px}
 .field label{
     display:block;
     margin-bottom:6px;
@@ -144,6 +145,14 @@ button{
     font-weight:800;
 }
 .ghostHint.show{display:block}
+.ghostHint .ghostMain{
+    color:#4b5563;
+    font-weight:900;
+}
+.ghostHint .ghostKey{
+    color:#9ca3af;
+    font-weight:800;
+}
 .deferralChipWrap{
     display:none;
     gap:6px;
@@ -235,16 +244,16 @@ td:first-child,th:first-child{
     <div class="card">
         <h3 style="margin-top:0;color:#991b1b">Deferral Data Input</h3>
 
+        <div class="field top-live-search">
+            <label for="liveSearch">Live Search</label>
+            <input type="text" id="liveSearch" autocomplete="off" placeholder="Search existing donor by name / serial / blood type">
+            <div id="donorSuggestBox" class="suggest-box"></div>
+        </div>
+
         <div class="form-grid">
             <div class="field">
                 <label for="deferralDate">Date</label>
                 <input type="date" id="deferralDate">
-            </div>
-
-            <div class="field span-2">
-                <label for="liveSearch">Live Search</label>
-                <input type="text" id="liveSearch" autocomplete="off" placeholder="Search existing donor by name / serial / blood type">
-                <div id="donorSuggestBox" class="suggest-box"></div>
             </div>
 
             <div class="field">
@@ -271,16 +280,16 @@ td:first-child,th:first-child{
                 </select>
             </div>
 
-            <div class="field span-3">
+            <div class="field span-6">
                 <label for="deferralReason">Deferral</label>
                 <div class="deferral-wrap">
-                    <input type="text" id="deferralReason" autocomplete="off" placeholder="Example: h = Low Hemoglobin, hy = Hypertension, dental = Tooth Extraction">
+                    <input type="text" id="deferralReason" autocomplete="off" placeholder="Type h, hb, hy, dental, tooth, fever, tattoo, etc.">
                     <div id="deferralGhost" class="ghostHint"></div>
                     <div id="deferralChips" class="deferralChipWrap"></div>
                 </div>
             </div>
 
-            <div class="field span-3">
+            <div class="field span-6">
                 <label>&nbsp;</label>
                 <div class="actions">
                     <button class="btn-red" onclick="saveDeferral()">Save Deferral</button>
@@ -561,18 +570,22 @@ function updateDeferralSuggestions(){
     const chips = document.getElementById("deferralChips");
     const q = input.value.trim();
 
+    if(selectedDeferralCanonical && norm(selectedDeferralCanonical) !== norm(q)){
+        selectedDeferralCanonical = "";
+    }
+
     const matches = findDeferralMatches(q);
     const best = matches[0];
 
-    if(!q || !best){
+    if(!q || !best || norm(best.label) === norm(q)){
         ghost.classList.remove("show");
-        ghost.textContent = "";
+        ghost.innerHTML = "";
         chips.classList.remove("open");
         chips.innerHTML = "";
         return;
     }
 
-    ghost.textContent = "Smart suggestion: " + best.label;
+    ghost.innerHTML = `<span class="ghostKey">Predictive text:</span> <span class="ghostMain">${esc(best.label)}</span> <span class="ghostKey">— press Enter, Tab, or Space to fill</span>`;
     ghost.classList.add("show");
 
     chips.innerHTML = matches.map(m => `
@@ -730,7 +743,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("deferralReason").addEventListener("input", updateDeferralSuggestions);
     document.getElementById("deferralReason").addEventListener("keydown", e => {
         const best = findDeferralMatches(e.target.value)[0];
-        if((e.key === "Tab" || e.key === "Enter") && best && e.target.value.trim()){
+        const acceptKey = e.key === "Tab" || e.key === "Enter" || e.key === " " || e.code === "Space";
+        if(acceptKey && best && e.target.value.trim() && norm(best.label) !== norm(e.target.value)){
             e.preventDefault();
             acceptDeferral(best.label);
         }
