@@ -1052,6 +1052,9 @@ function getReleasing(){
 // ─── BUILD STATS ──────────────────────────────────────────────────────────────
 function buildStats(){
   try{
+    // Always start report blocks collapsed whenever Statistics is rebuilt/opened.
+    reportCollapseState={};
+
     // Carry-forward dates across import batches
     applyCarryForward(donorRecords);
 
@@ -1244,20 +1247,21 @@ function mLabel(meta){return`${MONTHS[(meta.month||1)-1]} ${meta.year||""}`.trim
 function flatMonths(g){const r=[];Object.keys(g).sort((a,b)=>b.localeCompare(a)).forEach(y=>Object.keys(g[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>r.push(g[y][k])));return r;}
 
 
-// Collapse state is kept only while this page is open.
-// Each fresh navigation to Statistics starts expanded, then you can manually collapse sections.
+// Report blocks start CLOSED every time the Statistics page is rendered.
+// Nothing is remembered from the previous visit/open state; the user manually expands what they need.
 let reportCollapseState={};
 function saveReportCollapseState(){}
-function getReportCollapseState(key,defaultOpen=true){
-  return Object.prototype.hasOwnProperty.call(reportCollapseState,key)?reportCollapseState[key]!==false:defaultOpen;
+function getReportCollapseState(key,defaultOpen=false){
+  return defaultOpen===true;
 }
-function collapsibleBlock(key,title,cls,inner,defaultOpen=true){
+function collapsibleBlock(key,title,cls,inner,defaultOpen=false){
   const open=getReportCollapseState(key,defaultOpen);
   const openCls=open?"open":"";
   const arrow=open?"▲":"▼";
+  const displayStyle=open?"display:block":"display:none";
   return`<div class="sheet-block ${openCls}" data-collapse-key="${escH(key)}">
     <div class="sheet-title ${cls||""}" onclick="toggleReportCollapse('${escJ(key)}',this)"><span class="sheet-label">${escH(title)}</span><span class="sheet-toggle">${arrow}</span></div>
-    <div class="sheet-content ${openCls}">${inner}</div>
+    <div class="sheet-content ${openCls}" style="${displayStyle}">${inner}</div>
   </div>`;
 }
 function toggleReportCollapse(key,head){
@@ -1266,11 +1270,20 @@ function toggleReportCollapse(key,head){
   const block=head.closest(".sheet-block");
   const nowOpen=!content.classList.contains("open");
   content.classList.toggle("open",nowOpen);
+  content.style.display=nowOpen?"block":"none";
   if(block)block.classList.toggle("open",nowOpen);
   const arrow=head.querySelector(".sheet-toggle");
   if(arrow)arrow.textContent=nowOpen?"▲":"▼";
   reportCollapseState[key]=nowOpen;
   saveReportCollapseState();
+}
+function forceCollapsedReportBlocks(root){
+  (root||document).querySelectorAll(".sheet-content").forEach(content=>{
+    content.classList.remove("open");
+    content.style.display="none";
+  });
+  (root||document).querySelectorAll(".sheet-block").forEach(block=>block.classList.remove("open"));
+  (root||document).querySelectorAll(".sheet-toggle").forEach(toggle=>{ toggle.textContent="▼"; });
 }
 
 function combineRows(rows){
@@ -1338,7 +1351,7 @@ function renderSummary(g){
     const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
     return`<div class="summary-year-block">
       <div class="summary-year-head" onclick="tNext(this)"><span>${escH(y)}</span><span>${mks.length} month${mks.length===1?"":"s"}</span></div>
-      <div class="summary-year-content ${yi===0?"open":""}">
+      <div class="summary-year-content">
         <div class="summary-year-grid">
           ${mks.map(k=>{const s=g[y][k];const mk=`${s._meta?.year||""}-${String(s._meta?.month||"").padStart(2,"0")}`;return`
             <div class="summary-box">
@@ -1478,9 +1491,10 @@ function renderExtraSummary(donors){
   </div>`;
 
   el.innerHTML=`<div>
-    ${collapsibleBlock("extra:amount",`Amount Status Count — ${n(amountTotal)}`,"te",amountTable,true)}
-    ${collapsibleBlock("extra:deferrals",`Deferral Count Per Type — ${n(defTotal)}`,"tf",deferralTable,true)}
+    ${collapsibleBlock("extra:amount",`Amount Status Count — ${n(amountTotal)}`,"te",amountTable,false)}
+    ${collapsibleBlock("extra:deferrals",`Deferral Count Per Type — ${n(defTotal)}`,"tf",deferralTable,false)}
   </div>`;
+  forceCollapsedReportBlocks(el);
 }
 
 function fieldTable(title,label,rows){
@@ -1515,11 +1529,11 @@ function renderSearchReport(g,q){
     const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
     return`<div class="year-block">
       <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month(s)</span></div>
-      <div class="year-content open">
+      <div class="year-content open" style="display:block">
         ${mks.map((k,mi)=>{const s=g[y][k];const rows=aggSearch(s.fieldDetails,q);return`
           <div class="month-block">
             <div class="month-head" onclick="tNext(this)"><span>${MONTHS[(s._meta.month||1)-1]}</span><span>${n(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))} donor(s)</span></div>
-            <div class="month-content open">
+            <div class="month-content open" style="display:block">
               <div class="sheet-block"><div class="sheet-title tb">Group Search Results</div>
               <div class="search-note">Showing matching groups with total donor counts.</div>
               ${rows.length?`<div class="table-wrap"><table>
@@ -1543,7 +1557,7 @@ function renderReport(g){
     const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
     return`<div class="year-block">
       <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month group(s)</span></div>
-      <div class="year-content open">
+      <div class="year-content open" style="display:block">
         ${mks.map((k,mi)=>{
           const s=g[y][k];
           const mn=MONTHS[(s._meta.month||1)-1];
@@ -1617,23 +1631,24 @@ function renderReport(g){
 
           return`<div class="month-block">
             <div class="month-head" onclick="tNext(this)"><span>${mn}</span><span>${n(s.totalDonors)} donor entries</span></div>
-            <div class="month-content open">
-              ${collapsibleBlock(`${baseKey}:A`,"A. Office Bleeding","ta",officeHtml,true)}
-              ${collapsibleBlock(`${baseKey}:B`,"B. Field Donation","tb",fieldHtml,true)}
-              ${collapsibleBlock(`${baseKey}:II`,"II. Blood Type Distribution of Blood Collection","tc",bloodTypeHtml,true)}
-              ${collapsibleBlock(`${baseKey}:III`,"III. Component Preparation","td",componentHtml,true)}
-              ${collapsibleBlock(`${baseKey}:IV`,"IV. Blood Requests Received","te",requestHtml,true)}
-              ${collapsibleBlock(`${baseKey}:V`,"V. Sex Distribution of Donors","tf",sexHtml,true)}
-              ${collapsibleBlock(`${baseKey}:VI`,"VI. Distribution of Donors according to Frequency of Donation","tg",frequencyHtml,true)}
-              ${collapsibleBlock(`${baseKey}:VII`,"VII. Distribution of Donors By Age Group","th",ageHtml,true)}
-              ${collapsibleBlock(`${baseKey}:VIII`,"VIII. Donor Statistics by Age Range","ti",ageRangeHtml,true)}
-              ${collapsibleBlock(`${baseKey}:IX`,"IX. Monthly Donors Aged 16-25 Years Old","tj",youthHtml,true)}
+            <div class="month-content open" style="display:block">
+              ${collapsibleBlock(`${baseKey}:A`,"A. Office Bleeding","ta",officeHtml,false)}
+              ${collapsibleBlock(`${baseKey}:B`,"B. Field Donation","tb",fieldHtml,false)}
+              ${collapsibleBlock(`${baseKey}:II`,"II. Blood Type Distribution of Blood Collection","tc",bloodTypeHtml,false)}
+              ${collapsibleBlock(`${baseKey}:III`,"III. Component Preparation","td",componentHtml,false)}
+              ${collapsibleBlock(`${baseKey}:IV`,"IV. Blood Requests Received","te",requestHtml,false)}
+              ${collapsibleBlock(`${baseKey}:V`,"V. Sex Distribution of Donors","tf",sexHtml,false)}
+              ${collapsibleBlock(`${baseKey}:VI`,"VI. Distribution of Donors according to Frequency of Donation","tg",frequencyHtml,false)}
+              ${collapsibleBlock(`${baseKey}:VII`,"VII. Distribution of Donors By Age Group","th",ageHtml,false)}
+              ${collapsibleBlock(`${baseKey}:VIII`,"VIII. Donor Statistics by Age Range","ti",ageRangeHtml,false)}
+              ${collapsibleBlock(`${baseKey}:IX`,"IX. Monthly Donors Aged 16-25 Years Old","tj",youthHtml,false)}
 
             </div>
           </div>`;}).join("")}
       </div>
     </div>`;
   }).join("");
+  forceCollapsedReportBlocks(el);
 }
 
 // ─── TOGGLE HELPERS ───────────────────────────────────────────────────────────
