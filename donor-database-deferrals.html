@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Donor Database Deferrals</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f3f4f6;
+    color:#1f2937;
+}
+header{
+    background:linear-gradient(135deg,#b30000,#8b0000);
+    color:#fff;
+    text-align:center;
+    padding:18px;
+    font-size:24px;
+    font-weight:700;
+}
+.page{
+    width:min(1200px,96%);
+    margin:18px auto;
+}
+.card{
+    background:#fff;
+    border-radius:14px;
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+    padding:16px;
+    margin-bottom:16px;
+}
+.form-grid{
+    display:grid;
+    grid-template-columns:repeat(6,1fr);
+    gap:12px;
+    align-items:end;
+}
+.field{
+    min-width:0;
+    position:relative;
+}
+.field.span-2{grid-column:span 2}
+.field.span-3{grid-column:span 3}
+.field.span-6{grid-column:span 6}
+.field label{
+    display:block;
+    margin-bottom:6px;
+    font-size:13px;
+    color:#6b7280;
+    font-weight:700;
+}
+.field input,
+.field select{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid #d6dde6;
+    border-radius:10px;
+    font-size:14px;
+    background:#fff;
+    height:42px;
+}
+.field input:focus,
+.field select:focus{
+    outline:none;
+    border-color:#b30000;
+    box-shadow:0 0 0 3px rgba(179,0,0,.10);
+}
+button{
+    border:none;
+    border-radius:10px;
+    padding:10px 16px;
+    font-weight:700;
+    cursor:pointer;
+    min-height:42px;
+}
+.btn-red{background:#b30000;color:#fff}
+.btn-gray{background:#374151;color:#fff}
+.btn-blue{background:#2563eb;color:#fff}
+.btn-green{background:#15803d;color:#fff}
+.status{
+    padding:12px 14px;
+    border-radius:12px;
+    font-weight:700;
+    margin-bottom:12px;
+}
+.info{background:#eff6ff;color:#1d4ed8}
+.ok{background:#ecfdf5;color:#15803d}
+.warn{background:#fff7ed;color:#92400e}
+.error{background:#fef2f2;color:#b91c1c}
+.suggest-box{
+    display:none;
+    position:absolute;
+    left:0;
+    right:0;
+    top:calc(100% + 4px);
+    background:#fff;
+    border:1px solid #d6dde6;
+    border-radius:12px;
+    box-shadow:0 10px 24px rgba(15,23,42,.14);
+    z-index:20;
+    max-height:260px;
+    overflow:auto;
+}
+.suggest-box.open{display:block}
+.suggest-item{
+    padding:10px 12px;
+    border-bottom:1px solid #edf2f7;
+    cursor:pointer;
+    font-size:13px;
+}
+.suggest-item:last-child{border-bottom:none}
+.suggest-item:hover{
+    background:#fff1f2;
+}
+.suggest-name{
+    font-weight:800;
+    color:#111827;
+}
+.suggest-meta{
+    margin-top:3px;
+    color:#6b7280;
+    font-size:12px;
+    font-weight:700;
+}
+.deferral-wrap{
+    position:relative;
+}
+.ghostHint{
+    display:none;
+    margin-top:6px;
+    padding:8px 10px;
+    background:#f3f4f6;
+    border:1px dashed #cbd5e1;
+    color:#6b7280;
+    border-radius:10px;
+    font-size:12px;
+    font-weight:800;
+}
+.ghostHint.show{display:block}
+.deferralChipWrap{
+    display:none;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-top:7px;
+}
+.deferralChipWrap.open{
+    display:flex;
+}
+.deferralChip{
+    border:none;
+    border-radius:999px;
+    background:#eef2f7;
+    color:#475569;
+    padding:6px 10px;
+    font-size:12px;
+    font-weight:800;
+    min-height:0;
+    cursor:pointer;
+}
+.deferralChip:hover{
+    background:#fee2e2;
+    color:#8b0000;
+}
+.actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+}
+.table-wrap{
+    overflow:auto;
+    max-height:420px;
+    border:1px solid #d6dde6;
+    border-radius:12px;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:900px;
+}
+th,td{
+    border:1px solid #d6dde6;
+    padding:8px 10px;
+    font-size:13px;
+    text-align:center;
+    vertical-align:middle;
+}
+th{
+    background:#f8fafc;
+    font-weight:800;
+    color:#374151;
+}
+td:first-child,th:first-child{
+    text-align:left;
+    font-weight:700;
+}
+.empty{
+    padding:20px;
+    text-align:center;
+    color:#6b7280;
+    border:1px dashed #d6dde6;
+    border-radius:10px;
+}
+.note{
+    color:#6b7280;
+    font-size:12px;
+    font-weight:700;
+    line-height:1.5;
+    margin-top:8px;
+}
+@media(max-width:980px){
+    .form-grid{grid-template-columns:1fr 1fr}
+    .field.span-2,.field.span-3,.field.span-6{grid-column:span 2}
+}
+@media(max-width:640px){
+    .form-grid{grid-template-columns:1fr}
+    .field.span-2,.field.span-3,.field.span-6{grid-column:span 1}
+    header{font-size:20px}
+}
+</style>
+</head>
+
+<body>
+<header>Donor Database Deferrals</header>
+
+<div class="page">
+    <div id="statusBox" class="status info">Loading deferral page...</div>
+
+    <div class="card">
+        <h3 style="margin-top:0;color:#991b1b">Deferral Data Input</h3>
+
+        <div class="form-grid">
+            <div class="field">
+                <label for="deferralDate">Date</label>
+                <input type="date" id="deferralDate">
+            </div>
+
+            <div class="field span-2">
+                <label for="liveSearch">Live Search</label>
+                <input type="text" id="liveSearch" autocomplete="off" placeholder="Search existing donor by name / serial / blood type">
+                <div id="donorSuggestBox" class="suggest-box"></div>
+            </div>
+
+            <div class="field">
+                <label for="surname">Surname</label>
+                <input type="text" id="surname" autocomplete="off" placeholder="SURNAME">
+            </div>
+
+            <div class="field">
+                <label for="firstName">First Name</label>
+                <input type="text" id="firstName" autocomplete="off" placeholder="FIRST NAME">
+            </div>
+
+            <div class="field">
+                <label for="age">Age</label>
+                <input type="number" id="age" min="0" max="120" placeholder="Age">
+            </div>
+
+            <div class="field">
+                <label for="sex">Sex</label>
+                <select id="sex">
+                    <option value="">Select Sex</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+
+            <div class="field span-3">
+                <label for="deferralReason">Deferral</label>
+                <div class="deferral-wrap">
+                    <input type="text" id="deferralReason" autocomplete="off" placeholder="Example: h = Low Hemoglobin, hy = Hypertension, dental = Tooth Extraction">
+                    <div id="deferralGhost" class="ghostHint"></div>
+                    <div id="deferralChips" class="deferralChipWrap"></div>
+                </div>
+            </div>
+
+            <div class="field span-3">
+                <label>&nbsp;</label>
+                <div class="actions">
+                    <button class="btn-red" onclick="saveDeferral()">Save Deferral</button>
+                    <button class="btn-gray" onclick="clearForm()">Clear</button>
+                    <button class="btn-blue" onclick="loadRecentDeferrals()">Reload List</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="note">Deferral suggestions use common blood donor deferral terms and aliases. You can still type and save any exact deferral wording used by your blood service.</div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0;color:#991b1b">Recent Deferrals</h3>
+        <div id="recentDeferrals"></div>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
+};
+
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const fs = firebase.firestore();
+
+let currentUser = null;
+let donorIndex = [];
+let selectedDonorId = "";
+let selectedDeferralCanonical = "";
+
+const COMMON_DEFERRALS = [
+    {label:"Low Hemoglobin / Anemia", keys:["h","hb","low hb","low hemoglobin","hemoglobin","haemoglobin","anemia","anaemia","low hematocrit","low hct"]},
+    {label:"High Hemoglobin / Polycythemia", keys:["high hemoglobin","high hb","polycythemia","polycythaemia","high hematocrit","high hct"]},
+    {label:"Hypertension / High Blood Pressure", keys:["hy","hypertension","high blood pressure","high bp","bp high","elevated blood pressure"]},
+    {label:"Hypotension / Low Blood Pressure", keys:["hypotension","low blood pressure","low bp","bp low"]},
+    {label:"Dental Procedure / Tooth Extraction", keys:["dental","tooth","tooth extraction","extraction","dental surgery","oral surgery","root canal"]},
+    {label:"Fever", keys:["fever","febrile","temperature","high temperature"]},
+    {label:"Cough / Colds", keys:["cough","cold","colds","sore throat","runny nose","upper respiratory"]},
+    {label:"Flu-like Symptoms / Influenza", keys:["flu","influenza","flu like","body malaise","chills"]},
+    {label:"COVID-19 Infection / Exposure", keys:["covid","covid19","sars cov 2","coronavirus","covid exposure"]},
+    {label:"Dengue Infection / Recent Dengue", keys:["dengue","dengue fever"]},
+    {label:"Malaria Risk / Malaria History", keys:["malaria","malarial","malaria history"]},
+    {label:"Travel to Malaria-Endemic Area", keys:["travel malaria","endemic","malaria area","malaria travel"]},
+    {label:"Recent Vaccination", keys:["vaccine","vaccination","immunization","immunisation","booster"]},
+    {label:"Antibiotic Intake / Current Infection Treatment", keys:["antibiotic","antibiotics","amoxicillin","azithromycin","infection treatment"]},
+    {label:"Medication Deferral", keys:["medicine","medication","meds","drug intake","maintenance drug"]},
+    {label:"Aspirin / Antiplatelet Intake", keys:["aspirin","antiplatelet","clopidogrel"]},
+    {label:"Anticoagulant / Blood Thinner", keys:["anticoagulant","blood thinner","warfarin","heparin","rivaroxaban","apixaban"]},
+    {label:"Isotretinoin / Acne Medication", keys:["isotretinoin","accutane","acne medication"]},
+    {label:"Finasteride / Dutasteride", keys:["finasteride","dutasteride","proscar","avodart"]},
+    {label:"Acitretin / Etretinate", keys:["acitretin","etretinate","soriatane"]},
+    {label:"Methotrexate / Immunosuppressant", keys:["methotrexate","immunosuppressant","immunosuppression"]},
+    {label:"Steroid Intake", keys:["steroid","prednisone","corticosteroid"]},
+    {label:"Recent Surgery", keys:["surgery","operation","operative","post op"]},
+    {label:"Minor Procedure / Wound Suturing", keys:["minor procedure","suturing","stitches","laceration"]},
+    {label:"Endoscopy / Colonoscopy", keys:["endoscopy","colonoscopy","gastroscopy"]},
+    {label:"Tattoo", keys:["tattoo","body art"]},
+    {label:"Piercing", keys:["piercing","ear piercing","body piercing"]},
+    {label:"Acupuncture", keys:["acupuncture"]},
+    {label:"Blood Transfusion History", keys:["transfusion","blood transfusion","received blood"]},
+    {label:"Organ / Tissue Transplant", keys:["transplant","organ transplant","tissue transplant"]},
+    {label:"Pregnancy", keys:["pregnant","pregnancy","gravida"]},
+    {label:"Breastfeeding / Lactation", keys:["breastfeeding","lactating","lactation"]},
+    {label:"Miscarriage / Abortion", keys:["miscarriage","abortion"]},
+    {label:"Menstruation with Symptoms", keys:["menstruation","period","dysmenorrhea","heavy flow"]},
+    {label:"Underweight / Low Body Weight", keys:["underweight","low weight","weight","below weight"]},
+    {label:"Age Below Eligible Limit", keys:["minor","underage","age below","below age"]},
+    {label:"Age Above Eligible Limit", keys:["overage","age above","above age","senior age"]},
+    {label:"Recent Blood Donation Interval", keys:["recent donation","interval","donated recently","less than 3 months","less than 2 months"]},
+    {label:"Alcohol Intake", keys:["alcohol","liquor","drunk","intoxicated","hangover"]},
+    {label:"Lack of Sleep / Fatigue", keys:["sleep","no sleep","lack of sleep","fatigue","tired"]},
+    {label:"High-risk Sexual Exposure", keys:["high risk","sexual exposure","multiple partner","unsafe sex"]},
+    {label:"Injection Drug Use", keys:["injection drug","iv drug","drug abuse","needle sharing"]},
+    {label:"HIV / AIDS Risk or Infection", keys:["hiv","aids","human immunodeficiency"]},
+    {label:"Hepatitis B / Hepatitis C", keys:["hepatitis","hep b","hbv","hep c","hcv"]},
+    {label:"Syphilis / Reactive Screening History", keys:["syphilis","vdrl","rpr","treponema"]},
+    {label:"Tuberculosis", keys:["tb","tuberculosis","ptb"]},
+    {label:"Diabetes Mellitus - Uncontrolled / Insulin Use", keys:["diabetes","dm","insulin","uncontrolled sugar","high sugar"]},
+    {label:"Heart Disease / Cardiac Condition", keys:["heart","cardiac","angina","myocardial","arrhythmia"]},
+    {label:"Stroke / Cerebrovascular Disease", keys:["stroke","cva","cerebrovascular"]},
+    {label:"Cancer / Malignancy", keys:["cancer","malignancy","tumor","tumour","chemotherapy"]},
+    {label:"Epilepsy / Seizure", keys:["epilepsy","seizure","convulsion"]},
+    {label:"Asthma Attack / Respiratory Distress", keys:["asthma","wheezing","respiratory distress"]},
+    {label:"Kidney Disease", keys:["kidney","renal","dialysis"]},
+    {label:"Liver Disease", keys:["liver","cirrhosis","jaundice"]},
+    {label:"Bleeding Disorder", keys:["bleeding disorder","hemophilia","haemophilia","coagulopathy"]},
+    {label:"Autoimmune Disease", keys:["autoimmune","lupus","sle"]},
+    {label:"Allergy / Allergic Reaction", keys:["allergy","allergic","urticaria","hives"]},
+    {label:"Skin Infection / Open Wound", keys:["skin infection","wound","boil","abscess","cellulitis"]},
+    {label:"Needle Phobia / Donor Anxiety", keys:["needle phobia","anxiety","fainting fear","panic"]},
+    {label:"Failed Venipuncture / Poor Vein", keys:["failed vein","poor vein","vein","venipuncture failed"]},
+    {label:"No Valid Identification", keys:["no id","no identification","invalid id"]},
+    {label:"Incomplete Consent / Donor Refusal", keys:["no consent","refused","donor refusal","incomplete consent"]}
+];
+
+function setStatus(msg,type){
+    const el = document.getElementById("statusBox");
+    el.className = "status " + type;
+    el.textContent = msg;
+}
+
+function todayISO(){
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function esc(s){
+    return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+}
+
+function norm(s){
+    return String(s || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9+ -]/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+}
+
+function normSex(v){
+    const s = String(v || "").toUpperCase().trim();
+    if(s === "M" || s === "MALE") return "Male";
+    if(s === "F" || s === "FEMALE") return "Female";
+    return "";
+}
+
+function parseAge(v){
+    if(v === null || v === undefined || v === "") return "";
+    const n = Number(String(v).match(/\d{1,3}/)?.[0] || "");
+    return (n >= 0 && n <= 120) ? n : "";
+}
+
+function donorName(r){
+    return [r.surname, r.firstName || r.firstname, r.middleName].filter(Boolean).join(", ");
+}
+
+function isVisibleDonor(r){
+    if(!r || typeof r !== "object") return false;
+    if(r.isDeleted === true) return false;
+    if(typeof r.deletedBatchId === "string" && r.deletedBatchId.trim() !== "") return false;
+    return true;
+}
+
+function getDonorSearchText(r){
+    return [
+        r.serialNumber,
+        r.surname,
+        r.firstName,
+        r.firstname,
+        r.middleName,
+        r.bloodType,
+        r.sex,
+        r.age
+    ].join(" ").toLowerCase();
+}
+
+async function loadDonorIndex(){
+    try{
+        setStatus("Loading donor search index...","info");
+        const snap = await fs.collection("donorDatabase").get();
+        const arr = [];
+        snap.forEach(doc => {
+            const r = {id:doc.id, ...doc.data()};
+            if(isVisibleDonor(r)){
+                r._search = getDonorSearchText(r);
+                arr.push(r);
+            }
+        });
+        donorIndex = arr;
+        setStatus(`Ready. Donor search index loaded (${donorIndex.length} donors).`,"ok");
+    }catch(e){
+        console.error(e);
+        donorIndex = [];
+        setStatus("Deferral page loaded, but donor live search failed: " + (e.message || e),"warn");
+    }
+}
+
+function renderDonorSuggestions(){
+    const q = norm(document.getElementById("liveSearch").value);
+    const box = document.getElementById("donorSuggestBox");
+
+    if(q.length < 2){
+        box.classList.remove("open");
+        box.innerHTML = "";
+        return;
+    }
+
+    const words = q.split(" ").filter(Boolean);
+    const matches = donorIndex
+        .filter(r => words.every(w => r._search.includes(w)))
+        .slice(0,10);
+
+    if(!matches.length){
+        box.innerHTML = `<div class="suggest-item"><div class="suggest-meta">No matching donor found. You can still type the details manually.</div></div>`;
+        box.classList.add("open");
+        return;
+    }
+
+    box.innerHTML = matches.map(r => {
+        const displayName = donorName(r) || "Unnamed donor";
+        const meta = [
+            r.serialNumber ? "Serial: " + r.serialNumber : "",
+            r.age ? "Age: " + r.age : "",
+            r.sex ? "Sex: " + r.sex : "",
+            r.bloodType ? "BT: " + r.bloodType : ""
+        ].filter(Boolean).join(" | ");
+
+        return `
+            <div class="suggest-item" onclick="selectDonor('${esc(r.id)}')">
+                <div class="suggest-name">${esc(displayName)}</div>
+                <div class="suggest-meta">${esc(meta)}</div>
+            </div>
+        `;
+    }).join("");
+
+    box.classList.add("open");
+}
+
+window.selectDonor = function(id){
+    const r = donorIndex.find(x => x.id === id);
+    if(!r) return;
+
+    selectedDonorId = r.id;
+    document.getElementById("liveSearch").value = donorName(r);
+    document.getElementById("surname").value = String(r.surname || "").toUpperCase();
+    document.getElementById("firstName").value = String(r.firstName || r.firstname || "").toUpperCase();
+    document.getElementById("age").value = parseAge(r.age);
+    document.getElementById("sex").value = normSex(r.sex || "");
+
+    document.getElementById("donorSuggestBox").classList.remove("open");
+};
+
+function deferralScore(option, query){
+    const q = norm(query);
+    if(!q) return 0;
+
+    if(q === "h" && option.label === "Low Hemoglobin / Anemia") return 1000;
+    if(q === "hy" && option.label === "Hypertension / High Blood Pressure") return 1000;
+
+    const label = norm(option.label);
+    const keys = option.keys.map(norm);
+    const labelWords = label.split(" ");
+
+    if(label.startsWith(q)) return 900;
+    if(keys.some(k => k === q)) return 850;
+    if(keys.some(k => k.startsWith(q))) return 820;
+    if(labelWords.some(w => w.startsWith(q))) return 780;
+    if(label.includes(q)) return 620;
+    if(keys.some(k => k.includes(q))) return 600;
+
+    return 0;
+}
+
+function findDeferralMatches(query){
+    return COMMON_DEFERRALS
+        .map(opt => ({...opt, score:deferralScore(opt, query)}))
+        .filter(opt => opt.score > 0)
+        .sort((a,b) => b.score - a.score || a.label.localeCompare(b.label))
+        .slice(0,8);
+}
+
+function updateDeferralSuggestions(){
+    const input = document.getElementById("deferralReason");
+    const ghost = document.getElementById("deferralGhost");
+    const chips = document.getElementById("deferralChips");
+    const q = input.value.trim();
+
+    const matches = findDeferralMatches(q);
+    const best = matches[0];
+
+    if(!q || !best){
+        ghost.classList.remove("show");
+        ghost.textContent = "";
+        chips.classList.remove("open");
+        chips.innerHTML = "";
+        return;
+    }
+
+    ghost.textContent = "Smart suggestion: " + best.label;
+    ghost.classList.add("show");
+
+    chips.innerHTML = matches.map(m => `
+        <button type="button" class="deferralChip" onclick="acceptDeferral('${esc(m.label)}')">${esc(m.label)}</button>
+    `).join("");
+    chips.classList.add("open");
+}
+
+window.acceptDeferral = function(label){
+    document.getElementById("deferralReason").value = label;
+    selectedDeferralCanonical = label;
+    updateDeferralSuggestions();
+    document.getElementById("deferralReason").focus();
+};
+
+window.clearForm = function(){
+    selectedDonorId = "";
+    selectedDeferralCanonical = "";
+    document.getElementById("deferralDate").value = todayISO();
+    document.getElementById("liveSearch").value = "";
+    document.getElementById("surname").value = "";
+    document.getElementById("firstName").value = "";
+    document.getElementById("age").value = "";
+    document.getElementById("sex").value = "";
+    document.getElementById("deferralReason").value = "";
+    document.getElementById("donorSuggestBox").classList.remove("open");
+    updateDeferralSuggestions();
+};
+
+window.saveDeferral = async function(){
+    if(!currentUser){
+        setStatus("You are not logged in.","error");
+        return;
+    }
+
+    const date = document.getElementById("deferralDate").value;
+    const surname = document.getElementById("surname").value.trim().toUpperCase();
+    const firstName = document.getElementById("firstName").value.trim().toUpperCase();
+    const age = parseAge(document.getElementById("age").value);
+    const sex = document.getElementById("sex").value;
+    const typedDeferral = document.getElementById("deferralReason").value.trim();
+    const best = findDeferralMatches(typedDeferral)[0];
+    const canonicalDeferral = selectedDeferralCanonical || (best ? best.label : typedDeferral);
+
+    if(!date){
+        setStatus("Please enter the deferral date.","error");
+        return;
+    }
+    if(!surname || !firstName){
+        setStatus("Please enter surname and first name.","error");
+        return;
+    }
+    if(age === ""){
+        setStatus("Please enter a valid age.","error");
+        return;
+    }
+    if(!sex){
+        setStatus("Please select sex.","error");
+        return;
+    }
+    if(!typedDeferral){
+        setStatus("Please enter the deferral reason.","error");
+        return;
+    }
+
+    try{
+        setStatus("Saving deferral...","info");
+
+        await fs.collection("donorDeferrals").add({
+            date,
+            collectionYear:Number(date.slice(0,4)),
+            collectionMonth:Number(date.slice(5,7)),
+            collectionMonthKey:date.slice(0,7),
+            liveSearchText:document.getElementById("liveSearch").value.trim(),
+            linkedDonorId:selectedDonorId || "",
+            surname,
+            firstName,
+            age:Number(age),
+            sex,
+            deferral:typedDeferral,
+            deferralCanonical:canonicalDeferral,
+            createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+            createdByUid:currentUser.uid || "",
+            createdByEmail:currentUser.email || ""
+        });
+
+        setStatus("Deferral saved successfully.","ok");
+        clearForm();
+        loadRecentDeferrals();
+    }catch(e){
+        console.error(e);
+        setStatus("Failed to save deferral: " + (e.message || e),"error");
+    }
+};
+
+window.loadRecentDeferrals = async function(){
+    const box = document.getElementById("recentDeferrals");
+    try{
+        box.innerHTML = `<div class="empty">Loading recent deferrals...</div>`;
+
+        const snap = await fs.collection("donorDeferrals")
+            .orderBy("createdAt","desc")
+            .limit(100)
+            .get();
+
+        const rows = [];
+        snap.forEach(doc => rows.push({id:doc.id, ...doc.data()}));
+
+        if(!rows.length){
+            box.innerHTML = `<div class="empty">No deferrals recorded yet.</div>`;
+            return;
+        }
+
+        box.innerHTML = `
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>DATE</th>
+                            <th>SURNAME</th>
+                            <th>FIRST NAME</th>
+                            <th>AGE</th>
+                            <th>SEX</th>
+                            <th>DEFERRAL</th>
+                            <th>SMART CATEGORY</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(r => `
+                            <tr>
+                                <td>${esc(r.date || "")}</td>
+                                <td>${esc(r.surname || "")}</td>
+                                <td>${esc(r.firstName || "")}</td>
+                                <td>${esc(r.age ?? "")}</td>
+                                <td>${esc(r.sex || "")}</td>
+                                <td>${esc(r.deferral || "")}</td>
+                                <td>${esc(r.deferralCanonical || "")}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }catch(e){
+        console.error(e);
+        box.innerHTML = `<div class="empty">Could not load deferrals: ${esc(e.message || e)}</div>`;
+    }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("deferralDate").value = todayISO();
+
+    document.getElementById("liveSearch").addEventListener("input", renderDonorSuggestions);
+    document.getElementById("deferralReason").addEventListener("input", updateDeferralSuggestions);
+    document.getElementById("deferralReason").addEventListener("keydown", e => {
+        const best = findDeferralMatches(e.target.value)[0];
+        if((e.key === "Tab" || e.key === "Enter") && best && e.target.value.trim()){
+            e.preventDefault();
+            acceptDeferral(best.label);
+        }
+    });
+
+    document.addEventListener("click", e => {
+        const live = document.getElementById("liveSearch");
+        const donorBox = document.getElementById("donorSuggestBox");
+        if(!live.contains(e.target) && !donorBox.contains(e.target)){
+            donorBox.classList.remove("open");
+        }
+    });
+
+    auth.onAuthStateChanged(async user => {
+        if(!user){
+            window.location.href = "index.html";
+            return;
+        }
+        currentUser = user;
+        await loadDonorIndex();
+        await loadRecentDeferrals();
+    });
+});
+</script>
+</body>
+</html>
