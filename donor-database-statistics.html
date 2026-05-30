@@ -1244,17 +1244,10 @@ function mLabel(meta){return`${MONTHS[(meta.month||1)-1]} ${meta.year||""}`.trim
 function flatMonths(g){const r=[];Object.keys(g).sort((a,b)=>b.localeCompare(a)).forEach(y=>Object.keys(g[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>r.push(g[y][k])));return r;}
 
 
-const COLLAPSE_STORE_KEY="donorDatabaseStatsCollapseState";
-let reportCollapseState=loadReportCollapseState();
-function loadReportCollapseState(){
-  try{
-    const raw=localStorage.getItem(COLLAPSE_STORE_KEY);
-    return raw?JSON.parse(raw):{};
-  }catch(e){return {};}
-}
-function saveReportCollapseState(){
-  try{localStorage.setItem(COLLAPSE_STORE_KEY,JSON.stringify(reportCollapseState));}catch(e){}
-}
+// Collapse state is kept only while this page is open.
+// Each fresh navigation to Statistics starts expanded, then you can manually collapse sections.
+let reportCollapseState={};
+function saveReportCollapseState(){}
 function getReportCollapseState(key,defaultOpen=true){
   return Object.prototype.hasOwnProperty.call(reportCollapseState,key)?reportCollapseState[key]!==false:defaultOpen;
 }
@@ -1484,9 +1477,9 @@ function renderExtraSummary(donors){
     </table>
   </div>`;
 
-  el.innerHTML=`<div class="extra-summary-grid">
-    ${collapsibleBlock("extra:deferrals",`Deferral Count Per Type — ${n(defTotal)}`,"tf",deferralTable,true)}
+  el.innerHTML=`<div>
     ${collapsibleBlock("extra:amount",`Amount Status Count — ${n(amountTotal)}`,"te",amountTable,true)}
+    ${collapsibleBlock("extra:deferrals",`Deferral Count Per Type — ${n(defTotal)}`,"tf",deferralTable,true)}
   </div>`;
 }
 
@@ -1522,11 +1515,11 @@ function renderSearchReport(g,q){
     const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
     return`<div class="year-block">
       <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month(s)</span></div>
-      <div class="year-content ${yi===0?"open":""}">
+      <div class="year-content open">
         ${mks.map((k,mi)=>{const s=g[y][k];const rows=aggSearch(s.fieldDetails,q);return`
           <div class="month-block">
             <div class="month-head" onclick="tNext(this)"><span>${MONTHS[(s._meta.month||1)-1]}</span><span>${n(rows.reduce((a,b)=>a+Number(b.totalDonors||0),0))} donor(s)</span></div>
-            <div class="month-content ${yi===0&&mi===0?"open":""}">
+            <div class="month-content open">
               <div class="sheet-block"><div class="sheet-title tb">Group Search Results</div>
               <div class="search-note">Showing matching groups with total donor counts.</div>
               ${rows.length?`<div class="table-wrap"><table>
@@ -1550,7 +1543,7 @@ function renderReport(g){
     const mks=Object.keys(g[y]).sort((a,b)=>b.localeCompare(a));
     return`<div class="year-block">
       <div class="year-head" onclick="tNext(this)"><span>${y}</span><span>${mks.length} month group(s)</span></div>
-      <div class="year-content ${yi===0?"open":""}">
+      <div class="year-content open">
         ${mks.map((k,mi)=>{
           const s=g[y][k];
           const mn=MONTHS[(s._meta.month||1)-1];
@@ -1607,9 +1600,24 @@ function renderReport(g){
             <tr class="sub-row"><td>Total</td><td>${n(s.age["16-17"])}</td><td>${n(s.age["18-20"])}</td><td>${n(s.age["21-30"])}</td><td>${n(s.age["31-40"])}</td><td>${n(s.age["41-50"])}</td><td>${n(s.age["51-60"])}</td><td>${n(s.age["60-65"])}</td><td>${n(s.age["66 & above"])}</td><td>${n(s.age["Total"])}</td></tr>
           </table></div>`;
 
+          const ageRangeHtml=`<div class="table-wrap"><table>
+            <tr><th>Category</th><th>Count</th></tr>
+            <tr><td>Donors under 18 years</td><td>${n(s.agePicture["Under 18"])}</td></tr>
+            <tr><td>Donors aged 18 to 24 years</td><td>${n(s.agePicture["18-24"])}</td></tr>
+            <tr><td>Donors aged 25 to 44 years</td><td>${n(s.agePicture["25-44"])}</td></tr>
+            <tr><td>Donors aged 45 to 64 years</td><td>${n(s.agePicture["45-64"])}</td></tr>
+            <tr><td>Donors aged 65 years or older</td><td>${n(s.agePicture["65 & above"])}</td></tr>
+            <tr class="sub-row"><td>Total number of donations</td><td>${n(s.agePicture["Total donations"])}</td></tr>
+          </table></div>`;
+
+          const youthHtml=`<div class="table-wrap"><table>
+            <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
+            <tr><td>16-25 Years Old</td><td>${n(s.youth1625Sex["Male"])}</td><td>${n(s.youth1625Sex["Female"])}</td><td>${n(s.youth1625Sex["Total"])}</td></tr>
+          </table></div>`;
+
           return`<div class="month-block">
             <div class="month-head" onclick="tNext(this)"><span>${mn}</span><span>${n(s.totalDonors)} donor entries</span></div>
-            <div class="month-content ${yi===0&&mi===0?"open":""}">
+            <div class="month-content open">
               ${collapsibleBlock(`${baseKey}:A`,"A. Office Bleeding","ta",officeHtml,true)}
               ${collapsibleBlock(`${baseKey}:B`,"B. Field Donation","tb",fieldHtml,true)}
               ${collapsibleBlock(`${baseKey}:II`,"II. Blood Type Distribution of Blood Collection","tc",bloodTypeHtml,true)}
@@ -1618,23 +1626,8 @@ function renderReport(g){
               ${collapsibleBlock(`${baseKey}:V`,"V. Sex Distribution of Donors","tf",sexHtml,true)}
               ${collapsibleBlock(`${baseKey}:VI`,"VI. Distribution of Donors according to Frequency of Donation","tg",frequencyHtml,true)}
               ${collapsibleBlock(`${baseKey}:VII`,"VII. Distribution of Donors By Age Group","th",ageHtml,true)}
-
-              <div class="sheet-block"><div class="sheet-title ti">VIII. Donor Statistics by Age Range</div>
-              <div class="table-wrap"><table>
-                <tr><th>Category</th><th>Count</th></tr>
-                <tr><td>Donors under 18 years</td><td>${n(s.agePicture["Under 18"])}</td></tr>
-                <tr><td>Donors aged 18 to 24 years</td><td>${n(s.agePicture["18-24"])}</td></tr>
-                <tr><td>Donors aged 25 to 44 years</td><td>${n(s.agePicture["25-44"])}</td></tr>
-                <tr><td>Donors aged 45 to 64 years</td><td>${n(s.agePicture["45-64"])}</td></tr>
-                <tr><td>Donors aged 65 years or older</td><td>${n(s.agePicture["65 & above"])}</td></tr>
-                <tr class="sub-row"><td>Total number of donations</td><td>${n(s.agePicture["Total donations"])}</td></tr>
-              </table></div></div>
-
-              <div class="sheet-block"><div class="sheet-title tj">IX. Monthly Donors Aged 16-25 Years Old</div>
-              <div class="table-wrap"><table>
-                <tr><th></th><th>Male</th><th>Female</th><th>Total</th></tr>
-                <tr><td>16-25 Years Old</td><td>${n(s.youth1625Sex["Male"])}</td><td>${n(s.youth1625Sex["Female"])}</td><td>${n(s.youth1625Sex["Total"])}</td></tr>
-              </table></div></div>
+              ${collapsibleBlock(`${baseKey}:VIII`,"VIII. Donor Statistics by Age Range","ti",ageRangeHtml,true)}
+              ${collapsibleBlock(`${baseKey}:IX`,"IX. Monthly Donors Aged 16-25 Years Old","tj",youthHtml,true)}
 
             </div>
           </div>`;}).join("")}
