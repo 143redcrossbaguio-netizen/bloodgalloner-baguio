@@ -497,8 +497,8 @@ function getDonorTypes(r){
 function primaryType(r){
   const t=getDonorTypes(r);
   if(t.includes("MBD"))return"MBD";
-  if(t.includes("Walk-in"))return"Walk-in";
   if(t.includes("Patient Directed"))return"Patient Directed";
+  if(t.includes("Walk-in"))return"Walk-in";
   return"";
 }
 function isCategorized(r){return getDonorTypes(r).length>0;}
@@ -620,15 +620,40 @@ function resolvePartnerAlias(stripped){
   return stripped;
 }
 
+function knownGroupAliasName(v){
+  const norm=_aliasNormalize(v);
+  const compact=norm.replace(/\s+/g,"");
+  if(
+    norm==="P PARK" ||
+    compact==="PPARK" ||
+    compact==="PEOPLESPARK" ||
+    compact==="PEOPLEPARK" ||
+    norm.includes("PEOPLES PARK") ||
+    norm.includes("PEOPLE PARK") ||
+    norm==="MALCOLM" ||
+    norm==="MALCOLM SQUARE"
+  ) return "P PARK";
+  return "";
+}
+
+function displayFieldPlace(groupName, place){
+  const g=knownGroupAliasName(groupName)||normKey(groupName||"");
+  if(g==="P PARK")return "BAGUIO CITY";
+  return String(place||"").trim();
+}
+
 function normKey(v){
   let s=String(v||"").toUpperCase().trim();
-  s=s.replace(/\(.*?\)/g," ").replace(/[_.,/\\]+/g," ")
+  s=s.replace(/[’']/g,"")
+     .replace(/\(.*?\)/g," ").replace(/[_.,/\\]+/g," ")
      .replace(/\s*-\s*\d+\s*$/g," ").replace(/\d+\s*$/g," ")
      .replace(/\bNO\.?\s*\d+\b/g," ").replace(/\b#\s*\d+\b/g," ")
      .replace(/\b(BATCH|TEAM|GROUP)\s*\d+\b/g," ")
      .replace(/\s+/g," ").trim();
-  // Collapse known partner aliases (PP / P.PARK / MALCOLM → PEOPLES PARK, etc.)
+  // Collapse known partner aliases (P. PARK / PEOPLE'S PARK / MALCOLM → P PARK, etc.)
   s=resolvePartnerAlias(s);
+  const known=knownGroupAliasName(s);
+  if(known)return known;
   return s;
 }
 function smartName(v){return normKey(v||"");}
@@ -801,16 +826,10 @@ function mkStats(){
 }
 
 // ─── APPLY ONE RECORD ─────────────────────────────────────────────────────────
-// A donor can belong to MULTIPLE categories on the same record — e.g. a Walk-in
-// who is also a Patient Directed donor. The old code picked one "primary" type
-// via primaryType() and added their bag counts to only that bucket, so the
-// other category(ies) were silently dropped from the per-category breakdowns.
-//
-// New behaviour: bag counts are added to EVERY type the record belongs to.
-// totalDonors still increments once per record (no double-counting of people).
-// Per-category column totals can now legitimately sum to more than totalDonors
-// when overlap exists — that's correct: column totals are "donations counted
-// in this category", not "unique donors".
+// Donor entries are counted once. If a record contains overlapping donor-type
+// markers, the report uses one primary category so Office Bleeding + Field
+// Donation does not inflate the monthly total. Priority: MBD → Patient Directed
+// → Walk-in.
 function applyDonor(s,r){
   const iso  =getDate(r);
   const types=getDonorTypes(r);                // all categories this record falls into
@@ -828,14 +847,11 @@ function applyDonor(s,r){
       if(!s.dailyBreakdown[iso]) s.dailyBreakdown[iso]={total:0,walkIn:0,patientDirected:0,mbd:{}};
       const dbd=s.dailyBreakdown[iso];
       dbd.total++;
-      // Daily per-category counts: count this record in EACH category it
-      // belongs to, so the daily breakdown matches the per-category totals.
-      if(types.includes("Walk-in")) dbd.walkIn++;
-      if(types.includes("Patient Directed")) dbd.patientDirected++;
-      if(types.includes("MBD")){
-        // Pass through normKey so PP / P.PARK / MALCOLM SQUARE all roll up to
-        // PEOPLES PARK (or whatever canonical name is set in partner-organization.html)
-        // instead of showing the same partner under multiple separate keys.
+      // Daily per-category counts use the same one-primary-category rule as
+      // the main Office / Field tables, avoiding inflated totals from overlap.
+      if(pType==="Walk-in") dbd.walkIn++;
+      if(pType==="Patient Directed") dbd.patientDirected++;
+      if(pType==="MBD"){
         const rawName=String(r.mbdDetails||"MBD").trim().toUpperCase()||"MBD";
         const gname=normKey(rawName)||rawName;
         dbd.mbd[gname]=(dbd.mbd[gname]||0)+1;
@@ -847,10 +863,8 @@ function applyDonor(s,r){
     s.bloodType[bt]=(s.bloodType[bt]||0)+1;
     if(s.bagTypeBloodType[bag]) s.bagTypeBloodType[bag][bt]=(s.bagTypeBloodType[bag][bt]||0)+1;
 
-    // Apply bags to EACH type this record belongs to. A donor who is both
-    // Walk-in and Patient Directed contributes their bags to both columns;
-    // a Walk-in + MBD contributes to both Walk-in and MBD.
-    if(types.includes("MBD")){
+    // Apply bags to only one primary category, matching total donor entries.
+    if(pType==="MBD"){
       const grp =String(r.mbdDetails||"").trim().toUpperCase()||"MBD";
       const smart = smartFindMapping(grp);
       const map = (smart.confidence >= 0.7) ? smart.mapping : null;
@@ -868,7 +882,7 @@ function applyDonor(s,r){
       const d=parseDate(iso);
       const dd=d?`${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}`:"";
       const dname=map?(map.partnerName||grp||"Unspecified"):smartName(grp||"Unspecified");
-      const dplace=map&&map.place?map.place:(r.cityProvince||r.address||"");
+      const dplace=displayFieldPlace(dname,map&&map.place?map.place:(r.cityProvince||r.address||""));
       const det={name:dname,place:dplace,date:dd,rawDate:iso,totalDonors:1,"450 cc S":bags.S,"450 cc D":bags.D,"450 cc T":bags.T,"450 cc Q":bags.Q};
       if(cat==="Group")s.fieldDetails.group.push(det);
       else if(cat==="RC143 / BRGY Base")s.fieldDetails.rc143.push(det);
@@ -899,10 +913,10 @@ function applyDonor(s,r){
         }
       }
     }
-    if(types.includes("Walk-in")){
+    if(pType==="Walk-in"){
       addBag(s.officeBleeding["Walk-in"],bags);
     }
-    if(types.includes("Patient Directed")){
+    if(pType==="Patient Directed"){
       addBag(s.officeBleeding["Patient Directed"],bags);
     }
 
@@ -1199,11 +1213,13 @@ function combineRows(rows){
     const d=parseDate(r.rawDate||r.date||"");
     const dateKey=toISO(d)||String(r.rawDate||r.date||"").trim();
     const k=`${nameKey}__${dateKey}`;
-    if(!map[k])map[k]={name:nameKey||r.name||"",place:"",date:r.date||"",rawDate:d,"450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0,totalDonors:0};
+    const placeVal=displayFieldPlace(nameKey||r.name||"",r.place||"");
+    if(!map[k])map[k]={name:nameKey||r.name||"",place:placeVal,date:r.date||"",rawDate:d,"450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0,totalDonors:0};
     map[k]["450 cc S"]+=Number(r["450 cc S"]||0); map[k]["450 cc D"]+=Number(r["450 cc D"]||0);
     map[k]["450 cc T"]+=Number(r["450 cc T"]||0); map[k]["450 cc Q"]+=Number(r["450 cc Q"]||0);
     map[k].totalDonors+=Number(r.totalDonors||0);
-    if(!map[k].place&&r.place)map[k].place=r.place;
+    if(nameKey==="P PARK")map[k].place="BAGUIO CITY";
+    else if(!map[k].place&&placeVal)map[k].place=placeVal;
     if(!map[k].date&&r.date)map[k].date=r.date;
   });
   return Object.values(map).sort((a,b)=>{
