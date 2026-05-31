@@ -363,6 +363,24 @@ button{
     background:white;
 }
 
+.issuedWarning{
+    display:none;
+    margin-top:8px;
+    padding:10px 12px;
+    background:#fff3cd;
+    border:1px solid #ffca28;
+    border-left:5px solid #f9a825;
+    color:#7a4f00;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:bold;
+    line-height:1.4;
+}
+
+.issuedWarning.show{
+    display:block;
+}
+
 @media (max-width: 860px){
     .inline5{
         grid-template-columns:1fr 1fr;
@@ -563,6 +581,7 @@ button{
         <button type="button" class="addBtn" onclick="addIssued()">+</button>
     </div>
 </div>
+<div id="issuedWarning" class="issuedWarning"></div>
 
 <label>6A. BOX CONTAINER</label>
 <input type="number" id="boxContainerQty" placeholder="Qty">
@@ -1177,6 +1196,66 @@ function bindEnterMoveToNextBox(){
   });
 }
 
+
+function collectComponentTotals(rowSelector, typeSelector, qtySelector){
+  const totals = {};
+
+  document.querySelectorAll(rowSelector).forEach(row => {
+    const typeEl = row.querySelector(typeSelector);
+    const qtyEl = row.querySelector(qtySelector);
+
+    if(!typeEl || !qtyEl) return;
+
+    const type = String(typeEl.value || "").toUpperCase().trim();
+    const qty = Number(qtyEl.value) || 0;
+
+    if(type !== "" && qty > 0){
+      totals[type] = (totals[type] || 0) + qty;
+    }
+  });
+
+  return totals;
+}
+
+function componentListText(totals){
+  const list = Object.keys(totals || {}).filter(type => Number(totals[type] || 0) > 0);
+  return list.length ? list.join(", ") : "none";
+}
+
+function validateRequestedIssuedCompatibility(){
+  const warningBox = document.getElementById("issuedWarning");
+  if(!warningBox) return true;
+
+  const requestedTotals = collectComponentTotals(".requestRow", ".requestType", ".requestQty");
+  const issuedTotals = collectComponentTotals(".issuedRow", ".issuedType", ".issuedQty");
+  const strictComponents = ["PC", "FFP", "CRYO"];
+  const warnings = [];
+  const requestedText = componentListText(requestedTotals);
+  const issuedText = componentListText(issuedTotals);
+
+  strictComponents.forEach(type => {
+    if((requestedTotals[type] || 0) > 0 && (issuedTotals[type] || 0) <= 0 && issuedText !== "none"){
+      warnings.push(`Requested ${type} should be issued as ${type}. Current issued: ${issuedText}.`);
+    }
+  });
+
+  strictComponents.forEach(type => {
+    if((issuedTotals[type] || 0) > 0 && (requestedTotals[type] || 0) <= 0 && requestedText !== "none"){
+      warnings.push(`Issued ${type} does not match the requested component/s (${requestedText}). PC, FFP, and CRYO must match exactly.`);
+    }
+  });
+
+  if(warnings.length){
+    warningBox.innerHTML = "⚠️ CHECK ISSUED COMPONENT<br>" + warnings.join("<br>");
+    warningBox.classList.add("show");
+    return false;
+  }
+
+  warningBox.innerHTML = "";
+  warningBox.classList.remove("show");
+  return true;
+}
+
 function renderSearchResults(matches){
   if(!matches.length){
     searchResults.innerHTML = `<div class="searchItem">No matching record found.</div>`;
@@ -1282,6 +1361,7 @@ window.addRequest = function(){
     <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
   `;
   container.appendChild(row);
+  validateRequestedIssuedCompatibility();
 };
 
 window.addIssued = function(){
@@ -1300,6 +1380,8 @@ window.addIssued = function(){
     <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeIssuedTotal();">-</button>
   `;
   container.appendChild(row);
+  computeIssuedTotal();
+  validateRequestedIssuedCompatibility();
 };
 
 window.addWaived = function(){
@@ -1469,6 +1551,7 @@ function computeIssuedTotal(){
 
   document.getElementById("amountPaid").value = total.toFixed(2);
   computeMainDiscountFromPercentOrPrice();
+  validateRequestedIssuedCompatibility();
 }
 
 function computeMainDiscountFromPrice(){
@@ -1603,6 +1686,8 @@ function fillRequestRows(requests){
       </div>
     `;
   }
+
+  validateRequestedIssuedCompatibility();
 }
 
 function fillIssuedRows(issued){
@@ -1641,6 +1726,8 @@ function fillIssuedRows(issued){
       </div>
     `;
   }
+
+  validateRequestedIssuedCompatibility();
 }
 
 function loadEntryIntoForm(id, entry){
@@ -2052,9 +2139,12 @@ document.addEventListener("input", function(e){
   if(
     e.target.classList.contains("issuedQty") ||
     e.target.classList.contains("issuedType") ||
+    e.target.classList.contains("requestQty") ||
+    e.target.classList.contains("requestType") ||
     e.target.id === "boxContainerQty"
   ){
     computeIssuedTotal();
+    validateRequestedIssuedCompatibility();
   }
 
   if(e.target.id === "discountPrice"){
@@ -2086,6 +2176,27 @@ document.addEventListener("input", function(e){
 
   if(e.target.id === "augDiscountPercent"){
     computeAugDiscountFromPercent();
+  }
+});
+
+document.addEventListener("change", function(e){
+  if(
+    e.target.classList.contains("requestType") ||
+    e.target.classList.contains("requestQty") ||
+    e.target.classList.contains("issuedType") ||
+    e.target.classList.contains("issuedQty")
+  ){
+    computeIssuedTotal();
+    validateRequestedIssuedCompatibility();
+  }
+});
+
+document.addEventListener("click", function(e){
+  if(e.target.classList.contains("removeBtn")){
+    setTimeout(() => {
+      computeIssuedTotal();
+      validateRequestedIssuedCompatibility();
+    }, 0);
   }
 });
 
