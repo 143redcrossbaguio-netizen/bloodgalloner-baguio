@@ -349,14 +349,63 @@ border-radius:6px;
 max-height:70vh;
 }
 
-.btColHeader{
-background:#37474f !important;
+.issuedSummaryTable{
+min-width:1250px;
+border-collapse:collapse;
 }
 
-.btColSubHeader{
-background:#546e7a !important;
-color:#fff !important;
+.issuedSummaryTable th,
+.issuedSummaryTable td{
+border:1px solid #cfcfcf;
+padding:7px;
+text-align:center;
+font-size:13px;
 }
+
+.issuedSummaryTable th{
+color:#000;
+font-weight:bold;
+}
+
+.issuedSummaryTable .facilityCol{
+min-width:230px;
+text-align:left;
+background:#ffffff;
+color:#000;
+}
+
+.issuedSummaryTable .componentHeader{
+font-size:14px;
+letter-spacing:1px;
+border-top:3px solid #000;
+border-left:3px solid #000;
+border-right:3px solid #000;
+}
+
+.issuedSummaryTable .groupStart{
+border-left:3px solid #000;
+}
+
+.issuedSummaryTable .groupEnd{
+border-right:3px solid #000;
+}
+
+.issuedSummaryTable .groupBottom{
+border-bottom:3px solid #000;
+}
+
+.compWB{background:#d50000 !important;}
+.compPRBC{background:#ffd11a !important;}
+.compFFP{background:#9ccc65 !important;}
+.compPC{background:#16a9d1 !important;}
+.compCRYO{background:#ffff00 !important;}
+.compTOTAL{background:#f5f5f5 !important;}
+
+.bloodSubO{background:#f5f5f5 !important;}
+.bloodSubA{background:#d9edf7 !important;}
+.bloodSubB{background:#ffe599 !important;}
+.bloodSubAB{background:#ff66c4 !important;}
+
 
 .dashFilterLabel{
 display:inline-block;
@@ -369,10 +418,6 @@ border-radius:12px;
 margin-left:8px;
 vertical-align:middle;
 letter-spacing:0.5px;
-}
-
-.bt-zero{
-color:#bbb;
 }
 
 @media (max-width: 1000px){
@@ -434,6 +479,7 @@ display:block !important;
 
 <div id="dashboardSection"></div>
 <div id="patientServedSection"></div>
+<div id="issuedBloodTypeSummarySection"></div>
 <div id="statisticsContainer"></div>
 
 </div>
@@ -461,6 +507,7 @@ const db = getDatabase(app);
 const statisticsContainer = document.getElementById("statisticsContainer");
 const dashboardSection = document.getElementById("dashboardSection");
 const patientServedSection = document.getElementById("patientServedSection");
+const issuedBloodTypeSummarySection = document.getElementById("issuedBloodTypeSummarySection");
 const monthFilter = document.getElementById("monthFilter");
 const hospitalSearch = document.getElementById("hospitalSearch");
 
@@ -477,7 +524,7 @@ let currentPrices = {
 
 let expandedPatientSections = new Set();
 let expandedHospitalRows = new Set();
-let expandedMainSections = new Set(["dashboard","patientServed"]);
+let expandedMainSections = new Set(["dashboard","patientServed","issuedBloodTypeSummary"]);
 let expandedYears = new Set();
 let expandedMonths = new Set();
 
@@ -568,6 +615,46 @@ function monthName(monthKey){
 
 function emptyComponent(){
     return {WB:0, PRBC:0, PC:0, FFP:0, CRYO:0};
+}
+
+const COMPONENT_SUMMARY_ORDER = ["WB", "PRBC", "FFP", "PC", "CRYO"];
+const ABO_SUMMARY_ORDER = ["O", "A", "B", "AB"];
+
+function emptyIssuedBloodTypeSummary(){
+    const summary = {};
+    COMPONENT_SUMMARY_ORDER.forEach(component => {
+        summary[component] = {};
+        ABO_SUMMARY_ORDER.forEach(abo => {
+            summary[component][abo] = 0;
+        });
+    });
+    return summary;
+}
+
+function normalizeABOGroup(value){
+    const text = String(value || "").toUpperCase().replace(/\s+/g,"").trim();
+    if(!text) return "";
+    if(text.startsWith("AB")) return "AB";
+    if(text.startsWith("A")) return "A";
+    if(text.startsWith("B")) return "B";
+    if(text.startsWith("O")) return "O";
+    return "";
+}
+
+function countIssuedBloodTypeSummary(store, issuedList, bloodType){
+    if(!Array.isArray(issuedList)) return;
+
+    const abo = normalizeABOGroup(bloodType);
+    if(!abo) return;
+
+    issuedList.forEach(item => {
+        const type = String(item.type || "").toUpperCase().trim();
+        const qty = Number(item.qty || 0);
+
+        if(store[type] && store[type][abo] !== undefined){
+            store[type][abo] += qty;
+        }
+    });
 }
 
 function countComponents(store, list){
@@ -748,6 +835,8 @@ function buildReleasingStats(){
         noCharge:{ male:0, female:0, entries:[] }
     };
 
+    const issuedBloodTypeSummary = {};
+
     allEntries.forEach(entry => {
         const dateValue = entry.date || "";
         if(dateValue === "") return;
@@ -769,8 +858,7 @@ function buildReleasingStats(){
                     issued:emptyComponent(),
                     actualIncome:0,
                     computedTotal:0,
-                    boxContainers:0,
-                    btRequested:{}
+                    boxContainers:0
                 }
             };
         }
@@ -784,13 +872,16 @@ function buildReleasingStats(){
                 issued:emptyComponent(),
                 boxContainers:0,
                 computedTotal:0,
-                patients:[],
-                btRequested:{}
+                patients:[]
             };
         }
 
         const m = grouped[month];
         const h = m.hospitals[hospital];
+
+        if(!issuedBloodTypeSummary[hospital]){
+            issuedBloodTypeSummary[hospital] = emptyIssuedBloodTypeSummary();
+        }
 
         m.totals.entries++;
         h.entries++;
@@ -816,15 +907,7 @@ function buildReleasingStats(){
         countComponents(m.totals.issued, entry.issued);
         countComponents(h.issued, entry.issued);
         countComponents(grand.issued, entry.issued);
-
-        // Blood type requested tracking per facility
-        const _bt = ((entry.bloodtype||"").toUpperCase().trim()) || "UNKNOWN";
-        const _btUnits = Array.isArray(entry.requests)
-            ? entry.requests.reduce((s,r)=>s+Number(r.qty||0),0) : 0;
-        if(_btUnits > 0){
-            h.btRequested[_bt] = (h.btRequested[_bt]||0) + _btUnits;
-            m.totals.btRequested[_bt] = (m.totals.btRequested[_bt]||0) + _btUnits;
-        }
+        countIssuedBloodTypeSummary(issuedBloodTypeSummary[hospital], entry.issued, entry.bloodtype);
 
         const amountPaid = Number(entry.amountPaid || 0);
         const discount = Number(entry.discount || 0);
@@ -879,7 +962,7 @@ function buildReleasingStats(){
         }
     });
 
-    return {grouped, grand, patientServed};
+    return {grouped, grand, patientServed, issuedBloodTypeSummary};
 }
 
 function smallComponentTable(title, data){
@@ -1130,14 +1213,117 @@ function renderPatientServedTable(patientServed){
     `;
 }
 
+function issuedBloodTypeRowTotal(summary){
+    let total = 0;
+    COMPONENT_SUMMARY_ORDER.forEach(component => {
+        ABO_SUMMARY_ORDER.forEach(abo => {
+            total += Number(summary?.[component]?.[abo] || 0);
+        });
+    });
+    return total;
+}
+
+function renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary){
+    const sectionOpen = expandedMainSections.has("issuedBloodTypeSummary");
+    const hospitals = Object.keys(issuedBloodTypeSummary || {}).sort();
+
+    const grandSummary = emptyIssuedBloodTypeSummary();
+    hospitals.forEach(hospital => {
+        COMPONENT_SUMMARY_ORDER.forEach(component => {
+            ABO_SUMMARY_ORDER.forEach(abo => {
+                grandSummary[component][abo] += Number(issuedBloodTypeSummary[hospital]?.[component]?.[abo] || 0);
+            });
+        });
+    });
+
+    const componentHeaderClasses = {
+        WB:"compWB",
+        PRBC:"compPRBC",
+        FFP:"compFFP",
+        PC:"compPC",
+        CRYO:"compCRYO"
+    };
+
+    const subHeaderClasses = {
+        O:"bloodSubO",
+        A:"bloodSubA",
+        B:"bloodSubB",
+        AB:"bloodSubAB"
+    };
+
+    function renderComponentCells(summary){
+        return COMPONENT_SUMMARY_ORDER.map(component => {
+            return ABO_SUMMARY_ORDER.map((abo, index) => {
+                const classes = [];
+                if(index === 0) classes.push("groupStart");
+                if(index === ABO_SUMMARY_ORDER.length - 1) classes.push("groupEnd");
+                return `<td class="${classes.join(" ")}">${Number(summary?.[component]?.[abo] || 0) || ""}</td>`;
+            }).join("");
+        }).join("");
+    }
+
+    issuedBloodTypeSummarySection.innerHTML = `
+        <div class="collapsibleSection">
+            <div class="collapsibleHeader" data-main-section="issuedBloodTypeSummary">
+                <span>BLOOD TYPE ISSUED SUMMARY PER FACILITY</span>
+                <span>${sectionOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
+            </div>
+            <div class="collapsibleBody ${sectionOpen ? "open" : ""}">
+                <div class="tableScrollWrap">
+                    <table class="issuedSummaryTable">
+                        <tr>
+                            <th rowspan="2" class="facilityCol">FACILITY</th>
+                            ${COMPONENT_SUMMARY_ORDER.map(component => `<th colspan="4" class="componentHeader ${componentHeaderClasses[component]}">${component}</th>`).join("")}
+                            <th rowspan="2" class="componentHeader compTOTAL">TOTAL<br>UNITS</th>
+                        </tr>
+                        <tr>
+                            ${COMPONENT_SUMMARY_ORDER.map(component => {
+                                return ABO_SUMMARY_ORDER.map((abo, index) => {
+                                    const classes = [subHeaderClasses[abo], "groupBottom"];
+                                    if(index === 0) classes.push("groupStart");
+                                    if(index === ABO_SUMMARY_ORDER.length - 1) classes.push("groupEnd");
+                                    return `<th class="${classes.join(" ")}">${abo}</th>`;
+                                }).join("");
+                            }).join("")}
+                        </tr>
+                        ${hospitals.length ? hospitals.map(hospital => {
+                            const summary = issuedBloodTypeSummary[hospital];
+                            return `
+                                <tr>
+                                    <td class="facilityCol">${hospital}</td>
+                                    ${renderComponentCells(summary)}
+                                    <td><b>${issuedBloodTypeRowTotal(summary)}</b></td>
+                                </tr>
+                            `;
+                        }).join("") : `
+                                <tr>
+                                    <td colspan="22" class="facilityCol">No issued blood type summary found.</td>
+                                </tr>
+                        `}
+                        ${hospitals.length ? `
+                            <tr class="totalRow">
+                                <td class="facilityCol"><b>TOTAL</b></td>
+                                ${renderComponentCells(grandSummary)}
+                                <td><b>${issuedBloodTypeRowTotal(grandSummary)}</b></td>
+                            </tr>
+                        ` : ""}
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderStatistics(){
     const data = buildReleasingStats();
     const stats = data.grouped;
     const grand = data.grand;
     const patientServed = data.patientServed;
+    const issuedBloodTypeSummary = data.issuedBloodTypeSummary;
 
     renderDashboard(grand);
     renderPatientServedTable(patientServed);
+    renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary);
     statisticsContainer.innerHTML = "";
 
     const months = Object.keys(stats).sort().reverse();
@@ -1233,7 +1419,6 @@ function renderStatistics(){
                     <th rowspan="2">COMPUTED TOTAL</th>
                     <th colspan="5">REQUESTED</th>
                     <th colspan="5">ISSUED</th>
-                    <th colspan="8" class="btColHeader">BLOOD TYPE REQUESTED (UNITS)</th>
                 </tr>
 
                 <tr class="subHeader">
@@ -1249,7 +1434,6 @@ function renderStatistics(){
                     <th>FFP</th>
                     <th>CRYO</th>
 
-                    <th class="btColSubHeader">A+</th><th class="btColSubHeader">A-</th><th class="btColSubHeader">B+</th><th class="btColSubHeader">B-</th><th class="btColSubHeader">AB+</th><th class="btColSubHeader">AB-</th><th class="btColSubHeader">O+</th><th class="btColSubHeader">O-</th>
                 </tr>
             `;
 
@@ -1281,14 +1465,6 @@ function renderStatistics(){
                     <td>${s.issued.FFP}</td>
                     <td>${s.issued.CRYO}</td>
                     
-                    <td class="${(s.btRequested||{})["A+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["A+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["A-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["A-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["B+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["B+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["B-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["B-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["AB+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["AB+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["AB-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["AB-"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["O+"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["O+"]||0 || "—"}</td>
-                    <td class="${(s.btRequested||{})["O-"]||0 ? "" : "bt-zero"}">${(s.btRequested||{})["O-"]||0 || "—"}</td>
                 `;
                 table.appendChild(row);
 
@@ -1296,7 +1472,7 @@ function renderStatistics(){
                     const detailRow = document.createElement("tr");
                     detailRow.className = "hospitalDetailRow";
                     detailRow.innerHTML = `
-                        <td colspan="25">
+                        <td colspan="16">
                             <div class="hospitalDetailBox">
                                 <div class="hospitalDetailTitle">${hospital} PATIENT LIST AND FULL DETAILS</div>
                                 ${renderPatientDetailsTable(s.patients)}
@@ -1329,14 +1505,6 @@ function renderStatistics(){
                 <td>${m.totals.issued.FFP}</td>
                 <td>${m.totals.issued.CRYO}</td>
                 
-                <td>${(m.totals.btRequested||{})["A+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["A-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["B+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["B-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["AB+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["AB-"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["O+"]||0 || "—"}</td>
-                <td>${(m.totals.btRequested||{})["O-"]||0 || "—"}</td>
             `;
             table.appendChild(totalRow);
 
