@@ -75,6 +75,35 @@ color:white;
 .exportBtn{background:#2e7d32;}
 .backBtn{background:#444;}
 .uncheckBtn{background:#8e24aa;}
+.loadBtn{background:#1565c0;}
+
+.filterGroup{
+display:flex;
+flex-direction:column;
+gap:6px;
+min-width:160px;
+}
+
+.filterGroup label{
+font-size:14px;
+font-weight:bold;
+color:#2f3b52;
+}
+
+.filterGroup select,
+.filterGroup input{
+width:100%;
+box-sizing:border-box;
+}
+
+.yearFilter{min-width:140px;}
+.monthFilter{min-width:170px;}
+.dateFilter{min-width:210px;}
+
+#loadFilterBtn{
+align-self:flex-end;
+min-width:120px;
+}
 
 .duplicateBtn{
 background:#6d4c41;
@@ -514,8 +543,27 @@ flex-direction:column;
 
 <div class="controls">
 <input type="text" id="searchBox" placeholder="Search Name / Facility">
+
+<div class="filterGroup yearFilter">
+<label for="filterYear">Year</label>
+<select id="filterYear">
+<option value="">ALL YEARS</option>
+</select>
+</div>
+
+<div class="filterGroup monthFilter">
+<label for="filterMonth">Month</label>
+<select id="filterMonth">
+<option value="">ALL MONTHS</option>
+</select>
+</div>
+
+<div class="filterGroup dateFilter">
+<label for="filterDate">Date Filter</label>
 <input type="date" id="filterDate">
-<input type="month" id="filterMonth">
+</div>
+
+<button class="loadBtn" id="loadFilterBtn">LOAD</button>
 
 <select id="filterFacility">
 <option value="">ALL FACILITIES</option>
@@ -587,8 +635,10 @@ const container = document.getElementById("tableContainer");
 const duplicatePanel = document.getElementById("duplicatePanel");
 const duplicateBtn = document.getElementById("duplicateBtn");
 const searchBox = document.getElementById("searchBox");
-const filterDate = document.getElementById("filterDate");
+const filterYear = document.getElementById("filterYear");
 const filterMonth = document.getElementById("filterMonth");
+const filterDate = document.getElementById("filterDate");
+const loadFilterBtn = document.getElementById("loadFilterBtn");
 const filterFacility = document.getElementById("filterFacility");
 const exportBtn = document.getElementById("exportBtn");
 const backBtn = document.getElementById("backBtn");
@@ -605,6 +655,24 @@ let currentAugmentationPriceSnapshot = null;
 let authReady = false;
 let checkedReleaseRows = new Set();
 let duplicatePanelOpen = false;
+let appliedYearFilter = "";
+let appliedMonthFilter = "";
+let dateFilterDefaultsSet = false;
+
+const MONTH_FILTER_OPTIONS = [
+  {value:"01", label:"January"},
+  {value:"02", label:"February"},
+  {value:"03", label:"March"},
+  {value:"04", label:"April"},
+  {value:"05", label:"May"},
+  {value:"06", label:"June"},
+  {value:"07", label:"July"},
+  {value:"08", label:"August"},
+  {value:"09", label:"September"},
+  {value:"10", label:"October"},
+  {value:"11", label:"November"},
+  {value:"12", label:"December"}
+];
 
 let currentPrices = {
   WB: 0,
@@ -945,6 +1013,9 @@ function loadReleasingData(){
       });
     });
 
+    populateYearMonthFilterOptions();
+    setDefaultYearMonthFilter();
+
     if(currentView === "releasing"){
       populateFacilityFilter();
       renderCurrentView();
@@ -968,6 +1039,9 @@ function loadAugmentationData(){
         ...child.val()
       });
     });
+
+    populateYearMonthFilterOptions();
+    setDefaultYearMonthFilter();
 
     if(currentView === "augmentation"){
       populateFacilityFilter();
@@ -1009,6 +1083,115 @@ function setView(view){
   renderCurrentView();
 }
 
+
+function populateYearMonthFilterOptions(){
+  const currentYearValue = filterYear.value;
+  const currentMonthValue = filterMonth.value;
+
+  const yearSet = new Set();
+  [...allReleasingEntries, ...allAugmentationEntries].forEach(entry => {
+    const year = String(entry.date || "").slice(0,4);
+    if(/^\d{4}$/.test(year)) yearSet.add(year);
+  });
+
+  const thisYear = String(new Date().getFullYear());
+  yearSet.add(thisYear);
+
+  filterYear.innerHTML = '<option value="">ALL YEARS</option>';
+  [...yearSet].sort().reverse().forEach(year => {
+    const option = document.createElement("option");
+    option.value = year;
+    option.textContent = year;
+    filterYear.appendChild(option);
+  });
+
+  if(currentYearValue && [...yearSet].includes(currentYearValue)){
+    filterYear.value = currentYearValue;
+  }
+
+  filterMonth.innerHTML = '<option value="">ALL MONTHS</option>';
+  MONTH_FILTER_OPTIONS.forEach(month => {
+    const option = document.createElement("option");
+    option.value = month.value;
+    option.textContent = month.label;
+    filterMonth.appendChild(option);
+  });
+
+  if(currentMonthValue){
+    filterMonth.value = currentMonthValue;
+  }
+}
+
+function setDefaultYearMonthFilter(){
+  if(dateFilterDefaultsSet) return;
+
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2,"0");
+
+  populateYearMonthFilterOptions();
+
+  filterYear.value = year;
+  filterMonth.value = month;
+  filterDate.value = `${year}-${month}-01`;
+
+  appliedYearFilter = year;
+  appliedMonthFilter = month;
+  dateFilterDefaultsSet = true;
+}
+
+function syncDateFilterFromYearMonth(){
+  if(filterYear.value && filterMonth.value){
+    filterDate.value = `${filterYear.value}-${filterMonth.value}-01`;
+  }else{
+    filterDate.value = "";
+  }
+}
+
+function syncYearMonthFromDateFilter(){
+  const value = filterDate.value;
+  if(!value) return;
+
+  const year = value.slice(0,4);
+  const month = value.slice(5,7);
+
+  if(year){
+    const yearExists = [...filterYear.options].some(option => option.value === year);
+    if(!yearExists){
+      const option = document.createElement("option");
+      option.value = year;
+      option.textContent = year;
+      filterYear.appendChild(option);
+    }
+    filterYear.value = year;
+  }
+
+  if(month){
+    filterMonth.value = month;
+  }
+}
+
+function applyYearMonthFilter(){
+  syncYearMonthFromDateFilter();
+  appliedYearFilter = filterYear.value;
+  appliedMonthFilter = filterMonth.value;
+  renderCurrentView();
+}
+
+function entryMatchesAppliedMonthFilter(dateValue){
+  const date = String(dateValue || "");
+
+  const matchYear =
+    appliedYearFilter === "" ||
+    date.slice(0,4) === appliedYearFilter;
+
+  const matchMonth =
+    appliedMonthFilter === "" ||
+    date.slice(5,7) === appliedMonthFilter;
+
+  return matchYear && matchMonth;
+}
+
 function populateFacilityFilter(){
   let facilities = [];
 
@@ -1045,8 +1228,6 @@ function populateFacilityFilter(){
 
 function getFilteredReleasingEntries(){
   const search = searchBox.value.trim().toUpperCase();
-  const dateValue = filterDate.value;
-  const monthValue = filterMonth.value;
   const facilityValue = filterFacility.value;
 
   let filtered = allReleasingEntries.filter(entry => {
@@ -1059,19 +1240,13 @@ function getFilteredReleasingEntries(){
       fullName.includes(search) ||
       facility.includes(search);
 
-    const matchDate =
-      dateValue === "" ||
-      date === dateValue;
-
-    const matchMonth =
-      monthValue === "" ||
-      date.slice(0,7) === monthValue;
+    const matchMonth = entryMatchesAppliedMonthFilter(date);
 
     const matchFacility =
       facilityValue === "" ||
       entry.facility === facilityValue;
 
-    return matchSearch && matchDate && matchMonth && matchFacility;
+    return matchSearch && matchMonth && matchFacility;
   });
 
   filtered.sort((a,b) => {
@@ -1091,8 +1266,6 @@ function getFilteredReleasingEntries(){
 
 function getFilteredAugmentationEntries(){
   const search = searchBox.value.trim().toUpperCase();
-  const dateValue = filterDate.value;
-  const monthValue = filterMonth.value;
   const facilityValue = filterFacility.value;
 
   let filtered = allAugmentationEntries.filter(entry => {
@@ -1107,19 +1280,13 @@ function getFilteredAugmentationEntries(){
       facility.includes(search) ||
       bloodTypesText.includes(search);
 
-    const matchDate =
-      dateValue === "" ||
-      date === dateValue;
-
-    const matchMonth =
-      monthValue === "" ||
-      date.slice(0,7) === monthValue;
+    const matchMonth = entryMatchesAppliedMonthFilter(date);
 
     const matchFacility =
       facilityValue === "" ||
       entry.facility === facilityValue;
 
-    return matchSearch && matchDate && matchMonth && matchFacility;
+    return matchSearch && matchMonth && matchFacility;
   });
 
   filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
@@ -1128,8 +1295,6 @@ function getFilteredAugmentationEntries(){
 
 function getFilteredWaivedEntries(ignoreFilters = false){
   const search = ignoreFilters ? "" : searchBox.value.trim().toUpperCase();
-  const dateValue = ignoreFilters ? "" : filterDate.value;
-  const monthValue = ignoreFilters ? "" : filterMonth.value;
   const facilityValue = ignoreFilters ? "" : filterFacility.value;
 
   let filtered = allReleasingEntries.filter(entry => {
@@ -1149,19 +1314,15 @@ function getFilteredWaivedEntries(ignoreFilters = false){
       waivedComponent.includes(search) ||
       waivedUnit.includes(search);
 
-    const matchDate =
-      dateValue === "" ||
-      date === dateValue;
-
     const matchMonth =
-      monthValue === "" ||
-      date.slice(0,7) === monthValue;
+      ignoreFilters ||
+      entryMatchesAppliedMonthFilter(date);
 
     const matchFacility =
       facilityValue === "" ||
       entry.facility === facilityValue;
 
-    return matchSearch && matchDate && matchMonth && matchFacility;
+    return matchSearch && matchMonth && matchFacility;
   });
 
   filtered.sort((a,b) => {
@@ -2027,8 +2188,10 @@ function exportCurrentCSV(){
 
 /* EVENTS */
 searchBox.addEventListener("input", renderCurrentView);
-filterDate.addEventListener("change", renderCurrentView);
-filterMonth.addEventListener("change", renderCurrentView);
+filterYear.addEventListener("change", syncDateFilterFromYearMonth);
+filterMonth.addEventListener("change", syncDateFilterFromYearMonth);
+filterDate.addEventListener("change", syncYearMonthFromDateFilter);
+loadFilterBtn.addEventListener("click", applyYearMonthFilter);
 filterFacility.addEventListener("change", renderCurrentView);
 
 showReleaseBtn.addEventListener("click", () => setView("releasing"));
