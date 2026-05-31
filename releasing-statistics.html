@@ -479,7 +479,7 @@ display:block !important;
 
 <div id="dashboardSection"></div>
 <div id="patientServedSection"></div>
-<div id="issuedBloodTypeSummarySection"></div>
+<div id="requestedBloodTypeSummarySection"></div>
 <div id="statisticsContainer"></div>
 
 </div>
@@ -507,7 +507,7 @@ const db = getDatabase(app);
 const statisticsContainer = document.getElementById("statisticsContainer");
 const dashboardSection = document.getElementById("dashboardSection");
 const patientServedSection = document.getElementById("patientServedSection");
-const issuedBloodTypeSummarySection = document.getElementById("issuedBloodTypeSummarySection");
+const requestedBloodTypeSummarySection = document.getElementById("requestedBloodTypeSummarySection");
 const monthFilter = document.getElementById("monthFilter");
 const hospitalSearch = document.getElementById("hospitalSearch");
 
@@ -524,7 +524,7 @@ let currentPrices = {
 
 let expandedPatientSections = new Set();
 let expandedHospitalRows = new Set();
-let expandedMainSections = new Set(["dashboard","patientServed","issuedBloodTypeSummary"]);
+let expandedMainSections = new Set(["dashboard","patientServed","requestedBloodTypeSummary"]);
 let expandedYears = new Set();
 let expandedMonths = new Set();
 
@@ -620,7 +620,7 @@ function emptyComponent(){
 const COMPONENT_SUMMARY_ORDER = ["WB", "PRBC", "FFP", "PC", "CRYO"];
 const ABO_SUMMARY_ORDER = ["O", "A", "B", "AB"];
 
-function emptyIssuedBloodTypeSummary(){
+function emptyRequestedBloodTypeSummary(){
     const summary = {};
     COMPONENT_SUMMARY_ORDER.forEach(component => {
         summary[component] = {};
@@ -641,13 +641,13 @@ function normalizeABOGroup(value){
     return "";
 }
 
-function countIssuedBloodTypeSummary(store, issuedList, bloodType){
-    if(!Array.isArray(issuedList)) return;
+function countRequestedBloodTypeSummary(store, requestList, bloodType){
+    if(!Array.isArray(requestList)) return;
 
     const abo = normalizeABOGroup(bloodType);
     if(!abo) return;
 
-    issuedList.forEach(item => {
+    requestList.forEach(item => {
         const type = String(item.type || "").toUpperCase().trim();
         const qty = Number(item.qty || 0);
 
@@ -835,7 +835,7 @@ function buildReleasingStats(){
         noCharge:{ male:0, female:0, entries:[] }
     };
 
-    const issuedBloodTypeSummary = {};
+    const requestedBloodTypeSummary = {};
 
     allEntries.forEach(entry => {
         const dateValue = entry.date || "";
@@ -879,8 +879,8 @@ function buildReleasingStats(){
         const m = grouped[month];
         const h = m.hospitals[hospital];
 
-        if(!issuedBloodTypeSummary[hospital]){
-            issuedBloodTypeSummary[hospital] = emptyIssuedBloodTypeSummary();
+        if(!requestedBloodTypeSummary[hospital]){
+            requestedBloodTypeSummary[hospital] = emptyRequestedBloodTypeSummary();
         }
 
         m.totals.entries++;
@@ -907,7 +907,7 @@ function buildReleasingStats(){
         countComponents(m.totals.issued, entry.issued);
         countComponents(h.issued, entry.issued);
         countComponents(grand.issued, entry.issued);
-        countIssuedBloodTypeSummary(issuedBloodTypeSummary[hospital], entry.issued, entry.bloodtype);
+        countRequestedBloodTypeSummary(requestedBloodTypeSummary[hospital], entry.requests, entry.bloodtype);
 
         const amountPaid = Number(entry.amountPaid || 0);
         const discount = Number(entry.discount || 0);
@@ -962,7 +962,7 @@ function buildReleasingStats(){
         }
     });
 
-    return {grouped, grand, patientServed, issuedBloodTypeSummary};
+    return {grouped, grand, patientServed, requestedBloodTypeSummary};
 }
 
 function smallComponentTable(title, data){
@@ -1213,7 +1213,7 @@ function renderPatientServedTable(patientServed){
     `;
 }
 
-function issuedBloodTypeRowTotal(summary){
+function requestedBloodTypeRowTotal(summary){
     let total = 0;
     COMPONENT_SUMMARY_ORDER.forEach(component => {
         ABO_SUMMARY_ORDER.forEach(abo => {
@@ -1223,15 +1223,15 @@ function issuedBloodTypeRowTotal(summary){
     return total;
 }
 
-function renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary){
-    const sectionOpen = expandedMainSections.has("issuedBloodTypeSummary");
-    const hospitals = Object.keys(issuedBloodTypeSummary || {}).sort();
+function renderRequestedBloodTypeSummaryTable(requestedBloodTypeSummary){
+    const sectionOpen = expandedMainSections.has("requestedBloodTypeSummary");
+    const hospitals = Object.keys(requestedBloodTypeSummary || {}).sort();
 
-    const grandSummary = emptyIssuedBloodTypeSummary();
+    const grandSummary = emptyRequestedBloodTypeSummary();
     hospitals.forEach(hospital => {
         COMPONENT_SUMMARY_ORDER.forEach(component => {
             ABO_SUMMARY_ORDER.forEach(abo => {
-                grandSummary[component][abo] += Number(issuedBloodTypeSummary[hospital]?.[component]?.[abo] || 0);
+                grandSummary[component][abo] += Number(requestedBloodTypeSummary[hospital]?.[component]?.[abo] || 0);
             });
         });
     });
@@ -1262,10 +1262,10 @@ function renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary){
         }).join("");
     }
 
-    issuedBloodTypeSummarySection.innerHTML = `
+    requestedBloodTypeSummarySection.innerHTML = `
         <div class="collapsibleSection">
-            <div class="collapsibleHeader" data-main-section="issuedBloodTypeSummary">
-                <span>BLOOD TYPE ISSUED SUMMARY PER FACILITY</span>
+            <div class="collapsibleHeader" data-main-section="requestedBloodTypeSummary">
+                <span>BLOOD TYPE REQUESTED SUMMARY PER FACILITY</span>
                 <span>${sectionOpen ? "▲ COLLAPSE" : "▼ EXPAND"}</span>
             </div>
             <div class="collapsibleBody ${sectionOpen ? "open" : ""}">
@@ -1287,24 +1287,24 @@ function renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary){
                             }).join("")}
                         </tr>
                         ${hospitals.length ? hospitals.map(hospital => {
-                            const summary = issuedBloodTypeSummary[hospital];
+                            const summary = requestedBloodTypeSummary[hospital];
                             return `
                                 <tr>
                                     <td class="facilityCol">${hospital}</td>
                                     ${renderComponentCells(summary)}
-                                    <td><b>${issuedBloodTypeRowTotal(summary)}</b></td>
+                                    <td><b>${requestedBloodTypeRowTotal(summary)}</b></td>
                                 </tr>
                             `;
                         }).join("") : `
                                 <tr>
-                                    <td colspan="22" class="facilityCol">No issued blood type summary found.</td>
+                                    <td colspan="22" class="facilityCol">No requested blood type summary found.</td>
                                 </tr>
                         `}
                         ${hospitals.length ? `
                             <tr class="totalRow">
                                 <td class="facilityCol"><b>TOTAL</b></td>
                                 ${renderComponentCells(grandSummary)}
-                                <td><b>${issuedBloodTypeRowTotal(grandSummary)}</b></td>
+                                <td><b>${requestedBloodTypeRowTotal(grandSummary)}</b></td>
                             </tr>
                         ` : ""}
                     </table>
@@ -1319,11 +1319,11 @@ function renderStatistics(){
     const stats = data.grouped;
     const grand = data.grand;
     const patientServed = data.patientServed;
-    const issuedBloodTypeSummary = data.issuedBloodTypeSummary;
+    const requestedBloodTypeSummary = data.requestedBloodTypeSummary;
 
     renderDashboard(grand);
     renderPatientServedTable(patientServed);
-    renderIssuedBloodTypeSummaryTable(issuedBloodTypeSummary);
+    renderRequestedBloodTypeSummaryTable(requestedBloodTypeSummary);
     statisticsContainer.innerHTML = "";
 
     const months = Object.keys(stats).sort().reverse();
