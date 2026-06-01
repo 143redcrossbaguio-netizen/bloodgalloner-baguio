@@ -792,6 +792,116 @@
 }
 
 
+
+/* ============================================================
+   SIMPLE SCREEN VIEW — compact daily navigation, print remains unchanged
+   ============================================================ */
+.simple-view-note{
+    background:#eff6ff;
+    border:1px solid #bfdbfe;
+    color:#1e3a8a;
+    font-size:12px;
+    font-weight:bold;
+    padding:7px 10px;
+    border-radius:8px;
+    margin:8px 0 10px;
+}
+.simple-table-wrap{
+    overflow-x:auto;
+    width:100%;
+    border-top:1px solid #dbe3ec;
+}
+.simple-tracking-table{
+    width:100%;
+    min-width:1280px !important;
+    border-collapse:collapse;
+    table-layout:auto;
+    font-size:12px;
+}
+.simple-tracking-table th,
+.simple-tracking-table td{
+    border:1px solid #d7d7d7;
+    padding:4px 7px !important;
+    height:26px !important;
+    line-height:1.15 !important;
+    text-align:center;
+    vertical-align:middle;
+    white-space:nowrap;
+}
+.simple-tracking-table th{
+    position:sticky;
+    top:0;
+    z-index:4;
+    background:#f3f4f6;
+    color:#111827;
+    font-weight:bold;
+}
+.simple-tracking-table .simple-date-col{width:92px;min-width:92px;max-width:92px;background:#f9e2e2;}
+.simple-tracking-table .simple-source-col{width:150px;min-width:150px;}
+.simple-tracking-table .simple-walkin-col{width:92px;min-width:92px;background:#b9d2f0;}
+.simple-tracking-table .simple-pd-col{width:150px;min-width:150px;}
+.simple-tracking-table .simple-serial-col{width:150px;min-width:150px;background:#f0f0f0;}
+.simple-tracking-table .simple-name-col{width:260px;min-width:260px;text-align:left;}
+.simple-tracking-table .simple-bt-col{width:90px;min-width:90px;}
+.simple-tracking-table .simple-bag-col{width:130px;min-width:130px;}
+.simple-tracking-table .simple-amount-col{width:90px;min-width:90px;}
+.simple-tracking-table .simple-remarks-col{width:230px;min-width:230px;text-align:left;}
+.simple-tracking-table .simple-actions-col{width:120px;min-width:120px;}
+.simple-donor-row{cursor:pointer;}
+.simple-donor-row:hover td{background:#f8fafc;}
+.simple-donor-row.active td{background:#fff7ed;}
+.simple-detail-row td{
+    background:#fbfdff !important;
+    padding:8px 10px !important;
+    text-align:left !important;
+    white-space:normal !important;
+}
+.simple-detail-box{
+    border:1px solid #bfdbfe;
+    border-radius:10px;
+    background:#ffffff;
+    padding:8px 10px;
+}
+.simple-detail-title{
+    font-weight:bold;
+    color:#1e3a8a;
+    font-size:12px;
+    margin-bottom:7px;
+}
+.simple-detail-grid{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(150px,1fr));
+    gap:7px 10px;
+}
+.simple-detail-item{
+    font-size:12px;
+    line-height:1.25;
+    color:#334155;
+}
+.simple-detail-item b{
+    display:block;
+    color:#64748b;
+    font-size:10px;
+    text-transform:uppercase;
+    margin-bottom:2px;
+}
+.simple-row-hint{
+    font-size:10px;
+    color:#64748b;
+    margin-left:5px;
+    font-weight:normal;
+}
+#trackingViewToggleBtn{
+    background:#0f766e;
+    color:#fff;
+}
+@media(max-width:900px){
+    .simple-detail-grid{grid-template-columns:repeat(2,minmax(130px,1fr));}
+}
+@media(max-width:640px){
+    .simple-detail-grid{grid-template-columns:1fr;}
+}
+
     </style>
 </head>
 <body>
@@ -837,6 +947,7 @@
                     <button class="main-btn orange-btn" id="duplicateDataBtn">Show Duplicate This Month</button>
                     <button class="main-btn purple-btn" id="bulkEditBtn">Bulk Edit</button>
                     <button class="main-btn purple-btn" id="bulkEditDateBtn">Bulk Edit This Date</button>
+                    <button class="main-btn blue-btn" id="trackingViewToggleBtn" type="button">Full Table View</button>
                 </div>
             </div>
         </div>
@@ -1030,6 +1141,8 @@ const MONTHS = [
 // the entire donorDatabase collection every time.
 let currentLoadedMonthKey = "";
 let isAllMonthsSlowMode = false;
+let trackingViewMode = localStorage.getItem("donorTrackingViewMode") || "simple";
+let expandedSimpleRows = new Set();
 
 function getCurrentMonthKey() {
     const d = new Date();
@@ -2308,7 +2421,7 @@ function formatDateForDisplay(iso) {
 }
 
 // ─── RENDER TRACKING ─────────────────────────────────────────────────────────
-function renderTracking() {
+function renderTrackingFull() {
     const keyword       = document.getElementById("searchInput").value.trim();
     const baseDonors    = allDonors.filter(r => matchesUnifiedSearch(r, keyword) && matchesMonthFilter(r));
 
@@ -2486,6 +2599,228 @@ function renderTracking() {
     document.getElementById("trackingContainer").innerHTML = html;
 }
 
+
+function updateTrackingViewToggleButton() {
+    const btn = document.getElementById("trackingViewToggleBtn");
+    if (!btn) return;
+    btn.textContent = trackingViewMode === "simple" ? "Full Table View" : "Simple View";
+    btn.title = trackingViewMode === "simple"
+        ? "Switch to the complete wide table for advanced editing. Printing is unchanged."
+        : "Switch back to the cleaner daily tracking view.";
+}
+
+function setTrackingViewMode(mode) {
+    trackingViewMode = mode === "full" ? "full" : "simple";
+    localStorage.setItem("donorTrackingViewMode", trackingViewMode);
+    updateTrackingViewToggleButton();
+    renderTracking();
+}
+
+window.toggleTrackingViewMode = function() {
+    setTrackingViewMode(trackingViewMode === "simple" ? "full" : "simple");
+};
+
+window.toggleSimpleDonorDetails = function(id, event) {
+    if (event && event.target && event.target.closest("button,input,select,a")) return;
+    if (expandedSimpleRows.has(id)) expandedSimpleRows.delete(id);
+    else expandedSimpleRows.add(id);
+    renderTracking();
+    setTimeout(() => {
+        const row = document.getElementById(`row-${id}`);
+        if (row) row.scrollIntoView({ behavior:"auto", block:"nearest" });
+    }, 0);
+};
+
+function donorDisplayName(r) {
+    const parts = [getSurnameWithSuffix(r), r.firstName || "", r.middleName || ""].map(v => toUpperDisplay(v).trim()).filter(Boolean);
+    if (!parts.length) return "";
+    const surname = toUpperDisplay(getSurnameWithSuffix(r));
+    const given = [toUpperDisplay(r.firstName || ""), toUpperDisplay(r.middleName || "")].filter(Boolean).join(" ");
+    return given ? `${surname}, ${given}` : surname;
+}
+
+function renderSimpleDonorSource(r) {
+    const items = [];
+    if (isDonorType(r,"MBD")) items.push(`<b>MBD:</b> ${escapeUpperHtml(getCategoryDisplay(r,"MBD"))}`);
+    if (isDonorType(r,"WALK-IN")) items.push(`<b>Walk-in:</b> ${escapeUpperHtml(getCategoryDisplay(r,"WALK-IN"))}`);
+    if (isDonorType(r,"PATIENT DIRECTED")) items.push(`<b>PD:</b> ${escapeUpperHtml(getCategoryDisplay(r,"PATIENT DIRECTED"))}`);
+    return items.length ? items.join("<br>") : "";
+}
+
+function renderSimpleDetailRow(r) {
+    const donorKey = buildDonorKey(r);
+    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(r.numberOfDonations);
+    const enteredVal = resolveDonationCountValue(r.numberOfDonations);
+    const fields = [
+        ["Birthday", r._resolvedBirthday],
+        ["Age", r.age],
+        ["Sex", r.sex],
+        ["Contact Number", r.contactNumber],
+        ["Address", r.address],
+        ["Barangay / City", r.cityProvince],
+        ["Occupation", r.occupation],
+        ["Donor Category", r.donorCategory || ""],
+        ["Latest Donation Count", latestTotal],
+        ["Entry Donation Count", enteredVal],
+        ["Time Started", r._resolvedTimeStarted],
+        ["Time Ended", r._resolvedTimeEnded]
+    ];
+    return `
+        <tr class="simple-detail-row">
+            <td colspan="11">
+                <div class="simple-detail-box">
+                    <div class="simple-detail-title">Full details for ${escapeHtml(donorDisplayName(r))}</div>
+                    <div class="simple-detail-grid">
+                        ${fields.map(([label,value]) => `<div class="simple-detail-item"><b>${escapeHtml(label)}</b>${escapeUpperHtml(value || "")}</div>`).join("")}
+                    </div>
+                </div>
+            </td>
+        </tr>`;
+}
+
+function renderSimpleTracking() {
+    const keyword = document.getElementById("searchInput").value.trim();
+    const baseDonors = allDonors.filter(r => matchesUnifiedSearch(r, keyword) && matchesMonthFilter(r));
+    filteredDonors = baseDonors.filter(r => matchesHeaderFilters(r));
+
+    currentDonationTotals = computeCurrentDonationTotals(allDonors);
+    sequenceMap = computeSequenceMap(filteredDonors);
+
+    populatePrintMonthOptions(filteredDonors.length ? filteredDonors : allDonors);
+    populateGroupMonthOptions(allDonors);
+
+    if (!filteredDonors.length) {
+        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">No donor records found.</div>`;
+        updateTrackingViewToggleButton();
+        return;
+    }
+
+    const grouped = groupDonors(filteredDonors);
+    const sortedYears = Object.keys(grouped).sort((a,b) => {
+        if (a === "No Year") return 1;
+        if (b === "No Year") return -1;
+        return Number(b) - Number(a);
+    });
+
+    let html = `<div class="simple-view-note">Simple View is for screen navigation only. Click any donor row to show full details. Print Loaded Month still uses the same full official print layout.</div>`;
+
+    sortedYears.forEach((year, yi) => {
+        const monthsObj = grouped[year];
+        const sortedMonths = Object.keys(monthsObj).sort((a,b) => Number(b) - Number(a));
+        const yearKey = getGroupKey("year", year);
+        const yearCollapsed = isCollapsed(yearKey);
+
+        html += `
+            <div class="year-group">
+                <div class="year-header" onclick="toggleGroup('${yearKey}','simple-year-body-${yi}','simple-year-icon-${yi}')">
+                    <span>${escapeHtml(year)}</span>
+                    <span id="simple-year-icon-${yi}" class="toggle-icon">${yearCollapsed ? "+" : "−"}</span>
+                </div>
+                <div id="simple-year-body-${yi}" class="group-body ${yearCollapsed ? "hidden" : ""}">`;
+
+        sortedMonths.forEach((month, mi) => {
+            const monthBlock = monthsObj[month];
+            const records = monthBlock.records;
+            const monthKey = getGroupKey("month", year, month);
+            const monthCollapsed = isCollapsed(monthKey);
+            const monthValue = `${year}-${String(month).padStart(2,"0")}`;
+            const mbdCount = countType(records,"MBD");
+            const walkInCount = countType(records,"WALK-IN");
+            const pdCount = countType(records,"PATIENT DIRECTED");
+            const realCount = getCategorizedEntryCount(records);
+
+            html += `
+                <div class="month-group">
+                    <div class="month-header" onclick="toggleGroup('${monthKey}','simple-month-body-${yi}-${mi}','simple-month-icon-${yi}-${mi}')">
+                        <span>${escapeHtml(monthBlock.monthName)} (${realCount})</span>
+                        <span id="simple-month-icon-${yi}-${mi}" class="toggle-icon">${monthCollapsed ? "+" : "−"}</span>
+                    </div>
+                    <div id="simple-month-body-${yi}-${mi}" class="group-body ${monthCollapsed ? "hidden" : ""}">
+                        <div class="month-tools">
+                            <button class="small-btn gray-btn"   onclick="printOneMonth('${monthValue}')">Print This Month</button>
+                            <button class="small-btn green-btn"  onclick="exportOneMonthCsv('${monthValue}')">Export This Month CSV</button>
+                            <button class="small-btn orange-btn" onclick="renderDuplicateMonthView('${monthValue}')">Show Duplicates This Month</button>
+                            <button class="small-btn purple-btn" onclick="showSkippedSerials('${monthValue}')">Show Skipped Serials</button>
+                        </div>
+                        <div class="subtotal-bar">
+                            <span>Entries: ${realCount}</span>
+                            <span>MBD: ${mbdCount}</span>
+                            <span>Walk-in: ${walkInCount}</span>
+                            <span>Patient-Directed: ${pdCount}</span>
+                            <span>New: ${records.filter(r => isDonorCategory(r,"new")).length}</span>
+                            <span>Repeat: ${records.filter(r => isDonorCategory(r,"repeat")).length}</span>
+                            <span>Lapse: ${records.filter(r => isDonorCategory(r,"lapse")).length}</span>
+                            ${renderBloodBagSubtotal(records)}
+                        </div>
+                        <div class="simple-table-wrap">
+                            <table class="simple-tracking-table">
+                                <thead>
+                                    <tr>
+                                        <th class="simple-date-col">${renderMultiSelectFilter("entryDate", "Date", year, month)}</th>
+                                        <th class="simple-source-col col-mbd">${renderMultiSelectFilter("mbd", "MBD", year, month)}</th>
+                                        <th class="simple-walkin-col">${renderHeaderFilterSelect("walkIn", ["WALK-IN"], headerFilters.walkIn, "Walk-in")}</th>
+                                        <th class="simple-pd-col col-patient">${renderMultiSelectFilter("patientDirected", "Patient-Directed", year, month)}</th>
+                                        <th class="simple-serial-col">${renderHeaderFilterSelect("serialSort", ["asc","desc"], headerFilters.serialSort, "Serial")}</th>
+                                        <th class="simple-name-col">Donor Name <span class="simple-row-hint">click row for details</span></th>
+                                        <th class="simple-bt-col">${renderHeaderFilterSelect("bloodType", ["O+","O-","A+","A-","B+","B-","AB+","AB-","UNKNOWN"], headerFilters.bloodType, "BT")}</th>
+                                        <th class="simple-bag-col">${renderHeaderFilterSelect("bloodBagType", ["SINGLE","DOUBLE","TRIPLE","QUADRUPLE"], headerFilters.bloodBagType, "Bag")}</th>
+                                        <th class="simple-amount-col">${renderHeaderFilterSelect("amount", ["450 ML","QNS","UB"], headerFilters.amount, "Amount")}</th>
+                                        <th class="simple-remarks-col">Remarks</th>
+                                        <th class="simple-actions-col">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+
+            let lastDateHeader = null;
+            records.forEach(r => {
+                const rDate = r._resolvedEntryDate || "";
+                if (rDate !== lastDateHeader) {
+                    lastDateHeader = rDate;
+                    const dayLabel = rDate ? formatDateForDisplay(rDate) : "Unknown Date";
+                    const dayCount = records.filter(x => (x._resolvedEntryDate || "") === rDate).length;
+                    html += `<tr class="date-subheader-row"><td colspan="11">📅 ${escapeHtml(dayLabel)} &nbsp;—&nbsp; ${dayCount} record(s) <button type="button" class="date-bulk-btn" onclick="event.stopPropagation(); bulkEditByDate('${rDate}')">Bulk Edit This Date</button></td></tr>`;
+                }
+
+                const isOpen = expandedSimpleRows.has(r.id);
+                html += `
+                    <tr id="row-${r.id}" class="simple-donor-row ${isOpen ? "active" : ""}" onclick="toggleSimpleDonorDetails('${r.id}', event)">
+                        <td class="simple-date-col">${escapeHtml(r._resolvedEntryDate)}</td>
+                        <td class="simple-source-col">${escapeUpperHtml(isDonorType(r,"MBD") ? getCategoryDisplay(r,"MBD") : "")}</td>
+                        <td class="simple-walkin-col">${escapeUpperHtml(isDonorType(r,"WALK-IN") ? getCategoryDisplay(r,"WALK-IN") : "")}</td>
+                        <td class="simple-pd-col">${escapeUpperHtml(isDonorType(r,"PATIENT DIRECTED") ? getCategoryDisplay(r,"PATIENT DIRECTED") : "")}</td>
+                        <td class="simple-serial-col">${escapeUpperHtml(r.serialNumber)}</td>
+                        <td class="simple-name-col"><b>${escapeHtml(donorDisplayName(r))}</b></td>
+                        <td class="simple-bt-col">${r._resolvedBloodType ? `<b>${escapeHtml(r._resolvedBloodType)}</b>` : `<span style="color:#b30000;font-weight:bold;">?</span>`}</td>
+                        <td class="simple-bag-col">${escapeUpperHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}</td>
+                        <td class="simple-amount-col">${escapeUpperHtml(r.amount)}</td>
+                        <td class="simple-remarks-col">${escapeUpperHtml(r.remarks)}</td>
+                        <td class="actions-cell simple-actions-col">
+                            <button class="small-btn edit-btn" onclick="event.stopPropagation(); startEdit('${r.id}')">Edit</button>
+                            <button class="small-btn delete-btn" onclick="event.stopPropagation(); deleteDonor('${r.id}')">Delete</button>
+                        </td>
+                    </tr>`;
+                if (isOpen) html += renderSimpleDetailRow(r);
+            });
+
+            html += `</tbody></table></div></div></div>`;
+        });
+        html += `</div></div>`;
+    });
+
+    document.getElementById("trackingContainer").innerHTML = html;
+    updateTrackingViewToggleButton();
+}
+
+function renderTracking() {
+    updateTrackingViewToggleButton();
+    if (trackingViewMode === "full" || isBulkEditingActive()) {
+        renderTrackingFull();
+        updateTrackingViewToggleButton();
+        return;
+    }
+    renderSimpleTracking();
+}
+
 // ─── LOAD DONORS ──────────────────────────────────────────────────────────────
 async function loadDonors() {
     try {
@@ -2578,6 +2913,14 @@ function updateLocalDonorRecord(id, newData) {
 
 window.startEdit = function(id) {
     hideDuplicateBox();
+    if (trackingViewMode === "simple") {
+        trackingViewMode = "full";
+        localStorage.setItem("donorTrackingViewMode", trackingViewMode);
+        renderTracking();
+        setTimeout(() => window.startEdit(id), 0);
+        showMessage("Switched to Full Table View for editing. Print layout is unchanged.", "success");
+        return;
+    }
     const r = allDonors.find(r => r.id === id);
     if (!r) return;
     const row = document.getElementById(`row-${id}`);
@@ -3118,6 +3461,10 @@ function bulkFindRecords() {
         return;
     }
 
+    trackingViewMode = "full";
+    localStorage.setItem("donorTrackingViewMode", trackingViewMode);
+    updateTrackingViewToggleButton();
+
     bulkEditingIds = new Set(matches.map(r => r.id));
     bulkPendingChanges = {};
     document.getElementById("bulkPanelInfo").innerHTML = `<b>${matches.length}</b> record(s) found. Edit them in the table below — matched rows are highlighted purple.`;
@@ -3499,6 +3846,7 @@ document.getElementById("duplicateDataBtn").addEventListener("click", () => {
 
 // Bulk edit handlers
 document.getElementById("bulkEditBtn").addEventListener("click", openBulkEditPanel);
+document.getElementById("trackingViewToggleBtn").addEventListener("click", toggleTrackingViewMode);
 document.getElementById("bulkEditDateBtn").addEventListener("click", () => bulkEditByDate());
 document.getElementById("bulkPanelCloseBtn").addEventListener("click", closeBulkEditPanel);
 document.getElementById("bulkResetBtn").addEventListener("click", resetBulkEditFields);
