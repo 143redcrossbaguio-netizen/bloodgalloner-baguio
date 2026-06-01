@@ -1149,6 +1149,122 @@
     }
 }
 
+/* ============================================================
+   SIMPLE VIEW USABILITY FIX — frozen header, collapsible remarks,
+   and tighter wrapped MBD / Patient-Directed columns.
+   Screen only; print layout remains unchanged.
+   ============================================================ */
+@media screen {
+    #trackingContainer .simple-table-wrap{
+        max-height:calc(100vh - 215px) !important;
+        overflow:auto !important;
+        position:relative !important;
+    }
+    #trackingContainer .simple-tracking-table{
+        width:max-content !important;
+        min-width:0 !important;
+        max-width:none !important;
+        table-layout:fixed !important;
+    }
+    #trackingContainer .simple-tracking-table thead th{
+        position:sticky !important;
+        top:0 !important;
+        z-index:30 !important;
+        background:#f3f4f6 !important;
+        box-shadow:0 2px 0 #93c5fd !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-source-col,
+    #trackingContainer .simple-tracking-table .simple-pd-col{
+        width:180px !important;
+        min-width:180px !important;
+        max-width:180px !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        line-height:1.18 !important;
+        text-align:left !important;
+        vertical-align:top !important;
+    }
+    #trackingContainer .simple-tracking-table thead .simple-source-col,
+    #trackingContainer .simple-tracking-table thead .simple-pd-col{
+        text-align:center !important;
+        vertical-align:middle !important;
+    }
+    #trackingContainer .simple-tracking-table td.simple-source-col,
+    #trackingContainer .simple-tracking-table td.simple-pd-col{
+        height:auto !important;
+        min-height:28px !important;
+        padding-top:4px !important;
+        padding-bottom:4px !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-date-col{width:96px !important;min-width:96px !important;max-width:96px !important;}
+    #trackingContainer .simple-tracking-table .simple-walkin-col{width:82px !important;min-width:82px !important;max-width:82px !important;}
+    #trackingContainer .simple-tracking-table .simple-serial-col{width:120px !important;min-width:120px !important;max-width:120px !important;}
+    #trackingContainer .simple-tracking-table .simple-name-col{width:250px !important;min-width:250px !important;max-width:250px !important;}
+    #trackingContainer .simple-tracking-table .simple-cat-col{width:90px !important;min-width:90px !important;max-width:90px !important;}
+    #trackingContainer .simple-tracking-table .simple-bt-col{width:64px !important;min-width:64px !important;max-width:64px !important;}
+    #trackingContainer .simple-tracking-table .simple-bag-col{width:118px !important;min-width:118px !important;max-width:118px !important;}
+    #trackingContainer .simple-tracking-table .simple-amount-col{width:78px !important;min-width:78px !important;max-width:78px !important;}
+    #trackingContainer .simple-tracking-table .simple-actions-col{width:105px !important;min-width:105px !important;max-width:105px !important;}
+
+    #trackingContainer .simple-tracking-table .simple-remarks-col.remarks-collapsed{
+        width:46px !important;
+        min-width:46px !important;
+        max-width:46px !important;
+        padding-left:3px !important;
+        padding-right:3px !important;
+        text-align:center !important;
+        white-space:nowrap !important;
+        overflow:hidden !important;
+        cursor:pointer !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-remarks-col.remarks-expanded{
+        width:220px !important;
+        min-width:220px !important;
+        max-width:220px !important;
+        text-align:left !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        cursor:pointer !important;
+    }
+    #trackingContainer .simple-tracking-table th.simple-remarks-col.remarks-expanded{
+        text-align:center !important;
+    }
+    .remarks-toggle-btn{
+        width:100%;
+        min-height:25px;
+        height:25px;
+        padding:2px 4px;
+        border:1px solid #bfc7d4;
+        border-radius:6px;
+        background:#fff;
+        color:#1f2937;
+        font-size:11px;
+        font-weight:bold;
+        cursor:pointer;
+        white-space:nowrap;
+    }
+    .remark-closed-pill{
+        display:inline-flex;
+        width:18px;
+        height:18px;
+        align-items:center;
+        justify-content:center;
+        border-radius:999px;
+        background:#fde68a;
+        color:#92400e;
+        font-size:11px;
+        line-height:1;
+        font-weight:bold;
+    }
+}
+
+
     </style>
 </head>
 <body>
@@ -1376,6 +1492,7 @@ let partnerAliasLoadPromise = null;
 let partnerAliasLoadedOnce = false;
 let trackingViewMode = localStorage.getItem("donorTrackingViewMode") || "simple";
 let expandedSimpleRows = new Set();
+let simpleRemarksExpanded = false;
 
 function getCurrentMonthKey() {
     const d = new Date();
@@ -2885,6 +3002,12 @@ window.toggleSimpleDonorDetails = function(id, event) {
     }, 0);
 };
 
+window.toggleSimpleRemarksColumn = function(event) {
+    if (event) event.stopPropagation();
+    simpleRemarksExpanded = !simpleRemarksExpanded;
+    renderTracking();
+};
+
 function donorDisplayName(r) {
     const parts = [getSurnameWithSuffix(r), r.firstName || "", r.middleName || ""].map(v => toUpperDisplay(v).trim()).filter(Boolean);
     if (!parts.length) return "";
@@ -2978,6 +3101,8 @@ function renderSimpleTracking() {
             const monthBlock = monthsObj[month];
             const records = monthBlock.records;
             const hasRemarks = records.some(x => String(x.remarks || "").trim());
+            const remarksExpanded = hasRemarks && simpleRemarksExpanded;
+            const remarksStateClass = remarksExpanded ? "remarks-expanded" : "remarks-collapsed";
             const simpleColspan = hasRemarks ? 12 : 11;
             window.__simpleCurrentColspan = simpleColspan;
             const monthKey = getGroupKey("month", year, month);
@@ -3026,7 +3151,7 @@ function renderSimpleTracking() {
                                         <th class="simple-bt-col">${renderHeaderFilterSelect("bloodType", ["O+","O-","A+","A-","B+","B-","AB+","AB-","UNKNOWN"], headerFilters.bloodType, "BT")}</th>
                                         <th class="simple-bag-col">${renderHeaderFilterSelect("bloodBagType", ["SINGLE","DOUBLE","TRIPLE","QUADRUPLE"], headerFilters.bloodBagType, "Bag")}</th>
                                         <th class="simple-amount-col">${renderHeaderFilterSelect("amount", ["450 ML","QNS","UB"], headerFilters.amount, "Amount")}</th>
-                                        ${hasRemarks ? `<th class="simple-remarks-col">Remarks</th>` : ""}
+                                        ${hasRemarks ? `<th class="simple-remarks-col simple-remarks-toggle-col ${remarksStateClass}" onclick="toggleSimpleRemarksColumn(event)" title="Click to ${remarksExpanded ? 'close' : 'open'} remarks column"><button type="button" class="remarks-toggle-btn">${remarksExpanded ? 'Remarks ◀' : 'Remarks ▶'}</button></th>` : ""}
                                         <th class="simple-actions-col">Actions</th>
                                     </tr>
                                 </thead>
@@ -3055,7 +3180,7 @@ function renderSimpleTracking() {
                         <td class="simple-bt-col">${r._resolvedBloodType ? `<b>${escapeHtml(r._resolvedBloodType)}</b>` : `<span style="color:#b30000;font-weight:bold;">?</span>`}</td>
                         <td class="simple-bag-col" title="${escapeHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}">${escapeUpperHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}</td>
                         <td class="simple-amount-col">${escapeUpperHtml(r.amount)}</td>
-                        ${hasRemarks ? `<td class="simple-remarks-col" title="${escapeHtml(r.remarks || "")}">${escapeUpperHtml(r.remarks)}</td>` : ""}
+                        ${hasRemarks ? `<td class="simple-remarks-col ${remarksStateClass}" title="${escapeHtml(r.remarks || "")}" onclick="event.stopPropagation(); toggleSimpleRemarksColumn(event)">${remarksExpanded ? escapeUpperHtml(r.remarks) : (String(r.remarks || "").trim() ? `<span class="remark-closed-pill">●</span>` : "")}</td>` : ""}
                         <td class="actions-cell simple-actions-col">
                             <button class="small-btn edit-btn" onclick="event.stopPropagation(); startEdit('${r.id}')">Edit</button>
                             <button class="small-btn delete-btn" onclick="event.stopPropagation(); deleteDonor('${r.id}')">Delete</button>
@@ -3612,6 +3737,122 @@ function buildPrintableTable(records, monthLabel) {
     line-height:1 !important;
     white-space:nowrap !important;
 }
+
+/* ============================================================
+   SIMPLE VIEW USABILITY FIX — frozen header, collapsible remarks,
+   and tighter wrapped MBD / Patient-Directed columns.
+   Screen only; print layout remains unchanged.
+   ============================================================ */
+@media screen {
+    #trackingContainer .simple-table-wrap{
+        max-height:calc(100vh - 215px) !important;
+        overflow:auto !important;
+        position:relative !important;
+    }
+    #trackingContainer .simple-tracking-table{
+        width:max-content !important;
+        min-width:0 !important;
+        max-width:none !important;
+        table-layout:fixed !important;
+    }
+    #trackingContainer .simple-tracking-table thead th{
+        position:sticky !important;
+        top:0 !important;
+        z-index:30 !important;
+        background:#f3f4f6 !important;
+        box-shadow:0 2px 0 #93c5fd !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-source-col,
+    #trackingContainer .simple-tracking-table .simple-pd-col{
+        width:180px !important;
+        min-width:180px !important;
+        max-width:180px !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        line-height:1.18 !important;
+        text-align:left !important;
+        vertical-align:top !important;
+    }
+    #trackingContainer .simple-tracking-table thead .simple-source-col,
+    #trackingContainer .simple-tracking-table thead .simple-pd-col{
+        text-align:center !important;
+        vertical-align:middle !important;
+    }
+    #trackingContainer .simple-tracking-table td.simple-source-col,
+    #trackingContainer .simple-tracking-table td.simple-pd-col{
+        height:auto !important;
+        min-height:28px !important;
+        padding-top:4px !important;
+        padding-bottom:4px !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-date-col{width:96px !important;min-width:96px !important;max-width:96px !important;}
+    #trackingContainer .simple-tracking-table .simple-walkin-col{width:82px !important;min-width:82px !important;max-width:82px !important;}
+    #trackingContainer .simple-tracking-table .simple-serial-col{width:120px !important;min-width:120px !important;max-width:120px !important;}
+    #trackingContainer .simple-tracking-table .simple-name-col{width:250px !important;min-width:250px !important;max-width:250px !important;}
+    #trackingContainer .simple-tracking-table .simple-cat-col{width:90px !important;min-width:90px !important;max-width:90px !important;}
+    #trackingContainer .simple-tracking-table .simple-bt-col{width:64px !important;min-width:64px !important;max-width:64px !important;}
+    #trackingContainer .simple-tracking-table .simple-bag-col{width:118px !important;min-width:118px !important;max-width:118px !important;}
+    #trackingContainer .simple-tracking-table .simple-amount-col{width:78px !important;min-width:78px !important;max-width:78px !important;}
+    #trackingContainer .simple-tracking-table .simple-actions-col{width:105px !important;min-width:105px !important;max-width:105px !important;}
+
+    #trackingContainer .simple-tracking-table .simple-remarks-col.remarks-collapsed{
+        width:46px !important;
+        min-width:46px !important;
+        max-width:46px !important;
+        padding-left:3px !important;
+        padding-right:3px !important;
+        text-align:center !important;
+        white-space:nowrap !important;
+        overflow:hidden !important;
+        cursor:pointer !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-remarks-col.remarks-expanded{
+        width:220px !important;
+        min-width:220px !important;
+        max-width:220px !important;
+        text-align:left !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        cursor:pointer !important;
+    }
+    #trackingContainer .simple-tracking-table th.simple-remarks-col.remarks-expanded{
+        text-align:center !important;
+    }
+    .remarks-toggle-btn{
+        width:100%;
+        min-height:25px;
+        height:25px;
+        padding:2px 4px;
+        border:1px solid #bfc7d4;
+        border-radius:6px;
+        background:#fff;
+        color:#1f2937;
+        font-size:11px;
+        font-weight:bold;
+        cursor:pointer;
+        white-space:nowrap;
+    }
+    .remark-closed-pill{
+        display:inline-flex;
+        width:18px;
+        height:18px;
+        align-items:center;
+        justify-content:center;
+        border-radius:999px;
+        background:#fde68a;
+        color:#92400e;
+        font-size:11px;
+        line-height:1;
+        font-weight:bold;
+    }
+}
+
 
     </style></head><body>
     <h2>Donor Database Tracking</h2>
