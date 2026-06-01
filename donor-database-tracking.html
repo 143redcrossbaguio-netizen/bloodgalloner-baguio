@@ -3010,37 +3010,55 @@ window.toggleTrackingViewMode = function() {
 };
 
 window.toggleSimpleDonorDetails = function(id, event) {
-    if (event && event.target && event.target.closest("button,input,select,a")) return;
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.target && event.target.closest("button,input,select,a,label")) return;
+    }
 
-    const rowBefore = document.getElementById(`row-${id}`);
-    const rowTopBefore = rowBefore ? rowBefore.getBoundingClientRect().top : null;
-    const wrapBefore = rowBefore ? rowBefore.closest(".simple-table-wrap") : null;
-    const wrapScrollLeftBefore = wrapBefore ? wrapBefore.scrollLeft : 0;
-    const topScrollBefore = wrapBefore && wrapBefore.previousElementSibling && wrapBefore.previousElementSibling.classList.contains("table-top-scroll")
-        ? wrapBefore.previousElementSibling.scrollLeft
-        : 0;
+    const row = document.getElementById(`row-${id}`);
+    if (!row) return;
 
-    if (expandedSimpleRows.has(id)) expandedSimpleRows.delete(id);
-    else expandedSimpleRows.add(id);
+    // Save the exact current position. This row toggle must not re-render the
+    // whole table, because rebuilding the table is what can force the browser
+    // back to the top while the user is scrolling.
+    const savedWindowX = window.scrollX;
+    const savedWindowY = window.scrollY;
+    const wrap = row.closest(".simple-table-wrap");
+    const savedWrapLeft = wrap ? wrap.scrollLeft : 0;
+    const topScroll = wrap && wrap.previousElementSibling && wrap.previousElementSibling.classList.contains("table-top-scroll")
+        ? wrap.previousElementSibling
+        : null;
+    const savedTopLeft = topScroll ? topScroll.scrollLeft : 0;
 
-    renderTracking();
+    const existingDetail = row.nextElementSibling && row.nextElementSibling.classList.contains("simple-detail-row")
+        ? row.nextElementSibling
+        : null;
 
+    if (expandedSimpleRows.has(id) || existingDetail) {
+        expandedSimpleRows.delete(id);
+        row.classList.remove("active");
+        if (existingDetail) existingDetail.remove();
+    } else {
+        const donor = filteredDonors.find(r => r.id === id) || allDonors.find(r => r.id === id);
+        if (!donor) return;
+
+        expandedSimpleRows.add(id);
+        row.classList.add("active");
+
+        const colspan = Math.max(1, row.children.length);
+        let detailHtml = renderSimpleDetailRow(donor);
+        detailHtml = detailHtml.replace(/<tr class="simple-detail-row"/, `<tr class="simple-detail-row" data-detail-for="${escapeHtml(id)}"`);
+        detailHtml = detailHtml.replace(/<td colspan="\d+">/, `<td colspan="${colspan}">`);
+        row.insertAdjacentHTML("afterend", detailHtml);
+    }
+
+    // Restore the user's exact view after the DOM update. This keeps the data
+    // open right below the clicked row instead of jumping to the top.
     requestAnimationFrame(() => {
-        const rowAfter = document.getElementById(`row-${id}`);
-        const wrapAfter = rowAfter ? rowAfter.closest(".simple-table-wrap") : null;
-
-        if (wrapAfter) {
-            wrapAfter.scrollLeft = wrapScrollLeftBefore;
-            const topAfter = wrapAfter.previousElementSibling;
-            if (topAfter && topAfter.classList.contains("table-top-scroll")) {
-                topAfter.scrollLeft = topScrollBefore || wrapScrollLeftBefore;
-            }
-        }
-
-        if (rowAfter && rowTopBefore !== null) {
-            const rowTopAfter = rowAfter.getBoundingClientRect().top;
-            window.scrollBy(0, rowTopAfter - rowTopBefore);
-        }
+        if (wrap) wrap.scrollLeft = savedWrapLeft;
+        if (topScroll) topScroll.scrollLeft = savedTopLeft || savedWrapLeft;
+        window.scrollTo(savedWindowX, savedWindowY);
     });
 };
 
