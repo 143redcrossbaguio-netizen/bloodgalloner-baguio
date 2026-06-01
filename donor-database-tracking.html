@@ -834,7 +834,7 @@
                     <button class="main-btn green-btn"  id="exportCsvBtn">Export</button>
                     <button class="main-btn red-btn"    id="collapseAllBtn">Collapse</button>
                     <button class="main-btn blue-btn"   id="expandAllBtn">Expand</button>
-                    <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
+                    <button class="main-btn orange-btn" id="duplicateDataBtn">Show Duplicate This Month</button>
                     <button class="main-btn purple-btn" id="bulkEditBtn">Bulk Edit</button>
                     <button class="main-btn purple-btn" id="bulkEditDateBtn">Bulk Edit This Date</button>
                 </div>
@@ -926,24 +926,6 @@
     </div>
 
     <div id="duplicateBox" class="duplicate-box">
-        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
-        <div class="duplicate-note"  id="duplicateNote"></div>
-        <div class="duplicate-wrap">
-            <table class="duplicate-table">
-                <thead>
-                    <tr>
-                        <th>Duplicate Group</th><th>Entry Date</th><th>Serial Number</th>
-                        <th>Surname</th><th>First Name</th><th>Middle Name</th>
-                        <th>Birthday</th><th>Blood Type</th><th>Donor Type</th>
-                        <th>MBD / Patient Directed</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="duplicateBody">
-                    <tr><td colspan="11">No duplicate data found.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
         <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
         <div class="duplicate-note"  id="duplicateNote"></div>
         <div class="duplicate-wrap">
@@ -1065,7 +1047,6 @@ function populateStaticMonthDropdown(selectId, firstLabel, includeSlowAll = fals
     }
     if (sel.tagName === "SELECT") sel.innerHTML = html;
     if (currentVal) sel.value = currentVal;
-    if (!sel.value && selectId === "groupMonthFilter") sel.value = getCurrentMonthKey();
 }
 
 function populateYearMonthControls() {
@@ -1114,13 +1095,28 @@ function getSelectedMonthKeyFromVisibleFilters() {
 
 async function loadFromVisibleFilters() {
     const dateVal = document.getElementById("trackingDateFilter")?.value || "";
+    const groupEl = document.getElementById("groupMonthFilter");
+    const printEl = document.getElementById("printMonthSelect");
+
     if (dateVal && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
         const monthKey = dateVal.slice(0,7);
-        syncVisibleFiltersFromMonthKey(monthKey);
+        // Date filter is exact, but keep the month hidden value only for print/duplicate helpers.
+        if (groupEl) groupEl.value = monthKey;
+        if (printEl) printEl.value = monthKey;
+        const yearSel = document.getElementById("trackingYearSelect");
+        const monthSel = document.getElementById("trackingMonthSelect");
+        if (yearSel && monthSel) {
+            const [y,m] = monthKey.split("-");
+            yearSel.value = y;
+            monthSel.value = m;
+        }
         headerFilters.entryDate = [dateVal];
     } else {
         headerFilters.entryDate = [];
-        syncVisibleFiltersFromMonthKey(getSelectedMonthKeyFromVisibleFilters());
+        const monthKey = getSelectedMonthKeyFromVisibleFilters();
+        // Blank means no month filter: live search works across everything loaded.
+        if (groupEl) groupEl.value = monthKey || "";
+        if (printEl) printEl.value = monthKey || "";
     }
     await loadDonors();
 }
@@ -1129,9 +1125,13 @@ function initFastMonthSelectors() {
     populateYearMonthControls();
     const g = document.getElementById("groupMonthFilter");
     const p = document.getElementById("printMonthSelect");
-    if (g && !g.value) g.value = getCurrentMonthKey();
-    if (p && !p.value) p.value = g ? g.value : getCurrentMonthKey();
-    syncVisibleFiltersFromMonthKey(g ? g.value : getCurrentMonthKey());
+    const dateEl = document.getElementById("trackingDateFilter");
+
+    // Default is intentionally blank so Live Search can search the whole donor database.
+    // Month/date filters only apply after the user selects them.
+    if (g && g.value === undefined) g.value = "";
+    if (p && p.value === undefined) p.value = "";
+    if (dateEl && !dateEl.value) dateEl.value = "";
 }
 
 // ─── STATUS ───────────────────────────────────────────────────────────────────
@@ -2476,7 +2476,7 @@ async function loadDonors() {
         currentLoadedMonthKey = selectedMonth || "";
         isAllMonthsSlowMode = !selectedMonth && !selectedYear;
 
-        const loadLabel = selectedMonth ? getMonthLabel(selectedMonth) : (selectedYear ? `year ${selectedYear}` : "all months (slow mode)");
+        const loadLabel = selectedMonth ? getMonthLabel(selectedMonth) : (selectedYear ? `year ${selectedYear}` : "all donor database");
         document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${loadLabel} records...</div>`;
 
         let queryRef = db.collection("donorDatabase");
@@ -2514,14 +2514,15 @@ async function loadDonors() {
         if (pms) hideDuplicateBox();
         else     hideDuplicateBox();
 
-        // Auto-detect duplicates immediately after loading — no button needed
-        runAutoDuplicateDetection();
+        // Duplicate Data stays hidden unless the user clicks Show Duplicate This Month.
+        const autoDupBanner = document.getElementById("autoDupBanner");
+        if (autoDupBanner) autoDupBanner.classList.remove("show");
 
         showMessage(selectedMonth
-            ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}. Select another month to load more.`
+            ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}.`
             : (selectedYear
-                ? `Loaded ${allDonors.length} records for year ${selectedYear}. Choose a month for faster navigation.`
-                : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.`),
+                ? `Loaded ${allDonors.length} records for year ${selectedYear}. Live Search will search within this loaded year.`
+                : `Loaded ${allDonors.length} records from the whole donor database. Live Search can now search all dates.`),
             "success"
         );
 
@@ -3470,7 +3471,12 @@ document.getElementById("expandAllBtn").addEventListener("click", () => {
 });
 
 document.getElementById("duplicateDataBtn").addEventListener("click", () => {
-    renderDuplicateMonthView(document.getElementById("printMonthSelect").value);
+    const selectedMonth = document.getElementById("printMonthSelect")?.value || getSelectedMonthKeyFromVisibleFilters();
+    if (!selectedMonth) {
+        showMessage("Please select a specific Year and Month first, or click Show Duplicates This Month inside a month section.", "error");
+        return;
+    }
+    renderDuplicateMonthView(selectedMonth);
 });
 
 // Bulk edit handlers
