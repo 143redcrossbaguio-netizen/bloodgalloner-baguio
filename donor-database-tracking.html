@@ -3011,13 +3011,37 @@ window.toggleTrackingViewMode = function() {
 
 window.toggleSimpleDonorDetails = function(id, event) {
     if (event && event.target && event.target.closest("button,input,select,a")) return;
+
+    const rowBefore = document.getElementById(`row-${id}`);
+    const rowTopBefore = rowBefore ? rowBefore.getBoundingClientRect().top : null;
+    const wrapBefore = rowBefore ? rowBefore.closest(".simple-table-wrap") : null;
+    const wrapScrollLeftBefore = wrapBefore ? wrapBefore.scrollLeft : 0;
+    const topScrollBefore = wrapBefore && wrapBefore.previousElementSibling && wrapBefore.previousElementSibling.classList.contains("table-top-scroll")
+        ? wrapBefore.previousElementSibling.scrollLeft
+        : 0;
+
     if (expandedSimpleRows.has(id)) expandedSimpleRows.delete(id);
     else expandedSimpleRows.add(id);
+
     renderTracking();
-    setTimeout(() => {
-        const row = document.getElementById(`row-${id}`);
-        if (row) row.scrollIntoView({ behavior:"auto", block:"nearest" });
-    }, 0);
+
+    requestAnimationFrame(() => {
+        const rowAfter = document.getElementById(`row-${id}`);
+        const wrapAfter = rowAfter ? rowAfter.closest(".simple-table-wrap") : null;
+
+        if (wrapAfter) {
+            wrapAfter.scrollLeft = wrapScrollLeftBefore;
+            const topAfter = wrapAfter.previousElementSibling;
+            if (topAfter && topAfter.classList.contains("table-top-scroll")) {
+                topAfter.scrollLeft = topScrollBefore || wrapScrollLeftBefore;
+            }
+        }
+
+        if (rowAfter && rowTopBefore !== null) {
+            const rowTopAfter = rowAfter.getBoundingClientRect().top;
+            window.scrollBy(0, rowTopAfter - rowTopBefore);
+        }
+    });
 };
 
 window.toggleSimpleRemarksColumn = function(event) {
