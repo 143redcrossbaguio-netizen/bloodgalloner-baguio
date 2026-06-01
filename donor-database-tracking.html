@@ -902,6 +902,80 @@
     .simple-detail-grid{grid-template-columns:1fr;}
 }
 
+
+/* ============================================================
+   SIMPLE VIEW AUTO-FIT + TOP HORIZONTAL SCROLLBAR
+   Screen only. Official print layout is unchanged.
+   ============================================================ */
+.table-top-scroll{
+    width:100%;
+    height:14px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    border:1px solid #dbe3ec;
+    border-bottom:none;
+    border-radius:6px 6px 0 0;
+    background:#f8fafc;
+    -webkit-overflow-scrolling:touch;
+}
+.table-top-scroll-inner{height:1px;min-width:1px;}
+#trackingContainer .simple-table-wrap{
+    overflow-x:auto !important;
+    overflow-y:visible !important;
+    width:100% !important;
+    border:1px solid #dbe3ec !important;
+    border-top:none !important;
+    border-radius:0 0 6px 6px !important;
+    -webkit-overflow-scrolling:touch;
+}
+#trackingContainer .simple-tracking-table{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    table-layout:auto !important;
+    border-collapse:collapse !important;
+}
+#trackingContainer .simple-tracking-table th,
+#trackingContainer .simple-tracking-table td{
+    height:24px !important;
+    padding:3px 5px !important;
+    line-height:1.12 !important;
+    font-size:11px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    max-width:1px;
+}
+#trackingContainer .simple-tracking-table th{
+    overflow:visible !important;
+    text-overflow:clip !important;
+}
+#trackingContainer .simple-tracking-table .simple-date-col{width:8% !important;min-width:74px !important;max-width:86px !important;}
+#trackingContainer .simple-tracking-table .simple-source-col{width:15% !important;min-width:105px !important;max-width:160px !important;}
+#trackingContainer .simple-tracking-table .simple-walkin-col{width:7% !important;min-width:70px !important;max-width:90px !important;}
+#trackingContainer .simple-tracking-table .simple-pd-col{width:14% !important;min-width:100px !important;max-width:150px !important;}
+#trackingContainer .simple-tracking-table .simple-serial-col{width:10% !important;min-width:90px !important;max-width:120px !important;}
+#trackingContainer .simple-tracking-table .simple-name-col{width:20% !important;min-width:150px !important;max-width:240px !important;text-align:left !important;}
+#trackingContainer .simple-tracking-table .simple-bt-col{width:6% !important;min-width:54px !important;max-width:70px !important;}
+#trackingContainer .simple-tracking-table .simple-bag-col{width:10% !important;min-width:86px !important;max-width:115px !important;}
+#trackingContainer .simple-tracking-table .simple-amount-col{width:7% !important;min-width:64px !important;max-width:80px !important;}
+#trackingContainer .simple-tracking-table .simple-remarks-col{width:15% !important;min-width:120px !important;max-width:180px !important;text-align:left !important;}
+#trackingContainer .simple-tracking-table .simple-actions-col{width:9% !important;min-width:86px !important;max-width:105px !important;}
+#trackingContainer .simple-tracking-table .actions-cell{gap:3px !important;flex-wrap:nowrap !important;}
+#trackingContainer .simple-tracking-table .actions-cell .small-btn{
+    height:21px !important;
+    min-height:21px !important;
+    padding:2px 5px !important;
+    font-size:10px !important;
+}
+#trackingContainer .simple-tracking-table .date-subheader-row td,
+#trackingContainer .simple-detail-row td{
+    max-width:none !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+}
+@media print{.table-top-scroll{display:none !important;}}
+
     </style>
 </head>
 <body>
@@ -1209,7 +1283,11 @@ function populateYearMonthControls() {
         yearSel.value = ""; // keep user's manual All Years selection
     }
 
-    if (oldMonth) monthSel.value = oldMonth;
+    if (oldMonth) {
+        monthSel.value = oldMonth;
+    } else if (!alreadyInitialized) {
+        monthSel.value = String(now.getMonth()+1).padStart(2,"0"); // default fast load: current month
+    }
     yearSel.dataset.initialized = "true";
 }
 
@@ -1265,9 +1343,9 @@ function initFastMonthSelectors() {
     const p = document.getElementById("printMonthSelect");
     const monthKey = getSelectedMonthKeyFromVisibleFilters();
 
-    // Default is current year with all months, not current month and not all years.
-    // Hidden month filter is only filled when both Year + Month are selected,
-    // or when a specific Date Filter is used.
+    // Default is current year + current month for fastest loading.
+    // If Month is manually cleared, it loads the selected year only.
+    // All Years remains available but is intentionally marked slow.
     if (g) g.value = monthKey || "";
     if (p) p.value = monthKey || "";
 }
@@ -2495,6 +2573,7 @@ function renderTrackingFull() {
                             <span>Lapse: ${records.filter(r => isDonorCategory(r,"lapse")).length}</span>
                             ${renderBloodBagSubtotal(records)}
                         </div>
+                        <div class="table-top-scroll" aria-hidden="true"><div class="table-top-scroll-inner"></div></div>
                         <div class="table-wrap">
                             <table>
                                 <thead>
@@ -2665,9 +2744,11 @@ function renderSimpleDetailRow(r) {
         ["Time Started", r._resolvedTimeStarted],
         ["Time Ended", r._resolvedTimeEnded]
     ];
+    if (String(r.remarks || "").trim()) fields.push(["Remarks", r.remarks]);
+    const simpleColspan = Number(window.__simpleCurrentColspan || 10);
     return `
         <tr class="simple-detail-row">
-            <td colspan="11">
+            <td colspan="${simpleColspan}">
                 <div class="simple-detail-box">
                     <div class="simple-detail-title">Full details for ${escapeHtml(donorDisplayName(r))}</div>
                     <div class="simple-detail-grid">
@@ -2702,7 +2783,7 @@ function renderSimpleTracking() {
         return Number(b) - Number(a);
     });
 
-    let html = `<div class="simple-view-note">Simple View is for screen navigation only. Click any donor row to show full details. Print Loaded Month still uses the same full official print layout.</div>`;
+    let html = `<div class="simple-view-note">Default load is the current month for faster opening. Clear Month only when you need to search the whole selected year. Click any donor row to show full details. Print Loaded Month still uses the same full official print layout.</div>`;
 
     sortedYears.forEach((year, yi) => {
         const monthsObj = grouped[year];
@@ -2721,6 +2802,9 @@ function renderSimpleTracking() {
         sortedMonths.forEach((month, mi) => {
             const monthBlock = monthsObj[month];
             const records = monthBlock.records;
+            const hasRemarks = records.some(x => String(x.remarks || "").trim());
+            const simpleColspan = hasRemarks ? 11 : 10;
+            window.__simpleCurrentColspan = simpleColspan;
             const monthKey = getGroupKey("month", year, month);
             const monthCollapsed = isCollapsed(monthKey);
             const monthValue = `${year}-${String(month).padStart(2,"0")}`;
@@ -2752,6 +2836,7 @@ function renderSimpleTracking() {
                             <span>Lapse: ${records.filter(r => isDonorCategory(r,"lapse")).length}</span>
                             ${renderBloodBagSubtotal(records)}
                         </div>
+                        <div class="table-top-scroll" aria-hidden="true"><div class="table-top-scroll-inner"></div></div>
                         <div class="simple-table-wrap">
                             <table class="simple-tracking-table">
                                 <thead>
@@ -2765,7 +2850,7 @@ function renderSimpleTracking() {
                                         <th class="simple-bt-col">${renderHeaderFilterSelect("bloodType", ["O+","O-","A+","A-","B+","B-","AB+","AB-","UNKNOWN"], headerFilters.bloodType, "BT")}</th>
                                         <th class="simple-bag-col">${renderHeaderFilterSelect("bloodBagType", ["SINGLE","DOUBLE","TRIPLE","QUADRUPLE"], headerFilters.bloodBagType, "Bag")}</th>
                                         <th class="simple-amount-col">${renderHeaderFilterSelect("amount", ["450 ML","QNS","UB"], headerFilters.amount, "Amount")}</th>
-                                        <th class="simple-remarks-col">Remarks</th>
+                                        ${hasRemarks ? `<th class="simple-remarks-col">Remarks</th>` : ""}
                                         <th class="simple-actions-col">Actions</th>
                                     </tr>
                                 </thead>
@@ -2778,22 +2863,22 @@ function renderSimpleTracking() {
                     lastDateHeader = rDate;
                     const dayLabel = rDate ? formatDateForDisplay(rDate) : "Unknown Date";
                     const dayCount = records.filter(x => (x._resolvedEntryDate || "") === rDate).length;
-                    html += `<tr class="date-subheader-row"><td colspan="11">📅 ${escapeHtml(dayLabel)} &nbsp;—&nbsp; ${dayCount} record(s) <button type="button" class="date-bulk-btn" onclick="event.stopPropagation(); bulkEditByDate('${rDate}')">Bulk Edit This Date</button></td></tr>`;
+                    html += `<tr class="date-subheader-row"><td colspan="${simpleColspan}">📅 ${escapeHtml(dayLabel)} &nbsp;—&nbsp; ${dayCount} record(s) <button type="button" class="date-bulk-btn" onclick="event.stopPropagation(); bulkEditByDate('${rDate}')">Bulk Edit This Date</button></td></tr>`;
                 }
 
                 const isOpen = expandedSimpleRows.has(r.id);
                 html += `
                     <tr id="row-${r.id}" class="simple-donor-row ${isOpen ? "active" : ""}" onclick="toggleSimpleDonorDetails('${r.id}', event)">
                         <td class="simple-date-col">${escapeHtml(r._resolvedEntryDate)}</td>
-                        <td class="simple-source-col">${escapeUpperHtml(isDonorType(r,"MBD") ? getCategoryDisplay(r,"MBD") : "")}</td>
-                        <td class="simple-walkin-col">${escapeUpperHtml(isDonorType(r,"WALK-IN") ? getCategoryDisplay(r,"WALK-IN") : "")}</td>
-                        <td class="simple-pd-col">${escapeUpperHtml(isDonorType(r,"PATIENT DIRECTED") ? getCategoryDisplay(r,"PATIENT DIRECTED") : "")}</td>
-                        <td class="simple-serial-col">${escapeUpperHtml(r.serialNumber)}</td>
-                        <td class="simple-name-col"><b>${escapeHtml(donorDisplayName(r))}</b></td>
+                        <td class="simple-source-col" title="${escapeHtml(isDonorType(r,"MBD") ? getCategoryDisplay(r,"MBD") : "")}">${escapeUpperHtml(isDonorType(r,"MBD") ? getCategoryDisplay(r,"MBD") : "")}</td>
+                        <td class="simple-walkin-col" title="${escapeHtml(isDonorType(r,"WALK-IN") ? getCategoryDisplay(r,"WALK-IN") : "")}">${escapeUpperHtml(isDonorType(r,"WALK-IN") ? getCategoryDisplay(r,"WALK-IN") : "")}</td>
+                        <td class="simple-pd-col" title="${escapeHtml(isDonorType(r,"PATIENT DIRECTED") ? getCategoryDisplay(r,"PATIENT DIRECTED") : "")}">${escapeUpperHtml(isDonorType(r,"PATIENT DIRECTED") ? getCategoryDisplay(r,"PATIENT DIRECTED") : "")}</td>
+                        <td class="simple-serial-col" title="${escapeHtml(r.serialNumber || "")}">${escapeUpperHtml(r.serialNumber)}</td>
+                        <td class="simple-name-col" title="${escapeHtml(donorDisplayName(r))}"><b>${escapeHtml(donorDisplayName(r))}</b></td>
                         <td class="simple-bt-col">${r._resolvedBloodType ? `<b>${escapeHtml(r._resolvedBloodType)}</b>` : `<span style="color:#b30000;font-weight:bold;">?</span>`}</td>
-                        <td class="simple-bag-col">${escapeUpperHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}</td>
+                        <td class="simple-bag-col" title="${escapeHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}">${escapeUpperHtml([r.bloodBagBrand, r.bloodBagType].filter(Boolean).join(" / "))}</td>
                         <td class="simple-amount-col">${escapeUpperHtml(r.amount)}</td>
-                        <td class="simple-remarks-col">${escapeUpperHtml(r.remarks)}</td>
+                        ${hasRemarks ? `<td class="simple-remarks-col" title="${escapeHtml(r.remarks || "")}">${escapeUpperHtml(r.remarks)}</td>` : ""}
                         <td class="actions-cell simple-actions-col">
                             <button class="small-btn edit-btn" onclick="event.stopPropagation(); startEdit('${r.id}')">Edit</button>
                             <button class="small-btn delete-btn" onclick="event.stopPropagation(); deleteDonor('${r.id}')">Delete</button>
@@ -2808,17 +2893,36 @@ function renderSimpleTracking() {
     });
 
     document.getElementById("trackingContainer").innerHTML = html;
+    setupSyncedTopScrollbars();
     updateTrackingViewToggleButton();
+}
+
+function setupSyncedTopScrollbars() {
+    document.querySelectorAll(".table-top-scroll").forEach(top => {
+        const wrap = top.nextElementSibling;
+        if (!wrap || !(wrap.classList.contains("simple-table-wrap") || wrap.classList.contains("table-wrap"))) return;
+        const inner = top.querySelector(".table-top-scroll-inner");
+        const table = wrap.querySelector("table");
+        if (!inner || !table) return;
+        const syncWidth = () => { inner.style.width = Math.max(table.scrollWidth, wrap.scrollWidth) + "px"; };
+        syncWidth();
+        top.onscroll = () => { wrap.scrollLeft = top.scrollLeft; };
+        wrap.onscroll = () => { top.scrollLeft = wrap.scrollLeft; };
+        setTimeout(syncWidth, 50);
+        setTimeout(syncWidth, 250);
+    });
 }
 
 function renderTracking() {
     updateTrackingViewToggleButton();
     if (trackingViewMode === "full" || isBulkEditingActive()) {
         renderTrackingFull();
+        setupSyncedTopScrollbars();
         updateTrackingViewToggleButton();
         return;
     }
     renderSimpleTracking();
+    setupSyncedTopScrollbars();
 }
 
 // ─── LOAD DONORS ──────────────────────────────────────────────────────────────
@@ -3782,7 +3886,12 @@ document.getElementById("reloadBtn").addEventListener("click", async () => {
     showMessage("Tracking data reloaded.", "success");
 });
 
-document.getElementById("searchInput").addEventListener("input", () => { hideDuplicateBox(); renderTracking(); });
+let searchRenderTimer = null;
+document.getElementById("searchInput").addEventListener("input", () => {
+    hideDuplicateBox();
+    clearTimeout(searchRenderTimer);
+    searchRenderTimer = setTimeout(renderTracking, 180);
+});
 ["trackingYearSelect", "trackingMonthSelect"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", async () => {
