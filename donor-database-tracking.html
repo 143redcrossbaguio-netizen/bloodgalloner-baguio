@@ -304,6 +304,24 @@
             font-size: 13px;
         }
 
+        .subtotal-divider {
+            width: 1px;
+            align-self: stretch;
+            background: #e2c9b5;
+            margin: 0 2px;
+        }
+        .date-bulk-btn {
+            margin-left: 10px;
+            padding: 3px 8px;
+            border-radius: 5px;
+            background: #6b21a8;
+            color: #fff;
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1.1;
+            vertical-align: middle;
+        }
+
         .table-wrap { overflow: auto; width: 100%; max-height: 72vh; }
 
         table { width: 100%; min-width: 2850px; border-collapse: collapse; font-size: 12px; }
@@ -818,6 +836,7 @@
                     <button class="main-btn blue-btn"   id="expandAllBtn">Expand</button>
                     <button class="main-btn orange-btn" id="duplicateDataBtn">Duplicate Data</button>
                     <button class="main-btn purple-btn" id="bulkEditBtn">Bulk Edit</button>
+                    <button class="main-btn purple-btn" id="bulkEditDateBtn">Bulk Edit This Date</button>
                 </div>
             </div>
         </div>
@@ -1833,6 +1852,54 @@ function countType(records, type) { return records.filter(r => isDonorType(r, ty
 function getCategorizedEntryCount(records) {
     return records.filter(r => isDonorType(r,"MBD") || isDonorType(r,"WALK-IN") || isDonorType(r,"PATIENT DIRECTED")).length;
 }
+function normalizeBloodBagBrandForSummary(value) {
+    const s = String(value || "").trim().toUpperCase();
+    if (!s) return "UNKNOWN";
+    if (s.includes("KARMI")) return "KARMI";
+    if (s.includes("TERUMO")) return "TERUMO";
+    return s;
+}
+
+function normalizeBloodBagTypeForSummary(value) {
+    const s = String(value || "").trim().toUpperCase();
+    if (!s) return "UNKNOWN";
+    if (["SINGLE", "S", "1"].includes(s)) return "SINGLE";
+    if (["DOUBLE", "D", "2"].includes(s)) return "DOUBLE";
+    if (["TRIPLE", "T", "3"].includes(s)) return "TRIPLE";
+    if (["QUADRUPLE", "QUAD", "Q", "4"].includes(s)) return "QUADRUPLE";
+    return s;
+}
+
+function countBloodBagSummary(records) {
+    const summary = {
+        brands: { KARMI:0, TERUMO:0, UNKNOWN:0 },
+        types: { SINGLE:0, DOUBLE:0, TRIPLE:0, QUADRUPLE:0, UNKNOWN:0 }
+    };
+    (records || []).forEach(r => {
+        const brand = normalizeBloodBagBrandForSummary(r.bloodBagBrand);
+        const type = normalizeBloodBagTypeForSummary(r.bloodBagType);
+        if (summary.brands[brand] === undefined) summary.brands[brand] = 0;
+        if (summary.types[type] === undefined) summary.types[type] = 0;
+        summary.brands[brand]++;
+        summary.types[type]++;
+    });
+    return summary;
+}
+
+function renderBloodBagSubtotal(records) {
+    const b = countBloodBagSummary(records);
+    return `
+        <span class="subtotal-divider"></span>
+        <span>Blood Bags Used:</span>
+        <span>KARMI: ${b.brands.KARMI || 0}</span>
+        <span>TERUMO: ${b.brands.TERUMO || 0}</span>
+        <span>Single: ${b.types.SINGLE || 0}</span>
+        <span>Double: ${b.types.DOUBLE || 0}</span>
+        <span>Triple: ${b.types.TRIPLE || 0}</span>
+        <span>Quad: ${b.types.QUADRUPLE || 0}</span>
+    `;
+}
+
 
 function computeCurrentDonationTotals(records) {
     const totals = {};
@@ -2288,6 +2355,7 @@ function renderTracking() {
                             <span>New: ${records.filter(r => isDonorCategory(r,"new")).length}</span>
                             <span>Repeat: ${records.filter(r => isDonorCategory(r,"repeat")).length}</span>
                             <span>Lapse: ${records.filter(r => isDonorCategory(r,"lapse")).length}</span>
+                            ${renderBloodBagSubtotal(records)}
                         </div>
                         <div class="table-wrap">
                             <table>
@@ -2332,7 +2400,7 @@ function renderTracking() {
                     _lastDateHeader = _rDate;
                     const _dayLabel = _rDate ? formatDateForDisplay(_rDate) : "Unknown Date";
                     const _dayCount = records.filter(x => (x._resolvedEntryDate || "") === _rDate).length;
-                    html += `<tr class="date-subheader-row"><td colspan="${_TOTAL_COLS}">📅 ${escapeHtml(_dayLabel)} &nbsp;—&nbsp; ${_dayCount} record(s)</td></tr>`;
+                    html += `<tr class="date-subheader-row"><td colspan="${_TOTAL_COLS}">📅 ${escapeHtml(_dayLabel)} &nbsp;—&nbsp; ${_dayCount} record(s) <button type="button" class="date-bulk-btn" onclick="event.stopPropagation(); bulkEditByDate('${_rDate}')">Bulk Edit This Date</button></td></tr>`;
                 }
 
                 const donorKey    = buildDonorKey(r);
@@ -3058,6 +3126,63 @@ function bulkFindRecords() {
         if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
 }
+function detectDateForBulkEdit() {
+    const dateInput = document.getElementById("trackingDateFilter")?.value || "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return dateInput;
+
+    if (Array.isArray(headerFilters.entryDate) && headerFilters.entryDate.length === 1) {
+        return headerFilters.entryDate[0];
+    }
+
+    const visibleDates = [...new Set((filteredDonors || []).map(r => r._resolvedEntryDate || "").filter(Boolean))];
+    if (visibleDates.length === 1) return visibleDates[0];
+
+    return "";
+}
+
+function clearHeaderFiltersForDateOnly(dateValue) {
+    const keepSerialSort = headerFilters.serialSort || "";
+    headerFilters = {
+        entryDate: [dateValue],
+        mbd: [],
+        patientDirected: [],
+        walkIn: "",
+        sex: "",
+        bloodType: "",
+        donorCategory: "",
+        amount: "",
+        bloodBagType: "",
+        serialSort: keepSerialSort
+    };
+}
+
+window.bulkEditByDate = function(dateValue = "") {
+    const selectedDate = dateValue || detectDateForBulkEdit();
+    if (!selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+        openBulkEditPanel();
+        document.getElementById("bulkPanelInfo").innerHTML = "Please select one exact <b>Date Filter</b> first, or click <b>Bulk Edit This Date</b> beside a date header in the table.";
+        showMessage("Please select one exact date first before using Bulk Edit This Date.", "error");
+        return;
+    }
+
+    openBulkEditPanel();
+
+    document.getElementById("bulkFromDate").value = selectedDate;
+    document.getElementById("bulkToDate").value = selectedDate;
+    document.getElementById("bulkFilterDonorType").value = "";
+    document.getElementById("bulkFilterMbdName").value = "";
+    document.getElementById("bulkFilterPdName").value = "";
+    document.getElementById("bulkFilterDonorCategory").value = "";
+
+    const dateEl = document.getElementById("trackingDateFilter");
+    if (dateEl) dateEl.value = selectedDate;
+    syncVisibleFiltersFromMonthKey(selectedDate.slice(0,7));
+    clearHeaderFiltersForDateOnly(selectedDate);
+
+    bulkFindRecords();
+    showMessage(`Bulk edit mode opened for ${formatDateForDisplay(selectedDate)}. Edit the highlighted rows, then click Save All Changes.`, "success");
+};
+
 
 // Called whenever an inline bulk-edit input changes
 window.bulkInlineChange = function(id, field, newValue) {
@@ -3165,14 +3290,25 @@ async function bulkSaveAll() {
         for (let i = 0; i < entries.length; i += BATCH_SIZE) {
             const slice = entries.slice(i, i + BATCH_SIZE);
             const batch = db.batch();
-            slice.forEach(([id, changes]) => {
+            const preparedSlice = slice.map(([id, changes]) => {
+                const preparedChanges = { ...changes };
+                if (preparedChanges.entryDate !== undefined) {
+                    const dateMeta = getMonthMetaFromIso(preparedChanges.entryDate);
+                    preparedChanges.collectionYear = dateMeta.collectionYear;
+                    preparedChanges.collectionMonth = dateMeta.collectionMonth;
+                    preparedChanges.collectionMonthName = dateMeta.collectionMonthName;
+                    preparedChanges.collectionMonthKey = dateMeta.collectionMonthKey;
+                }
+                return [id, preparedChanges];
+            });
+            preparedSlice.forEach(([id, preparedChanges]) => {
                 const ref = db.collection("donorDatabase").doc(id);
-                batch.update(ref, changes);
+                batch.update(ref, preparedChanges);
             });
             try {
                 await batch.commit();
-                success += slice.length;
-                slice.forEach(([id, changes]) => updateLocalDonorRecord(id, changes));
+                success += preparedSlice.length;
+                preparedSlice.forEach(([id, preparedChanges]) => updateLocalDonorRecord(id, preparedChanges));
             } catch (err) {
                 console.error("Bulk batch failed:", err);
                 failed += slice.length;
@@ -3339,6 +3475,7 @@ document.getElementById("duplicateDataBtn").addEventListener("click", () => {
 
 // Bulk edit handlers
 document.getElementById("bulkEditBtn").addEventListener("click", openBulkEditPanel);
+document.getElementById("bulkEditDateBtn").addEventListener("click", () => bulkEditByDate());
 document.getElementById("bulkPanelCloseBtn").addEventListener("click", closeBulkEditPanel);
 document.getElementById("bulkResetBtn").addEventListener("click", resetBulkEditFields);
 document.getElementById("bulkFindBtn").addEventListener("click", bulkFindRecords);
