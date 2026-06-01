@@ -174,6 +174,28 @@
         #cityProvince{position:relative;z-index:1;background:transparent!important}
         #cityProvince::placeholder{color:#9ca3af}
         .city-inline-note{font-size:11px;color:#64748b;margin-top:4px}
+        .predictive-suggest-wrap{position:relative;width:100%}
+        .predictive-inline-wrap{position:relative;width:100%}
+        .predictive-inline-hint{
+            position:absolute;
+            inset:0;
+            padding:8px 10px;
+            border:1px solid transparent;
+            border-radius:8px;
+            font-size:13px;
+            line-height:normal;
+            color:#9ca3af;
+            background:#fff;
+            pointer-events:none;
+            white-space:pre;
+            overflow:hidden;
+            z-index:0;
+        }
+        .predictive-inline-hint .typed-part{visibility:hidden}
+        .predictive-inline-hint .completion-part{color:#9ca3af}
+        .predictive-input{position:relative;z-index:1;background:transparent!important}
+        .predictive-input::placeholder{color:#9ca3af}
+        .predictive-inline-note{font-size:11px;color:#64748b;margin-top:4px}
 
     </style>
 </head>
@@ -242,7 +264,10 @@
                             </div>
                             <div id="mbdBox" class="hidden" style="margin-top:10px">
                                 <div class="field-row">
-                                    <input type="text" id="mbdDetails" placeholder="Enter MBD site / organization">
+                                    <div class="predictive-suggest-wrap">
+                                        <div class="predictive-inline-wrap"><div id="mbdInlineHint" class="predictive-inline-hint"></div><input type="text" id="mbdDetails" class="predictive-input" autocomplete="new-password" autocapitalize="characters" spellcheck="false" placeholder="Enter MBD site / organization"></div>
+                                        <div class="predictive-inline-note">Suggestions are pulled from Group Category Entry. Press <b>Tab</b> or <b>Enter</b> to accept.</div>
+                                    </div>
                                     <input type="number" id="mbdCount" min="1" placeholder="Number of MBD donors">
                                 </div>
                                 <div style="margin-top:10px"><button type="button" id="startMbdGroupBtn" class="main-btn blue-btn">Start MBD Group</button></div>
@@ -270,7 +295,12 @@
                                         <label><input type="radio" name="rangeDonorType" value="MBD"> MBD</label>
                                         <label><input type="radio" name="rangeDonorType" value="Patient Directed"> Patient Directed</label>
                                     </div>
-                                    <div id="rangeMbdBox" class="hidden" style="margin-top:10px"><input type="text" id="rangeMbdDetails" placeholder="Range MBD site / organization"></div>
+                                    <div id="rangeMbdBox" class="hidden" style="margin-top:10px">
+                                        <div class="predictive-suggest-wrap">
+                                            <div class="predictive-inline-wrap"><div id="rangeMbdInlineHint" class="predictive-inline-hint"></div><input type="text" id="rangeMbdDetails" class="predictive-input" autocomplete="new-password" autocapitalize="characters" spellcheck="false" placeholder="Range MBD site / organization"></div>
+                                            <div class="predictive-inline-note">Suggestions are pulled from Group Category Entry. Press <b>Tab</b> or <b>Enter</b> to accept.</div>
+                                        </div>
+                                    </div>
                                     <div id="rangePatientBox" class="hidden" style="margin-top:10px"><input type="text" id="rangePatientDetails" placeholder="Range patient directed details"></div>
                                     <div id="rangeTypeInfo" class="range-type-info hidden"></div>
                                 </div>
@@ -295,7 +325,7 @@
                         <select id="sex" required><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
                     <div class="field-group span-8"><label for="address">11. Address</label><input type="text" id="address" required></div>
                     <div class="field-group span-4 city-suggest-wrap"><label for="cityProvince">12. Province / City</label><div class="city-inline-wrap"><div id="cityInlineHint" class="city-inline-hint"></div><input type="text" id="cityProvince" name="cityProvinceManualOnly" autocomplete="new-password" autocapitalize="characters" spellcheck="false" placeholder="Type city/province" required></div><div class="city-inline-note">Press <b>Tab</b> or <b>Enter</b> to accept the gray suggestion.</div></div>
-                    <div class="field-group span-6"><label for="occupation">13. Occupation</label><input type="text" id="occupation"></div>
+                    <div class="field-group span-6"><label for="occupation">13. Occupation</label><div class="predictive-suggest-wrap"><div class="predictive-inline-wrap"><div id="occupationInlineHint" class="predictive-inline-hint"></div><input type="text" id="occupation" class="predictive-input" autocomplete="new-password" autocapitalize="characters" spellcheck="false"></div><div class="predictive-inline-note">Press <b>Tab</b> or <b>Enter</b> to accept the gray suggestion.</div></div></div>
                     <div class="field-group span-6"><label for="contactNumber">14. Contact Number</label><input type="text" id="contactNumber" inputmode="numeric"></div>
                     <div class="field-group span-6">
                         <label>15. Type of Donor</label>
@@ -386,8 +416,10 @@ const serialBatchInfo=document.getElementById("serialBatchInfo"),serialBatchPrev
 const rangeDonorTypeRadios=document.querySelectorAll('input[name="rangeDonorType"]'),rangeMbdBox=document.getElementById("rangeMbdBox"),rangeMbdDetails=document.getElementById("rangeMbdDetails"),rangePatientBox=document.getElementById("rangePatientBox"),rangePatientDetails=document.getElementById("rangePatientDetails"),rangeTypeInfo=document.getElementById("rangeTypeInfo");
 const timeStartedInput=document.getElementById("timeStarted"),timeEndedInput=document.getElementById("timeEnded"),timeHelperBox=document.getElementById("timeHelperBox");
 const cityProvinceInput=document.getElementById("cityProvince"),cityInlineHint=document.getElementById("cityInlineHint");
+const occupationInput=document.getElementById("occupation"),occupationInlineHint=document.getElementById("occupationInlineHint");
+const mbdInlineHint=document.getElementById("mbdInlineHint"),rangeMbdInlineHint=document.getElementById("rangeMbdInlineHint");
 let currentUser=null,authReady=false,loadedDonorRecord=null,donorLookupResults=[],autoTypeSuggestion="",autoTypeReason="",isSaving=false,donorSearchDebounce=null;
-let citySuggestionLoaded=false;
+let citySuggestionLoaded=false,mbdGroupSuggestionLoaded=false,occupationSuggestionLoaded=false;
 const AG_KEY="donorEntryActiveGroup",SB_KEY="donorEntrySerialBatch";
 const IDENTITY_FIELDS=["suffix","surname","firstName","middleName","birthday","civilStatus","sex","address","cityProvince","occupation","contactNumber"];
 
@@ -623,13 +655,196 @@ async function loadCityProvinceSuggestions(){
     }
 }
 
+function normalizePredictiveValue(v){
+    return String(v||"").trim().replace(/\s+/g," ").toUpperCase();
+}
+function normalizePredictiveKey(v){
+    return normalizePredictiveValue(v)
+        .replace(/[’']/g,"")
+        .replace(/[.\/_,-]+/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+}
+function isInitialLastMatch(queryKey,itemKey){
+    const q=queryKey.split(" ").filter(Boolean),i=itemKey.split(" ").filter(Boolean);
+    if(q.length<2||i.length<2)return false;
+    const firstInitial=i[0].length===1&&q[0].startsWith(i[0]);
+    const lastSame=q[q.length-1]===i[i.length-1];
+    return firstInitial&&lastSame;
+}
+
+let mbdGroupSuggestionItems=[];
+let currentMbdInlineSuggestion="";
+let currentRangeMbdInlineSuggestion="";
+
+function setMbdGroupSuggestionOptions(options){
+    const unique=[];
+    const seen=new Set();
+    (options||[]).forEach(item=>{
+        const raw=typeof item==="string"?item:(item&&item.value)||"";
+        const canonical=normalizePredictiveValue(raw);
+        if(!canonical||seen.has(canonical))return;
+        seen.add(canonical);
+        const aliases=Array.isArray(item?.aliases)?item.aliases:[];
+        const keys=[canonical,...aliases].map(normalizePredictiveKey).filter(Boolean);
+        unique.push({value:canonical,keys:[...new Set(keys)],count:item?.count||0});
+    });
+    mbdGroupSuggestionItems=unique.slice(0,250);
+    renderMbdInlineSuggestion(mbdDetails,mbdInlineHint,"main");
+    renderMbdInlineSuggestion(rangeMbdDetails,rangeMbdInlineHint,"range");
+}
+
+function getBestMbdGroupSuggestion(inputEl,allowPrefix=true){
+    const q=normalizePredictiveKey(inputEl.value);
+    if(!q)return null;
+    for(const item of mbdGroupSuggestionItems){
+        if(item.keys.some(k=>k===q))return {item,exact:true};
+    }
+    for(const item of mbdGroupSuggestionItems){
+        if(item.keys.some(k=>isInitialLastMatch(q,k)||isInitialLastMatch(k,q)))return {item,exact:true};
+    }
+    if(!allowPrefix)return null;
+    const starts=mbdGroupSuggestionItems.filter(item=>item.keys.some(k=>k.startsWith(q)));
+    if(starts.length)return {item:starts[0],exact:false};
+    const reverse=mbdGroupSuggestionItems.filter(item=>item.keys.some(k=>q.startsWith(k)&&k.length>=4));
+    if(reverse.length)return {item:reverse[0],exact:false};
+    return null;
+}
+
+function renderMbdInlineSuggestion(inputEl,hintEl,mode){
+    if(!inputEl||!hintEl)return;
+    const typed=String(inputEl.value||"");
+    const q=normalizePredictiveKey(typed);
+    const best=getBestMbdGroupSuggestion(inputEl,true);
+    if(!typed.trim()||!best||normalizePredictiveValue(typed)===best.item.value){
+        if(mode==="range")currentRangeMbdInlineSuggestion="";else currentMbdInlineSuggestion="";
+        hintEl.innerHTML="";
+        return;
+    }
+    const suggestion=best.item.value;
+    if(mode==="range")currentRangeMbdInlineSuggestion=suggestion;else currentMbdInlineSuggestion=suggestion;
+    let completion="";
+    if(normalizePredictiveKey(suggestion).startsWith(q))completion=suggestion.slice(Math.min(typed.length,suggestion.length));
+    else completion=suggestion;
+    hintEl.innerHTML=`<span class="typed-part">${esc(typed)}</span><span class="completion-part">${esc(completion)}</span>`;
+}
+
+function acceptMbdGroupSuggestion(inputEl,hintEl,mode,value){
+    const v=normalizePredictiveValue(value||(mode==="range"?currentRangeMbdInlineSuggestion:currentMbdInlineSuggestion));
+    if(!v)return false;
+    inputEl.value=v;
+    if(mode==="range")currentRangeMbdInlineSuggestion="";else currentMbdInlineSuggestion="";
+    if(hintEl)hintEl.innerHTML="";
+    if(inputEl===rangeMbdDetails)updateRangeFields();
+    inputEl.focus();
+    return true;
+}
+
+function canonicalizeMbdGroupValue(raw){
+    const temp={value:raw||""};
+    const best=getBestMbdGroupSuggestion(temp,false);
+    return best?best.item.value:normalizePredictiveValue(raw);
+}
+
+async function loadMbdGroupSuggestions(){
+    if(mbdGroupSuggestionLoaded)return;
+    mbdGroupSuggestionLoaded=true;
+    try{
+        const snap=await db.collection("donorGroupCategories").get();
+        const items=[];
+        snap.forEach(doc=>{
+            const r=doc.data()||{};
+            const name=r.partnerName||r.name||r.groupName||"";
+            if(!name)return;
+            const aliases=[];
+            if(r.normalizedKey)aliases.push(r.normalizedKey);
+            if(r.place)aliases.push(r.place);
+            if(Array.isArray(r.aliases))aliases.push(...r.aliases);
+            items.push({value:name,aliases});
+        });
+        if(items.length)setMbdGroupSuggestionOptions(items);
+    }catch(err){
+        console.warn("MBD group suggestion loading skipped:",err);
+    }
+}
+
+let occupationSuggestionItems=[];
+let currentOccupationInlineSuggestion="";
+
+function setOccupationSuggestionOptions(options){
+    const unique=[];
+    const seen=new Set();
+    (options||[]).forEach(item=>{
+        const value=typeof item==="string"?item:(item&&item.value)||"";
+        const count=typeof item==="object"?(item.count||0):0;
+        const occ=normalizePredictiveValue(value);
+        if(!occ||seen.has(occ))return;
+        seen.add(occ);
+        unique.push({value:occ,count});
+    });
+    occupationSuggestionItems=unique.slice(0,150);
+    renderOccupationInlineSuggestion();
+}
+function getBestOccupationSuggestion(){
+    const q=normalizePredictiveKey(occupationInput.value);
+    if(!q)return null;
+    const exact=occupationSuggestionItems.find(item=>normalizePredictiveKey(item.value)===q);
+    if(exact)return null;
+    const starts=occupationSuggestionItems.filter(item=>normalizePredictiveKey(item.value).startsWith(q));
+    if(starts.length)return starts[0];
+    return null;
+}
+function renderOccupationInlineSuggestion(){
+    if(!occupationInlineHint)return;
+    const typed=String(occupationInput.value||"");
+    const q=normalizePredictiveKey(typed);
+    const best=getBestOccupationSuggestion();
+    if(!typed.trim()||!best){
+        currentOccupationInlineSuggestion="";
+        occupationInlineHint.innerHTML="";
+        return;
+    }
+    currentOccupationInlineSuggestion=best.value;
+    const completion=best.value.slice(q.length);
+    occupationInlineHint.innerHTML=`<span class="typed-part">${esc(typed)}</span><span class="completion-part">${esc(completion)}</span>`;
+}
+function acceptOccupationSuggestion(value){
+    const v=normalizePredictiveValue(value||currentOccupationInlineSuggestion);
+    if(!v)return false;
+    occupationInput.value=v;
+    currentOccupationInlineSuggestion="";
+    if(occupationInlineHint)occupationInlineHint.innerHTML="";
+    occupationInput.focus();
+    return true;
+}
+async function loadOccupationSuggestions(){
+    if(occupationSuggestionLoaded)return;
+    occupationSuggestionLoaded=true;
+    try{
+        const snap=await db.collection("donorDatabase").limit(3000).get();
+        const counts={};
+        snap.forEach(doc=>{
+            const r=doc.data()||{};
+            const occ=normalizePredictiveValue(r.occupation||"");
+            if(!occ)return;
+            counts[occ]=(counts[occ]||0)+1;
+        });
+        const ranked=Object.entries(counts)
+            .map(([value,count])=>({value,count}))
+            .sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value));
+        if(ranked.length)setOccupationSuggestionOptions(ranked);
+    }catch(err){
+        console.warn("Occupation suggestion loading skipped:",err);
+    }
+}
+
 function clearLoadedDonor(){loadedDonorRecord=null;loadedDonorInfo.classList.add("hidden");loadedDonorInfo.textContent="";clearHighlights();setCatMode("");numberOfDonations.value="";updateAutoType();}
 function clearEntryFields(){["suffix","surname","firstName","middleName","birthday","age","address","cityProvince","occupation","contactNumber"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});document.getElementById("civilStatus").selectedIndex=0;document.getElementById("sex").selectedIndex=0;document.getElementById("bloodType").selectedIndex=0;document.getElementById("bloodBagBrand").selectedIndex=0;document.getElementById("bloodBagType").selectedIndex=0;document.getElementById("amount").selectedIndex=0;document.getElementById("timeStarted").value="";document.getElementById("timeEnded").value="";document.getElementById("remarks").value="";setCatMode("");numberOfDonations.value="";timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";clearHighlights();}
 attachTime(timeStartedInput); attachTime(timeEndedInput);
 donorTypeRadios.forEach(r=>r.addEventListener("change",updateTypeFields));
 donorCategoryRadios.forEach(r=>r.addEventListener("change",function(){if(r.checked)setCatMode(r.value);}));
 rangeDonorTypeRadios.forEach(r=>r.addEventListener("change",updateRangeFields));
-rangeMbdDetails.addEventListener("input",updateRangeFields); rangePatientDetails.addEventListener("input",updateRangeFields);
+rangeMbdDetails.addEventListener("input",()=>{updateRangeFields();renderMbdInlineSuggestion(rangeMbdDetails,rangeMbdInlineHint,"range");}); rangePatientDetails.addEventListener("input",updateRangeFields);
 birthday.addEventListener("change",computeAge);
 entryDate.addEventListener("change",()=>{updateAutoType();renderAG();updateSerialPrefixByDate();});
 useSerialPrefix.addEventListener("change",updateSerialUI);
@@ -655,14 +870,14 @@ serialNumberInput.addEventListener("input", function() {
 numberOfDonations.addEventListener("blur",normCountField);
 timeStartedInput.addEventListener("change",validateTimes); timeEndedInput.addEventListener("change",validateTimes);
 donorForm.addEventListener("keydown",function(e){if(e.key!=="Enter")return;if(e.target.tagName.toLowerCase()==="textarea")return;if(["button","submit","reset"].includes(e.target.type))return;e.preventDefault();focusNext(e.target);});
-generateSerialRangeBtn.addEventListener("click",function(){try{const rt=selRangeType();if(!rt){showMsg("Please select the Range Donor Type.","error");return;}if(rt==="MBD"&&!rangeMbdDetails.value.trim()){showMsg("Please enter the Range MBD site.","error");return;}if(rt==="Patient Directed"&&!rangePatientDetails.value.trim()){showMsg("Please enter Range patient directed details.","error");return;}const list=buildRange(serialRangeStart.value,serialRangeEnd.value,serialRangeSkip.value);setSerialBatch(list);showMsg(`Serial list generated. ${list.length} serial(s) ready.`,"success");}catch(err){showMsg(err.message,"error");}});
+generateSerialRangeBtn.addEventListener("click",function(){try{const rt=selRangeType();if(rt==="MBD"&&rangeMbdDetails.value.trim())rangeMbdDetails.value=canonicalizeMbdGroupValue(rangeMbdDetails.value);const rt2=selRangeType();if(!rt2){showMsg("Please select the Range Donor Type.","error");return;}if(rt2==="MBD"&&!rangeMbdDetails.value.trim()){showMsg("Please enter the Range MBD site.","error");return;}if(rt2==="Patient Directed"&&!rangePatientDetails.value.trim()){showMsg("Please enter Range patient directed details.","error");return;}const list=buildRange(serialRangeStart.value,serialRangeEnd.value,serialRangeSkip.value);setSerialBatch(list);showMsg(`Serial list generated. ${list.length} serial(s) ready.`,"success");}catch(err){showMsg(err.message,"error");}});
 nextSerialBtn.addEventListener("click",()=>loadNextSerial(true));
 clearSerialBatchBtn.addEventListener("click",()=>{clrSBatch();showMsg("Serial list cleared.","success");});
 lookupSearch.addEventListener("input",()=>{clearTimeout(donorSearchDebounce);donorSearchDebounce=setTimeout(searchDonors,300);});
 clearLoadedDonorBtn.addEventListener("click",clearLoadedDonor);
 document.getElementById("reloadPageBtn").addEventListener("click",()=>window.location.reload());
 startWalkInGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const count=parseInt(walkInCount.value||"0");if(count<=0){showMsg("Please enter a valid number of walk-in donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"Walk-in",organization:"",details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("Walk-in");renderAG();showMsg(`Walk-in group started for ${count} donors.`,"success");});
-startMbdGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}const org=mbdDetails.value.trim(),count=parseInt(mbdCount.value||"0");if(!org){showMsg("Please enter MBD site / organization.","error");return;}if(count<=0){showMsg("Please enter a valid number of MBD donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"MBD",organization:org,details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("MBD");renderAG();showMsg(`MBD group started for ${count} donors under ${org}.`,"success");});
+startMbdGroupBtn.addEventListener("click",function(){if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return;}if(mbdDetails.value.trim())mbdDetails.value=canonicalizeMbdGroupValue(mbdDetails.value);const org=mbdDetails.value.trim(),count=parseInt(mbdCount.value||"0");if(!org){showMsg("Please enter MBD site / organization.","error");return;}if(count<=0){showMsg("Please enter a valid number of MBD donors.","error");return;}setAG({entryDate:entryDate.value,donorType:"MBD",organization:org,details:"",remaining:count,originalCount:count,createdBy:currentUser.uid,createdAtMs:Date.now(),updatedAtMs:Date.now()});setDonorType("MBD");renderAG();showMsg(`MBD group started for ${count} donors under ${org}.`,"success");});
 endGroupBtn.addEventListener("click",()=>{clrAG();renderAG();showMsg("Active group ended manually.","success");});
 // ============================================================
 // DUPLICATE DETECTION HELPERS
@@ -794,7 +1009,7 @@ async function checkDuplicates(finalSerial, surname, firstName, middleName, birt
 // END DUPLICATE DETECTION HELPERS
 // ============================================================
 
-donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();clearDupWarning();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||""):"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select at least one donor type.","error");return false;}if(hasDonorType("Patient Directed")&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(hasDonorType("MBD")&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:hasDonorType("Patient Directed")?pdVal:"",mbdDetails:hasDonorType("MBD")?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();clearDupWarning();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}if(mbdDetails.value.trim())mbdDetails.value=canonicalizeMbdGroupValue(mbdDetails.value);if(rangeMbdDetails.value.trim())rangeMbdDetails.value=canonicalizeMbdGroupValue(rangeMbdDetails.value);const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),sb=getSB(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}const rt=sb?(sb.rangeDonorType||""):"";if(rt&&!selDonorType()){setDonorType(rt);if(rt==="MBD"&&sb.rangeMbdDetails)mbdDetails.value=sb.rangeMbdDetails;if(rt==="Patient Directed"&&sb.rangePatientDetails)patientDirectedDetails.value=sb.rangePatientDetails;}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select at least one donor type.","error");return false;}if(hasDonorType("Patient Directed")&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(hasDonorType("MBD")&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!document.getElementById("birthday").value){showMsg("Please enter birthday.","error");return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:hasDonorType("Patient Directed")?pdVal:"",mbdDetails:hasDonorType("MBD")?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",serialBatchActive:!!getSB(),serialBatchAssignedType:sb?(sb.rangeDonorType||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
 
 // ── DUPLICATE CHECK before saving ──────────────────────────
 setSaving(true);
@@ -825,6 +1040,37 @@ sendToGoogleSheets(data);
 let gr={group:null,completed:false};if(hasGroup)gr=consumeAG();const sr=consumeSB();clearLoadedDonor();clearEntryFields();const rag=getAG();if(rag&&rag.entryDate===entryDate.value&&rag.remaining>0){if(rag.donorType==="Walk-in")setDonorType("Walk-in");else if(rag.donorType==="MBD"){setDonorType("MBD");mbdDetails.value=rag.organization||"";}else if(rag.donorType==="Patient Directed"){setDonorType("Patient Directed");patientDirectedDetails.value=rag.details||"";}}renderAG();updateAutoType();updateSerialPrefixByDate();if(sr.batch?.list?.length)serialNumberInput.value=sr.batch.list[0];else serialNumberInput.value="";serialNumberInput.focus();let msgs=["Donor record saved successfully."];if(sr.batch?.list?.length)msgs.push(`Next serial loaded. Remaining: ${sr.batch.list.length}.`);if(sr.completed)msgs.push("Serial range completed.");if(rag?.entryDate===entryDate.value&&rag.remaining>0)msgs.push(`Active ${rag.donorType} group remaining: ${rag.remaining}.`);if(gr.completed){msgs.push("Group completed.");walkInCount.value="";mbdCount.value="";}if(!rag&&!gr.completed){walkInCount.value="";mbdCount.value="";}showMsg(msgs.join(" "),"success");return false;}catch(err){console.error(err);showMsg("Failed to save: "+err.message,"error");return false;}finally{setSaving(false);}});
 donorForm.addEventListener("reset",function(){setTimeout(()=>{clearLoadedDonor();setTodayDate();
         serialNumberInput.style.borderColor="";serialNumberInput.style.boxShadow="";age.value="";setCatMode("");numberOfDonations.value="";donorTypeCBs.forEach(r=>{r.checked=false;});dtBlockedNote&&dtBlockedNote.classList.add("hidden");dtComboNote&&dtComboNote.classList.add("hidden");patientDirectedBox.classList.add("hidden");walkInBox.classList.add("hidden");mbdBox.classList.add("hidden");clearMsg();timeHelperBox.classList.add("hidden");timeHelperBox.textContent="";updateSerialUI();renderAG();renderBatchInfo();updateAutoType();const b=getSB();if(b?.list?.length)serialNumberInput.value=b.list[0];},50);});
+function attachMbdPredictiveInput(inputEl,hintEl,mode){
+    inputEl.addEventListener("focus",()=>{loadMbdGroupSuggestions();renderMbdInlineSuggestion(inputEl,hintEl,mode);});
+    inputEl.addEventListener("input",()=>{if(!mbdGroupSuggestionLoaded)loadMbdGroupSuggestions();renderMbdInlineSuggestion(inputEl,hintEl,mode);});
+    inputEl.addEventListener("blur",()=>{const best=getBestMbdGroupSuggestion(inputEl,false);if(best){inputEl.value=best.item.value;if(inputEl===rangeMbdDetails)updateRangeFields();}if(hintEl)hintEl.innerHTML="";});
+    inputEl.addEventListener("keydown",e=>{
+        const cur=mode==="range"?currentRangeMbdInlineSuggestion:currentMbdInlineSuggestion;
+        if((e.key==="Enter"||e.key==="Tab")&&cur){
+            e.preventDefault();
+            acceptMbdGroupSuggestion(inputEl,hintEl,mode,cur);
+            if(e.key==="Tab")focusNext(inputEl);
+        }else if(e.key==="Escape"){
+            if(mode==="range")currentRangeMbdInlineSuggestion="";else currentMbdInlineSuggestion="";
+            if(hintEl)hintEl.innerHTML="";
+        }
+    });
+}
+attachMbdPredictiveInput(mbdDetails,mbdInlineHint,"main");
+attachMbdPredictiveInput(rangeMbdDetails,rangeMbdInlineHint,"range");
+occupationInput.addEventListener("focus",()=>{loadOccupationSuggestions();renderOccupationInlineSuggestion();});
+occupationInput.addEventListener("input",()=>{if(!occupationSuggestionLoaded)loadOccupationSuggestions();renderOccupationInlineSuggestion();});
+occupationInput.addEventListener("blur",()=>{if(occupationInlineHint)occupationInlineHint.innerHTML="";});
+occupationInput.addEventListener("keydown",e=>{
+    if((e.key==="Enter"||e.key==="Tab")&&currentOccupationInlineSuggestion){
+        e.preventDefault();
+        acceptOccupationSuggestion(currentOccupationInlineSuggestion);
+        if(e.key==="Tab")focusNext(occupationInput);
+    }else if(e.key==="Escape"){
+        currentOccupationInlineSuggestion="";
+        if(occupationInlineHint)occupationInlineHint.innerHTML="";
+    }
+});
 cityProvinceInput.addEventListener("focus",()=>{ loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
 cityProvinceInput.addEventListener("input",()=>{ if(!citySuggestionLoaded) loadCityProvinceSuggestions(); renderCityInlineSuggestion(); });
 cityProvinceInput.addEventListener("blur",()=>{ if(cityInlineHint)cityInlineHint.innerHTML=""; });
@@ -838,7 +1084,7 @@ cityProvinceInput.addEventListener("keydown",e=>{
         if(cityInlineHint)cityInlineHint.innerHTML="";
     }
 });
-auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();setTimeout(loadCityProvinceSuggestions,800);}else setAuthInd("No logged in user detected.",false);});
+auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();setTimeout(()=>{loadCityProvinceSuggestions();loadMbdGroupSuggestions();loadOccupationSuggestions();},800);}else setAuthInd("No logged in user detected.",false);});
 setTodayDate();setCatMode("");numberOfDonations.value="";updateAutoType();updateSerialUI();validateTimes();renderAG();renderBatchInfo();updateRangeFields();setRangeCollapsed(false);
 const eb=getSB();if(eb?.list?.length){serialNumberInput.value=eb.list[0];rangeDonorTypeRadios.forEach(r=>{r.checked=r.value===eb.rangeDonorType;});rangeMbdDetails.value=eb.rangeMbdDetails||"";rangePatientDetails.value=eb.rangePatientDetails||"";updateRangeFields();}
 </script>
