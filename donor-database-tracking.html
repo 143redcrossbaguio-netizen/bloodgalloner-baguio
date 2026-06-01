@@ -1078,6 +1078,77 @@
     white-space:nowrap !important;
 }
 
+    
+
+/* ============================================================
+   FINAL SIMPLE VIEW FIX — compact wrapped MBD / Patient-Directed
+   and cleaner header spacing. Screen only; print layout unchanged.
+   ============================================================ */
+@media screen {
+    #trackingContainer .simple-tracking-table{
+        width:100% !important;
+        min-width:1180px !important;
+        table-layout:auto !important;
+    }
+    #trackingContainer .simple-tracking-table th,
+    #trackingContainer .simple-tracking-table td{
+        padding:5px 7px !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-source-col,
+    #trackingContainer .simple-tracking-table .simple-pd-col{
+        width:150px !important;
+        min-width:130px !important;
+        max-width:170px !important;
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        word-break:normal !important;
+        overflow-wrap:anywhere !important;
+        line-height:1.18 !important;
+        vertical-align:top !important;
+        text-align:left !important;
+    }
+    #trackingContainer .simple-tracking-table thead .simple-source-col,
+    #trackingContainer .simple-tracking-table thead .simple-pd-col{
+        vertical-align:middle !important;
+        text-align:center !important;
+    }
+    #trackingContainer .simple-tracking-table .simple-date-col{width:96px !important;min-width:96px !important;max-width:96px !important;}
+    #trackingContainer .simple-tracking-table .simple-walkin-col{width:82px !important;min-width:82px !important;max-width:90px !important;}
+    #trackingContainer .simple-tracking-table .simple-serial-col{width:122px !important;min-width:118px !important;max-width:130px !important;}
+    #trackingContainer .simple-tracking-table .simple-name-col{width:250px !important;min-width:225px !important;max-width:270px !important;}
+    #trackingContainer .simple-tracking-table .simple-cat-col{width:92px !important;min-width:86px !important;max-width:96px !important;}
+    #trackingContainer .simple-tracking-table .simple-bt-col{width:64px !important;min-width:58px !important;max-width:70px !important;}
+    #trackingContainer .simple-tracking-table .simple-bag-col{width:118px !important;min-width:108px !important;max-width:128px !important;}
+    #trackingContainer .simple-tracking-table .simple-amount-col{width:78px !important;min-width:72px !important;max-width:86px !important;}
+    #trackingContainer .simple-tracking-table .simple-remarks-col{width:160px !important;min-width:140px !important;max-width:190px !important;white-space:normal !important;overflow-wrap:anywhere !important;}
+    #trackingContainer .simple-tracking-table .simple-actions-col{width:105px !important;min-width:100px !important;max-width:110px !important;}
+    #trackingContainer .simple-tracking-table .header-filter-wrap{
+        gap:3px !important;
+    }
+    #trackingContainer .simple-tracking-table .header-filter-wrap > span{
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        font-size:11px !important;
+    }
+    #trackingContainer .simple-tracking-table .header-filter-wrap > select,
+    #trackingContainer .simple-tracking-table .multi-filter-btn{
+        height:26px !important;
+        min-height:26px !important;
+        font-size:11.5px !important;
+        padding:2px 5px !important;
+    }
+    #trackingContainer .simple-tracking-table tbody tr.simple-donor-row td{
+        height:auto !important;
+        min-height:28px !important;
+    }
+    #trackingContainer .simple-tracking-table td.simple-source-col,
+    #trackingContainer .simple-tracking-table td.simple-pd-col{
+        font-size:11.5px !important;
+    }
+}
+
     </style>
 </head>
 <body>
@@ -1231,24 +1302,6 @@
             </table>
         </div>
     </div>
-        <div class="duplicate-title" id="duplicateTitle">Duplicate Data</div>
-        <div class="duplicate-note"  id="duplicateNote"></div>
-        <div class="duplicate-wrap">
-            <table class="duplicate-table">
-                <thead>
-                    <tr>
-                        <th>Duplicate Group</th><th>Entry Date</th><th>Serial Number</th>
-                        <th>Surname</th><th>First Name</th><th>Middle Name</th>
-                        <th>Birthday</th><th>Blood Type</th><th>Donor Type</th>
-                        <th>MBD / Patient Directed</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="duplicateBody">
-                    <tr><td colspan="11">No duplicate data found.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
 
     <!-- Skipped Serials panel -->
     <div id="skippedBox" class="skipped-box">
@@ -1317,12 +1370,30 @@ const MONTHS = [
 // the entire donorDatabase collection every time.
 let currentLoadedMonthKey = "";
 let isAllMonthsSlowMode = false;
+let monthControlsInitialized = false;
+let donorLoadRequestId = 0;
+let partnerAliasLoadPromise = null;
+let partnerAliasLoadedOnce = false;
 let trackingViewMode = localStorage.getItem("donorTrackingViewMode") || "simple";
 let expandedSimpleRows = new Set();
 
 function getCurrentMonthKey() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+
+function getCurrentYearMonthParts(){
+    const key = getCurrentMonthKey();
+    const [year, month] = key.split("-");
+    return { year, month, monthKey:key };
+}
+
+function withTimeout(promise, ms, fallbackValue){
+    return Promise.race([
+        promise,
+        new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
+    ]);
 }
 
 function getMonthMetaFromIso(iso) {
@@ -1357,19 +1428,17 @@ function populateStaticMonthDropdown(selectId, firstLabel, includeSlowAll = fals
     // groupMonthFilter should stay blank unless a specific month/date is selected.
 }
 
-function populateYearMonthControls() {
+function populateYearMonthControls(forceDefault = false) {
     const yearSel = document.getElementById("trackingYearSelect");
     const monthSel = document.getElementById("trackingMonthSelect");
     if (!yearSel || !monthSel) return;
 
     const oldYear = yearSel.value;
     const oldMonth = monthSel.value;
-    const alreadyInitialized = yearSel.dataset.initialized === "true";
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const startYear = Math.max(2024, currentYear - 2);
-    const endYear = currentYear + 6;
+    const { year:currentYear, month:currentMonth } = getCurrentYearMonthParts();
+    const currentYearNum = Number(currentYear);
+    const startYear = Math.max(2024, currentYearNum - 2);
+    const endYear = currentYearNum + 6;
 
     yearSel.innerHTML = `<option value="">All Years (SLOW)</option>`;
     for (let y = endYear; y >= startYear; y--) yearSel.innerHTML += `<option value="${y}">${y}</option>`;
@@ -1377,20 +1446,15 @@ function populateYearMonthControls() {
     monthSel.innerHTML = `<option value="">All Months</option>`;
     for (let m = 1; m <= 12; m++) monthSel.innerHTML += `<option value="${String(m).padStart(2,"0")}">${MONTHS[m-1]}</option>`;
 
-    if (oldYear) {
-        yearSel.value = oldYear;
-    } else if (!alreadyInitialized) {
-        yearSel.value = String(currentYear); // default fast load: current year only
-    } else {
-        yearSel.value = ""; // keep user's manual All Years selection
+    if (forceDefault || !monthControlsInitialized) {
+        yearSel.value = currentYear;
+        monthSel.value = currentMonth;
+        monthControlsInitialized = true;
+        return;
     }
 
-    if (oldMonth) {
-        monthSel.value = oldMonth;
-    } else if (!alreadyInitialized) {
-        monthSel.value = String(now.getMonth()+1).padStart(2,"0"); // default fast load: current month
-    }
-    yearSel.dataset.initialized = "true";
+    yearSel.value = oldYear;
+    monthSel.value = oldMonth;
 }
 
 function syncVisibleFiltersFromMonthKey(monthKey) {
@@ -1439,15 +1503,14 @@ async function loadFromVisibleFilters() {
     await loadDonors();
 }
 
-function initFastMonthSelectors() {
-    populateYearMonthControls();
+function initFastMonthSelectors(forceDefault = false) {
+    populateYearMonthControls(forceDefault);
     const g = document.getElementById("groupMonthFilter");
     const p = document.getElementById("printMonthSelect");
     const monthKey = getSelectedMonthKeyFromVisibleFilters();
 
-    // Default is current year + current month for fastest loading.
-    // If Month is manually cleared, it loads the selected year only.
-    // All Years remains available but is intentionally marked slow.
+    // Default is current year + current month for fastest opening.
+    // The page no longer resets the user's manual year/month choices on refresh/reload.
     if (g) g.value = monthKey || "";
     if (p) p.value = monthKey || "";
 }
@@ -2429,11 +2492,21 @@ async function loadPartnerAliasIndex() {
             idx.push({ canonical, aliasesNormalized: allAliases });
         });
         partnerAliasIndex = idx;
+        partnerAliasLoadedOnce = true;
         console.log(`[partner-aliases] Loaded ${idx.length} partner organizations.`);
     } catch (e) {
         console.warn("[partner-aliases] Failed to load partner alias index:", e);
         partnerAliasIndex = [];
+        partnerAliasLoadedOnce = false;
     }
+}
+
+
+function startPartnerAliasLoad(){
+    if (!partnerAliasLoadPromise) {
+        partnerAliasLoadPromise = loadPartnerAliasIndex().finally(() => { partnerAliasLoadPromise = null; });
+    }
+    return partnerAliasLoadPromise;
 }
 
 function resolvePartnerAlias(stripped) {
@@ -3038,7 +3111,8 @@ async function loadDonors() {
             return;
         }
 
-        initFastMonthSelectors();
+        initFastMonthSelectors(false);
+        const requestId = ++donorLoadRequestId;
         const selectedMonth = document.getElementById("groupMonthFilter").value;
         const selectedYear = document.getElementById("trackingYearSelect") ? document.getElementById("trackingYearSelect").value : "";
         currentLoadedMonthKey = selectedMonth || "";
@@ -3054,7 +3128,13 @@ async function loadDonors() {
             queryRef = queryRef.where("collectionYear", "==", Number(selectedYear));
         }
 
-        const snapshot = await queryRef.get();
+        const snapshot = await withTimeout(queryRef.get(), 15000, null);
+        if (requestId !== donorLoadRequestId) return;
+        if (!snapshot) {
+            document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading is taking too long. Please click Load again or select a specific month.</div>`;
+            showMessage("Loading took too long. Try clicking Load again or choose a specific month for faster loading.", "error");
+            return;
+        }
 
         allDonors = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
@@ -4156,11 +4236,18 @@ document.addEventListener("input", e => {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 auth.onAuthStateChanged(async (user) => {
     if (user) {
-        initFastMonthSelectors();
-        // Load partner aliases FIRST so stripGroupingNumbers() can resolve
-        // PP / P.PARK / MALCOLM → PEOPLES PARK from the very first render.
-        await loadPartnerAliasIndex();
-        loadDonors();
+        initFastMonthSelectors(true);
+
+        // Do not let partner-alias loading block the first tracking load.
+        // This prevents the page from staying on "Loading June records..." after refresh.
+        const aliasPromise = startPartnerAliasLoad();
+        await withTimeout(aliasPromise, 1200, null);
+        await loadDonors();
+
+        // If aliases finish after the first render, refresh the visible labels only.
+        aliasPromise.then(() => {
+            if (auth.currentUser) renderTracking();
+        }).catch(() => {});
     }
     else document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Please log in first.</div>`;
 });
