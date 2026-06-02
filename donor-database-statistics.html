@@ -166,9 +166,9 @@
         <select id="filterMonth"><option value="ALL">All Months</option></select></div>
       <div class="field"><label for="searchText">Search Group</label>
         <input id="searchText" type="text" placeholder="Search group / partner"></div>
-      <button class="btn-red"   onclick="reloadStatistics()">Reload Statistics</button>
-      <button class="btn-blue"  onclick="window.print()">Print</button>
-      <button class="btn-green" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-red"   type="button" onclick="reloadStatistics()">Reload Statistics</button>
+      <button class="btn-blue"  type="button" id="printStatsBtn" onclick="printStatistics(event)">Print</button>
+      <button class="btn-green" type="button" id="exportCsvBtn" onclick="exportCSV(event)">Export CSV</button>
     </div>
   </div>
 
@@ -1906,30 +1906,121 @@ function renderMappings(){
   }).join("");
 }
 
-// ─── EXPORT CSV ───────────────────────────────────────────────────────────────
-function exportCSV(){
-  if(!groupedCache){alert("No statistics yet.");return;}
-  const rows=[["Year","Month","Walk-in S","Walk-in D","Walk-in T","Walk-in Q","Patient Dir S","Patient Dir D","Patient Dir T","Patient Dir Q","MBD S","MBD D","MBD T","MBD Q","450 cc","PRBC","FFP","PC","CRYO","Male","Female","16-17","18-20","21-30","31-40","41-50","51-60","60-65","66 & above"]];
-  Object.keys(groupedCache).sort((a,b)=>b-a).forEach(y=>{
-    Object.keys(groupedCache[y]).sort((a,b)=>b.localeCompare(a)).forEach(k=>{
-      const s=groupedCache[y][k];
-      rows.push([y,MONTHS[(s._meta.month||1)-1],
-        s.officeBleeding["Walk-in"].S,s.officeBleeding["Walk-in"].D,s.officeBleeding["Walk-in"].T,s.officeBleeding["Walk-in"].Q,
-        s.officeBleeding["Patient Directed"].S,s.officeBleeding["Patient Directed"].D,s.officeBleeding["Patient Directed"].T,s.officeBleeding["Patient Directed"].Q,
-        s.fieldDonation["Total MBD"].S,s.fieldDonation["Total MBD"].D,s.fieldDonation["Total MBD"].T,s.fieldDonation["Total MBD"].Q,
-        s.components["450 cc"],s.components["PRBC"],s.components["FFP"],s.components["PC"],s.components["CRYO"],
-        s.sex["Male"],s.sex["Female"],
-        s.age["16-17"],s.age["18-20"],s.age["21-30"],s.age["31-40"],s.age["41-50"],s.age["51-60"],s.age["60-65"],s.age["66 & above"]
-      ]);
+// ─── PRINT + EXPORT CSV ───────────────────────────────────────────────────────
+function printStatistics(ev){
+  if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
+  try{
+    if(!groupedCache) buildStats();
+  }catch(e){
+    console.warn("Print pre-check failed:", e);
+  }
+  window.focus();
+  setTimeout(()=>{
+    try{
+      window.print();
+    }catch(e){
+      console.error(e);
+      alert("Print failed to open. Please press Ctrl+P / Cmd+P as fallback.");
+    }
+  },80);
+}
+
+function cellText(el){
+  return String(el ? el.textContent : "")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function tableToCsvRows(table){
+  const rows=[];
+  Array.from(table.rows || []).forEach(tr=>{
+    const row=[];
+    Array.from(tr.cells || []).forEach(cell=>{
+      const text=cellText(cell);
+      const colspan=Math.max(1, Number(cell.getAttribute("colspan") || 1));
+      row.push(text);
+      for(let i=1;i<colspan;i++) row.push("");
     });
+    rows.push(row);
   });
+  return rows;
+}
+
+function addSectionTablesToCsv(rows, sectionTitle, containerId){
+  const root=document.getElementById(containerId);
+  if(!root) return;
+  rows.push([]);
+  rows.push([sectionTitle]);
+
+  const hasContent=cellText(root);
+  if(!hasContent){
+    rows.push(["No data shown."]);
+    return;
+  }
+
+  const tables=Array.from(root.querySelectorAll("table"));
+  if(!tables.length){
+    const lines=cellText(root).split(/(?=\b[A-Z][A-Z /-]{2,}:)|(?=\b\d{4}\b)/).map(x=>x.trim()).filter(Boolean);
+    (lines.length ? lines : [hasContent]).forEach(line=>rows.push([line]));
+    return;
+  }
+
+  tables.forEach(table=>{
+    const block=table.closest(".year-block,.month-block,.sheet-block,.summary-year-block,.card") || table.parentElement;
+    if(block){
+      const titles=[];
+      const year=block.closest(".year-block")?.querySelector(":scope > .year-head span:first-child");
+      const month=block.closest(".month-block")?.querySelector(":scope > .month-head span:first-child");
+      const sheet=block.closest(".sheet-block")?.querySelector(":scope > .sheet-title .sheet-label, :scope > .sheet-title");
+      [year,month,sheet].forEach(x=>{ const t=cellText(x); if(t && !titles.includes(t)) titles.push(t); });
+      if(titles.length) rows.push([]), rows.push(titles);
+    }
+    rows.push(...tableToCsvRows(table));
+    rows.push([]);
+  });
+}
+
+function addCurrentFiltersToCsv(rows){
+  const y=document.getElementById("filterYear")?.value || "ALL";
+  const mVal=document.getElementById("filterMonth")?.value || "ALL";
+  const m=mVal==="ALL" ? "ALL" : (MONTHS[Number(mVal)-1] || mVal);
+  const q=document.getElementById("searchText")?.value || "";
+  rows.push(["Donor Database Statistics"]);
+  rows.push(["Exported", new Date().toLocaleString()]);
+  rows.push(["Year Filter", y, "Month Filter", m, "Search Group", q || ""]);
+}
+
+function exportCSV(ev){
+  if(ev && typeof ev.preventDefault === "function") ev.preventDefault();
+  if(!groupedCache){
+    alert("No statistics yet. Please wait for the statistics to load first.");
+    return;
+  }
+
+  // Export the same report order used for printing/viewing, rather than the old
+  // short summary-only CSV. CSV cannot keep colours or merged-cell styling, but
+  // the sections, tables, headers, totals, and current filters are preserved.
+  const rows=[];
+  addCurrentFiltersToCsv(rows);
+  addSectionTablesToCsv(rows,"Monthly Summary","summaryGrid");
+  addSectionTablesToCsv(rows,"Male / Female Per Month","sexMonthly");
+  addSectionTablesToCsv(rows,"Year / Month Statistics","reportContainer");
+  addSectionTablesToCsv(rows,"Deferrals / UB-QNS Summary","extraSummaryContainer");
+
   const csv=rows.map(r=>r.map(csvE).join(",")).join("\n");
   const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
-  a.href=url;a.download="donor-database-statistics.csv";
-  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  a.href=url;
+  a.download="donor-database-statistics-print-view.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+window.printStatistics=printStatistics;
+window.exportCSV=exportCSV;
 </script>
 </body>
 </html>
