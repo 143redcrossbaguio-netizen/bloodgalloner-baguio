@@ -89,6 +89,19 @@ button:disabled{
 .btn-gray{background:#374151;color:#fff}
 .btn-blue{background:#2563eb;color:#fff}
 .btn-green{background:#15803d;color:#fff}
+.btn-yellow{background:#f59e0b;color:#111827}
+.btn-small{
+    min-height:0;
+    padding:6px 10px;
+    border-radius:8px;
+    font-size:12px;
+}
+.row-actions{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    flex-wrap:wrap;
+}
 .status{
     padding:12px 14px;
     border-radius:12px;
@@ -195,7 +208,7 @@ button:disabled{
 table{
     width:100%;
     border-collapse:collapse;
-    min-width:900px;
+    min-width:1000px;
 }
 th,td{
     border:1px solid #d6dde6;
@@ -342,6 +355,8 @@ let selectedDonorId = "";
 let selectedDeferralCanonical = "";
 let selectedDeferralType = "";
 let isSavingDeferral = false;
+let editingDeferralId = "";
+let recentDeferralRows = [];
 
 const COMMON_DEFERRALS = [
     {label:"Low Hemoglobin / Anemia", keys:["h","hb","low hb","low hemoglobin","hemoglobin","haemoglobin","anemia","anaemia","low hematocrit","low hct"]},
@@ -423,7 +438,20 @@ function setSaveButtonLoading(isLoading){
     const btn = document.getElementById("saveDeferralBtn");
     if(!btn) return;
     btn.disabled = !!isLoading;
-    btn.textContent = isLoading ? "Saving..." : "Save Deferral";
+    if(isLoading){
+        btn.textContent = editingDeferralId ? "Updating..." : "Saving...";
+    }else{
+        btn.textContent = editingDeferralId ? "Update Deferral" : "Save Deferral";
+    }
+}
+
+function resetEditMode(){
+    editingDeferralId = "";
+    setSaveButtonLoading(false);
+}
+
+function getDeferralRowById(id){
+    return recentDeferralRows.find(r => r.id === id) || null;
 }
 
 function todayISO(){
@@ -706,6 +734,7 @@ window.clearForm = function(){
     selectedDonorId = "";
     selectedDeferralCanonical = "";
     selectedDeferralType = "";
+    resetEditMode();
     document.getElementById("deferralDate").value = todayISO();
     document.getElementById("liveSearch").value = "";
     document.getElementById("surname").value = "";
@@ -768,7 +797,7 @@ window.saveDeferral = async function(){
         setSaveButtonLoading(true);
         setStatus("Saving deferral...","info");
 
-        await fs.collection("donorDeferrals").add({
+        const payload = {
             date,
             collectionYear:Number(date.slice(0,4)),
             collectionMonth:Number(date.slice(5,7)),
@@ -783,13 +812,24 @@ window.saveDeferral = async function(){
             deferralTypeCode:deferralType === "Temporary" ? "T" : "P",
             deferral:typedDeferral,
             deferralCanonical:canonicalDeferral,
-            createdAt:firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-            createdByUid:currentUser.uid || "",
-            createdByEmail:currentUser.email || ""
-        });
+            updatedByUid:currentUser.uid || "",
+            updatedByEmail:currentUser.email || ""
+        };
 
-        setStatus("Deferral saved successfully.","ok");
+        if(editingDeferralId){
+            await fs.collection("donorDeferrals").doc(editingDeferralId).update(payload);
+            setStatus("Deferral updated successfully.","ok");
+        }else{
+            await fs.collection("donorDeferrals").add({
+                ...payload,
+                createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+                createdByUid:currentUser.uid || "",
+                createdByEmail:currentUser.email || ""
+            });
+            setStatus("Deferral saved successfully.","ok");
+        }
+
         clearForm();
         loadRecentDeferrals();
     }catch(e){
@@ -798,6 +838,59 @@ window.saveDeferral = async function(){
     }finally{
         isSavingDeferral = false;
         setSaveButtonLoading(false);
+    }
+};
+
+window.editDeferral = function(id){
+    const r = getDeferralRowById(id);
+    if(!r){
+        setStatus("Could not find the selected deferral record. Please reload the list.","error");
+        return;
+    }
+
+    editingDeferralId = id;
+    selectedDonorId = r.linkedDonorId || "";
+    selectedDeferralType = r.deferralType || "";
+    selectedDeferralCanonical = r.deferralCanonical || r.deferral || "";
+
+    document.getElementById("deferralDate").value = r.date || todayISO();
+    document.getElementById("liveSearch").value = r.liveSearchText || [r.surname, r.firstName].filter(Boolean).join(", ");
+    document.getElementById("surname").value = String(r.surname || "").toUpperCase();
+    document.getElementById("firstName").value = String(r.firstName || "").toUpperCase();
+    document.getElementById("age").value = parseAge(r.age);
+    document.getElementById("sex").value = normSex(r.sex || "");
+    document.getElementById("deferralType").value = r.deferralType || "";
+    document.getElementById("deferralReason").value = r.deferral || r.deferralCanonical || "";
+
+    document.getElementById("donorSuggestBox").classList.remove("open");
+    updateTypeSuggestions();
+    updateDeferralSuggestions();
+    setSaveButtonLoading(false);
+    setStatus("Editing selected deferral. Update the details, then click Update Deferral.","info");
+    document.querySelector(".card").scrollIntoView({behavior:"smooth", block:"start"});
+};
+
+window.deleteDeferral = async function(id){
+    if(!currentUser){
+        setStatus("You are not logged in.","error");
+        return;
+    }
+
+    const r = getDeferralRowById(id);
+    const label = r ? `${r.date || ""} ${r.surname || ""}, ${r.firstName || ""}`.trim() : "this deferral";
+    if(!confirm(`Delete ${label}? This cannot be undone.`)){
+        return;
+    }
+
+    try{
+        setStatus("Deleting deferral...","info");
+        await fs.collection("donorDeferrals").doc(id).delete();
+        if(editingDeferralId === id) clearForm();
+        setStatus("Deferral deleted successfully.","ok");
+        await loadRecentDeferrals();
+    }catch(e){
+        console.error(e);
+        setStatus("Failed to delete deferral: " + (e.message || e),"error");
     }
 };
 
@@ -820,6 +913,7 @@ window.loadRecentDeferrals = async function(){
 
         const rows = [];
         snap.forEach(doc => rows.push({id:doc.id, ...doc.data()}));
+        recentDeferralRows = rows;
 
         if(!rows.length){
             box.innerHTML = `<div class="empty">No deferrals recorded yet.</div>`;
@@ -839,6 +933,7 @@ window.loadRecentDeferrals = async function(){
                             <th>TYPE</th>
                             <th>DEFERRAL</th>
                             <th>SMART CATEGORY</th>
+                            <th>ACTION</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -852,6 +947,12 @@ window.loadRecentDeferrals = async function(){
                                 <td>${esc(r.deferralType || "")}</td>
                                 <td>${esc(r.deferral || "")}</td>
                                 <td>${esc(r.deferralCanonical || "")}</td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button type="button" class="btn-yellow btn-small" data-action="edit-deferral" data-id="${esc(r.id)}">Edit</button>
+                                        <button type="button" class="btn-red btn-small" data-action="delete-deferral" data-id="${esc(r.id)}">Delete</button>
+                                    </div>
+                                </td>
                             </tr>
                         `).join("")}
                     </tbody>
@@ -871,9 +972,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearBtn = document.getElementById("clearFormBtn");
     const reloadBtn = document.getElementById("reloadDeferralsBtn");
 
-    if(saveBtn) saveBtn.addEventListener("click", saveDeferral);
-    if(clearBtn) clearBtn.addEventListener("click", clearForm);
-    if(reloadBtn) reloadBtn.addEventListener("click", loadRecentDeferrals);
+    if(saveBtn) saveBtn.addEventListener("click", window.saveDeferral);
+    if(clearBtn) clearBtn.addEventListener("click", window.clearForm);
+    if(reloadBtn) reloadBtn.addEventListener("click", window.loadRecentDeferrals);
+
+    document.getElementById("recentDeferrals").addEventListener("click", e => {
+        const btn = e.target.closest("button[data-action]");
+        if(!btn) return;
+        const id = btn.getAttribute("data-id");
+        const action = btn.getAttribute("data-action");
+        if(!id) return;
+
+        if(action === "edit-deferral") window.editDeferral(id);
+        if(action === "delete-deferral") window.deleteDeferral(id);
+    });
 
     document.getElementById("liveSearch").addEventListener("input", renderDonorSuggestions);
     document.getElementById("deferralType").addEventListener("input", updateTypeSuggestions);
