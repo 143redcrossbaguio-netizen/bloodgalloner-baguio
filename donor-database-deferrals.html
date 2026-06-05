@@ -81,6 +81,10 @@ button{
     cursor:pointer;
     min-height:42px;
 }
+button:disabled{
+    opacity:.65;
+    cursor:not-allowed;
+}
 .btn-red{background:#b30000;color:#fff}
 .btn-gray{background:#374151;color:#fff}
 .btn-blue{background:#2563eb;color:#fff}
@@ -300,9 +304,9 @@ td:first-child,th:first-child{
             <div class="field span-6">
                 <label>&nbsp;</label>
                 <div class="actions">
-                    <button class="btn-red" onclick="saveDeferral()">Save Deferral</button>
-                    <button class="btn-gray" onclick="clearForm()">Clear</button>
-                    <button class="btn-blue" onclick="loadRecentDeferrals()">Reload List</button>
+                    <button type="button" id="saveDeferralBtn" class="btn-red">Save Deferral</button>
+                    <button type="button" id="clearFormBtn" class="btn-gray">Clear</button>
+                    <button type="button" id="reloadDeferralsBtn" class="btn-blue">Reload List</button>
                 </div>
             </div>
         </div>
@@ -337,6 +341,7 @@ let donorIndex = [];
 let selectedDonorId = "";
 let selectedDeferralCanonical = "";
 let selectedDeferralType = "";
+let isSavingDeferral = false;
 
 const COMMON_DEFERRALS = [
     {label:"Low Hemoglobin / Anemia", keys:["h","hb","low hb","low hemoglobin","hemoglobin","haemoglobin","anemia","anaemia","low hematocrit","low hct"]},
@@ -412,6 +417,13 @@ function setStatus(msg,type){
     const el = document.getElementById("statusBox");
     el.className = "status " + type;
     el.textContent = msg;
+}
+
+function setSaveButtonLoading(isLoading){
+    const btn = document.getElementById("saveDeferralBtn");
+    if(!btn) return;
+    btn.disabled = !!isLoading;
+    btn.textContent = isLoading ? "Saving..." : "Save Deferral";
 }
 
 function todayISO(){
@@ -708,6 +720,8 @@ window.clearForm = function(){
 };
 
 window.saveDeferral = async function(){
+    if(isSavingDeferral) return;
+
     if(!currentUser){
         setStatus("You are not logged in.","error");
         return;
@@ -750,6 +764,8 @@ window.saveDeferral = async function(){
     }
 
     try{
+        isSavingDeferral = true;
+        setSaveButtonLoading(true);
         setStatus("Saving deferral...","info");
 
         await fs.collection("donorDeferrals").add({
@@ -779,11 +795,21 @@ window.saveDeferral = async function(){
     }catch(e){
         console.error(e);
         setStatus("Failed to save deferral: " + (e.message || e),"error");
+    }finally{
+        isSavingDeferral = false;
+        setSaveButtonLoading(false);
     }
 };
 
 window.loadRecentDeferrals = async function(){
     const box = document.getElementById("recentDeferrals");
+
+    if(!currentUser){
+        box.innerHTML = `<div class="empty">Please wait until login is confirmed before reloading deferrals.</div>`;
+        setStatus("Please wait. Login is still being checked.","warn");
+        return;
+    }
+
     try{
         box.innerHTML = `<div class="empty">Loading recent deferrals...</div>`;
 
@@ -840,6 +866,14 @@ window.loadRecentDeferrals = async function(){
 
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("deferralDate").value = todayISO();
+
+    const saveBtn = document.getElementById("saveDeferralBtn");
+    const clearBtn = document.getElementById("clearFormBtn");
+    const reloadBtn = document.getElementById("reloadDeferralsBtn");
+
+    if(saveBtn) saveBtn.addEventListener("click", saveDeferral);
+    if(clearBtn) clearBtn.addEventListener("click", clearForm);
+    if(reloadBtn) reloadBtn.addEventListener("click", loadRecentDeferrals);
 
     document.getElementById("liveSearch").addEventListener("input", renderDonorSuggestions);
     document.getElementById("deferralType").addEventListener("input", updateTypeSuggestions);
