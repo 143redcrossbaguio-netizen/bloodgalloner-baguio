@@ -83,6 +83,8 @@
     th{background:#f8fafc;font-weight:700}
     td:first-child,th:first-child{text-align:left;font-weight:700}
     .sub-row{background:#f3f4f6!important;font-weight:700}
+    .field-place-total-row{background:#fff7ed!important;font-weight:800;color:#7c2d12}
+    .field-place-total-row td:first-child{text-align:right!important}
     .empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d6dde6;border-radius:10px}
     .search-note{margin:8px 12px;padding:10px 12px;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:13px}
     .extra-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -1497,12 +1499,49 @@ function renderExtraSummary(donors){
   forceCollapsedReportBlocks(el);
 }
 
+function fieldTotalKey(r){
+  const nameKey=normKey(r.name||"");
+  const placeVal=displayFieldPlace(nameKey||r.name||"",r.place||"");
+  return `${nameKey}__${_aliasNormalize(placeVal)}`;
+}
+
+function buildFieldPlaceTotals(rows){
+  const totals={};
+  (rows||[]).forEach((r,idx)=>{
+    const key=fieldTotalKey(r);
+    if(!totals[key]){
+      totals[key]={count:0,lastIndex:idx,name:r.name||"",place:r.place||"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0};
+    }
+    totals[key].count++;
+    totals[key].lastIndex=idx;
+    totals[key].name=r.name||totals[key].name||"";
+    totals[key].place=r.place||totals[key].place||"";
+    totals[key]["450 cc S"]+=Number(r["450 cc S"]||0);
+    totals[key]["450 cc D"]+=Number(r["450 cc D"]||0);
+    totals[key]["450 cc T"]+=Number(r["450 cc T"]||0);
+    totals[key]["450 cc Q"]+=Number(r["450 cc Q"]||0);
+  });
+  return totals;
+}
+
 function fieldTable(title,label,rows){
-  const r2=rows.length?rows:[{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+  const hasRows=Array.isArray(rows)&&rows.length>0;
+  const r2=hasRows?rows:[{name:"",place:"",date:"","450 cc S":0,"450 cc D":0,"450 cc T":0,"450 cc Q":0}];
+  const placeTotals=hasRows?buildFieldPlaceTotals(r2):{};
+  const bodyRows=r2.map((r,idx)=>{
+    const normalRow=`<tr><td>${escH(r.name||"")}</td><td>${escH(r.place||"")}</td><td>${escH(r.date||"")}</td><td>${n(r["450 cc S"])}</td><td>${n(r["450 cc D"])}</td><td>${n(r["450 cc T"])}</td><td>${n(r["450 cc Q"])}</td></tr>`;
+    if(!hasRows)return normalRow;
+    const key=fieldTotalKey(r);
+    const total=placeTotals[key];
+    if(!total||total.count<=1||total.lastIndex!==idx)return normalRow;
+    const totalLabel=`Total for ${total.name||r.name||""}${(total.place||r.place)?` — ${total.place||r.place}`:""}`;
+    const totalRow=`<tr class="field-place-total-row"><td colspan="3">${escH(totalLabel)}</td><td>${n(total["450 cc S"])}</td><td>${n(total["450 cc D"])}</td><td>${n(total["450 cc T"])}</td><td>${n(total["450 cc Q"])}</td></tr>`;
+    return normalRow+totalRow;
+  }).join("");
   return`<div class="table-wrap" style="margin-bottom:10px"><table>
     <tr class="sub-row"><td colspan="7">${title}</td></tr>
     <tr><th>${label==="Group"?"Group":"Municipality"}</th><th>${label==="Pledge 25"?"School or Barangay street (location)":"Place"}</th><th>Date</th><th>450 cc S</th><th>450 cc D</th><th>450 cc T</th><th>450 cc Q</th></tr>
-    ${r2.map(r=>`<tr><td>${escH(r.name||"")}</td><td>${escH(r.place||"")}</td><td>${escH(r.date||"")}</td><td>${n(r["450 cc S"])}</td><td>${n(r["450 cc D"])}</td><td>${n(r["450 cc T"])}</td><td>${n(r["450 cc Q"])}</td></tr>`).join("")}
+    ${bodyRows}
     <tr class="sub-row"><td colspan="3">Sub total</td><td>${n(sumDF(r2,"450 cc S"))}</td><td>${n(sumDF(r2,"450 cc D"))}</td><td>${n(sumDF(r2,"450 cc T"))}</td><td>${n(sumDF(r2,"450 cc Q"))}</td></tr>
   </table></div>`;
 }
