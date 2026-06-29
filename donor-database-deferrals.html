@@ -199,6 +199,34 @@ button:disabled{
     gap:8px;
     flex-wrap:wrap;
 }
+
+.deferral-list-controls{
+    display:grid;
+    grid-template-columns:170px 190px 130px 1fr;
+    gap:10px;
+    align-items:end;
+    padding:10px;
+    margin-bottom:12px;
+    background:#f8fafc;
+    border:1px solid #d6dde6;
+    border-radius:12px;
+}
+.deferral-list-controls .field label{
+    font-size:12px;
+}
+.deferral-loaded-label{
+    align-self:center;
+    padding:9px 12px;
+    border-radius:10px;
+    background:#fff7ed;
+    border:1px solid #fed7aa;
+    color:#92400e;
+    font-size:13px;
+    font-weight:800;
+    min-height:42px;
+    display:flex;
+    align-items:center;
+}
 .table-wrap{
     overflow:auto;
     max-height:420px;
@@ -244,9 +272,15 @@ td:first-child,th:first-child{
     .form-grid{grid-template-columns:1fr 1fr}
     .field.span-2,.field.span-3,.field.span-6{grid-column:span 2}
 }
+@media(max-width:980px){
+    .deferral-list-controls{grid-template-columns:1fr 1fr}
+    .deferral-loaded-label{grid-column:span 2}
+}
 @media(max-width:640px){
     .form-grid{grid-template-columns:1fr}
     .field.span-2,.field.span-3,.field.span-6{grid-column:span 1}
+    .deferral-list-controls{grid-template-columns:1fr}
+    .deferral-loaded-label{grid-column:span 1}
     header{font-size:20px}
 }
 </style>
@@ -329,6 +363,18 @@ td:first-child,th:first-child{
 
     <div class="card">
         <h3 style="margin-top:0;color:#991b1b">Recent Deferrals</h3>
+        <div class="deferral-list-controls">
+            <div class="field">
+                <label for="deferralYearFilter">Year</label>
+                <select id="deferralYearFilter"></select>
+            </div>
+            <div class="field">
+                <label for="deferralMonthFilter">Month</label>
+                <select id="deferralMonthFilter"></select>
+            </div>
+            <button type="button" id="loadDeferralMonthBtn" class="btn-blue">Load Month</button>
+            <div id="deferralLoadedLabel" class="deferral-loaded-label">Current month will load by default.</div>
+        </div>
         <div id="recentDeferrals"></div>
     </div>
 </div>
@@ -357,6 +403,11 @@ let selectedDeferralType = "";
 let isSavingDeferral = false;
 let editingDeferralId = "";
 let recentDeferralRows = [];
+
+const MONTH_NAMES = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+];
 
 const COMMON_DEFERRALS = [
     {label:"Low Hemoglobin / Anemia", keys:["h","hb","low hb","low hemoglobin","hemoglobin","haemoglobin","anemia","anaemia","low hematocrit","low hct"]},
@@ -457,6 +508,82 @@ function getDeferralRowById(id){
 function todayISO(){
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function populateDeferralMonthYearFilters(){
+    const yearSelect = document.getElementById("deferralYearFilter");
+    const monthSelect = document.getElementById("deferralMonthFilter");
+    if(!yearSelect || !monthSelect) return;
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    if(!yearSelect.options.length){
+        const years = [];
+        for(let y = currentYear + 1; y >= currentYear - 10; y--){
+            years.push(y);
+        }
+        yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join("");
+    }
+
+    if(!monthSelect.options.length){
+        monthSelect.innerHTML = MONTH_NAMES.map((name, index) => {
+            const value = String(index + 1).padStart(2,"0");
+            return `<option value="${value}">${name}</option>`;
+        }).join("");
+    }
+
+    if(!yearSelect.value) yearSelect.value = String(currentYear);
+    if(!monthSelect.value) monthSelect.value = String(currentMonth).padStart(2,"0");
+}
+
+function setDeferralFiltersFromDate(dateValue){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || ""))) return;
+
+    const yearSelect = document.getElementById("deferralYearFilter");
+    const monthSelect = document.getElementById("deferralMonthFilter");
+    if(!yearSelect || !monthSelect) return;
+
+    const y = dateValue.slice(0,4);
+    const m = dateValue.slice(5,7);
+
+    if(!Array.from(yearSelect.options).some(opt => opt.value === y)){
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        yearSelect.appendChild(opt);
+        Array.from(yearSelect.options)
+            .sort((a,b) => Number(b.value) - Number(a.value))
+            .forEach(optNode => yearSelect.appendChild(optNode));
+    }
+
+    yearSelect.value = y;
+    monthSelect.value = m;
+}
+
+function getSelectedDeferralPeriod(){
+    populateDeferralMonthYearFilters();
+
+    const now = new Date();
+    const yearSelect = document.getElementById("deferralYearFilter");
+    const monthSelect = document.getElementById("deferralMonthFilter");
+
+    const year = Number(yearSelect?.value || now.getFullYear());
+    const month = Number(monthSelect?.value || (now.getMonth() + 1));
+    const monthText = String(month).padStart(2,"0");
+    const key = `${year}-${monthText}`;
+    const lastDay = new Date(year, month, 0).getDate();
+
+    return {
+        year,
+        month,
+        monthText,
+        key,
+        label:`${MONTH_NAMES[month - 1]} ${year}`,
+        startDate:`${key}-01`,
+        endDate:`${key}-${String(lastDay).padStart(2,"0")}`
+    };
 }
 
 function esc(s){
@@ -830,6 +957,7 @@ window.saveDeferral = async function(){
             setStatus("Deferral saved successfully.","ok");
         }
 
+        setDeferralFiltersFromDate(date);
         clearForm();
         loadRecentDeferrals();
     }catch(e){
@@ -896,6 +1024,12 @@ window.deleteDeferral = async function(id){
 
 window.loadRecentDeferrals = async function(){
     const box = document.getElementById("recentDeferrals");
+    const loadedLabel = document.getElementById("deferralLoadedLabel");
+    const period = getSelectedDeferralPeriod();
+
+    if(loadedLabel){
+        loadedLabel.textContent = `Loaded month: ${period.label}`;
+    }
 
     if(!currentUser){
         box.innerHTML = `<div class="empty">Please wait until login is confirmed before reloading deferrals.</div>`;
@@ -904,19 +1038,29 @@ window.loadRecentDeferrals = async function(){
     }
 
     try{
-        box.innerHTML = `<div class="empty">Loading recent deferrals...</div>`;
+        box.innerHTML = `<div class="empty">Loading deferrals for ${esc(period.label)}...</div>`;
 
         const snap = await fs.collection("donorDeferrals")
-            .orderBy("createdAt","desc")
-            .limit(100)
+            .where("date",">=",period.startDate)
+            .where("date","<=",period.endDate)
             .get();
 
         const rows = [];
         snap.forEach(doc => rows.push({id:doc.id, ...doc.data()}));
+
+        rows.sort((a,b) => {
+            const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+            if(dateCompare !== 0) return dateCompare;
+
+            const aCreated = a.createdAt && typeof a.createdAt.toMillis === "function" ? a.createdAt.toMillis() : 0;
+            const bCreated = b.createdAt && typeof b.createdAt.toMillis === "function" ? b.createdAt.toMillis() : 0;
+            return bCreated - aCreated;
+        });
+
         recentDeferralRows = rows;
 
         if(!rows.length){
-            box.innerHTML = `<div class="empty">No deferrals recorded yet.</div>`;
+            box.innerHTML = `<div class="empty">No deferrals recorded for ${esc(period.label)}.</div>`;
             return;
         }
 
@@ -961,20 +1105,23 @@ window.loadRecentDeferrals = async function(){
         `;
     }catch(e){
         console.error(e);
-        box.innerHTML = `<div class="empty">Could not load deferrals: ${esc(e.message || e)}</div>`;
+        box.innerHTML = `<div class="empty">Could not load deferrals for ${esc(period.label)}: ${esc(e.message || e)}</div>`;
     }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("deferralDate").value = todayISO();
+    populateDeferralMonthYearFilters();
 
     const saveBtn = document.getElementById("saveDeferralBtn");
     const clearBtn = document.getElementById("clearFormBtn");
     const reloadBtn = document.getElementById("reloadDeferralsBtn");
+    const loadMonthBtn = document.getElementById("loadDeferralMonthBtn");
 
     if(saveBtn) saveBtn.addEventListener("click", window.saveDeferral);
     if(clearBtn) clearBtn.addEventListener("click", window.clearForm);
     if(reloadBtn) reloadBtn.addEventListener("click", window.loadRecentDeferrals);
+    if(loadMonthBtn) loadMonthBtn.addEventListener("click", window.loadRecentDeferrals);
 
     document.getElementById("recentDeferrals").addEventListener("click", e => {
         const btn = e.target.closest("button[data-action]");
