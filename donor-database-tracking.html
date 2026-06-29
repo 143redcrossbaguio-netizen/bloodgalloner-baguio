@@ -1283,6 +1283,123 @@
     font-family:Arial, sans-serif !important;
     letter-spacing:0 !important;
 }
+
+
+/* ============================================================
+   SIMPLE VIEW INLINE EDIT FIX — keep the clean Simple View while editing
+   Screen only; official print layout is unchanged.
+   ============================================================ */
+@media screen {
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing td {
+        background:#fff7ed !important;
+        vertical-align:top !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+    }
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .edit-input,
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .edit-select {
+        width:100% !important;
+        min-width:0 !important;
+        max-width:100% !important;
+        height:25px !important;
+        min-height:25px !important;
+        padding:3px 5px !important;
+        font-size:11px !important;
+        line-height:1.1 !important;
+        border:1px solid #f59e0b !important;
+        border-radius:5px !important;
+        background:#fff !important;
+    }
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .edit-checkbox-label {
+        min-width:0 !important;
+        width:100% !important;
+        height:25px !important;
+        justify-content:center !important;
+        background:#fff !important;
+        border:1px solid #f59e0b !important;
+        border-radius:5px !important;
+        font-size:10.5px !important;
+        padding:2px 4px !important;
+    }
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .edit-checkbox {
+        width:14px !important;
+        height:14px !important;
+    }
+    .simple-edit-stack {
+        display:grid;
+        grid-template-columns:1fr;
+        gap:3px;
+        width:100%;
+    }
+    .simple-edit-two-stack {
+        display:grid;
+        grid-template-columns:1fr;
+        gap:3px;
+        width:100%;
+    }
+    .simple-edit-detail-row td {
+        background:#fbfdff !important;
+        padding:8px 10px !important;
+        text-align:left !important;
+        white-space:normal !important;
+        overflow:visible !important;
+    }
+    .simple-edit-detail-box {
+        border:1px solid #fed7aa;
+        border-radius:10px;
+        background:#fffaf5;
+        padding:9px 10px;
+    }
+    .simple-edit-detail-title {
+        font-weight:bold;
+        color:#9a3412;
+        font-size:12px;
+        margin-bottom:8px;
+    }
+    .simple-edit-detail-grid {
+        display:grid;
+        grid-template-columns:repeat(4,minmax(145px,1fr));
+        gap:8px 10px;
+    }
+    .simple-edit-detail-field label {
+        display:block;
+        color:#64748b;
+        font-size:10px;
+        text-transform:uppercase;
+        font-weight:bold;
+        margin-bottom:3px;
+    }
+    .simple-edit-detail-field .edit-input,
+    .simple-edit-detail-field .edit-select {
+        width:100% !important;
+        min-width:0 !important;
+        height:28px !important;
+        padding:4px 6px !important;
+        font-size:12px !important;
+        border:1px solid #f59e0b !important;
+        border-radius:5px !important;
+        background:#fff !important;
+    }
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .actions-cell {
+        gap:4px !important;
+        flex-wrap:nowrap !important;
+        align-items:flex-start !important;
+    }
+    #trackingContainer .simple-tracking-table tr.simple-inline-editing .actions-cell .small-btn {
+        height:24px !important;
+        min-height:24px !important;
+        padding:3px 6px !important;
+        font-size:10px !important;
+        line-height:1 !important;
+    }
+}
+@media screen and (max-width:900px){
+    .simple-edit-detail-grid{grid-template-columns:repeat(2,minmax(130px,1fr));}
+}
+@media screen and (max-width:640px){
+    .simple-edit-detail-grid{grid-template-columns:1fr;}
+}
+
 </style>
 </head>
 <body>
@@ -1508,6 +1625,11 @@ let monthControlsInitialized = false;
 let donorLoadRequestId = 0;
 let partnerAliasLoadPromise = null;
 let partnerAliasLoadedOnce = false;
+const TRACKING_INLINE_EDIT_FIX_VERSION = "simple-inline-edit-20260629";
+if (localStorage.getItem("donorTrackingInlineEditFixVersion") !== TRACKING_INLINE_EDIT_FIX_VERSION) {
+    localStorage.setItem("donorTrackingViewMode", "simple");
+    localStorage.setItem("donorTrackingInlineEditFixVersion", TRACKING_INLINE_EDIT_FIX_VERSION);
+}
 let trackingViewMode = localStorage.getItem("donorTrackingViewMode") || "simple";
 let expandedSimpleRows = new Set();
 let simpleRemarksExpanded = false;
@@ -3384,23 +3506,176 @@ function updateLocalDonorRecord(id, newData) {
     allDonors[idx]._resolvedBloodType = resolveBloodType(allDonors[idx]);
 }
 
+function captureRowScrollState(id) {
+    const row = document.getElementById(`row-${id}`);
+    const wrap = row ? row.closest(".simple-table-wrap, .table-wrap") : null;
+    const topScroll = wrap && wrap.previousElementSibling && wrap.previousElementSibling.classList.contains("table-top-scroll")
+        ? wrap.previousElementSibling
+        : null;
+    return {
+        id,
+        windowX: window.scrollX,
+        windowY: window.scrollY,
+        rowTop: row ? row.getBoundingClientRect().top : null,
+        wrapLeft: wrap ? wrap.scrollLeft : 0,
+        topLeft: topScroll ? topScroll.scrollLeft : 0
+    };
+}
+
+function restoreRowScrollState(state) {
+    if (!state) return;
+    requestAnimationFrame(() => {
+        const row = document.getElementById(`row-${state.id}`);
+        const wrap = row ? row.closest(".simple-table-wrap, .table-wrap") : null;
+        const topScroll = wrap && wrap.previousElementSibling && wrap.previousElementSibling.classList.contains("table-top-scroll")
+            ? wrap.previousElementSibling
+            : null;
+
+        if (wrap) wrap.scrollLeft = state.wrapLeft || 0;
+        if (topScroll) topScroll.scrollLeft = state.topLeft || state.wrapLeft || 0;
+
+        if (row && typeof state.rowTop === "number") {
+            const newTop = row.getBoundingClientRect().top;
+            window.scrollBy(0, newTop - state.rowTop);
+        } else {
+            window.scrollTo(state.windowX || 0, state.windowY || 0);
+        }
+
+        requestAnimationFrame(() => {
+            if (wrap) wrap.scrollLeft = state.wrapLeft || 0;
+            if (topScroll) topScroll.scrollLeft = state.topLeft || state.wrapLeft || 0;
+        });
+    });
+}
+
+function buildNamedEditInput(name, value, type = "text", placeholder = "") {
+    const safe = type === "text" ? toUpperDisplay(value || "") : (value || "");
+    const placeholderAttr = placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : "";
+    return `<input class="edit-input simple-edit-field" name="${escapeHtml(name)}" type="${escapeHtml(type)}" value="${escapeHtml(safe)}"${placeholderAttr}${type === "text" ? ' data-uppercase="true" style="text-transform:uppercase;"' : ""} onclick="event.stopPropagation()">`;
+}
+
+function buildNamedEditSelect(name, options, selectedValue) {
+    const normSel = normalizeText(selectedValue);
+    const safeOptions = options.some(opt => String(opt) === "") ? options : ["", ...options];
+    return `<select class="edit-select simple-edit-field" name="${escapeHtml(name)}" onclick="event.stopPropagation()">
+        ${safeOptions.map(opt => `<option value="${escapeHtml(opt)}" ${normalizeText(opt) === normSel ? "selected" : ""}>${escapeHtml(opt ? String(opt).toUpperCase() : "")}</option>`).join("")}
+    </select>`;
+}
+
+function buildNamedEditCheckbox(name, checked, labelText) {
+    return `<label class="edit-checkbox-label" onclick="event.stopPropagation()"><input type="checkbox" class="edit-checkbox simple-edit-field" name="${escapeHtml(name)}" ${checked ? "checked" : ""}><span>${escapeHtml(labelText)}</span></label>`;
+}
+
+function buildSimpleEditDetailRow(id, r, colspan, includeRemarksInMainRow) {
+    const donorKey = buildDonorKey(r);
+    const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(r.numberOfDonations);
+    const detailFields = [
+        ["Birthday", buildNamedEditInput("birthday", parseDateFlexible(r._resolvedBirthday || r.birthday || ""), "date")],
+        ["Age", buildNamedEditInput("age", r.age || "", "number")],
+        ["Sex", buildNamedEditSelect("sex", ["MALE","FEMALE"], r.sex || "")],
+        ["Contact Number", buildNamedEditInput("contactNumber", r.contactNumber || "")],
+        ["House Number/Purok/Street", buildNamedEditInput("address", r.address || "")],
+        ["Barangay / City", buildNamedEditInput("cityProvince", r.cityProvince || "")],
+        ["Occupation", buildNamedEditInput("occupation", r.occupation || "")],
+        ["# of Donations", buildNamedEditInput("numberOfDonations", resolveDonationCountValue(r.numberOfDonations || latestTotal), "text")],
+        ["Time Started", buildNamedEditInput("timeStarted", r._resolvedTimeStarted || "", "time")],
+        ["Time Ended", buildNamedEditInput("timeEnded", r._resolvedTimeEnded || "", "time")]
+    ];
+    if (!includeRemarksInMainRow) detailFields.push(["Remarks", buildNamedEditInput("remarks", r.remarks || "")]);
+
+    return `
+        <tr class="simple-detail-row simple-edit-detail-row" data-edit-detail-for="${escapeHtml(id)}">
+            <td colspan="${colspan}">
+                <div class="simple-edit-detail-box">
+                    <div class="simple-edit-detail-title">Inline edit details for ${escapeHtml(donorDisplayName(r))}</div>
+                    <div class="simple-edit-detail-grid">
+                        ${detailFields.map(([label, control]) => `<div class="simple-edit-detail-field"><label>${escapeHtml(label)}</label>${control}</div>`).join("")}
+                    </div>
+                </div>
+            </td>
+        </tr>`;
+}
+
+function getSimpleEditDetailRow(id) {
+    const row = document.getElementById(`row-${id}`);
+    return row && row.nextElementSibling && row.nextElementSibling.getAttribute("data-edit-detail-for") === id
+        ? row.nextElementSibling
+        : null;
+}
+
+function getFieldFromScopes(scopes, name) {
+    for (const scope of scopes) {
+        if (!scope) continue;
+        const field = scope.querySelector(`[name="${name}"]`);
+        if (field) return field;
+    }
+    return null;
+}
+
 window.startEdit = function(id) {
     hideDuplicateBox();
-    if (trackingViewMode === "simple") {
-        trackingViewMode = "full";
-        localStorage.setItem("donorTrackingViewMode", trackingViewMode);
-        renderTracking();
-        setTimeout(() => window.startEdit(id), 0);
-        showMessage("Switched to Full Table View for editing. Print layout is unchanged.", "success");
-        return;
-    }
+
     const r = allDonors.find(r => r.id === id);
     if (!r) return;
+
     const row = document.getElementById(`row-${id}`);
     if (!row) {
         showMessage("Record is not visible in the current view. Clear filters and try again.", "error");
         return;
     }
+
+    const scrollState = captureRowScrollState(id);
+
+    if (trackingViewMode === "simple" && row.classList.contains("simple-donor-row")) {
+        const existingDetail = row.nextElementSibling && row.nextElementSibling.classList.contains("simple-detail-row")
+            ? row.nextElementSibling
+            : null;
+        if (existingDetail) existingDetail.remove();
+        expandedSimpleRows.delete(id);
+
+        const hasRemarksColumn = !!row.querySelector("td.simple-remarks-col");
+        const colspan = Math.max(1, row.children.length);
+
+        row.classList.remove("active");
+        row.classList.add("simple-inline-editing");
+        row.setAttribute("data-edit-mode", "simple");
+        row.removeAttribute("onclick");
+
+        row.innerHTML = `
+            <td class="simple-date-col">${buildNamedEditInput("entryDate", r._resolvedEntryDate || "", "date")}</td>
+            <td class="simple-source-col">${buildNamedEditInput("mbdDetails", r.mbdDetails || "", "text", "MBD")}</td>
+            <td class="simple-walkin-col">${buildNamedEditCheckbox("walkIn", isDonorType(r,"WALK-IN"), "WALK-IN")}</td>
+            <td class="simple-pd-col">${buildNamedEditInput("patientDirectedDetails", r.patientDirectedDetails || "", "text", "Patient")}</td>
+            <td class="simple-serial-col">${buildNamedEditInput("serialNumber", r.serialNumber || "")}</td>
+            <td class="simple-name-col">
+                <div class="simple-edit-stack">
+                    ${buildNamedEditInput("surname", r.surname || "", "text", "SURNAME")}
+                    ${buildNamedEditInput("firstName", r.firstName || "", "text", "GIVEN NAME")}
+                    ${buildNamedEditInput("middleName", r.middleName || "", "text", "MIDDLE NAME")}
+                </div>
+            </td>
+            <td class="simple-cat-col">${buildNamedEditSelect("donorCategory", ["New","Repeat","Lapse"], r.donorCategory || "")}</td>
+            <td class="simple-bt-col">${buildNamedEditSelect("bloodType", ["O+","O-","A+","A-","B+","B-","AB+","AB-","UNKNOWN"], r._resolvedBloodType || r.bloodType || "")}</td>
+            <td class="simple-bag-col">
+                <div class="simple-edit-two-stack">
+                    ${buildNamedEditSelect("bloodBagBrand", ["KARMI","TERUMO"], r.bloodBagBrand || "")}
+                    ${buildNamedEditSelect("bloodBagType", ["SINGLE","DOUBLE","TRIPLE","QUADRUPLE"], r.bloodBagType || "")}
+                </div>
+            </td>
+            <td class="simple-amount-col">${buildNamedEditSelect("amount", ["450 ML","QNS","UB"], r.amount || "")}</td>
+            ${hasRemarksColumn ? `<td class="simple-remarks-col remarks-expanded">${buildNamedEditInput("remarks", r.remarks || "")}</td>` : ""}
+            <td class="actions-cell simple-actions-col">
+                <button class="small-btn save-btn" type="button" onclick="event.stopPropagation(); saveEdit('${id}')">Save</button>
+                <button class="small-btn cancel-btn" type="button" onclick="event.stopPropagation(); cancelEdit('${id}')">Cancel</button>
+            </td>`;
+
+        row.insertAdjacentHTML("afterend", buildSimpleEditDetailRow(id, r, colspan, hasRemarksColumn));
+        setupSyncedTopScrollbars();
+        restoreRowScrollState(scrollState);
+        return;
+    }
+
+    row.setAttribute("data-edit-mode", "full");
     row.innerHTML = `
         <td class="col-entrydate-cell">${buildEditInput(r._resolvedEntryDate || "", "date")}</td>
         <td>${buildEditInput(r.mbdDetails || "")}</td>
@@ -3428,64 +3703,141 @@ window.startEdit = function(id) {
         <td>${buildEditInput(r.remarks || "")}</td>
         <td class="actions-cell">
             <button class="small-btn save-btn"   onclick="saveEdit('${id}')">Save</button>
-            <button class="small-btn cancel-btn" onclick="renderTracking()">Cancel</button>
+            <button class="small-btn cancel-btn" onclick="cancelEdit('${id}')">Cancel</button>
         </td>`;
+    restoreRowScrollState(scrollState);
+};
+
+window.cancelEdit = function(id) {
+    const scrollState = captureRowScrollState(id);
+    const detail = getSimpleEditDetailRow(id);
+    if (detail) detail.remove();
+    expandedSimpleRows.delete(id);
+    renderTracking();
+    setupSyncedTopScrollbars();
+    restoreRowScrollState(scrollState);
 };
 
 window.saveEdit = async function(id) {
-    const row    = document.getElementById(`row-${id}`);
-    const fields = row.querySelectorAll("input, select");
+    const row = document.getElementById(`row-${id}`);
+    if (!row) return;
 
-    const mbdDetails              = fields[1].value.trim();
-    const walkInChecked           = fields[2].checked;
-    const patientDirectedDetails  = fields[3].value.trim();
+    const scrollState = captureRowScrollState(id);
+    const originalRecord = allDonors.find(r => r.id === id) || {};
+    let updatedData;
 
-    const donorTypes = [];
-    if (mbdDetails)             donorTypes.push("MBD");
-    if (walkInChecked)          donorTypes.push("WALK-IN");
-    if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
+    if (row.getAttribute("data-edit-mode") === "simple") {
+        const detailRow = getSimpleEditDetailRow(id);
+        const scopes = [row, detailRow].filter(Boolean);
+        const valueOf = (name, fallback = "") => {
+            const field = getFieldFromScopes(scopes, name);
+            return field ? String(field.value || "").trim() : String(fallback || "").trim();
+        };
+        const checkedOf = (name, fallback = false) => {
+            const field = getFieldFromScopes(scopes, name);
+            return field ? !!field.checked : !!fallback;
+        };
 
-    const dateMeta = getMonthMetaFromIso(fields[0].value);
+        const mbdDetails = valueOf("mbdDetails", originalRecord.mbdDetails || "");
+        const walkInChecked = checkedOf("walkIn", isDonorType(originalRecord,"WALK-IN"));
+        const patientDirectedDetails = valueOf("patientDirectedDetails", originalRecord.patientDirectedDetails || "");
 
-    const updatedData = {
-        entryDate:              fields[0].value,
-        collectionYear:         dateMeta.collectionYear,
-        collectionMonth:        dateMeta.collectionMonth,
-        collectionMonthName:    dateMeta.collectionMonthName,
-        collectionMonthKey:     dateMeta.collectionMonthKey,
-        mbdDetails:             toUpperTrim(mbdDetails),
-        patientDirectedDetails: toUpperTrim(patientDirectedDetails),
-        donorType:              donorTypes.join(", "),
-        surname:                toUpperTrim(fields[4].value),
-        firstName:              toUpperTrim(fields[5].value),
-        middleName:             toUpperTrim(fields[6].value),
-        birthday:               fields[7].value,
-        age:                    parseInt(fields[8].value || "0"),
-        sex:                    fields[9].value,
-        contactNumber:          toUpperTrim(fields[10].value),
-        address:                toUpperTrim(fields[11].value),
-        cityProvince:           toUpperTrim(fields[12].value),
-        occupation:             toUpperTrim(fields[13].value),
-        donorCategory:          fields[14].value,
-        numberOfDonations:      fields[15].value.trim(),
-        bloodType:              fields[16].value,
-        serialNumber:           toUpperTrim(fields[17].value),
-        amount:                 fields[18].value,
-        bloodBagBrand:          fields[19].value,
-        bloodBagType:           fields[20].value,
-        timeStarted:            fields[21].value,
-        timeEnded:              fields[22].value,
-        remarks:                toUpperTrim(fields[23].value)
-    };
+        const donorTypes = [];
+        if (mbdDetails) donorTypes.push("MBD");
+        if (walkInChecked) donorTypes.push("WALK-IN");
+        if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
+
+        const entryDate = valueOf("entryDate", originalRecord._resolvedEntryDate || originalRecord.entryDate || "");
+        const dateMeta = getMonthMetaFromIso(entryDate);
+
+        updatedData = {
+            entryDate,
+            collectionYear:         dateMeta.collectionYear,
+            collectionMonth:        dateMeta.collectionMonth,
+            collectionMonthName:    dateMeta.collectionMonthName,
+            collectionMonthKey:     dateMeta.collectionMonthKey,
+            mbdDetails:             toUpperTrim(mbdDetails),
+            patientDirectedDetails: toUpperTrim(patientDirectedDetails),
+            donorType:              donorTypes.join(", "),
+            surname:                toUpperTrim(valueOf("surname", originalRecord.surname || "")),
+            firstName:              toUpperTrim(valueOf("firstName", originalRecord.firstName || "")),
+            middleName:             toUpperTrim(valueOf("middleName", originalRecord.middleName || "")),
+            birthday:               valueOf("birthday", originalRecord._resolvedBirthday || originalRecord.birthday || ""),
+            age:                    parseInt(valueOf("age", originalRecord.age || "0") || "0"),
+            sex:                    valueOf("sex", originalRecord.sex || ""),
+            contactNumber:          toUpperTrim(valueOf("contactNumber", originalRecord.contactNumber || "")),
+            address:                toUpperTrim(valueOf("address", originalRecord.address || "")),
+            cityProvince:           toUpperTrim(valueOf("cityProvince", originalRecord.cityProvince || "")),
+            occupation:             toUpperTrim(valueOf("occupation", originalRecord.occupation || "")),
+            donorCategory:          valueOf("donorCategory", originalRecord.donorCategory || ""),
+            numberOfDonations:      valueOf("numberOfDonations", originalRecord.numberOfDonations || ""),
+            bloodType:              valueOf("bloodType", originalRecord._resolvedBloodType || originalRecord.bloodType || ""),
+            serialNumber:           toUpperTrim(valueOf("serialNumber", originalRecord.serialNumber || "")),
+            amount:                 valueOf("amount", originalRecord.amount || ""),
+            bloodBagBrand:          valueOf("bloodBagBrand", originalRecord.bloodBagBrand || ""),
+            bloodBagType:           valueOf("bloodBagType", originalRecord.bloodBagType || ""),
+            timeStarted:            valueOf("timeStarted", originalRecord._resolvedTimeStarted || originalRecord.timeStarted || ""),
+            timeEnded:              valueOf("timeEnded", originalRecord._resolvedTimeEnded || originalRecord.timeEnded || ""),
+            remarks:                toUpperTrim(valueOf("remarks", originalRecord.remarks || ""))
+        };
+    } else {
+        const fields = row.querySelectorAll("input, select");
+
+        const mbdDetails              = fields[1].value.trim();
+        const walkInChecked           = fields[2].checked;
+        const patientDirectedDetails  = fields[3].value.trim();
+
+        const donorTypes = [];
+        if (mbdDetails)             donorTypes.push("MBD");
+        if (walkInChecked)          donorTypes.push("WALK-IN");
+        if (patientDirectedDetails) donorTypes.push("PATIENT DIRECTED");
+
+        const dateMeta = getMonthMetaFromIso(fields[0].value);
+
+        updatedData = {
+            entryDate:              fields[0].value,
+            collectionYear:         dateMeta.collectionYear,
+            collectionMonth:        dateMeta.collectionMonth,
+            collectionMonthName:    dateMeta.collectionMonthName,
+            collectionMonthKey:     dateMeta.collectionMonthKey,
+            mbdDetails:             toUpperTrim(mbdDetails),
+            patientDirectedDetails: toUpperTrim(patientDirectedDetails),
+            donorType:              donorTypes.join(", "),
+            surname:                toUpperTrim(fields[4].value),
+            firstName:              toUpperTrim(fields[5].value),
+            middleName:             toUpperTrim(fields[6].value),
+            birthday:               fields[7].value,
+            age:                    parseInt(fields[8].value || "0"),
+            sex:                    fields[9].value,
+            contactNumber:          toUpperTrim(fields[10].value),
+            address:                toUpperTrim(fields[11].value),
+            cityProvince:           toUpperTrim(fields[12].value),
+            occupation:             toUpperTrim(fields[13].value),
+            donorCategory:          fields[14].value,
+            numberOfDonations:      fields[15].value.trim(),
+            bloodType:              fields[16].value,
+            serialNumber:           toUpperTrim(fields[17].value),
+            amount:                 fields[18].value,
+            bloodBagBrand:          fields[19].value,
+            bloodBagType:           fields[20].value,
+            timeStarted:            fields[21].value,
+            timeEnded:              fields[22].value,
+            remarks:                toUpperTrim(fields[23].value)
+        };
+    }
 
     try {
         await db.collection("donorDatabase").doc(id).update(updatedData);
         updateLocalDonorRecord(id, updatedData);
+        expandedSimpleRows.delete(id);
         renderTracking();
         showMessage("Record updated successfully.", "success");
+        setupSyncedTopScrollbars();
+        restoreRowScrollState(scrollState);
     } catch(e) {
         console.error(e);
         showMessage("Failed to update record: " + e.message, "error");
+        restoreRowScrollState(scrollState);
     }
 };
 
