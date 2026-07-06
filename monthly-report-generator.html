@@ -978,18 +978,74 @@ function resolvePartnerAlias(name, partnerAliases) {
 function findGroupMapping(name, mappings, partnerAliases) {
     const resolved = resolvePartnerAlias(name, partnerAliases);
     const key = normKey(resolved);
-    let hit = mappings.find(m => normKey(m.partnerName || m.name || m.groupName || "") === key);
+    if (!key) return null;
+
+    const mappingKeys = (m) => [
+        m.partnerName, m.name, m.groupName,
+        ...(Array.isArray(m.aliases) ? m.aliases : [])
+    ].map(normKey).filter(Boolean);
+
+    let hit = mappings.find(m => mappingKeys(m).some(k => k === key));
     if (hit) return hit;
-    hit = mappings.find(m => Array.isArray(m.aliases) && m.aliases.some(a => normKey(a) === key));
+
+    // Some imported MBD names differ only by small connector words or punctuation
+    // (example: "ROTARY CLUB OF DOWNTOWN SESSION" vs "ROTARY CLUB DOWNTOWN SESSION").
+    // Use a conservative contains check so existing donorGroupCategories can still supply
+    // the official place/category instead of falling back to donor address fields.
+    hit = mappings.find(m => mappingKeys(m).some(k => k.length >= 6 && key.length >= 6 && (key.includes(k) || k.includes(key))));
     if (hit) return hit;
+
     return null;
+}
+
+function firstNormText(...values) {
+    for (const value of values) {
+        const text = normText(value);
+        if (text) return text;
+    }
+    return "";
+}
+
+function defaultMbdPlaceFromName(name) {
+    const key = normKey(name);
+
+    // Known Baguio MBD aliases that have been imported without a donorGroupCategories place.
+    if (key.includes("P PARK") || key.includes("PEOPLES PARK") || key.includes("PEOPLE S PARK")) return "BAGUIO CITY";
+    if (key.includes("DOWNTOWN SESSION")) return "BAGUIO CITY";
+    if (key.includes("ROTARY CLUB HIGHLAND") || key.includes("ROTARY CLUB HIGHLAND")) return "ILOCOS SUR";
+
+    // Do not fall back to r.cityProvince/r.address here. Those fields are donor residence
+    // fields and caused the Excel MBD section to split one bloodletting into donor-address rows.
+    return "BAGUIO CITY";
+}
+
+function resolveMbdPlace(r, map, canonicalName) {
+    const mappedPlace = firstNormText(
+        map?.place, map?.cityProvince, map?.province, map?.location, map?.venue, map?.address
+    );
+    if (mappedPlace) return mappedPlace;
+
+    const encodedPlace = firstNormText(
+        r.mbdPlace, r.mbdLocation, r.mbdVenue,
+        r.mobileBloodDonationPlace, r.mobileBloodDonationVenue,
+        r.collectionPlace, r.collectionVenue,
+        r.donationPlace, r.donationVenue,
+        r.bloodLettingPlace, r.bloodlettingPlace,
+        r.bloodLettingVenue, r.bloodlettingVenue,
+        r.eventPlace, r.eventVenue,
+        r.groupPlace, r.partnerPlace,
+        r.site, r.siteName, r.venue, r.place
+    );
+    if (encodedPlace) return encodedPlace;
+
+    return defaultMbdPlaceFromName(canonicalName || r.mbdDetails || r.groupName || r.partner || "");
 }
 
 function categorizeMbdRecord(r, mappings, partnerAliases) {
     const rawName = normText(r.mbdDetails || r.groupName || r.partner || "MBD");
     const map = findGroupMapping(rawName, mappings, partnerAliases);
-    const name = normText(map?.partnerName || map?.name || rawName || "MBD");
-    const place = normText(map?.place || r.cityProvince || r.address || "");
+    const name = normText(map?.partnerName || map?.name || map?.groupName || rawName || "MBD");
+    const place = resolveMbdPlace(r, map, name);
     let category = String(map?.category || "Group").trim();
     if (!category) category = "Group";
     if (/rc143|brgy|barangay/i.test(category)) category = "RC143 / BRGY Base";
@@ -1655,8 +1711,17 @@ function writeMbdSection(ws, rows, startRow, endRow, totalRow) {
         setCell(ws, `E${r}`, item.category === "RC143 / BRGY Base" ? "Community" : (item.category === "Pledge 25" ? "Student" : "Employee/Staff"));
         writeRowValues(ws, r, 6, [item.S, item.D, item.T, item.Q, 0,0,0]);
     });
-    const totals = limited.reduce((acc,x)=>{["S","D","T","Q"].forEach(k=>acc[k]+=x[k]||0); return acc;}, {S:0,D:0,T:0,Q:0});
-    writeRowValuesIfNotFormula(ws, totalRow, 7, [totals.D, totals.T, totals.Q, 0,0,0]);
+
+    // Totals must use the full computed section, not only the visible template rows.
+    // This prevents the subtotal from changing when more than 20 MBD lines exist.
+    const totals = rows.reduce((acc,x)=>{["S","D","T","Q"].forEach(k=>acc[k]+=x[k]||0); return acc;}, {S:0,D:0,T:0,Q:0});
+    setNumIfNotFormula(ws, `F${totalRow}`, totals.S);
+    setNumIfNotFormula(ws, `G${totalRow}`, totals.D);
+    setNumIfNotFormula(ws, `H${totalRow}`, totals.T);
+    setNumIfNotFormula(ws, `I${totalRow}`, totals.Q);
+    setNumIfNotFormula(ws, `J${totalRow}`, 0);
+    setNumIfNotFormula(ws, `K${totalRow}`, 0);
+    setNumIfNotFormula(ws, `L${totalRow}`, 0);
 }
 
 function fillBS325(workbook, data) {
