@@ -194,6 +194,26 @@
         .status.warn{ background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; display:block; }
         .status.error{ background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; display:block; }
 
+
+        .download-fallback{
+            display:none;
+            margin-top:12px;
+            padding:12px 14px;
+            border-radius:14px;
+            border:1px solid #bbf7d0;
+            background:#ecfdf5;
+            color:#166534;
+            font-size:13px;
+            font-weight:800;
+            line-height:1.5;
+        }
+        .download-fallback.show{ display:block; }
+        .download-fallback a{
+            color:#0f5132;
+            text-decoration:underline;
+            font-weight:900;
+        }
+
         .preview-card{ display:none; }
         .preview-card.show{ display:block; }
 
@@ -370,6 +390,7 @@
 
 
                     <div id="statusBox" class="status"></div>
+                    <div id="downloadFallbackBox" class="download-fallback"></div>
                 </div>
             </div>
 
@@ -430,6 +451,7 @@ const components = ["WB", "PRBC", "FFP", "PC", "CRYO"];
 
 let lastPreviewData = null;
 let selectedTemplateFile = null;
+let activeDownloadUrl = null;
 let authReady = false;
 let currentReleasingPrices = {WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, BOX:0};
 let lastRTDBDiagnostics = {};
@@ -469,6 +491,7 @@ function showStatus(message, type = "info") {
 }
 
 function clearPreview() {
+    clearManualDownloadLink();
     lastPreviewData = null;
     document.getElementById("previewCard").classList.remove("show");
     document.getElementById("summaryGrid").innerHTML = "";
@@ -479,6 +502,48 @@ function clearPreview() {
 
 function escH(v) {
     return String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+}
+
+function clearManualDownloadLink() {
+    const box = document.getElementById("downloadFallbackBox");
+    if (box) {
+        box.classList.remove("show");
+        box.innerHTML = "";
+    }
+    if (activeDownloadUrl) {
+        try { URL.revokeObjectURL(activeDownloadUrl); } catch (e) {}
+        activeDownloadUrl = null;
+    }
+}
+
+function showManualDownloadLink(url, fileName) {
+    const box = document.getElementById("downloadFallbackBox");
+    if (!box) return;
+    box.innerHTML = "Excel is ready. If it did not download automatically, " +
+        `<a href="${url}" download="${escH(fileName)}">click here to download ${escH(fileName)}</a>.`;
+    box.classList.add("show");
+}
+
+function triggerWorkbookDownload(blob, fileName) {
+    clearManualDownloadLink();
+    const url = URL.createObjectURL(blob);
+    activeDownloadUrl = url;
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.rel = "noopener";
+    link.style.display = "none";
+    document.body.appendChild(link);
+
+    // Do not revoke the object URL immediately. Some browsers cancel the download
+    // when the blob URL is revoked in the same click cycle. Keep a visible fallback.
+    link.click();
+    setTimeout(() => {
+        try { document.body.removeChild(link); } catch (e) {}
+    }, 0);
+
+    showManualDownloadLink(url, fileName);
 }
 
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -1429,6 +1494,7 @@ async function previewMonthlyReport() {
     if (!authReady) { showStatus("Checking login status. Please click Preview Report again after a moment.", "info"); return; }
     if (!auth.currentUser) { showStatus("Please login first before generating a monthly report.", "warn"); return; }
 
+    clearManualDownloadLink();
     showStatus("Loading " + monthNames[month - 1] + " " + year + " records from Firebase...", "info");
     lastRTDBDiagnostics = {};
     try {
@@ -1998,40 +2064,49 @@ function setupTemplateFileInput(){
 }
 
 async function downloadExcelReport() {
-    const selectedMonth = Number(document.getElementById("reportMonth").value);
-    const selectedYear = Number(document.getElementById("reportYear").value);
-    if (!lastPreviewData || Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) {
-        showStatus("Selected month/year changed. Refreshing preview before download...", "info");
-        await previewMonthlyReport();
+    const downloadBtn = document.getElementById("downloadExcelBtn");
+    if (downloadBtn && downloadBtn.dataset.busy === "1") return;
+    if (downloadBtn) {
+        downloadBtn.dataset.busy = "1";
+        downloadBtn.disabled = true;
     }
-    if (!lastPreviewData) { showStatus("Please preview the report first before downloading.", "warn"); return; }
-    if (Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) { showStatus("Preview did not match the selected month/year. Please click Preview Report again.", "error"); return; }
-    if (typeof ExcelJS === "undefined") { showStatus("Excel library did not load. Please check internet connection and reload the page.", "error"); return; }
 
-    showStatus("Loading Excel template and writing mapped cells for " + monthYearText(lastPreviewData) + "...", "info");
     try {
+        const selectedMonth = Number(document.getElementById("reportMonth").value);
+        const selectedYear = Number(document.getElementById("reportYear").value);
+
+        if (!lastPreviewData || Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) {
+            showStatus("Selected month/year changed. Refreshing preview before download...", "info");
+            await previewMonthlyReport();
+        }
+        if (!lastPreviewData) { showStatus("Please preview the report first before downloading.", "warn"); return; }
+        if (Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) { showStatus("Preview did not match the selected month/year. Please click Preview Report again.", "error"); return; }
+        if (typeof ExcelJS === "undefined") { showStatus("Excel library did not load. Please check internet connection and reload the page.", "error"); return; }
+
+        showStatus("Loading Excel template and writing mapped cells for " + monthYearText(lastPreviewData) + "...", "info");
+
         const buffer = await loadTemplateBuffer();
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);
         fillWorkbook(workbook, lastPreviewData);
         const out = await workbook.xlsx.writeBuffer();
         const blob = new Blob([out], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-        const link = document.createElement("a");
         const name = `${monthNames[lastPreviewData.month - 1].toUpperCase()}-${lastPreviewData.year}-MONTHLY-REPORT.xlsx`;
-        link.href = URL.createObjectURL(blob);
-        link.download = name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-        showStatus("Excel generated and downloaded: " + name, "ok");
+        triggerWorkbookDownload(blob, name);
+        showStatus("Excel generated. If the file did not download automatically, use the green download link below.", "ok");
     } catch (error) {
         console.error(error);
         showStatus("Excel download failed: " + (error.message || error), "error");
+    } finally {
+        if (downloadBtn) {
+            downloadBtn.dataset.busy = "0";
+            downloadBtn.disabled = !lastPreviewData;
+        }
     }
 }
 
 setupTemplateFileInput();
+window.addEventListener("beforeunload", clearManualDownloadLink);
 setThisMonth();
 </script>
 
