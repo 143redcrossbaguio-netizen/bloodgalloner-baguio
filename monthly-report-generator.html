@@ -1112,7 +1112,8 @@ function buildReleasingData(releases, augmentations) {
         issuedTotal: emptyReleaseComponents(),
         requestTotal: emptyReleaseComponents(),
         facilities: {},
-        augmentationFacilities: {}
+        augmentationFacilities: {},
+        augmentationAmount: 0
     };
 
     reportBloodTypes.forEach(bt => {
@@ -1154,6 +1155,8 @@ function buildReleasingData(releases, augmentations) {
         if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
         const af = data.augmentationFacilities[facility];
         af.patients++;
+        const prices = getEntryPrices(r);
+        data.augmentationAmount += Math.max(0, parseNum(r.amountPaid) - parseNum(r.discount));
         const bloodTypesArray = Array.isArray(r.bloodTypes) ? r.bloodTypes : [];
         bloodTypesArray.forEach(btRow => {
             const issuedCounts = countComponentsFromList(btRow.issued);
@@ -1191,7 +1194,7 @@ async function previewMonthlyReport() {
         lastPreviewData = {month, year, donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, donorData, deferralData, releasingData, generatedAt: new Date()};
         renderPreview(lastPreviewData);
         document.getElementById("downloadExcelBtn").disabled = false;
-        showStatus("Preview generated. You can now download the mapped Excel template.", "ok");
+        showStatus("Preview generated. " + regularReleaseSummaryText(lastPreviewData) + ". You can now download the mapped Excel template.", "ok");
     } catch (error) {
         console.error(error);
         showStatus("Preview failed: " + (error.message || error), "error");
@@ -1212,6 +1215,7 @@ function renderPreview(data) {
         ${summaryBox("Deferrals", data.deferralData.total)}
         ${summaryBox("Components Prepared", totalPrepared)}
         ${summaryBox("Units Released", totalReleased)}
+        ${summaryBox("Releasing Records", data.releasingData.regularRecords)}
     `;
 
     document.getElementById("sheetPreviewContainer").innerHTML = `
@@ -1345,46 +1349,83 @@ function formatShortDate(iso) {
 function isFormulaCell(cell) { return !!(cell && cell.value && typeof cell.value === "object" && cell.value.formula); }
 function setNumIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = Number(value || 0); }
 function setCellIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = value == null || value === "" ? null : value; }
+function setFormulaResult(ws, addr, formula, result) { ws.getCell(addr).value = { formula: formula, result: Number(result || 0) }; }
+function setNumForce(ws, addr, value) { ws.getCell(addr).value = Number(value || 0); }
 function writeRowValues(ws, row, colStart, values) { values.forEach((v,i) => ws.getCell(row, colStart + i).value = v == null || v === "" ? null : v); }
 function writeRowValuesIfNotFormula(ws, row, colStart, values) { values.forEach((v,i) => { const cell = ws.getCell(row, colStart + i); if (!isFormulaCell(cell)) cell.value = v == null || v === "" ? null : v; }); }
 function copySafeArray(arr) { return Array.isArray(arr) ? arr : []; }
+function regularReleaseSummaryText(data) {
+    const r = data?.releasingData || {};
+    const units = sumObj(r.issuedTotal || {});
+    return `Releasing records loaded: ${r.regularRecords || 0}; augmentation records: ${r.augmentationRecords || 0}; regular units issued: ${units}`;
+}
 
 function fillBS323(workbook, data) {
     const ws = workbook.getWorksheet("BS 323");
     if (!ws) return;
 
-    // Clear stale template values first. These sections are either manual or will be recomputed below.
+    // Clear stale template/sample values first. BS 323 must be rebuilt from the current month's releasing statistics.
     clearCellsIfNotFormula(ws, "C15:E33");      // Screening test tables are manual.
-    clearCellsIfNotFormula(ws, "D42:H44");      // Patient served.
-    clearCellsIfNotFormula(ws, "F52:Q69");      // Units dispensed / BPF collection input cells.
-    clearCellsIfNotFormula(ws, "B68:L69");      // Old-rate rows are manual and should start blank.
-    clearCellsIfNotFormula(ws, "T52:W69");      // Hidden/helper old-rate area from the source template.
+    clearCells(ws, "D42:H45");                  // Patient served block, including displayed totals.
+    clearCells(ws, "F51:R70");                  // Units dispensed / BPF collection rows and totals.
+    clearCells(ws, "T51:W70");                  // Old hidden/helper sample values from the source template.
+    clearCells(ws, "B68:L69");                  // Old-rate rows are manual and should start blank.
 
     setPeriodCell(ws, "D3", data);
     setNum(ws, "D5", data.donorData.totalRecords);
 
-    const ps = data.releasingData.patientServed;
-    setNum(ws, "D42", ps.pay.Male); setNum(ws, "E42", ps.pay.Female);
-    setNum(ws, "D43", ps.discounted.Male); setNum(ws, "E43", ps.discounted.Female);
-    setNum(ws, "D44", ps.noCharge.Male); setNum(ws, "E44", ps.noCharge.Female);
+    const ps = data.releasingData.patientServed || {};
+    const payMale = ps.pay?.Male || 0;
+    const payFemale = ps.pay?.Female || 0;
+    const discMale = ps.discounted?.Male || 0;
+    const discFemale = ps.discounted?.Female || 0;
+    const noMale = ps.noCharge?.Male || 0;
+    const noFemale = ps.noCharge?.Female || 0;
 
-    // Correct rows in the official template:
-    // 53 = Whole Blood 450 ml, 54 = PRBC, 55 = Platelet Concentrate, 56 = FFP, 58 = Cryoprecipitate.
-    const mapRows = {WB:53, PRBC:54, PC:55, FFP:56, CRYO:58};
+    setNum(ws, "D42", payMale);       setNum(ws, "E42", payFemale);
+    setNum(ws, "D43", discMale);      setNum(ws, "E43", discFemale);
+    setNum(ws, "D44", noMale);        setNum(ws, "E44", noFemale);
+    setFormulaResult(ws, "H42", "SUM(D42:G42)", payMale + payFemale);
+    setFormulaResult(ws, "H43", "SUM(D43:G43)", discMale + discFemale);
+    setFormulaResult(ws, "H44", "SUM(D44:G44)", noMale + noFemale);
+    setFormulaResult(ws, "H45", "SUM(H42:H44)", payMale + payFemale + discMale + discFemale + noMale + noFemale);
+
+    // Official row positions in the uploaded template:
+    // 52 = Whole Blood 450 ml, 53 = Packed Red Cells, 54 = Platelet Concentrate,
+    // 55 = FFP, 57 = Cryoprecipitate. Row 51 is Whole Blood 350 ml and is intentionally kept blank/zero.
+    const mapRows = {WB:52, PRBC:53, PC:54, FFP:55, CRYO:57};
     Object.entries(mapRows).forEach(([comp,row]) => {
-        const payUnits = data.releasingData.unitsByPayment.pay[comp];
-        const discountedUnits = data.releasingData.unitsByPayment.discounted[comp];
-        const noChargeUnits = data.releasingData.unitsByPayment.noCharge[comp];
+        const payUnits = Number(data.releasingData.unitsByPayment.pay[comp] || 0);
+        const discountedUnits = Number(data.releasingData.unitsByPayment.discounted[comp] || 0);
+        const noChargeUnits = Number(data.releasingData.unitsByPayment.noCharge[comp] || 0);
+        const totalUnits = payUnits + discountedUnits + noChargeUnits;
 
         setNum(ws, `F${row}`, payUnits);
         setNum(ws, `G${row}`, discountedUnits);
         setNum(ws, `H${row}`, noChargeUnits);
-        setNumIfNotFormula(ws, `I${row}`, payUnits + discountedUnits + noChargeUnits);
+        setFormulaResult(ws, `I${row}`, `SUM(F${row}:H${row})`, totalUnits);
 
         setNum(ws, `J${row}`, data.releasingData.moneyByPayment.pay[comp]);
         setNum(ws, `K${row}`, data.releasingData.moneyByPayment.discounted[comp]);
         setNum(ws, `L${row}`, data.releasingData.moneyByPayment.noCharge[comp]);
     });
+
+    // Blood augmentation is tracked separately in the Releasing module. Put total augmentation units/amount on its own row only.
+    const augUnits = Object.values(data.releasingData.augmentationFacilities || {}).reduce((sum, x) => sum + (x.WB||0) + (x.PRBC||0) + (x.FFP||0) + (x.PC||0) + (x.CRYO||0), 0);
+    const augAmount = Number(data.releasingData.augmentationAmount || 0);
+    if (augUnits || augAmount) {
+        setNum(ws, "F66", augUnits);
+        setFormulaResult(ws, "I66", "SUM(F66:H66)", augUnits);
+        setNum(ws, "J66", augAmount);
+    }
+
+    ["J","K","L","M","N","O","P","Q"].forEach(col => {
+        const values = [];
+        for (let row = 51; row <= 69; row++) values.push(Number(ws.getCell(`${col}${row}`).value || 0));
+        const total = values.reduce((a,b)=>a+b,0);
+        setFormulaResult(ws, `${col}70`, `SUM(${col}51:${col}69)`, total);
+    });
+    setFormulaResult(ws, "R70", "SUM(J70:Q70)", ["J","K","L","M","N","O","P","Q"].reduce((s,col)=>s+Number(ws.getCell(`${col}70`).value?.result ?? ws.getCell(`${col}70`).value ?? 0),0));
 }
 
 function fillBS324a(workbook, data) {
@@ -1474,14 +1515,21 @@ function fillBM7(workbook, data) {
     const ws = workbook.getWorksheet("BM7");
     if (!ws) return;
     setPeriodCell(ws, "C7", data);
+    const monthLabel = monthNames[Number(data.month) - 1] || "";
     const classMap = buildFacilityClassMap(workbook);
-    const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
-    clearCells(ws, "B10:O79");
+
+    const rows = Object.values(data.releasingData.facilities || {})
+        .sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility))
+        .slice(0,70);
+
+    // Section A: Direct Hospital Distribution. Clear all editable cells and rebuild from releasing statistics.
+    clearCells(ws, "B10:T79");
     rows.forEach((item, idx) => {
         const row = 10 + idx;
+        setCell(ws, `B${row}`, monthLabel);
         setCell(ws, `C${row}`, item.facility);
         setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
-        setNum(ws, `E${row}`, item.patients);
+        setNum(ws, `E${row}`, item.patients || 0);
         setNum(ws, `F${row}`, item.Male || 0);
         setNum(ws, `G${row}`, item.Female || 0);
         setNum(ws, `H${row}`, item.WB || 0);
@@ -1491,14 +1539,20 @@ function fillBM7(workbook, data) {
         setNum(ws, `O${row}`, item.CRYO || 0);
     });
     const tot = rows.reduce((a,x)=>{["patients","Male","Female","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
-    setNum(ws,"F80",tot.Male); setNum(ws,"G80",tot.Female); setNum(ws,"H80",tot.WB); setNum(ws,"I80",tot.PRBC); setNum(ws,"J80",tot.FFP); setNum(ws,"K80",tot.PC); setNum(ws,"O80",tot.CRYO);
+    setCell(ws,"C80","Total");
+    setNum(ws,"E80",tot.patients); setNum(ws,"F80",tot.Male); setNum(ws,"G80",tot.Female);
+    setNum(ws,"H80",tot.WB); setNum(ws,"I80",tot.PRBC); setNum(ws,"J80",tot.FFP); setNum(ws,"K80",tot.PC); setNum(ws,"O80",tot.CRYO);
 
-    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b)=>b.patients-a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
-    clearCells(ws, "B156:O225");
+    // Section C: Blood augmentation / distribution to other PRC BSF.
+    const augRows = Object.values(data.releasingData.augmentationFacilities || {})
+        .sort((a,b)=>b.patients-a.patients || a.facility.localeCompare(b.facility))
+        .slice(0,70);
+    clearCells(ws, "B156:T225");
     augRows.forEach((item, idx) => {
         const row = 156 + idx;
+        setCell(ws, `B${row}`, monthLabel);
         setCell(ws, `C${row}`, item.facility);
-        setNum(ws, `E${row}`, item.patients);
+        setNum(ws, `E${row}`, item.patients || 0);
         setNum(ws, `H${row}`, item.WB || 0);
         setNum(ws, `I${row}`, item.PRBC || 0);
         setNum(ws, `J${row}`, item.FFP || 0);
@@ -1506,7 +1560,8 @@ function fillBM7(workbook, data) {
         setNum(ws, `O${row}`, item.CRYO || 0);
     });
     const augTot = augRows.reduce((a,x)=>{["patients","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
-    setNumIfNotFormula(ws,"H226",augTot.WB); setNumIfNotFormula(ws,"I226",augTot.PRBC); setNumIfNotFormula(ws,"J226",augTot.FFP); setNumIfNotFormula(ws,"K226",augTot.PC); setNumIfNotFormula(ws,"O226",augTot.CRYO);
+    setCell(ws,"C226","Total");
+    setNum(ws,"E226",augTot.patients); setNum(ws,"H226",augTot.WB); setNum(ws,"I226",augTot.PRBC); setNum(ws,"J226",augTot.FFP); setNum(ws,"K226",augTot.PC); setNum(ws,"O226",augTot.CRYO);
 }
 
 function buildFacilityClassMap(workbook) {
@@ -1568,6 +1623,8 @@ function fillWorkbook(workbook, data) {
     fillWastages(workbook, data);
     setReportPeriodCells(workbook, data);
     workbook.calcProperties.fullCalcOnLoad = true;
+    workbook.calcProperties.forceFullCalc = true;
+    workbook.calcProperties.calcMode = "auto";
 }
 
 async function loadTemplateBuffer() {
