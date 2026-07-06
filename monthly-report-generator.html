@@ -1042,13 +1042,49 @@ function getEntryPrices(entry) {
     return out;
 }
 
-function computeComponentMoney(list, prices) {
+function computeComponentListValue(list, prices) {
     const out = emptyReleaseComponents();
     (Array.isArray(list) ? list : []).forEach(item => {
         const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
         const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
         if (comp && qty) out[comp] += qty * (prices[comp] || 0);
     });
+    return out;
+}
+
+function computeComponentMoneyForEntry(entry, paymentGroup) {
+    const prices = getEntryPrices(entry);
+    const componentListValue = computeComponentListValue(entry.issued, prices);
+    const componentListTotal = sumObj(componentListValue);
+    const boxListTotal = parseNum(entry.boxContainerQty) * (prices.BOX || 0);
+    const fullListTotal = componentListTotal + boxListTotal;
+    const amountPaid = parseNum(entry.amountPaid);
+    const discount = parseNum(entry.discount);
+    const netIncome = Math.max(0, amountPaid - discount);
+    const out = emptyReleaseComponents();
+
+    if (componentListTotal <= 0) return out;
+
+    let productIncome = 0;
+
+    if (paymentGroup === "noCharge") {
+        productIncome = 0;
+    } else if (amountPaid === 0 && discount === 0 && paymentGroup === "pay") {
+        // Safety fallback for old records without payment fields.
+        productIncome = componentListTotal;
+    } else if (fullListTotal > 0) {
+        // The releasing form's amountPaid includes box containers. BS 323 rows are blood products only,
+        // so remove the box-container share before distributing the net income to the issued components.
+        productIncome = netIncome * (componentListTotal / fullListTotal);
+    }
+
+    if (!isFinite(productIncome) || productIncome < 0) productIncome = 0;
+
+    const factor = productIncome / componentListTotal;
+    components.forEach(comp => {
+        out[comp] = Number(((componentListValue[comp] || 0) * factor).toFixed(2));
+    });
+
     return out;
 }
 
@@ -1097,7 +1133,7 @@ function buildReleasingData(releases, augmentations) {
         addReleaseCounts(data.requestTotal, reqCounts);
         addReleaseCounts(data.issuedTotal, issuedCounts);
         addReleaseCounts(data.unitsByPayment[paymentGroup], issuedCounts);
-        addReleaseCounts(data.moneyByPayment[paymentGroup], computeComponentMoney(r.issued, getEntryPrices(r)));
+        addReleaseCounts(data.moneyByPayment[paymentGroup], computeComponentMoneyForEntry(r, paymentGroup));
 
         const bt = normBT(r.bloodtype || r.bloodType || "Unknown");
         if (!data.requestedByBT[bt]) data.requestedByBT[bt] = emptyReleaseComponents();
@@ -1267,10 +1303,38 @@ function clearCellsIfNotFormula(ws, range) {
         }
     }
 }
+function monthYearText(data) {
+    return monthNames[Number(data.month) - 1] + " " + Number(data.year);
+}
+function setPeriodCell(ws, addr, data) {
+    const cell = ws.getCell(addr);
+    cell.value = monthYearText(data);
+}
 function setDateCell(ws, addr, date) {
     const cell = ws.getCell(addr);
     cell.value = date;
     cell.numFmt = "mmmm yyyy";
+}
+function setReportPeriodCells(workbook, data) {
+    const period = monthYearText(data);
+
+    const bs323 = workbook.getWorksheet("BS 323");
+    if (bs323) setCell(bs323, "D3", period);
+
+    const bs324a = workbook.getWorksheet("BS 324a");
+    if (bs324a) setCell(bs324a, "C1", period);
+
+    const bs325 = workbook.getWorksheet("BS 325");
+    if (bs325) setCell(bs325, "D1", period);
+
+    const bm7 = workbook.getWorksheet("BM7");
+    if (bm7) setCell(bm7, "C7", period);
+
+    const bs324b = workbook.getWorksheet("BS 324b");
+    if (bs324b) setCell(bs324b, "D1", period);
+
+    const bloodProgram = workbook.getWorksheet("BLOOD PROGRAM DEVELOPMENT");
+    if (bloodProgram) setCell(bloodProgram, "B2", period);
 }
 function formatShortDate(iso) {
     if (!iso) return "";
@@ -1296,7 +1360,7 @@ function fillBS323(workbook, data) {
     clearCellsIfNotFormula(ws, "B68:L69");      // Old-rate rows are manual and should start blank.
     clearCellsIfNotFormula(ws, "T52:W69");      // Hidden/helper old-rate area from the source template.
 
-    setDateCell(ws, "D3", monthStartDate(data.year, data.month));
+    setPeriodCell(ws, "D3", data);
     setNum(ws, "D5", data.donorData.totalRecords);
 
     const ps = data.releasingData.patientServed;
@@ -1308,9 +1372,15 @@ function fillBS323(workbook, data) {
     // 53 = Whole Blood 450 ml, 54 = PRBC, 55 = Platelet Concentrate, 56 = FFP, 58 = Cryoprecipitate.
     const mapRows = {WB:53, PRBC:54, PC:55, FFP:56, CRYO:58};
     Object.entries(mapRows).forEach(([comp,row]) => {
-        setNum(ws, `F${row}`, data.releasingData.unitsByPayment.pay[comp]);
-        setNum(ws, `G${row}`, data.releasingData.unitsByPayment.discounted[comp]);
-        setNum(ws, `H${row}`, data.releasingData.unitsByPayment.noCharge[comp]);
+        const payUnits = data.releasingData.unitsByPayment.pay[comp];
+        const discountedUnits = data.releasingData.unitsByPayment.discounted[comp];
+        const noChargeUnits = data.releasingData.unitsByPayment.noCharge[comp];
+
+        setNum(ws, `F${row}`, payUnits);
+        setNum(ws, `G${row}`, discountedUnits);
+        setNum(ws, `H${row}`, noChargeUnits);
+        setNumIfNotFormula(ws, `I${row}`, payUnits + discountedUnits + noChargeUnits);
+
         setNum(ws, `J${row}`, data.releasingData.moneyByPayment.pay[comp]);
         setNum(ws, `K${row}`, data.releasingData.moneyByPayment.discounted[comp]);
         setNum(ws, `L${row}`, data.releasingData.moneyByPayment.noCharge[comp]);
@@ -1320,7 +1390,7 @@ function fillBS323(workbook, data) {
 function fillBS324a(workbook, data) {
     const ws = workbook.getWorksheet("BS 324a");
     if (!ws) return;
-    setDateCell(ws, "C1", monthStartDate(data.year, data.month));
+    setPeriodCell(ws, "C1", data);
     const d = data.donorData;
     writeRowValues(ws, 6, 6, [d.office["Walk-in"].S, d.office["Walk-in"].D, d.office["Walk-in"].T, d.office["Walk-in"].Q, 0,0,0]);
     writeRowValues(ws, 7, 6, [d.office["Patient Directed"].S, d.office["Patient Directed"].D, d.office["Patient Directed"].T, d.office["Patient Directed"].Q, 0,0,0]);
@@ -1386,6 +1456,7 @@ function writeMbdSection(ws, rows, startRow, endRow, totalRow) {
 function fillBS325(workbook, data) {
     const ws = workbook.getWorksheet("BS 325");
     if (!ws) return;
+    setPeriodCell(ws, "D1", data);
     const d = data.donorData;
     setNum(ws, "C7", d.sex.Male); setNum(ws, "C8", d.sex.Female);
     setNum(ws, "C13", d.frequency["First-time donors"]);
@@ -1402,7 +1473,7 @@ function fillBS325(workbook, data) {
 function fillBM7(workbook, data) {
     const ws = workbook.getWorksheet("BM7");
     if (!ws) return;
-    setDateCell(ws, "C7", monthStartDate(data.year, data.month));
+    setPeriodCell(ws, "C7", data);
     const classMap = buildFacilityClassMap(workbook);
     const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
     clearCells(ws, "B10:O79");
@@ -1474,14 +1545,17 @@ function clearManualOnlySheets(workbook, data) {
     // BS 324b is purposely kept manual. Only clear previous sample/template answers, not headings.
     const b = workbook.getWorksheet("BS 324b");
     if (b) {
-        setDateCell(b, "D1", monthStartDate(data.year, data.month));
+        setPeriodCell(b, "D1", data);
         ["C2:C7", "C12:C20", "C23:C24", "B29:D38", "B42:E52", "C59:C65"].forEach(r => clearCellsIfNotFormula(b, r));
     }
 
-    // Blood Program Development is manual in this website workflow.
+    // Blood Program Development is manual in this website workflow. Keep labels/month period, clear only editable answer/name cells.
     const bp = workbook.getWorksheet("BLOOD PROGRAM DEVELOPMENT");
     if (bp) {
-        clearCellsIfNotFormula(bp, "A1:D74");
+        setCell(bp, "B1", "BAGUIO CITY");
+        setPeriodCell(bp, "B2", data);
+        ["B5:B10", "B14:B21", "D23:D29", "A68:D74"].forEach(r => clearCellsIfNotFormula(bp, r));
+        setPeriodCell(bp, "B2", data);
     }
 }
 
@@ -1492,6 +1566,7 @@ function fillWorkbook(workbook, data) {
     fillBS325(workbook, data);
     fillBM7(workbook, data);
     fillWastages(workbook, data);
+    setReportPeriodCells(workbook, data);
     workbook.calcProperties.fullCalcOnLoad = true;
 }
 
@@ -1548,10 +1623,17 @@ function setupTemplateFileInput(){
 }
 
 async function downloadExcelReport() {
+    const selectedMonth = Number(document.getElementById("reportMonth").value);
+    const selectedYear = Number(document.getElementById("reportYear").value);
+    if (!lastPreviewData || Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) {
+        showStatus("Selected month/year changed. Refreshing preview before download...", "info");
+        await previewMonthlyReport();
+    }
     if (!lastPreviewData) { showStatus("Please preview the report first before downloading.", "warn"); return; }
+    if (Number(lastPreviewData.month) !== selectedMonth || Number(lastPreviewData.year) !== selectedYear) { showStatus("Preview did not match the selected month/year. Please click Preview Report again.", "error"); return; }
     if (typeof ExcelJS === "undefined") { showStatus("Excel library did not load. Please check internet connection and reload the page.", "error"); return; }
 
-    showStatus("Loading Excel template and writing mapped cells...", "info");
+    showStatus("Loading Excel template and writing mapped cells for " + monthYearText(lastPreviewData) + "...", "info");
     try {
         const buffer = await loadTemplateBuffer();
         const workbook = new ExcelJS.Workbook();
