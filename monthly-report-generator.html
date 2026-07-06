@@ -9,6 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
     <style>
         * { box-sizing: border-box; }
@@ -281,7 +282,7 @@
                 <div class="card-header">
                     <div>
                         <h1>Generate Monthly Report</h1>
-                        <p>Select the reporting month/year, preview the values, then download the final Excel once mapping is connected.</p>
+                        <p>Select the reporting month/year, preview the values, preview the values, then download the mapped Excel template.</p>
                     </div>
                     <span class="pill">Monthly MOV Preview</span>
                 </div>
@@ -320,7 +321,7 @@
                     </div>
 
                     <div class="notice">
-                        Preview lets you check the computed values before downloading. The official Excel file will still use your uploaded workbook as the template, so the final download can preserve the same style, colors, spacing, merged cells, formulas, and computations once the cell mapping is added.
+                        Preview lets you check the computed values before downloading. The official Excel file will still use your uploaded workbook as the template, so the final download can preserve the same style, colors, spacing, merged cells, formulas, and computations using the current mapped cells.
                     </div>
 
                     <div id="statusBox" class="status"></div>
@@ -362,19 +363,22 @@ const auth = firebase.auth();
 const fs = firebase.firestore();
 const rtdb = firebase.database();
 
+const REPORT_TEMPLATE_FILE = "monthly-report-template.xlsx";
+
 const monthNames = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ];
+const bloodTypes = ["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "Unknown"];
+const reportBloodTypes = ["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"];
+const components = ["WB", "PRBC", "FFP", "PC", "CRYO"];
 
 let lastPreviewData = null;
 let authReady = false;
 
 auth.onAuthStateChanged((user) => {
     authReady = true;
-    if (!user) {
-        showStatus("Please login first before generating a monthly report.", "warn");
-    }
+    if (!user) showStatus("Please login first before generating a monthly report.", "warn");
 });
 
 // ─── BASIC UI ────────────────────────────────────────────────────────────────
@@ -389,9 +393,7 @@ function getPhilippineDateParts() {
     }).formatToParts(new Date());
 
     const data = {};
-    parts.forEach(part => {
-        if (part.type !== "literal") data[part.type] = Number(part.value);
-    });
+    parts.forEach(part => { if (part.type !== "literal") data[part.type] = Number(part.value); });
     return data;
 }
 
@@ -423,9 +425,38 @@ function escH(v) {
 
 function pad2(n) { return String(n).padStart(2, "0"); }
 function monthKey(year, month) { return `${year}-${pad2(month)}`; }
+function monthStartDate(year, month) { return new Date(Number(year), Number(month) - 1, 1); }
+function excelDateString(year, month) { return `${monthNames[month - 1]} ${year}`; }
+function normText(v) { return String(v || "").trim().replace(/\s+/g, " ").toUpperCase(); }
+function normKey(v) { return normText(v).replace(/[’']/g, "").replace(/[.\-_/,()&]+/g, " ").replace(/\s+/g, " ").trim(); }
+function addOne(obj, key, qty = 1) { obj[key] = (obj[key] || 0) + qty; }
+function sumObj(obj) { return Object.values(obj || {}).reduce((a,b)=>a + (Number(b) || 0), 0); }
+function parseNum(v) {
+    if (v == null || v === "") return 0;
+    if (typeof v === "number" && isFinite(v)) return v;
+    const m = String(v).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : 0;
+}
 
-// ─── DATE / NORMALIZATION HELPERS ────────────────────────────────────────────
+// ─── DATE / RECORD VISIBILITY ────────────────────────────────────────────────
 const MON = {jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+
+function parseTxtDate(text) {
+    const s = String(text || "").trim().toLowerCase();
+    if (!s) return "";
+    let m;
+    if ((m = s.match(/(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/))) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+    if ((m = s.match(/(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/))) return `${m[3]}-${pad2(m[1])}-${pad2(m[2])}`;
+    if ((m = s.match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/))) {
+        const key = Object.keys(MON).find(k => m[1].startsWith(k));
+        if (key) return `${m[2]}-${pad2(MON[key])}-01`;
+    }
+    if ((m = s.match(/(\d{4})[\s\-_]*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)/))) {
+        const key = Object.keys(MON).find(k => m[2].startsWith(k));
+        if (key) return `${m[1]}-${pad2(MON[key])}-01`;
+    }
+    return "";
+}
 
 function parseDate(raw) {
     if (!raw) return null;
@@ -435,31 +466,93 @@ function parseDate(raw) {
     if (typeof raw === "string") {
         const t = raw.trim();
         if (!t) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+            const [y,m,d] = t.split("-").map(Number);
+            return new Date(y, m - 1, d);
+        }
         let m;
-        if ((m = t.match(/^(\d{4})[-_\/ ](\d{1,2})[-_\/ ](\d{1,2})$/))) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-        if ((m = t.match(/^(\d{1,2})[-_\/ ](\d{1,2})[-_\/ ](\d{2,4})$/))) {
+        if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/))) {
             let y = Number(m[3]);
             if (String(m[3]).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
             return new Date(y, Number(m[1]) - 1, Number(m[2]));
         }
-        if ((m = t.toLowerCase().match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/))) {
-            const key = Object.keys(MON).find(k => m[1].startsWith(k));
-            if (key) return new Date(Number(m[2]), MON[key] - 1, 1);
-        }
+        const ft = parseTxtDate(t);
+        if (ft) return parseDate(ft);
         const fb = new Date(t);
         if (!isNaN(fb.getTime())) return fb;
     }
     return null;
 }
 
+function toISO(d) {
+    if (!d || isNaN(d)) return "";
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+
+function directDate(r) {
+    return toISO(parseDate(r.entryDate)) || toISO(parseDate(r.donationDate)) || toISO(parseDate(r.date)) || toISO(parseDate(r.bleedingDate)) || "";
+}
+
+function sourceBase(r) {
+    return parseTxtDate(r?.importMeta?.sourceSheet || "") || parseTxtDate(r?.importMeta?.sourceFile || "") || toISO(parseDate(r.createdAt)) || "";
+}
+
+function dayOnly(val, base) {
+    const raw = String(val ?? "").trim();
+    if (!raw || !base || !/^\d{4}-\d{2}-\d{2}$/.test(base)) return "";
+    const m = raw.match(/^(\d{1,2})$/);
+    if (!m) return "";
+    const day = Number(m[1]);
+    if (!day || day < 1 || day > 31) return "";
+    const [y, mo] = base.split("-");
+    const cand = `${y}-${mo}-${pad2(day)}`;
+    const d = new Date(cand + "T00:00:00");
+    if (isNaN(d.getTime()) || d.getFullYear() !== Number(y) || d.getMonth()+1 !== Number(mo) || d.getDate() !== day) return "";
+    return cand;
+}
+
+function applyCarryForward(records) {
+    const grps = {};
+    records.forEach(r => {
+        const batchId = String(r?.importMeta?.batchId || "");
+        const sourceFile = String(r?.importMeta?.sourceFile || "");
+        const sourceSheet = String(r?.importMeta?.sourceSheet || "");
+        if (!batchId && !sourceFile && !sourceSheet) return;
+        const key = [batchId, sourceFile, sourceSheet].join("|");
+        if (!grps[key]) grps[key] = [];
+        grps[key].push(r);
+    });
+    Object.values(grps).forEach(items => {
+        items.sort((a,b) => Number(a?.importMeta?.sourceRowNumber || 0) - Number(b?.importMeta?.sourceRowNumber || 0) || String(a.serialNumber || "").localeCompare(String(b.serialNumber || ""), undefined, {numeric:true,sensitivity:"base"}));
+        let last = "";
+        items.forEach(r => {
+            const explicit = directDate(r), base = sourceBase(r);
+            const raw = r.entryDate || r.donationDate || r.date || r.bleedingDate || "";
+            const dOnly = dayOnly(raw, last || base);
+            if (explicit) { r._resolvedDate = explicit; last = explicit; }
+            else if (dOnly) { r._resolvedDate = dOnly; last = dOnly; }
+            else if (last) r._resolvedDate = last;
+            else if (base) { r._resolvedDate = base; last = base; }
+            if (!last && r._resolvedDate) last = r._resolvedDate;
+        });
+    });
+}
+
+function getRecordDate(r) {
+    if (r._resolvedDate) return r._resolvedDate;
+    const direct = directDate(r);
+    if (direct) return direct;
+    const base = sourceBase(r);
+    const raw = r.entryDate || r.donationDate || r.date || r.bleedingDate || "";
+    return dayOnly(raw, base) || base || "";
+}
+
 function recordMatchesMonth(r, year, month) {
     const key = monthKey(year, month);
     if (String(r.collectionMonthKey || "") === key) return true;
     if (Number(r.collectionYear) === Number(year) && Number(r.collectionMonth) === Number(month)) return true;
-
-    const d = parseDate(r.entryDate || r.donationDate || r.date || r.bleedingDate || r.requestDate || r.releasedDate || r.createdAt || null);
-    if (!d || isNaN(d.getTime())) return false;
-    return d.getFullYear() === Number(year) && d.getMonth() + 1 === Number(month);
+    const iso = getRecordDate(r);
+    return String(iso).slice(0,7) === key;
 }
 
 function isVisible(r) {
@@ -469,13 +562,7 @@ function isVisible(r) {
     return true;
 }
 
-function parseNum(v) {
-    if (v == null || v === "") return 0;
-    if (typeof v === "number" && isFinite(v)) return v;
-    const m = String(v).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-    return m ? Number(m[0]) : 0;
-}
-
+// ─── DONOR NORMALIZATION ────────────────────────────────────────────────────
 function normSex(v) {
     const s = String(v || "").toUpperCase().trim();
     if (s === "M" || s === "MALE") return "Male";
@@ -490,7 +577,6 @@ function normBT(v) {
         .replace(/R\/H|RH\s*FACTOR|RH\s*TYPE|\bRH\b/g, "")
         .replace(/POSITIVE|\bPOS\b/g, "+").replace(/NEGATIVE|\bNEG\b/g, "-")
         .replace(/PLUS/g, "+").replace(/MINUS/g, "-").replace(/\s+/g, "").trim();
-
     const aliases = {
         "O+": ["O+", "OPOS", "O(+)"], "O-": ["O-", "ONEG", "O(-)"],
         "A+": ["A+", "APOS", "A(+)"], "A-": ["A-", "ANEG", "A(-)"],
@@ -500,6 +586,15 @@ function normBT(v) {
     for (const [key, vals] of Object.entries(aliases)) if (vals.includes(s)) return key;
     if (["O", "A", "B", "AB"].includes(s)) return s + "+";
     return "Unknown";
+}
+
+function normABO(v) {
+    const bt = normBT(v);
+    if (bt.startsWith("AB")) return "AB";
+    if (bt.startsWith("A")) return "A";
+    if (bt.startsWith("B")) return "B";
+    if (bt.startsWith("O")) return "O";
+    return "";
 }
 
 function normBag(v) {
@@ -515,7 +610,7 @@ function getAge(r) {
     const direct = parseNum(r.age);
     if (direct >= 1 && direct <= 120) return direct;
     const birth = parseDate(r.birthday || r.birthDate || r.dateOfBirth || null);
-    const donation = parseDate(r.entryDate || r.donationDate || r.date || r.bleedingDate || r.createdAt || null);
+    const donation = parseDate(getRecordDate(r));
     if (!birth || !donation) return null;
     let age = donation.getFullYear() - birth.getFullYear();
     const md = donation.getMonth() - birth.getMonth();
@@ -566,8 +661,6 @@ function primaryType(r) {
     return "Unspecified";
 }
 
-function addOne(obj, key, qty = 1) { obj[key] = (obj[key] || 0) + qty; }
-
 function componentFromBag(bag) {
     if (bag === "Q") return {"450 cc":0, PRBC:1, FFP:1, PC:1, CRYO:1};
     if (bag === "T") return {"450 cc":0, PRBC:1, FFP:1, PC:1, CRYO:0};
@@ -576,120 +669,204 @@ function componentFromBag(bag) {
     return {"450 cc":0, PRBC:0, FFP:0, PC:0, CRYO:0};
 }
 
-function normGroup(v) {
-    return String(v || "Unspecified").toUpperCase().trim().replace(/[’']/g, "").replace(/[._,\\/]+/g, " ").replace(/\s+/g, " ") || "Unspecified";
-}
+function emptyCounter(keys) { const obj = {}; keys.forEach(k => obj[k] = 0); return obj; }
+function emptyBagCounts() { return {S:0, D:0, T:0, Q:0}; }
+function addBagCount(obj, bag, qty = 1) { if (obj[bag] == null) obj[bag] = 0; obj[bag] += qty; }
+function emptyComponents() { return {"450 cc":0, PRBC:0, FFP:0, PC:0, CRYO:0}; }
+function emptyReleaseComponents() { return {WB:0, PRBC:0, FFP:0, PC:0, CRYO:0}; }
 
-// ─── DATA LOAD ───────────────────────────────────────────────────────────────
+// ─── FIREBASE DATA LOAD ─────────────────────────────────────────────────────
 async function loadFirestoreMonth(collectionName, year, month) {
     const key = monthKey(year, month);
     let records = [];
-
     try {
         const snap = await fs.collection(collectionName).where("collectionMonthKey", "==", key).get();
         snap.forEach(doc => records.push({id: doc.id, ...doc.data()}));
-    } catch (e) {
-        console.warn(collectionName + " monthKey query failed:", e);
-    }
+    } catch (e) { console.warn(collectionName + " monthKey query failed:", e); }
 
     if (!records.length) {
         try {
-            const snap = await fs.collection(collectionName)
-                .where("collectionYear", "==", Number(year))
-                .where("collectionMonth", "==", Number(month))
-                .get();
+            const snap = await fs.collection(collectionName).where("collectionYear", "==", Number(year)).where("collectionMonth", "==", Number(month)).get();
             snap.forEach(doc => records.push({id: doc.id, ...doc.data()}));
-        } catch (e) {
-            console.warn(collectionName + " year/month query failed:", e);
-        }
+        } catch (e) { console.warn(collectionName + " year/month query failed:", e); }
     }
 
     if (!records.length) {
         try {
             const snap = await fs.collection(collectionName).get();
-            snap.forEach(doc => {
-                const r = {id: doc.id, ...doc.data()};
-                if (recordMatchesMonth(r, year, month)) records.push(r);
-            });
-        } catch (e) {
-            console.warn(collectionName + " fallback query failed:", e);
-        }
+            const all = [];
+            snap.forEach(doc => all.push({id: doc.id, ...doc.data()}));
+            applyCarryForward(all);
+            records = all.filter(r => recordMatchesMonth(r, year, month));
+        } catch (e) { console.warn(collectionName + " fallback query failed:", e); }
     }
 
+    applyCarryForward(records);
     return records.filter(isVisible);
 }
 
-async function loadReleasingMonth(year, month) {
+async function loadMappings() {
+    const maps = [];
+    try {
+        const snap = await fs.collection("donorGroupCategories").get();
+        snap.forEach(doc => maps.push({id: doc.id, ...doc.data()}));
+    } catch (e) { console.warn("Group mapping load failed:", e); }
+    return maps;
+}
+
+async function loadPartnerAliases() {
+    const aliases = [];
+    try {
+        const snap = await fs.collection("partnerOrganizations").get();
+        snap.forEach(doc => {
+            const r = doc.data() || {};
+            const canonical = normText(r.name || "");
+            if (!canonical) return;
+            const arr = Array.isArray(r.aliases) ? r.aliases : [];
+            aliases.push({canonical, keys:[canonical, ...arr.map(normText)].filter(Boolean)});
+        });
+    } catch (e) { console.warn("Partner alias load failed:", e); }
+    return aliases;
+}
+
+async function loadRTDBPathMonth(path, year, month) {
     const out = [];
     try {
-        const snap = await rtdb.ref("releasing").once("value");
-        flattenRTDB(snap.val(), out);
-    } catch (e) {
-        console.warn("Releasing load failed:", e);
+        const snap = await rtdb.ref(path).once("value");
+        snap.forEach(child => out.push({id: child.key, ...(child.val() || {})}));
+    } catch (e) { console.warn(path + " load failed:", e); }
+    const key = monthKey(year, month);
+    return out.filter(r => String(r.date || r.requestDate || r.releasedDate || "").slice(0,7) === key);
+}
+
+async function loadManualMonthlyInputs(year, month) {
+    const key = monthKey(year, month);
+    const paths = [
+        `monthlyReportManual/${key}`,
+        `monthlyReportsManual/${key}`,
+        `manualMonthlyReport/${key}`,
+        `monthlyReportInputs/${key}`
+    ];
+    for (const path of paths) {
+        try {
+            const snap = await rtdb.ref(path).once("value");
+            if (snap.exists()) return snap.val() || {};
+        } catch (e) {}
     }
-    return out.filter(r => recordMatchesMonth(r, year, month));
+    return {};
 }
 
-function flattenRTDB(node, out) {
-    if (node == null) return;
-    if (Array.isArray(node)) { node.forEach(x => flattenRTDB(x, out)); return; }
-    if (typeof node !== "object") return;
-    const keys = Object.keys(node).map(k => k.toLowerCase());
-    const isRec = ["date", "requestdate", "releaseddate", "requests", "wb", "prbc", "ffp", "pc", "cryo", "patientname", "facility"].some(k => keys.includes(k));
-    if (isRec) { out.push(node); return; }
-    Object.keys(node).forEach(k => flattenRTDB(node[k], out));
+// ─── AGGREGATION ─────────────────────────────────────────────────────────────
+function resolvePartnerAlias(name, partnerAliases) {
+    const key = normText(name);
+    if (!key) return "";
+    for (const entry of partnerAliases) {
+        if (entry.keys.includes(key)) return entry.canonical;
+    }
+    return key;
 }
 
-// ─── REPORT COMPUTATION ──────────────────────────────────────────────────────
-function emptyCounter(keys) {
-    const obj = {};
-    keys.forEach(k => obj[k] = 0);
-    return obj;
+function findGroupMapping(name, mappings, partnerAliases) {
+    const resolved = resolvePartnerAlias(name, partnerAliases);
+    const key = normKey(resolved);
+    let hit = mappings.find(m => normKey(m.partnerName || m.name || m.groupName || "") === key);
+    if (hit) return hit;
+    hit = mappings.find(m => Array.isArray(m.aliases) && m.aliases.some(a => normKey(a) === key));
+    if (hit) return hit;
+    return null;
 }
 
-function buildDonorPreview(records) {
+function categorizeMbdRecord(r, mappings, partnerAliases) {
+    const rawName = normText(r.mbdDetails || r.groupName || r.partner || "MBD");
+    const map = findGroupMapping(rawName, mappings, partnerAliases);
+    const name = normText(map?.partnerName || map?.name || rawName || "MBD");
+    const place = normText(map?.place || r.cityProvince || r.address || "");
+    let category = String(map?.category || "Group").trim();
+    if (!category) category = "Group";
+    if (/rc143|brgy|barangay/i.test(category)) category = "RC143 / BRGY Base";
+    else if (/pledge/i.test(category)) category = "Pledge 25";
+    else category = "Group";
+    return {name, place, category};
+}
+
+function buildDonorData(records, mappings, partnerAliases) {
     const data = {
         totalRecords: records.length,
         categorizedDonors: 0,
-        office: emptyCounter(["Walk-in", "Patient Directed", "Unspecified"]),
-        field: emptyCounter(["MBD", "Unspecified"]),
+        office: {"Walk-in": emptyBagCounts(), "Patient Directed": emptyBagCounts()},
+        field: {"Group": [], "RC143 / BRGY Base": [], "Pledge 25": []},
+        fieldTotals: {"Group": emptyBagCounts(), "RC143 / BRGY Base": emptyBagCounts(), "Pledge 25": emptyBagCounts()},
         bag: emptyCounter(["S", "D", "T", "Q", "Unknown"]),
-        bloodType: emptyCounter(["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "Unknown"]),
+        bloodTypeBag: {},
+        bloodType: emptyCounter(bloodTypes),
         sex: emptyCounter(["Male", "Female", "Unspecified"]),
         age: emptyCounter(["16-17", "18-20", "21-30", "31-40", "41-50", "51-60", "60-65", "66 & above", "Unspecified"]),
+        ageSex: {},
         frequency: emptyCounter(["First-time donors", "Repeat non-regular", "Repeat regular", "Unspecified"]),
-        components: emptyCounter(["450 cc", "PRBC", "FFP", "PC", "CRYO"]),
-        mbdGroups: {}
+        frequencySex: {},
+        components: emptyComponents(),
+        componentByBT: {},
+        mbdGroups: {},
+        qns: 0,
+        ub: 0
     };
+
+    bloodTypes.forEach(bt => {
+        data.bloodTypeBag[bt] = emptyBagCounts();
+        data.componentByBT[bt] = emptyComponents();
+    });
+    Object.keys(data.age).forEach(ag => data.ageSex[ag] = {Male:0, Female:0});
+    Object.keys(data.frequency).forEach(fr => data.frequencySex[fr] = {Male:0, Female:0});
+
+    const fieldRowMap = {"Group": {}, "RC143 / BRGY Base": {}, "Pledge 25": {}};
 
     records.forEach(r => {
         const pType = primaryType(r);
         const bag = normBag(r.bloodBagType || r.bagType || r.bag || "");
         const bt = normBT(r.bloodType || r.bloodGroup || "");
         const sex = normSex(r.sex || r.gender || "");
-        const age = ageGroup(getAge(r));
+        const ag = ageGroup(getAge(r));
         const freq = donorFrequency(r.donorCategory || r.category || r.frequency || "");
+        const amount = normText(r.amount || r.volume || "");
+        const isoDate = getRecordDate(r) || String(r.entryDate || r.date || "");
+
+        if (/QNS/.test(amount)) data.qns++;
+        if (/\bUB\b|UNSUCCESS/.test(amount)) data.ub++;
 
         if (pType !== "Unspecified") data.categorizedDonors++;
         if (pType === "MBD") {
-            data.field.MBD++;
-            const group = normGroup(r.mbdDetails || r.groupName || r.partner || "Unspecified");
-            addOne(data.mbdGroups, group);
+            const info = categorizeMbdRecord(r, mappings, partnerAliases);
+            const key = [info.name, info.place, isoDate, info.category].join("||");
+            if (!fieldRowMap[info.category][key]) fieldRowMap[info.category][key] = {name:info.name, place:info.place, date:isoDate, category:info.category, S:0,D:0,T:0,Q:0, totalDonors:0};
+            const row = fieldRowMap[info.category][key];
+            if (bag !== "Unknown") addBagCount(row, bag);
+            row.totalDonors++;
+            addOne(data.mbdGroups, info.name);
+            if (bag !== "Unknown") addBagCount(data.fieldTotals[info.category], bag);
         } else if (pType === "Walk-in" || pType === "Patient Directed") {
-            data.office[pType]++;
-        } else {
-            data.office.Unspecified++;
-            data.field.Unspecified++;
+            if (bag !== "Unknown") addBagCount(data.office[pType], bag);
         }
 
         addOne(data.bag, bag);
         addOne(data.bloodType, bt);
+        if (!data.bloodTypeBag[bt]) data.bloodTypeBag[bt] = emptyBagCounts();
+        if (bag !== "Unknown") addBagCount(data.bloodTypeBag[bt], bag);
         addOne(data.sex, sex);
-        addOne(data.age, age);
+        addOne(data.age, ag);
+        if (sex === "Male" || sex === "Female") data.ageSex[ag][sex]++;
         addOne(data.frequency, freq);
+        if (sex === "Male" || sex === "Female") data.frequencySex[freq][sex]++;
 
         const comps = componentFromBag(bag);
-        Object.keys(comps).forEach(k => data.components[k] += comps[k]);
+        Object.keys(comps).forEach(k => {
+            data.components[k] += comps[k];
+            if (!data.componentByBT[bt]) data.componentByBT[bt] = emptyComponents();
+            data.componentByBT[bt][k] += comps[k];
+        });
+    });
+
+    Object.keys(fieldRowMap).forEach(cat => {
+        data.field[cat] = Object.values(fieldRowMap[cat]).sort((a,b) => String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
     });
 
     return data;
@@ -703,56 +880,50 @@ function deferralType(r) {
 }
 
 function deferralReason(r) {
-    return String(r.deferral || r.reason || r.deferralReason || r.remarks || "Unspecified").trim() || "Unspecified";
+    return String(r.deferralCanonical || r.deferral || r.reason || r.deferralReason || r.remarks || "Unspecified").trim() || "Unspecified";
 }
 
-function buildDeferralPreview(records) {
+function standardDeferralRemark(reason) {
+    const low = String(reason || "").toLowerCase();
+    if (low.includes("hemoglobin") || low.includes("anemia") || low.includes("hgb") || low.includes("mhib")) return "Deferred due unsatisfactory mHgb and PE";
+    if (low.includes("cough") || low.includes("cold") || low.includes("fever") || low.includes("illness") || low.includes("infection")) return "Acute/Chronic Illness";
+    if (low.includes("piercing") || low.includes("surgery") || low.includes("dental") || low.includes("tooth") || low.includes("tattoo")) return "Piercing, Surgery Major/minor";
+    if (low.includes("medication") || low.includes("antibiotic") || low.includes("medicine") || low.includes("drug")) return "Under Medications";
+    return "Others";
+}
+
+function buildDeferralData(deferralRecords, donorRecords) {
     const data = {
-        total: records.length,
+        total: deferralRecords.length,
         type: emptyCounter(["Temporary", "Permanent", "Unspecified"]),
-        ubQns: emptyCounter(["UB / Unsuccessful Bleeding", "QNS", "Others"]),
-        reasons: {}
+        ubQns: {"UB / Unsuccessful Bleeding":0, QNS:0, Others:0},
+        reasons: {},
+        reasonRows: [],
+        refusalRows: []
     };
 
-    records.forEach(r => {
+    deferralRecords.forEach(r => {
         const type = deferralType(r);
         const reason = deferralReason(r);
         const low = reason.toLowerCase();
         addOne(data.type, type);
         addOne(data.reasons, reason);
         if (low.includes("qns") || low.includes("quantity not sufficient")) addOne(data.ubQns, "QNS");
-        else if (low.includes("ub") || low.includes("unsuccess") || low.includes("unsuccessful")) addOne(data.ubQns, "UB / Unsuccessful Bleeding");
+        else if (low.includes("ub") || low.includes("unsuccess")) addOne(data.ubQns, "UB / Unsuccessful Bleeding");
         else addOne(data.ubQns, "Others");
     });
 
-    return data;
-}
-
-function getReleaseComponentCounts(r) {
-    const out = emptyCounter(["WB", "PRBC", "FFP", "PC", "CRYO"]);
-
-    const directFields = [
-        ["WB", ["wb", "WB", "wholeBlood", "whole_blood", "450cc", "blood450"]],
-        ["PRBC", ["prbc", "PRBC", "packedRBC", "packedCells"]],
-        ["FFP", ["ffp", "FFP", "freshFrozenPlasma"]],
-        ["PC", ["pc", "PC", "platelet", "platelets", "plateletConcentrate"]],
-        ["CRYO", ["cryo", "CRYO", "cryoprecipitate"]]
-    ];
-
-    directFields.forEach(([component, fields]) => {
-        fields.forEach(f => {
-            if (r[f] != null) out[component] += parseNum(r[f]);
-        });
+    donorRecords.forEach(r => {
+        const amount = normText(r.amount || "");
+        if (/QNS/.test(amount)) addOne(data.ubQns, "QNS");
+        if (/\bUB\b|UNSUCCESS/.test(amount)) addOne(data.ubQns, "UB / Unsuccessful Bleeding");
     });
 
-    const arrays = [r.requests, r.components, r.releasedComponents, r.items, r.products].filter(Array.isArray);
-    arrays.forEach(arr => arr.forEach(item => {
-        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
-        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
-        if (comp && qty) out[comp] += qty;
-    }));
+    data.reasonRows = Object.entries(data.reasons)
+        .map(([reason,count]) => ({reason, count, remarks:standardDeferralRemark(reason)}))
+        .sort((a,b)=>b.count-a.count || a.reason.localeCompare(b.reason));
 
-    return out;
+    return data;
 }
 
 function normReleaseComponent(v) {
@@ -765,26 +936,122 @@ function normReleaseComponent(v) {
     return "";
 }
 
-function releaseFacility(r) {
-    return String(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified").trim() || "Unspecified";
+function countComponentsFromList(list) {
+    const out = emptyReleaseComponents();
+    (Array.isArray(list) ? list : []).forEach(item => {
+        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
+        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
+        if (comp && qty) out[comp] += qty;
+    });
+    return out;
 }
 
-function buildReleasingPreview(records) {
+function addReleaseCounts(target, counts) { components.forEach(c => target[c] = (target[c] || 0) + (counts[c] || 0)); }
+function releaseFacility(r) { return normText(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified") || "Unspecified"; }
+function releaseSex(r) { return normSex(r.sex || r.gender || ""); }
+
+function getEntryPrices(entry) {
+    const snap = entry?.priceSnapshot || {};
+    return {
+        WB: parseNum(snap.WB ?? snap.wb),
+        PRBC: parseNum(snap.PRBC ?? snap.prbc),
+        FFP: parseNum(snap.FFP ?? snap.ffp),
+        PC: parseNum(snap.PC ?? snap.pc),
+        CRYO: parseNum(snap.CRYO ?? snap.cryo),
+        BOX: parseNum(snap.BOX ?? snap.box ?? snap.boxContainer)
+    };
+}
+
+function computeComponentMoney(list, prices) {
+    const out = emptyReleaseComponents();
+    (Array.isArray(list) ? list : []).forEach(item => {
+        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
+        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
+        if (comp && qty) out[comp] += qty * (prices[comp] || 0);
+    });
+    return out;
+}
+
+function buildReleasingData(releases, augmentations) {
     const data = {
-        totalTransactions: records.length,
-        patientsServed: records.length,
-        components: emptyCounter(["WB", "PRBC", "FFP", "PC", "CRYO"]),
-        facilities: {}
+        regularRecords: releases.length,
+        augmentationRecords: augmentations.length,
+        patientServed: {
+            pay:{Male:0,Female:0,Unspecified:0},
+            discounted:{Male:0,Female:0,Unspecified:0},
+            noCharge:{Male:0,Female:0,Unspecified:0}
+        },
+        unitsByPayment: {
+            pay: emptyReleaseComponents(),
+            discounted: emptyReleaseComponents(),
+            noCharge: emptyReleaseComponents()
+        },
+        moneyByPayment: {
+            pay: emptyReleaseComponents(),
+            discounted: emptyReleaseComponents(),
+            noCharge: emptyReleaseComponents()
+        },
+        requestedByBT: {},
+        issuedByBT: {},
+        issuedTotal: emptyReleaseComponents(),
+        requestTotal: emptyReleaseComponents(),
+        facilities: {},
+        augmentationFacilities: {}
     };
 
-    records.forEach(r => {
-        const counts = getReleaseComponentCounts(r);
+    reportBloodTypes.forEach(bt => {
+        data.requestedByBT[bt] = emptyReleaseComponents();
+        data.issuedByBT[bt] = emptyReleaseComponents();
+    });
+
+    releases.forEach(r => {
+        const sex = releaseSex(r);
+        const amountPaid = parseNum(r.amountPaid);
+        const discount = parseNum(r.discount);
+        const actualIncome = amountPaid - discount;
+        const paymentGroup = actualIncome <= 0 ? "noCharge" : (discount > 0 ? "discounted" : "pay");
+        data.patientServed[paymentGroup][sex] = (data.patientServed[paymentGroup][sex] || 0) + 1;
+
+        const reqCounts = countComponentsFromList(r.requests);
+        const issuedCounts = countComponentsFromList(r.issued);
+        addReleaseCounts(data.requestTotal, reqCounts);
+        addReleaseCounts(data.issuedTotal, issuedCounts);
+        addReleaseCounts(data.unitsByPayment[paymentGroup], issuedCounts);
+        addReleaseCounts(data.moneyByPayment[paymentGroup], computeComponentMoney(r.issued, getEntryPrices(r)));
+
+        const bt = normBT(r.bloodtype || r.bloodType || "Unknown");
+        if (!data.requestedByBT[bt]) data.requestedByBT[bt] = emptyReleaseComponents();
+        if (!data.issuedByBT[bt]) data.issuedByBT[bt] = emptyReleaseComponents();
+        addReleaseCounts(data.requestedByBT[bt], reqCounts);
+        addReleaseCounts(data.issuedByBT[bt], issuedCounts);
+
         const facility = releaseFacility(r);
-        if (!data.facilities[facility]) data.facilities[facility] = {patients: 0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
-        data.facilities[facility].patients++;
-        Object.keys(counts).forEach(k => {
-            data.components[k] += counts[k];
-            data.facilities[facility][k] += counts[k];
+        if (!data.facilities[facility]) data.facilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
+        const f = data.facilities[facility];
+        f.patients++;
+        f[sex] = (f[sex] || 0) + 1;
+        addReleaseCounts(f, issuedCounts);
+    });
+
+    augmentations.forEach(r => {
+        const facility = releaseFacility(r);
+        if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
+        const af = data.augmentationFacilities[facility];
+        af.patients++;
+        const bloodTypesArray = Array.isArray(r.bloodTypes) ? r.bloodTypes : [];
+        bloodTypesArray.forEach(btRow => {
+            const bt = normBT(btRow.bloodType || "Unknown");
+            const reqCounts = countComponentsFromList(btRow.requests);
+            const issuedCounts = countComponentsFromList(btRow.issued);
+            addReleaseCounts(data.requestTotal, reqCounts);
+            addReleaseCounts(data.issuedTotal, issuedCounts);
+            addReleaseCounts(data.unitsByPayment.pay, issuedCounts);
+            addReleaseCounts(data.moneyByPayment.pay, computeComponentMoney(btRow.issued, getEntryPrices(r)));
+            if (!data.requestedByBT[bt]) data.requestedByBT[bt] = emptyReleaseComponents();
+            if (!data.issuedByBT[bt]) data.issuedByBT[bt] = emptyReleaseComponents();
+            addReleaseCounts(data.requestedByBT[bt], reqCounts);
+            addReleaseCounts(data.issuedByBT[bt], issuedCounts);
+            addReleaseCounts(af, issuedCounts);
         });
     });
 
@@ -794,64 +1061,48 @@ function buildReleasingPreview(records) {
 async function previewMonthlyReport() {
     const month = Number(document.getElementById("reportMonth").value);
     const year = Number(document.getElementById("reportYear").value);
-
-    if (!month || !year || month < 1 || month > 12) {
-        showStatus("Please select a valid month and year.", "warn");
-        return;
-    }
-
-    if (!authReady) {
-        showStatus("Checking login status. Please click Preview Report again after a moment.", "info");
-        return;
-    }
-
-    if (!auth.currentUser) {
-        showStatus("Please login first before generating a monthly report.", "warn");
-        return;
-    }
+    if (!month || !year || month < 1 || month > 12) { showStatus("Please select a valid month and year.", "warn"); return; }
+    if (!authReady) { showStatus("Checking login status. Please click Preview Report again after a moment.", "info"); return; }
+    if (!auth.currentUser) { showStatus("Please login first before generating a monthly report.", "warn"); return; }
 
     showStatus("Loading " + monthNames[month - 1] + " " + year + " records from Firebase...", "info");
-
     try {
-        const [donors, deferrals, releases] = await Promise.all([
+        const [donors, deferrals, releases, augmentations, mappings, partnerAliases, manual] = await Promise.all([
             loadFirestoreMonth("donorDatabase", year, month),
             loadFirestoreMonth("donorDeferrals", year, month),
-            loadReleasingMonth(year, month)
+            loadRTDBPathMonth("releasing", year, month),
+            loadRTDBPathMonth("bloodAugmentation", year, month),
+            loadMappings(),
+            loadPartnerAliases(),
+            loadManualMonthlyInputs(year, month)
         ]);
 
-        const donorPreview = buildDonorPreview(donors);
-        const deferralPreview = buildDeferralPreview(deferrals);
-        const releasingPreview = buildReleasingPreview(releases);
+        const donorData = buildDonorData(donors, mappings, partnerAliases);
+        const deferralData = buildDeferralData(deferrals, donors);
+        const releasingData = buildReleasingData(releases, augmentations);
 
-        lastPreviewData = {
-            month, year,
-            donors, deferrals, releases,
-            donorPreview, deferralPreview, releasingPreview,
-            generatedAt: new Date()
-        };
-
+        lastPreviewData = {month, year, donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, donorData, deferralData, releasingData, generatedAt: new Date()};
         renderPreview(lastPreviewData);
         document.getElementById("downloadExcelBtn").disabled = false;
-        showStatus("Preview generated. Please review the values before downloading the final Excel.", "ok");
+        showStatus("Preview generated. You can now download the mapped Excel template.", "ok");
     } catch (error) {
         console.error(error);
         showStatus("Preview failed: " + (error.message || error), "error");
     }
 }
 
-// ─── RENDERING ────────────────────────────────────────────────────────────────
+// ─── PREVIEW RENDERING ──────────────────────────────────────────────────────
 function renderPreview(data) {
     const title = `${monthNames[data.month - 1]} ${data.year} Monthly Report Preview`;
     document.getElementById("previewTitle").textContent = title;
-    document.getElementById("previewSubtitle").textContent = "Values are computed from Firebase records. The Excel template cell mapping is the next step.";
+    document.getElementById("previewSubtitle").textContent = "Values are computed from Firebase records and will be written into the official Excel template.";
     document.getElementById("previewGeneratedAt").textContent = "Generated: " + new Intl.DateTimeFormat("en-PH", {timeZone:"Asia/Manila", dateStyle:"medium", timeStyle:"short"}).format(data.generatedAt);
 
-    const totalReleased = Object.values(data.releasingPreview.components).reduce((a,b)=>a+b,0);
-    const totalPrepared = Object.values(data.donorPreview.components).reduce((a,b)=>a+b,0);
-
+    const totalReleased = sumObj(data.releasingData.issuedTotal);
+    const totalPrepared = sumObj(data.donorData.components);
     document.getElementById("summaryGrid").innerHTML = `
-        ${summaryBox("Donor Records", data.donorPreview.totalRecords)}
-        ${summaryBox("Deferrals", data.deferralPreview.total)}
+        ${summaryBox("Donor Records", data.donorData.totalRecords)}
+        ${summaryBox("Deferrals", data.deferralData.total)}
         ${summaryBox("Components Prepared", totalPrepared)}
         ${summaryBox("Units Released", totalReleased)}
     `;
@@ -861,139 +1112,311 @@ function renderPreview(data) {
         ${sheetBlock("BS 324a - Collection / Components / Requests", "green", renderBS324a(data), true)}
         ${sheetBlock("BS 325 - Donor Profile", "purple", renderBS325(data), false)}
         ${sheetBlock("Wastages & Spoilage / Deferrals", "orange", renderDeferrals(data), false)}
-        ${sheetBlock("BM7 - Releasing Preview", "blue", renderBM7(data), false)}
+        ${sheetBlock("BM7 - Releasing and Augmentation", "blue", renderBM7(data), false)}
         ${sheetBlock("Manual Fields Still Needed", "orange", renderManualFields(), false)}
     `;
-
     document.getElementById("previewCard").classList.add("show");
 }
 
-function summaryBox(label, value) {
-    return `<div class="summary-box"><div class="label">${escH(label)}</div><div class="value">${Number(value || 0).toLocaleString()}</div></div>`;
-}
-
+function summaryBox(label, value) { return `<div class="summary-box"><div class="label">${escH(label)}</div><div class="value">${Number(value || 0).toLocaleString()}</div></div>`; }
 function sheetBlock(title, color, body, open) {
     const id = "sheet_" + Math.random().toString(36).slice(2, 8);
-    return `
-        <div class="sheet-block">
-            <div class="sheet-head ${escH(color)}" onclick="toggleSheet('${id}')">
-                <span>${escH(title)}</span><span>▼</span>
-            </div>
-            <div id="${id}" class="sheet-body ${open ? "open" : ""}">${body}</div>
-        </div>
-    `;
+    return `<div class="sheet-block"><div class="sheet-head ${escH(color)}" onclick="toggleSheet('${id}')"><span>${escH(title)}</span><span>▼</span></div><div id="${id}" class="sheet-body ${open ? "open" : ""}">${body}</div></div>`;
 }
-
-function toggleSheet(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("open");
-}
-
+function toggleSheet(id) { const el = document.getElementById(id); if (el) el.classList.toggle("open"); }
 function table(headers, rows) {
     if (!rows.length) return `<div class="empty">No records found for this section.</div>`;
-    return `
-        <div class="table-wrap">
-            <table>
-                <thead><tr>${headers.map(h => `<th>${escH(h)}</th>`).join("")}</tr></thead>
-                <tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escH(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
-            </table>
-        </div>
-    `;
+    return `<div class="table-wrap"><table><thead><tr>${headers.map(h => `<th>${escH(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escH(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
 function renderBS323(data) {
-    const d = data.donorPreview;
-    const r = data.releasingPreview;
-    const totalReleased = Object.values(r.components).reduce((a,b)=>a+b,0);
+    const d = data.donorData, r = data.releasingData;
     return table(["Item", "Preview Value"], [
         ["Total donor records", d.totalRecords],
-        ["Categorized donor records", d.categorizedDonors],
-        ["Temporary deferrals", data.deferralPreview.type.Temporary],
-        ["Permanent deferrals", data.deferralPreview.type.Permanent],
-        ["Patients / transactions served", r.patientsServed],
-        ["Total units released", totalReleased]
+        ["MBD donors", Object.values(d.fieldTotals).reduce((s,x)=>s+sumObj(x),0)],
+        ["QNS from donor records", d.qns],
+        ["UB / unsuccessful bleeding from donor records", d.ub],
+        ["Temporary deferrals", data.deferralData.type.Temporary],
+        ["Permanent deferrals", data.deferralData.type.Permanent],
+        ["Patients / transactions served", r.regularRecords],
+        ["Blood augmentation records", r.augmentationRecords],
+        ["Total units released including augmentation", sumObj(r.issuedTotal)]
     ]);
 }
 
 function renderBS324a(data) {
-    const d = data.donorPreview;
+    const d = data.donorData;
+    const fieldRows = ["Group", "RC143 / BRGY Base", "Pledge 25"].flatMap(cat => d.field[cat].map(x => [cat, x.name, x.place, x.date, x.S, x.D, x.T, x.Q]));
     return `
-        ${table(["Collection Category", "Count"], [
-            ["Walk-in", d.office["Walk-in"]],
-            ["Patient Directed", d.office["Patient Directed"]],
-            ["Mobile Blood Donation / MBD", d.field.MBD],
-            ["Unspecified", d.office.Unspecified]
-        ])}
-        <br>
-        ${table(["Bag Type", "Count"], Object.entries(d.bag).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["Blood Type", "Count"], Object.entries(d.bloodType).map(([k,v]) => [k, v]))}
-        <br>
+        ${table(["Office Collection", "S", "D", "T", "Q"], [
+            ["Walk-in", d.office["Walk-in"].S, d.office["Walk-in"].D, d.office["Walk-in"].T, d.office["Walk-in"].Q],
+            ["Patient Directed", d.office["Patient Directed"].S, d.office["Patient Directed"].D, d.office["Patient Directed"].T, d.office["Patient Directed"].Q]
+        ])}<br>
+        ${table(["MBD Category", "Name", "Place", "Date", "S", "D", "T", "Q"], fieldRows.slice(0,80))}<br>
+        ${table(["Blood Type", "S", "D", "T", "Q"], reportBloodTypes.map(bt => [bt, d.bloodTypeBag[bt]?.S || 0, d.bloodTypeBag[bt]?.D || 0, d.bloodTypeBag[bt]?.T || 0, d.bloodTypeBag[bt]?.Q || 0]))}<br>
         ${table(["Component Prepared", "Count"], Object.entries(d.components).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["MBD Group", "Donors"], Object.entries(d.mbdGroups).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([k,v]) => [k, v]))}
     `;
 }
 
 function renderBS325(data) {
-    const d = data.donorPreview;
-    return `
-        ${table(["Sex", "Count"], Object.entries(d.sex).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["Age Group", "Count"], Object.entries(d.age).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["Donor Frequency", "Count"], Object.entries(d.frequency).map(([k,v]) => [k, v]))}
-    `;
+    const d = data.donorData;
+    return `${table(["Sex", "Count"], Object.entries(d.sex).map(([k,v]) => [k, v]))}<br>${table(["Age Group", "Total", "Male", "Female"], Object.keys(d.age).map(k => [k, d.age[k], d.ageSex[k]?.Male || 0, d.ageSex[k]?.Female || 0]))}<br>${table(["Donor Frequency", "Count"], Object.entries(d.frequency).map(([k,v]) => [k, v]))}`;
 }
 
 function renderDeferrals(data) {
-    const d = data.deferralPreview;
-    return `
-        ${table(["Deferral Type", "Count"], Object.entries(d.type).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["UB / QNS Category", "Count"], Object.entries(d.ubQns).map(([k,v]) => [k, v]))}
-        <br>
-        ${table(["Reason", "Count"], Object.entries(d.reasons).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([k,v]) => [k, v]))}
-    `;
+    const d = data.deferralData;
+    return `${table(["Deferral Type", "Count"], Object.entries(d.type).map(([k,v]) => [k, v]))}<br>${table(["UB / QNS Category", "Count"], Object.entries(d.ubQns).map(([k,v]) => [k, v]))}<br>${table(["Reason", "Count", "Template Remarks"], d.reasonRows.slice(0,50).map(r => [r.reason, r.count, r.remarks]))}`;
 }
 
 function renderBM7(data) {
-    const r = data.releasingPreview;
-    const componentRows = Object.entries(r.components).map(([k,v]) => [k, v]);
-    const facilityRows = Object.entries(r.facilities)
-        .sort((a,b) => b[1].patients - a[1].patients)
-        .slice(0, 80)
-        .map(([name, v]) => [name, v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
-
-    return `
-        ${table(["Component Released", "Units"], componentRows)}
-        <br>
-        ${table(["Facility", "Patients/Transactions", "WB", "PRBC", "FFP", "PC", "CRYO"], facilityRows)}
-    `;
+    const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients).slice(0,80).map(v => [v.facility, v.patients, v.Male, v.Female, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b) => b.patients - a.patients).slice(0,80).map(v => [v.facility, v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+    return `${table(["Facility", "Patients", "Male", "Female", "WB", "PRBC", "FFP", "PC", "CRYO"], rows)}<br>${table(["Augmentation Facility", "Entries", "WB", "PRBC", "FFP", "PC", "CRYO"], augRows)}`;
 }
 
 function renderManualFields() {
-    return `
-        <ul class="warn-list">
-            <li>BS 324b: trainings, mass blood typing, recruitment activities, counselling, and narrative fields if not encoded in the website.</li>
-            <li>BLOOD PROGRAM DEVELOPMENT: seminars, QA activities, MOA/MOU, Blood Samaritan, advocacy activities, and remarks.</li>
-            <li>Wastages & Spoilage: chylous, hemolyzed, clotted, reactive, expired, and other wastage categories if not encoded in the donor or deferral modules.</li>
-            <li>BM7 - DIAGNOSIS: diagnosis details only if your releasing module stores them and if you want them included.</li>
-            <li>Prepared by / reviewed by / noted by names and signatures.</li>
-        </ul>
-    `;
+    return `<ul class="warn-list"><li>BS 324b and Blood Program Development remain manual unless you create a data-entry module for trainings, seminars, advocacy, MOA/MOU, recruitment sessions, and QA activities.</li><li>Reactive screening results and detailed wastage/spoilage categories remain manual because they are not fully encoded in the current website modules.</li><li>Prepared by / noted by names are kept from the template unless you add a manual monthly input record.</li></ul>`;
 }
 
-function downloadExcelReport() {
-    if (!lastPreviewData) {
-        showStatus("Please preview the report first before downloading.", "warn");
-        return;
-    }
+// ─── EXCEL WRITING HELPERS ──────────────────────────────────────────────────
+function setCell(ws, addr, value) { ws.getCell(addr).value = value == null || value === "" ? null : value; }
+function setNum(ws, addr, value) { ws.getCell(addr).value = Number(value || 0); }
+function clearCells(ws, range) {
+    const [start, end] = range.split(":");
+    const s = ws.getCell(start), e = ws.getCell(end);
+    for (let r = s.row; r <= e.row; r++) for (let c = s.col; c <= e.col; c++) ws.getCell(r,c).value = null;
+}
+function setDateCell(ws, addr, date) {
+    const cell = ws.getCell(addr);
+    cell.value = date;
+    cell.numFmt = "mmmm yyyy";
+}
+function formatShortDate(iso) {
+    if (!iso) return "";
+    const d = parseDate(iso);
+    if (!d) return iso;
+    return `${pad2(d.getMonth()+1)}/${pad2(d.getDate())}/${String(d.getFullYear()).slice(-2)}`;
+}
+function isFormulaCell(cell) { return !!(cell && cell.value && typeof cell.value === "object" && cell.value.formula); }
+function setNumIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = Number(value || 0); }
+function setCellIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = value == null || value === "" ? null : value; }
+function writeRowValues(ws, row, colStart, values) { values.forEach((v,i) => ws.getCell(row, colStart + i).value = v == null || v === "" ? null : v); }
+function writeRowValuesIfNotFormula(ws, row, colStart, values) { values.forEach((v,i) => { const cell = ws.getCell(row, colStart + i); if (!isFormulaCell(cell)) cell.value = v == null || v === "" ? null : v; }); }
+function copySafeArray(arr) { return Array.isArray(arr) ? arr : []; }
 
-    showStatus("Excel download is the next step. The preview is ready; now we need the exact Excel cell mapping so the official workbook keeps the same style and formulas.", "warn");
+function fillBS323(workbook, data) {
+    const ws = workbook.getWorksheet("BS 323");
+    if (!ws) return;
+    setDateCell(ws, "D3", monthStartDate(data.year, data.month));
+    setNum(ws, "D5", data.donorData.totalRecords);
+
+    const ps = data.releasingData.patientServed;
+    setNum(ws, "D42", ps.pay.Male); setNum(ws, "E42", ps.pay.Female);
+    setNum(ws, "D43", ps.discounted.Male); setNum(ws, "E43", ps.discounted.Female);
+    setNum(ws, "D44", ps.noCharge.Male); setNum(ws, "E44", ps.noCharge.Female);
+
+    const mapRows = {WB:52, PRBC:53, PC:54, FFP:55, CRYO:57};
+    Object.entries(mapRows).forEach(([comp,row]) => {
+        setNum(ws, `F${row}`, data.releasingData.unitsByPayment.pay[comp]);
+        setNum(ws, `G${row}`, data.releasingData.unitsByPayment.discounted[comp]);
+        setNum(ws, `H${row}`, data.releasingData.unitsByPayment.noCharge[comp]);
+        setNum(ws, `J${row}`, data.releasingData.moneyByPayment.pay[comp]);
+        setNum(ws, `K${row}`, data.releasingData.moneyByPayment.discounted[comp]);
+        setNum(ws, `L${row}`, data.releasingData.moneyByPayment.noCharge[comp]);
+    });
+}
+
+function fillBS324a(workbook, data) {
+    const ws = workbook.getWorksheet("BS 324a");
+    if (!ws) return;
+    const d = data.donorData;
+    writeRowValues(ws, 6, 6, [d.office["Walk-in"].S, d.office["Walk-in"].D, d.office["Walk-in"].T, d.office["Walk-in"].Q, 0,0,0]);
+    writeRowValues(ws, 7, 6, [d.office["Patient Directed"].S, d.office["Patient Directed"].D, d.office["Patient Directed"].T, d.office["Patient Directed"].Q, 0,0,0]);
+    writeRowValuesIfNotFormula(ws, 8, 7, [d.office["Walk-in"].D + d.office["Patient Directed"].D, d.office["Walk-in"].T + d.office["Patient Directed"].T, d.office["Walk-in"].Q + d.office["Patient Directed"].Q, 0,0,0]);
+
+    writeMbdSection(ws, d.field["Group"], 14, 33, 34);
+    writeMbdSection(ws, d.field["RC143 / BRGY Base"], 37, 56, 57);
+    writeMbdSection(ws, d.field["Pledge 25"], 59, 78, 79);
+
+    const grand = {S:0,D:0,T:0,Q:0};
+    ["Group","RC143 / BRGY Base","Pledge 25"].forEach(cat => { ["S","D","T","Q"].forEach(k => grand[k]+=d.fieldTotals[cat][k]||0); });
+    writeRowValuesIfNotFormula(ws, 80, 7, [grand.D, grand.T, grand.Q, 0,0,0]);
+    setNumIfNotFormula(ws, "H80", grand.T); setNumIfNotFormula(ws, "I80", grand.Q);
+
+    const btRows = {"O+":87,"A+":88,"B+":89,"AB+":90,"O-":91,"A-":92,"B-":93,"AB-":94};
+    Object.entries(btRows).forEach(([bt,row]) => {
+        const b = d.bloodTypeBag[bt] || emptyBagCounts();
+        writeRowValues(ws, row, 6, [b.S,b.D,b.T,b.Q,0,0,0]);
+    });
+    const bagTotals = {S:0,D:0,T:0,Q:0};
+    reportBloodTypes.forEach(bt => { const b = d.bloodTypeBag[bt] || emptyBagCounts(); ["S","D","T","Q"].forEach(k=>bagTotals[k]+=b[k]||0); });
+    writeRowValuesIfNotFormula(ws, 95, 7, [bagTotals.D, bagTotals.T, bagTotals.Q, 0,0,0]);
+
+    clearCells(ws, "B102:E127");
+    data.deferralData.reasonRows.slice(0,26).forEach((r, idx) => {
+        const row = 102 + idx;
+        setCell(ws, `B${row}`, r.reason);
+        setNum(ws, `C${row}`, r.count);
+        setCell(ws, `E${row}`, r.remarks);
+    });
+
+    const prepRows = {"O+":160,"A+":161,"B+":162,"AB+":163,"O-":164,"A-":165,"B-":166,"AB-":167};
+    Object.entries(prepRows).forEach(([bt,row]) => {
+        const c = d.componentByBT[bt] || emptyComponents();
+        writeRowValues(ws, row, 6, [c["450 cc"], c.PRBC, c.FFP, c.PC, 0,0,0, c.CRYO]);
+    });
+    writeRowValues(ws, 159, 7, [d.components.PRBC, d.components.FFP, d.components.PC, 0,0,0, d.components.CRYO]);
+
+    const reqRows = {"O+":178,"A+":179,"B+":180,"AB+":181,"O-":182,"A-":183,"B-":184,"AB-":185};
+    Object.entries(reqRows).forEach(([bt,row]) => {
+        const r = data.releasingData.requestedByBT[bt] || emptyReleaseComponents();
+        writeRowValues(ws, row, 6, [r.WB, r.PRBC, r.FFP, r.PC, 0,0,0, r.CRYO]);
+    });
+    const rt = data.releasingData.requestTotal;
+    writeRowValues(ws, 186, 7, [rt.PRBC, rt.FFP, rt.PC, 0,0,0, rt.CRYO]);
+}
+
+function writeMbdSection(ws, rows, startRow, endRow, totalRow) {
+    clearCells(ws, `B${startRow}:L${endRow}`);
+    const limited = rows.slice(0, endRow - startRow + 1);
+    limited.forEach((item, idx) => {
+        const r = startRow + idx;
+        setCell(ws, `B${r}`, item.name);
+        setCell(ws, `C${r}`, item.place);
+        setCell(ws, `D${r}`, formatShortDate(item.date));
+        setCell(ws, `E${r}`, item.category === "RC143 / BRGY Base" ? "Community" : (item.category === "Pledge 25" ? "Student" : "Employee/Staff"));
+        writeRowValues(ws, r, 6, [item.S, item.D, item.T, item.Q, 0,0,0]);
+    });
+    const totals = limited.reduce((acc,x)=>{["S","D","T","Q"].forEach(k=>acc[k]+=x[k]||0); return acc;}, {S:0,D:0,T:0,Q:0});
+    writeRowValuesIfNotFormula(ws, totalRow, 7, [totals.D, totals.T, totals.Q, 0,0,0]);
+}
+
+function fillBS325(workbook, data) {
+    const ws = workbook.getWorksheet("BS 325");
+    if (!ws) return;
+    const d = data.donorData;
+    setNum(ws, "C7", d.sex.Male); setNum(ws, "C8", d.sex.Female);
+    setNum(ws, "C13", d.frequency["First-time donors"]);
+    setNum(ws, "C14", d.frequency["Repeat non-regular"]);
+    setNum(ws, "C23", d.frequency["Repeat regular"]);
+    const ageRows = {"16-17":34,"18-20":35,"21-30":36,"31-40":37,"41-50":38,"51-60":39,"60-65":40,"66 & above":41};
+    Object.entries(ageRows).forEach(([ag,row]) => {
+        setNum(ws, `C${row}`, d.age[ag]);
+        setNum(ws, `D${row}`, d.ageSex[ag]?.Male || 0);
+        setNum(ws, `E${row}`, d.ageSex[ag]?.Female || 0);
+    });
+}
+
+function fillBM7(workbook, data) {
+    const ws = workbook.getWorksheet("BM7");
+    if (!ws) return;
+    const classMap = buildFacilityClassMap(workbook);
+    const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
+    clearCells(ws, "B10:O79");
+    rows.forEach((item, idx) => {
+        const row = 10 + idx;
+        setCell(ws, `C${row}`, item.facility);
+        setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
+        setNum(ws, `E${row}`, item.patients);
+        setNum(ws, `F${row}`, item.Male || 0);
+        setNum(ws, `G${row}`, item.Female || 0);
+        setNum(ws, `H${row}`, item.WB || 0);
+        setNum(ws, `I${row}`, item.PRBC || 0);
+        setNum(ws, `J${row}`, item.FFP || 0);
+        setNum(ws, `K${row}`, item.PC || 0);
+        setNum(ws, `O${row}`, item.CRYO || 0);
+    });
+    const tot = rows.reduce((a,x)=>{["patients","Male","Female","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
+    setNum(ws,"F80",tot.Male); setNum(ws,"G80",tot.Female); setNum(ws,"H80",tot.WB); setNum(ws,"I80",tot.PRBC); setNum(ws,"J80",tot.FFP); setNum(ws,"K80",tot.PC); setNum(ws,"O80",tot.CRYO);
+
+    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b)=>b.patients-a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
+    clearCells(ws, "B156:O225");
+    augRows.forEach((item, idx) => {
+        const row = 156 + idx;
+        setCell(ws, `C${row}`, item.facility);
+        setNum(ws, `E${row}`, item.patients);
+        setNum(ws, `H${row}`, item.WB || 0);
+        setNum(ws, `I${row}`, item.PRBC || 0);
+        setNum(ws, `J${row}`, item.FFP || 0);
+        setNum(ws, `K${row}`, item.PC || 0);
+        setNum(ws, `O${row}`, item.CRYO || 0);
+    });
+    const augTot = augRows.reduce((a,x)=>{["patients","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
+    setNumIfNotFormula(ws,"H226",augTot.WB); setNumIfNotFormula(ws,"I226",augTot.PRBC); setNumIfNotFormula(ws,"J226",augTot.FFP); setNumIfNotFormula(ws,"K226",augTot.PC); setNumIfNotFormula(ws,"O226",augTot.CRYO);
+}
+
+function buildFacilityClassMap(workbook) {
+    const map = {};
+    const ws = workbook.getWorksheet("dropdown - List of Hospital");
+    if (!ws) return map;
+    for (let r = 1; r <= 4050; r++) {
+        const name = ws.getCell(`L${r}`).value;
+        const cls = ws.getCell(`M${r}`).value;
+        const n = normKey(name);
+        if (n && cls) {
+            const c = normText(cls);
+            map[n] = c.includes("GOV") ? "Government" : (c.includes("MIL") ? "Military" : (c.includes("PRC") ? "PRC Chapter" : "Private"));
+        }
+    }
+    return map;
+}
+
+function fillWastages(workbook, data) {
+    const ws = workbook.getWorksheet("Wastages&Spoilage");
+    if (!ws) return;
+    const month = data.month;
+    const blocks = {
+        1:{col:"B",row:3}, 2:{col:"F",row:3}, 3:{col:"J",row:3},
+        4:{col:"B",row:26}, 5:{col:"F",row:26}, 6:{col:"J",row:26},
+        7:{col:"B",row:49}, 8:{col:"F",row:49}, 9:{col:"J",row:49},
+        10:{col:"B",row:72}, 11:{col:"F",row:72}, 12:{col:"J",row:72}
+    };
+    const b = blocks[month];
+    if (!b) return;
+    setNum(ws, `${b.col}${b.row + 1}`, data.donorData.qns);
+    setNum(ws, `${b.col}${b.row + 9}`, data.donorData.ub);
+}
+
+function fillWorkbook(workbook, data) {
+    fillBS323(workbook, data);
+    fillBS324a(workbook, data);
+    fillBS325(workbook, data);
+    fillBM7(workbook, data);
+    fillWastages(workbook, data);
+    workbook.calcProperties.fullCalcOnLoad = true;
+}
+
+async function downloadExcelReport() {
+    if (!lastPreviewData) { showStatus("Please preview the report first before downloading.", "warn"); return; }
+    if (typeof ExcelJS === "undefined") { showStatus("Excel library did not load. Please check internet connection and reload the page.", "error"); return; }
+
+    showStatus("Loading Excel template and writing mapped cells...", "info");
+    try {
+        const response = await fetch(REPORT_TEMPLATE_FILE + "?v=" + Date.now());
+        if (!response.ok) throw new Error("Cannot load " + REPORT_TEMPLATE_FILE + ". Upload this template file beside monthly-report-generator.html in GitHub.");
+        const buffer = await response.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        fillWorkbook(workbook, lastPreviewData);
+        const out = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([out], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+        const link = document.createElement("a");
+        const name = `${monthNames[lastPreviewData.month - 1].toUpperCase()}-${lastPreviewData.year}-MONTHLY-REPORT.xlsx`;
+        link.href = URL.createObjectURL(blob);
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        showStatus("Excel generated and downloaded: " + name, "ok");
+    } catch (error) {
+        console.error(error);
+        showStatus("Excel download failed: " + (error.message || error), "error");
+    }
 }
 
 setThisMonth();
 </script>
+
 </body>
 </html>
