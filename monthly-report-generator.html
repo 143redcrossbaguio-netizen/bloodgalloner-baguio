@@ -1691,6 +1691,45 @@ function isFormulaCell(cell) { return !!(cell && cell.value && typeof cell.value
 function setNumIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = Number(value || 0); }
 function setCellIfNotFormula(ws, addr, value) { const cell = ws.getCell(addr); if (!isFormulaCell(cell)) cell.value = value == null || value === "" ? null : value; }
 function setFormulaResult(ws, addr, formula, result) { ws.getCell(addr).value = { formula: formula, result: Number(result || 0) }; }
+function splitCellAddress(addr) {
+    const m = String(addr || "").match(/^([A-Z]+)(\d+)$/i);
+    if (!m) return null;
+    let col = 0;
+    const letters = m[1].toUpperCase();
+    for (let i = 0; i < letters.length; i++) col = col * 26 + (letters.charCodeAt(i) - 64);
+    return { row: Number(m[2]), col };
+}
+function sanitizeSharedFormulaClones(workbook) {
+    workbook.eachSheet(ws => {
+        ws.eachRow({ includeEmpty: true }, row => {
+            row.eachCell({ includeEmpty: true }, cell => {
+                let v;
+                try { v = cell.value; } catch (e) { return; }
+                if (!v || typeof v !== "object" || !v.sharedFormula) return;
+
+                let keepShared = false;
+                try {
+                    const master = ws.getCell(v.sharedFormula);
+                    const masterValue = master.value;
+                    const masterPos = splitCellAddress(v.sharedFormula);
+                    keepShared = !!(
+                        masterPos &&
+                        (masterPos.row < cell.row || masterPos.col < cell.col) &&
+                        masterValue &&
+                        typeof masterValue === "object" &&
+                        masterValue.formula
+                    );
+                } catch (e) {
+                    keepShared = false;
+                }
+
+                if (!keepShared) {
+                    cell.value = v.result == null ? null : Number(v.result || 0);
+                }
+            });
+        });
+    });
+}
 function setNumForce(ws, addr, value) { ws.getCell(addr).value = Number(value || 0); }
 function writeRowValues(ws, row, colStart, values) { values.forEach((v,i) => ws.getCell(row, colStart + i).value = v == null || v === "" ? null : v); }
 function writeRowValuesIfNotFormula(ws, row, colStart, values) { values.forEach((v,i) => { const cell = ws.getCell(row, colStart + i); if (!isFormulaCell(cell)) cell.value = v == null || v === "" ? null : v; }); }
@@ -1896,8 +1935,14 @@ function fillBM7(workbook, data) {
     });
     const tot = rows.reduce((a,x)=>{["patients","Male","Female","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
     setCell(ws,"C80","Total");
-    setNum(ws,"E80",tot.patients); setNum(ws,"F80",tot.Male); setNum(ws,"G80",tot.Female);
-    setNum(ws,"H80",tot.WB); setNum(ws,"I80",tot.PRBC); setNum(ws,"J80",tot.FFP); setNum(ws,"K80",tot.PC); setNum(ws,"O80",tot.CRYO);
+    // Force independent formulas/results so ExcelJS does not retain broken shared-formula clones from the template.
+    setFormulaResult(ws,"E80","SUM(E10:E79)",tot.patients);
+    setFormulaResult(ws,"F80","SUM(F10:F79)",tot.Male);
+    setFormulaResult(ws,"G80","SUM(G10:G79)",tot.Female);
+    setFormulaResult(ws,"H80","SUM(H10:H79)",tot.WB);
+    setFormulaResult(ws,"I80","SUM(I10:I79)",tot.PRBC);
+    setFormulaResult(ws,"J80","SUM(J10:J79)",tot.FFP);
+    setFormulaResult(ws,"K80","SUM(K10:K79)",tot.PC);
 
     // Section C: Blood augmentation / distribution to other PRC BSF.
     const augRows = Object.values(data.releasingData.augmentationFacilities || {})
@@ -1917,7 +1962,24 @@ function fillBM7(workbook, data) {
     });
     const augTot = augRows.reduce((a,x)=>{["patients","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
     setCell(ws,"C226","Total");
-    setNum(ws,"E226",augTot.patients); setNum(ws,"H226",augTot.WB); setNum(ws,"I226",augTot.PRBC); setNum(ws,"J226",augTot.FFP); setNum(ws,"K226",augTot.PC); setNum(ws,"O226",augTot.CRYO);
+    // Row 226 in the template contains shared formulas. Rewrite every formula cell in the row
+    // because writing only E/H/I/J/K/O leaves F226/G226/etc as broken shared-formula clones.
+    setFormulaResult(ws,"E226","SUM(E156:E225)",augTot.patients);
+    setFormulaResult(ws,"F226","SUM(F156:F225)",0);
+    setFormulaResult(ws,"G226","SUM(G156:G225)",0);
+    setFormulaResult(ws,"H226","SUM(H156:H225)",augTot.WB);
+    setFormulaResult(ws,"I226","SUM(I156:I225)",augTot.PRBC);
+    setFormulaResult(ws,"J226","SUM(J156:J225)",augTot.FFP);
+    setFormulaResult(ws,"K226","SUM(K156:K225)",augTot.PC);
+    setFormulaResult(ws,"L226","SUM(L156:L225)",0);
+    setFormulaResult(ws,"M226","SUM(M156:M225)",0);
+    setFormulaResult(ws,"N226","SUM(N156:N225)",0);
+    setFormulaResult(ws,"O226","SUM(O156:O225)",augTot.CRYO);
+    setFormulaResult(ws,"P226","SUM(P156:P225)",0);
+    setFormulaResult(ws,"Q226","SUM(Q156:Q225)",0);
+    setFormulaResult(ws,"R226","SUM(R156:R225)",0);
+    setFormulaResult(ws,"S226","SUM(S156:S225)",0);
+    setFormulaResult(ws,"T226","SUM(T156:T225)",0);
 }
 
 function buildFacilityClassMap(workbook) {
@@ -2089,6 +2151,7 @@ async function downloadExcelReport() {
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);
         fillWorkbook(workbook, lastPreviewData);
+        sanitizeSharedFormulaClones(workbook);
         const out = await workbook.xlsx.writeBuffer();
         const blob = new Blob([out], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
         const name = `${monthNames[lastPreviewData.month - 1].toUpperCase()}-${lastPreviewData.year}-MONTHLY-REPORT.xlsx`;
