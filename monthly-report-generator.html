@@ -1407,6 +1407,95 @@ function computeComponentMoneyForEntry(entry, paymentGroup) {
     return out;
 }
 
+const nhqRemittanceRates = {
+    current: {WB:1118, PRBC:1291, PC:600, FFP:600, CRYO:600},
+    old: {WB:850, PRBC:1076, PC:600, FFP:600, CRYO:600},
+    bloodTyping: 10
+};
+
+function getComponentUnitPriceFromItem(item, comp) {
+    if (!item || typeof item !== "object") return 0;
+    const qty = Math.max(1, getComponentQtyFromItem(item) || 1);
+    const direct = parseNum(item.price ?? item.unitPrice ?? item.bpf ?? item.processingFee ?? item.amountPerUnit ?? item.rate);
+    if (direct) return direct;
+    const amount = parseNum(item.amount ?? item.total ?? item.subtotal ?? item.lineTotal ?? item.value);
+    if (amount) return amount / qty;
+    return 0;
+}
+
+function getEffectiveComponentPrice(entry, comp) {
+    const snap = entry?.priceSnapshot || {};
+    const snapPrice = parseNum(snap[comp] ?? snap[String(comp || "").toLowerCase()]);
+    const prices = getEntryPrices(entry);
+    let price = snapPrice || parseNum(prices[comp]);
+
+    asRTDBList(entry?.issued).forEach(item => {
+        const itemComp = normReleaseComponent(getComponentNameFromItem(item));
+        const itemPrice = getComponentUnitPriceFromItem(item, comp);
+        if (itemComp === comp && itemPrice) price = itemPrice;
+    });
+
+    // Old records may not have priceSnapshot. If the entry issued only one component
+    // and there is no discount, infer the unit price from amountPaid so old-rate WB/PRBC
+    // can still be separated for BS 323 item 10 BPF Remittance to NHQ.
+    if (!snapPrice && (comp === "WB" || comp === "PRBC")) {
+        const counts = getIssuedCountsForRecord(entry);
+        const qty = Number(counts[comp] || 0);
+        const issuedTotalUnits = sumObj(counts);
+        const discount = parseNum(entry?.discount);
+        if (qty > 0 && issuedTotalUnits === qty && discount === 0) {
+            const boxAmount = parseNum(entry?.boxContainerQty) * (prices.BOX || 0);
+            const gross = Math.max(0, parseNum(entry?.amountPaid) - boxAmount);
+            const inferred = gross / qty;
+            if (comp === "WB" && inferred >= 1500 && inferred < 2000) price = inferred;
+            if (comp === "PRBC" && inferred >= 1200 && inferred < 2000) price = inferred;
+        }
+    }
+
+    return price;
+}
+
+function remittanceRateGroup(entry, comp) {
+    const price = getEffectiveComponentPrice(entry, comp);
+    if (comp === "WB" && price && price < 2000) return "old";
+    if (comp === "PRBC" && price && price < 2000) return "old";
+    return "current";
+}
+
+function emptyRemittanceBlock() {
+    return {
+        currentCounts: emptyReleaseComponents(),
+        oldCounts: emptyReleaseComponents(),
+        currentAmounts: emptyReleaseComponents(),
+        oldAmounts: emptyReleaseComponents(),
+        currentTotal: 0,
+        oldTotal: 0,
+        total: 0,
+        bloodTypingCount: 0,
+        bloodTypingAmount: 0
+    };
+}
+
+function addRemittanceForEntry(remittance, entry, issuedCounts) {
+    components.forEach(comp => {
+        const qty = Number(issuedCounts?.[comp] || 0);
+        if (!qty) return;
+        const group = remittanceRateGroup(entry, comp);
+        const rate = Number(nhqRemittanceRates[group]?.[comp] || nhqRemittanceRates.current[comp] || 0);
+        const amount = qty * rate;
+        if (group === "old") {
+            remittance.oldCounts[comp] += qty;
+            remittance.oldAmounts[comp] += amount;
+            remittance.oldTotal += amount;
+        } else {
+            remittance.currentCounts[comp] += qty;
+            remittance.currentAmounts[comp] += amount;
+            remittance.currentTotal += amount;
+        }
+        remittance.total += amount;
+    });
+}
+
 function buildReleasingData(releases, augmentations) {
     const data = {
         regularRecords: releases.length,
@@ -1432,7 +1521,8 @@ function buildReleasingData(releases, augmentations) {
         requestTotal: emptyReleaseComponents(),
         facilities: {},
         augmentationFacilities: {},
-        augmentationAmount: 0
+        augmentationAmount: 0,
+        remittance: emptyRemittanceBlock()
     };
 
     reportBloodTypes.forEach(bt => {
@@ -1457,6 +1547,7 @@ function buildReleasingData(releases, augmentations) {
         addReleaseCounts(data.issuedTotal, issuedCounts);
         addReleaseCounts(data.unitsByPayment[paymentGroup], issuedCounts);
         addReleaseCounts(data.moneyByPayment[paymentGroup], computeComponentMoneyForEntry(r, paymentGroup));
+        addRemittanceForEntry(data.remittance, r, issuedCounts);
 
         const bt = normBT(r.bloodtype || r.bloodType || "Unknown");
         if (!data.requestedByBT[bt]) data.requestedByBT[bt] = emptyReleaseComponents();
@@ -1591,7 +1682,8 @@ function renderBS323(data) {
         ["Permanent deferrals", data.deferralData.type.Permanent],
         ["Patients / transactions served", r.regularRecords],
         ["Blood augmentation records", r.augmentationRecords],
-        ["Total regular units released", sumObj(r.issuedTotal)]
+        ["Total regular units released", sumObj(r.issuedTotal)],
+        ["BPF Remittance to NHQ", (r.remittance?.total || 0) + (r.remittance?.bloodTypingAmount || 0)]
     ]) + "<br>" + table(["Patient Served", "Male", "Female", "Total"], patientRows) +
        "<br>" + table(["Issued units", "Pay", "Discounted", "No Charge", "Total"], unitRows);
 }
@@ -1748,11 +1840,15 @@ function fillBS323(workbook, data) {
     if (!ws) return;
 
     // Clear stale template/sample values first. BS 323 must be rebuilt from the current month's releasing statistics.
-    clearCellsIfNotFormula(ws, "C15:E33");      // Screening test tables are manual.
+    clearCellsIfNotFormula(ws, "C15:F33");      // Screening test tables are manual.
+    clearCellsIfNotFormula(ws, "D6:D11");       // Items 2 to 6 are manual.
+    clearCellsIfNotFormula(ws, "C36:C36");      // Item 7 blood typed is manual.
     clearCells(ws, "D42:H45");                  // Patient served block, including displayed totals.
     clearCells(ws, "F51:R70");                  // Units dispensed / BPF collection rows and totals.
-    clearCells(ws, "T51:W70");                  // Old hidden/helper sample values from the source template.
+    clearCells(ws, "T51:W74");                  // Hidden/helper sample values from the source template.
+    clearCells(ws, "Y74:Y74");                  // Hidden/helper BPF remittance total from the source template.
     clearCells(ws, "B68:L69");                  // Old-rate rows are manual and should start blank.
+    clearCellsIfNotFormula(ws, "C84:C86");      // BPF Remittance / Total BPF collected must be rebuilt for this month.
 
     setPeriodCell(ws, "D3", data);
     setNum(ws, "D5", data.donorData.totalRecords);
@@ -1811,7 +1907,46 @@ function fillBS323(workbook, data) {
         const total = values.reduce((a,b)=>a+b,0);
         setFormulaResult(ws, `${col}70`, `SUM(${col}51:${col}69)`, total);
     });
-    setFormulaResult(ws, "R70", "SUM(J70:Q70)", ["J","K","L","M","N","O","P","Q"].reduce((s,col)=>s+Number(ws.getCell(`${col}70`).value?.result ?? ws.getCell(`${col}70`).value ?? 0),0));
+    const totalBpfCollected = ["J","K","L","M","N","O","P","Q"].reduce((s,col)=>s+Number(ws.getCell(`${col}70`).value?.result ?? ws.getCell(`${col}70`).value ?? 0),0);
+    setFormulaResult(ws, "R70", "SUM(J70:Q70)", totalBpfCollected);
+
+    const rem = data.releasingData.remittance || emptyRemittanceBlock();
+    const remRows = [
+        [60, "WB", "wb"],
+        [61, "PRBC", "prbc"],
+        [62, "PC", "pc"],
+        [63, "FFP", "ffp"],
+        [64, "CRYO", "cryo"]
+    ];
+    remRows.forEach(([row, comp, label]) => {
+        const qty = Number(rem.currentCounts?.[comp] || 0);
+        const rate = Number(nhqRemittanceRates.current[comp] || 0);
+        setNum(ws, `T${row}`, qty);
+        setNum(ws, `U${row}`, rate);
+        setCell(ws, `V${row}`, label);
+        setFormulaResult(ws, `W${row}`, `T${row}*U${row}`, qty * rate);
+    });
+    setNum(ws, "T65", Number(rem.bloodTypingCount || 0));
+    setNum(ws, "U65", nhqRemittanceRates.bloodTyping);
+    setCell(ws, "V65", "bt");
+    setFormulaResult(ws, "W65", "T65*U65", Number(rem.bloodTypingAmount || 0));
+    setFormulaResult(ws, "W66", "SUM(W60:W65)", Number(rem.currentTotal || 0) + Number(rem.bloodTypingAmount || 0));
+    setCell(ws, "T67", "old rate");
+    [
+        [68, "WB", "wb"],
+        [69, "PRBC", "prbc"]
+    ].forEach(([row, comp, label]) => {
+        const qty = Number(rem.oldCounts?.[comp] || 0);
+        const rate = Number(nhqRemittanceRates.old[comp] || 0);
+        setNum(ws, `T${row}`, qty);
+        setNum(ws, `U${row}`, rate);
+        setCell(ws, `V${row}`, label);
+        setFormulaResult(ws, `W${row}`, `T${row}*U${row}`, qty * rate);
+    });
+    setFormulaResult(ws, "W70", "SUM(W68:W69)", Number(rem.oldTotal || 0));
+    setFormulaResult(ws, "Y74", "W66+W70", Number(rem.total || 0) + Number(rem.bloodTypingAmount || 0));
+    setFormulaResult(ws, "C84", "Y74", Number(rem.total || 0) + Number(rem.bloodTypingAmount || 0));
+    setFormulaResult(ws, "C86", "R70", totalBpfCollected);
 }
 
 function fillBS324a(workbook, data) {
