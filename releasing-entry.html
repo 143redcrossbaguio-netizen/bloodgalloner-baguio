@@ -303,18 +303,22 @@ button{
 }
 
 /* BLOOD AUGMENTATION */
+.augmentationTopBar{
+    max-width:900px;
+    margin:16px auto 0;
+    padding:0 30px;
+    box-sizing:border-box;
+}
+
 .augmentationToggle{
-    position:fixed;
-    right:15px;
-    top:120px;
-    width:auto;
+    position:static;
+    width:100%;
     padding:12px 16px;
     background:#1565c0;
     color:white;
     border:none;
     border-radius:8px;
     font-weight:bold;
-    z-index:1000;
     box-shadow:0 3px 10px rgba(0,0,0,0.2);
 }
 
@@ -388,6 +392,11 @@ button{
 }
 
 @media (max-width: 600px){
+    .augmentationTopBar{
+        margin:12px 12px 0;
+        padding:0;
+    }
+
     .container{
         margin:20px 12px;
         padding:20px;
@@ -473,7 +482,9 @@ button{
 <h2>Blood Releasing Entry</h2>
 </header>
 
-<button class="augmentationToggle" onclick="toggleAugmentation()">BLOOD AUGMENTATION</button>
+<div class="augmentationTopBar">
+    <button class="augmentationToggle" onclick="toggleAugmentation()">BLOOD AUGMENTATION</button>
+</div>
 
 <div class="container">
 
@@ -498,7 +509,7 @@ button{
 </div>
 
 <label>DATE</label>
-<input type="date" id="date">
+<input type="date" id="date" required>
 
 <label>FACILITY</label>
 <div class="fac-wrap" id="facWrapMain">
@@ -514,22 +525,22 @@ button{
 <div class="inline5">
     <div>
         <label>1. SURNAME</label>
-        <input type="text" id="surname">
+        <input type="text" id="surname" required>
     </div>
 
     <div>
         <label>2. FIRST NAME</label>
-        <input type="text" id="firstname">
+        <input type="text" id="firstname" required>
     </div>
 
     <div>
         <label>3. AGE</label>
-        <input type="number" id="age">
+        <input type="number" id="age" required>
     </div>
 
     <div>
         <label>4. SEX</label>
-        <select id="sex">
+        <select id="sex" required>
             <option value="">Select</option>
             <option>MALE</option>
             <option>FEMALE</option>
@@ -538,7 +549,7 @@ button{
 
     <div>
         <label>5. BLOOD TYPE</label>
-        <select id="bloodtype">
+        <select id="bloodtype" required>
             <option value="">Select</option>
             <option>A+</option>
             <option>A-</option>
@@ -562,7 +573,7 @@ button{
             <option>FFP</option>
             <option>CRYO</option>
         </select>
-        <input type="number" class="requestQty" placeholder="Qty">
+        <input type="number" class="requestQty" placeholder="Qty" required>
         <button type="button" class="addBtn" onclick="addRequest()">+</button>
     </div>
 </div>
@@ -577,7 +588,7 @@ button{
             <option>FFP</option>
             <option>CRYO</option>
         </select>
-        <input type="number" class="issuedQty" placeholder="Qty">
+        <input type="number" class="issuedQty" placeholder="Qty" required>
         <button type="button" class="addBtn" onclick="addIssued()">+</button>
     </div>
 </div>
@@ -601,7 +612,7 @@ button{
         <div class="row waivedRow">
             <div>
                 <label>WAIVED COMPONENT</label>
-                <select class="waivedComponent">
+                <select class="waivedComponent" required>
                     <option value="">Select</option>
                     <option>WB</option>
                     <option>PRBC</option>
@@ -613,7 +624,7 @@ button{
             </div>
             <div>
                 <label>WAIVED UNIT</label>
-                <input type="number" class="waivedUnit" placeholder="Unit">
+                <input type="number" class="waivedUnit" placeholder="Unit" required>
             </div>
             <button type="button" class="addBtn" onclick="addWaived()">+</button>
         </div>
@@ -641,7 +652,7 @@ button{
     <div class="augmentationHeader">BLOOD AUGMENTATION</div>
 
     <label>DATE</label>
-    <input type="date" id="augDate">
+    <input type="date" id="augDate" required>
 
     <label>FACILITY</label>
     <div class="fac-wrap" id="facWrapAug">
@@ -791,14 +802,46 @@ function normalizePriceSnapshot(snapshot){
   };
 }
 
+let currentPhilippinesDateString = "";
+let philippinesDateWatcherStarted = false;
+
+function getPhilippinesDateString(){
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+
+  const year = parts.find(part => part.type === "year")?.value || "";
+  const month = parts.find(part => part.type === "month")?.value || "";
+  const day = parts.find(part => part.type === "day")?.value || "";
+
+  return `${year}-${month}-${day}`;
+}
+
 function setTodayDate(){
-  const today = new Date().toISOString().split("T")[0];
+  const previousToday = currentPhilippinesDateString;
+  const today = getPhilippinesDateString();
 
   const mainDate = document.getElementById("date");
-  if(mainDate && !mainDate.value) mainDate.value = today;
+  if(mainDate && !selectedLoadedId && (!mainDate.value || (previousToday && mainDate.value === previousToday))){
+    mainDate.value = today;
+  }
 
   const augDate = document.getElementById("augDate");
-  if(augDate && !augDate.value) augDate.value = today;
+  if(augDate && (!augDate.value || (previousToday && augDate.value === previousToday))){
+    augDate.value = today;
+  }
+
+  currentPhilippinesDateString = today;
+}
+
+function startPhilippinesDateWatcher(){
+  if(philippinesDateWatcherStarted) return;
+  philippinesDateWatcherStarted = true;
+  setTodayDate();
+  setInterval(setTodayDate, 60000);
 }
 
 // ─── Facility data (loaded from Firebase, available to all devices) ──────────
@@ -1357,7 +1400,7 @@ window.addRequest = function(){
         <option>FFP</option>
         <option>CRYO</option>
     </select>
-    <input type="number" class="requestQty" placeholder="Qty">
+    <input type="number" class="requestQty" placeholder="Qty" required>
     <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
   `;
   container.appendChild(row);
@@ -1376,7 +1419,7 @@ window.addIssued = function(){
         <option>FFP</option>
         <option>CRYO</option>
     </select>
-    <input type="number" class="issuedQty" placeholder="Qty">
+    <input type="number" class="issuedQty" placeholder="Qty" required>
     <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeIssuedTotal();">-</button>
   `;
   container.appendChild(row);
@@ -1391,7 +1434,7 @@ window.addWaived = function(){
   row.innerHTML = `
     <div>
         <label>WAIVED COMPONENT</label>
-        <select class="waivedComponent">
+        <select class="waivedComponent" required>
             <option value="">Select</option>
             <option>WB</option>
             <option>PRBC</option>
@@ -1403,7 +1446,7 @@ window.addWaived = function(){
     </div>
     <div>
         <label>WAIVED UNIT</label>
-        <input type="number" class="waivedUnit" placeholder="Unit">
+        <input type="number" class="waivedUnit" placeholder="Unit" required>
     </div>
     <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeIssuedTotal();">-</button>
   `;
@@ -1442,7 +1485,7 @@ function resetWaivedRows(items = null){
       row.innerHTML = `
         <div>
             <label>WAIVED COMPONENT</label>
-            <select class="waivedComponent">
+            <select class="waivedComponent" required>
                 <option value="">Select</option>
                 <option ${item.component==="WB" ? "selected" : ""}>WB</option>
                 <option ${item.component==="PRBC" ? "selected" : ""}>PRBC</option>
@@ -1465,7 +1508,7 @@ function resetWaivedRows(items = null){
       <div class="row waivedRow">
           <div>
               <label>WAIVED COMPONENT</label>
-              <select class="waivedComponent">
+              <select class="waivedComponent" required>
                   <option value="">Select</option>
                   <option>WB</option>
                   <option>PRBC</option>
@@ -1477,7 +1520,7 @@ function resetWaivedRows(items = null){
           </div>
           <div>
               <label>WAIVED UNIT</label>
-              <input type="number" class="waivedUnit" placeholder="Unit">
+              <input type="number" class="waivedUnit" placeholder="Unit" required>
           </div>
           <button type="button" class="addBtn" onclick="addWaived()">+</button>
       </div>
@@ -1601,7 +1644,7 @@ function resetForm(){
   waivedActive = false;
   if(typeof hideLoadedRecordBar === "function") hideLoadedRecordBar();
 
-  document.getElementById("date").value = new Date().toISOString().split("T")[0];
+  document.getElementById("date").value = getPhilippinesDateString();
   document.getElementById("facility").value = "";
   document.getElementById("surname").value = "";
   document.getElementById("firstname").value = "";
@@ -1627,7 +1670,7 @@ function resetForm(){
             <option>FFP</option>
             <option>CRYO</option>
         </select>
-        <input type="number" class="requestQty" placeholder="Qty">
+        <input type="number" class="requestQty" placeholder="Qty" required>
         <button type="button" class="addBtn" onclick="addRequest()">+</button>
     </div>
   `;
@@ -1641,7 +1684,7 @@ function resetForm(){
             <option>FFP</option>
             <option>CRYO</option>
         </select>
-        <input type="number" class="issuedQty" placeholder="Qty">
+        <input type="number" class="issuedQty" placeholder="Qty" required>
         <button type="button" class="addBtn" onclick="addIssued()">+</button>
     </div>
   `;
@@ -1681,7 +1724,7 @@ function fillRequestRows(requests){
               <option>FFP</option>
               <option>CRYO</option>
           </select>
-          <input type="number" class="requestQty" placeholder="Qty">
+          <input type="number" class="requestQty" placeholder="Qty" required>
           <button type="button" class="addBtn" onclick="addRequest()">+</button>
       </div>
     `;
@@ -1721,7 +1764,7 @@ function fillIssuedRows(issued){
               <option>FFP</option>
               <option>CRYO</option>
           </select>
-          <input type="number" class="issuedQty" placeholder="Qty">
+          <input type="number" class="issuedQty" placeholder="Qty" required>
           <button type="button" class="addBtn" onclick="addIssued()">+</button>
       </div>
     `;
@@ -1791,12 +1834,150 @@ async function loadEditEntry(){
   }
 }
 
+
+function alertAndFocus(element, message){
+  alert(message);
+  if(element && typeof element.focus === "function") element.focus();
+  return false;
+}
+
+function isBlankValue(value){
+  return String(value ?? "").trim() === "";
+}
+
+function requireFieldById(id, label){
+  const element = document.getElementById(id);
+  if(!element || isBlankValue(element.value)){
+    return alertAndFocus(element, `${label} is required.`);
+  }
+  return true;
+}
+
+function requireRowQuantities(rowSelector, qtySelector, label){
+  const rows = Array.from(document.querySelectorAll(rowSelector));
+  if(!rows.length){
+    alert(`At least one ${label} row is required.`);
+    return false;
+  }
+
+  for(let index = 0; index < rows.length; index++){
+    const qtyElement = rows[index].querySelector(qtySelector);
+    if(!qtyElement || isBlankValue(qtyElement.value)){
+      return alertAndFocus(qtyElement, `${label} quantity is required.`);
+    }
+  }
+
+  return true;
+}
+
+function requireDiscountFields(sectionId, priceId, percentId){
+  const section = document.getElementById(sectionId);
+  if(!section || section.style.display === "none") return true;
+
+  if(!requireFieldById(priceId, "Discounted price")) return false;
+  if(!requireFieldById(percentId, "Discount percent")) return false;
+
+  return true;
+}
+
+function validateWaivedRequiredFields(){
+  if(!waivedActive) return true;
+
+  const rows = Array.from(document.querySelectorAll(".waivedRow"));
+  if(!rows.length){
+    alert("At least one waived row is required when WAIVED is active.");
+    return false;
+  }
+
+  for(let index = 0; index < rows.length; index++){
+    const componentElement = rows[index].querySelector(".waivedComponent");
+    const unitElement = rows[index].querySelector(".waivedUnit");
+
+    if(!componentElement || isBlankValue(componentElement.value)){
+      return alertAndFocus(componentElement, "Waived component is required.");
+    }
+
+    if(!unitElement || isBlankValue(unitElement.value)){
+      return alertAndFocus(unitElement, "Waived unit is required.");
+    }
+  }
+
+  return true;
+}
+
+function validateMainRequiredFields(){
+  if(!requireFieldById("date", "Date")) return false;
+  if(!requireFieldById("facility", "Facility")) return false;
+  if(!requireFieldById("surname", "Surname")) return false;
+  if(!requireFieldById("firstname", "First name")) return false;
+  if(!requireFieldById("age", "Age")) return false;
+  if(!requireFieldById("sex", "Sex")) return false;
+  if(!requireFieldById("bloodtype", "Blood type")) return false;
+  if(!requireRowQuantities(".requestRow", ".requestQty", "Request")) return false;
+  if(!requireRowQuantities(".issuedRow", ".issuedQty", "Issued")) return false;
+  if(!requireFieldById("or", "OR")) return false;
+  if(!validateWaivedRequiredFields()) return false;
+  if(!requireDiscountFields("discountSection", "discountPrice", "discountPercent")) return false;
+
+  return true;
+}
+
+function validateAugmentationRequiredFields(){
+  if(!requireFieldById("augDate", "Augmentation date")) return false;
+  if(!requireFieldById("augFacility", "Augmentation facility")) return false;
+
+  const cards = Array.from(document.querySelectorAll(".augmentationCard"));
+  if(!cards.length){
+    alert("Please add at least one blood type for blood augmentation.");
+    return false;
+  }
+
+  for(let index = 0; index < cards.length; index++){
+    const bloodTypeElement = cards[index].querySelector(".augBloodType");
+    if(!bloodTypeElement || isBlankValue(bloodTypeElement.value)){
+      return alertAndFocus(bloodTypeElement, "Augmentation blood type is required.");
+    }
+
+    const requestRows = Array.from(cards[index].querySelectorAll(".augRequestRow"));
+    if(!requestRows.length){
+      alert("At least one augmentation requested row is required.");
+      return false;
+    }
+
+    for(let reqIndex = 0; reqIndex < requestRows.length; reqIndex++){
+      const qtyElement = requestRows[reqIndex].querySelector(".augRequestQty");
+      if(!qtyElement || isBlankValue(qtyElement.value)){
+        return alertAndFocus(qtyElement, "Augmentation requested quantity is required.");
+      }
+    }
+
+    const issuedRows = Array.from(cards[index].querySelectorAll(".augIssuedRow"));
+    if(!issuedRows.length){
+      alert("At least one augmentation issued row is required.");
+      return false;
+    }
+
+    for(let issuedIndex = 0; issuedIndex < issuedRows.length; issuedIndex++){
+      const qtyElement = issuedRows[issuedIndex].querySelector(".augIssuedQty");
+      if(!qtyElement || isBlankValue(qtyElement.value)){
+        return alertAndFocus(qtyElement, "Augmentation issued quantity is required.");
+      }
+    }
+  }
+
+  if(!requireDiscountFields("augDiscountSection", "augDiscountPrice", "augDiscountPercent")) return false;
+
+  return true;
+}
+
 saveBtn.addEventListener("click", async () => {
   if (!auth.currentUser) {
     alert("You are not logged in.");
     window.location.href = "index.html";
     return;
   }
+
+  if(!validateMainRequiredFields()) return;
 
   const facilityValue = document.getElementById("facility").value.trim();
   if(facilityValue === ""){
@@ -1966,7 +2147,7 @@ window.addAugmentationBloodType = function(){
     <div class="row">
       <div style="flex:1">
         <label>BLOOD TYPE</label>
-        <select class="augBloodType">
+        <select class="augBloodType" required>
           <option value="">Select</option>
           <option>A+</option>
           <option>A-</option>
@@ -1994,7 +2175,7 @@ window.addAugmentationBloodType = function(){
             <option>FFP</option>
             <option>CRYO</option>
           </select>
-          <input type="number" class="augRequestQty" placeholder="Qty">
+          <input type="number" class="augRequestQty" placeholder="Qty" required>
           <button type="button" class="addBtn" onclick="addAugRequest(this)">+</button>
         </div>
       </div>
@@ -2011,7 +2192,7 @@ window.addAugmentationBloodType = function(){
             <option>FFP</option>
             <option>CRYO</option>
           </select>
-          <input type="number" class="augIssuedQty" placeholder="Qty">
+          <input type="number" class="augIssuedQty" placeholder="Qty" required>
           <button type="button" class="addBtn" onclick="addAugIssued(this)">+</button>
         </div>
       </div>
@@ -2032,7 +2213,7 @@ window.addAugRequest = function(button){
       <option>FFP</option>
       <option>CRYO</option>
     </select>
-    <input type="number" class="augRequestQty" placeholder="Qty">
+    <input type="number" class="augRequestQty" placeholder="Qty" required>
     <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
   `;
   container.appendChild(row);
@@ -2050,7 +2231,7 @@ window.addAugIssued = function(button){
       <option>FFP</option>
       <option>CRYO</option>
     </select>
-    <input type="number" class="augIssuedQty" placeholder="Qty">
+    <input type="number" class="augIssuedQty" placeholder="Qty" required>
     <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeAugmentationTotal();">-</button>
   `;
   container.appendChild(row);
@@ -2062,6 +2243,8 @@ window.saveAugmentation = async function(){
     window.location.href = "index.html";
     return;
   }
+
+  if(!validateAugmentationRequiredFields()) return;
 
   const augFacilityValue = document.getElementById("augFacility").value.trim();
   if(augFacilityValue === ""){
@@ -2119,7 +2302,7 @@ window.saveAugmentation = async function(){
     await push(ref(db, "bloodAugmentation"), augmentationData);
     alert("Blood augmentation saved successfully!");
     currentAugmentationPriceSnapshot = null;
-    document.getElementById("augDate").value = new Date().toISOString().split("T")[0];
+    document.getElementById("augDate").value = getPhilippinesDateString();
     document.getElementById("augFacility").value = "";
     document.getElementById("augBoxContainerQty").value = "";
     document.getElementById("augmentationBloodTypeContainer").innerHTML = "";
@@ -2220,7 +2403,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  setTodayDate();
+  startPhilippinesDateWatcher();
   loadFacilities();
   bindLiveSearch();
   bindEnterMoveToNextBox();
