@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
+
     <style>
         * { box-sizing: border-box; }
 
@@ -18,6 +23,8 @@
             --muted:#667085;
             --green:#166534;
             --blue:#0f52ba;
+            --orange:#a64b00;
+            --purple:#6b21a8;
             --shadow:0 14px 30px rgba(15,23,42,0.08);
             --radius:18px;
         }
@@ -33,19 +40,21 @@
 
         .page{
             min-height: 100vh;
-            padding: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 20px;
+        }
+
+        .shell{
+            width: min(1280px, 100%);
+            margin: 0 auto;
         }
 
         .card{
-            width: min(760px, 100%);
             background: var(--panel);
             border: 1px solid var(--line);
             border-radius: 24px;
             box-shadow: var(--shadow);
             overflow: hidden;
+            margin-bottom: 16px;
         }
 
         .card-header{
@@ -54,6 +63,10 @@
                 linear-gradient(90deg, #7a0000 0%, #a50000 45%, #c01818 100%);
             color: white;
             padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            align-items: center;
         }
 
         .card-header h1{
@@ -68,9 +81,7 @@
             opacity: 0.92;
         }
 
-        .card-body{
-            padding: 24px;
-        }
+        .card-body{ padding: 22px; }
 
         .form-grid{
             display: grid;
@@ -120,147 +131,869 @@
             font-size: 14px;
         }
 
-        .btn-primary{
-            background: linear-gradient(135deg, #920000, #c31616);
-            box-shadow: 0 8px 16px rgba(179,0,0,0.18);
+        button:disabled{
+            opacity: .55;
+            cursor: not-allowed;
         }
 
-        .btn-secondary{
-            background: linear-gradient(135deg, #1565c0, #1e88e5);
-            box-shadow: 0 8px 16px rgba(21,101,192,0.16);
-        }
+        .btn-primary{ background: linear-gradient(135deg, #920000, #c31616); box-shadow: 0 8px 16px rgba(179,0,0,0.18); }
+        .btn-secondary{ background: linear-gradient(135deg, #1565c0, #1e88e5); box-shadow: 0 8px 16px rgba(21,101,192,0.16); }
+        .btn-green{ background: linear-gradient(135deg, #166534, #15803d); box-shadow: 0 8px 16px rgba(21,128,61,0.16); }
+        .btn-gray{ background: linear-gradient(135deg, #374151, #4b5563); }
 
-        .notice{
-            margin-top: 18px;
+        .notice, .status{
+            margin-top: 16px;
             padding: 14px 16px;
             border-radius: 14px;
-            background: #f8fafc;
-            border: 1px solid #e1e8f0;
-            color: #475467;
             font-size: 13px;
             line-height: 1.55;
         }
 
-        .status{
-            margin-top: 14px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            background: #fff7ed;
-            border: 1px solid #fed7aa;
-            color: #9a3412;
-            font-size: 13px;
-            display: none;
+        .notice{ background:#f8fafc; border:1px solid #e1e8f0; color:#475467; }
+        .status{ display:none; font-weight:700; }
+        .status.info{ background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; display:block; }
+        .status.ok{ background:#ecfdf5; border:1px solid #bbf7d0; color:#15803d; display:block; }
+        .status.warn{ background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; display:block; }
+        .status.error{ background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; display:block; }
+
+        .preview-card{ display:none; }
+        .preview-card.show{ display:block; }
+
+        .preview-title-row{
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap:12px;
+            margin-bottom:14px;
         }
 
+        .preview-title-row h2{
+            margin:0;
+            color:#8b0000;
+            font-size:20px;
+        }
+
+        .preview-title-row .sub{
+            color:#667085;
+            font-size:13px;
+            margin-top:4px;
+            font-weight:700;
+        }
+
+        .pill{
+            display:inline-block;
+            padding:7px 11px;
+            border-radius:999px;
+            background:#fff1f2;
+            color:#8b0000;
+            font-size:12px;
+            font-weight:800;
+            border:1px solid #fecdd3;
+            white-space:nowrap;
+        }
+
+        .summary-grid{
+            display:grid;
+            grid-template-columns:repeat(4,1fr);
+            gap:12px;
+            margin-bottom:16px;
+        }
+
+        .summary-box{
+            border:1px solid #dbe3ec;
+            border-radius:16px;
+            background:linear-gradient(180deg,#ffffff,#f8fafc);
+            padding:14px;
+        }
+
+        .summary-box .label{
+            font-size:12px;
+            color:#667085;
+            font-weight:800;
+            margin-bottom:8px;
+        }
+
+        .summary-box .value{
+            font-size:28px;
+            color:#b30000;
+            font-weight:900;
+        }
+
+        .sheet-block{
+            border:1px solid #dbe3ec;
+            border-radius:16px;
+            overflow:hidden;
+            margin-bottom:14px;
+            background:#fff;
+        }
+
+        .sheet-head{
+            padding:13px 15px;
+            font-size:15px;
+            font-weight:900;
+            color:#111827;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            cursor:pointer;
+            background:linear-gradient(90deg,#fdf2f8,#fff1f2);
+        }
+
+        .sheet-head.blue{ background:linear-gradient(90deg,#eff6ff,#f8fafc); }
+        .sheet-head.green{ background:linear-gradient(90deg,#ecfdf5,#f8fafc); }
+        .sheet-head.orange{ background:linear-gradient(90deg,#fff7ed,#f8fafc); }
+        .sheet-head.purple{ background:linear-gradient(90deg,#f5f3ff,#f8fafc); }
+
+        .sheet-body{ display:none; padding:14px; }
+        .sheet-body.open{ display:block; }
+
+        .table-wrap{ overflow-x:auto; border:1px solid #edf2f7; border-radius:12px; }
+        table{ width:100%; border-collapse:collapse; min-width:640px; }
+        th, td{ border:1px solid #e5e7eb; padding:9px 10px; font-size:13px; text-align:center; vertical-align:middle; }
+        th{ background:#f8fafc; color:#374151; font-weight:900; }
+        td:first-child, th:first-child{ text-align:left; font-weight:800; }
+        .right{text-align:right!important;}
+        .muted{ color:#667085; font-weight:700; }
+        .warn-list{ margin:0; padding-left:18px; color:#92400e; font-size:13px; line-height:1.7; }
+        .empty{ padding:16px; text-align:center; color:#667085; font-weight:700; }
+
+        @media (max-width: 900px){
+            .summary-grid{ grid-template-columns:repeat(2,1fr); }
+        }
         @media (max-width: 640px){
-            .page{ padding: 12px; align-items: flex-start; }
-            .card-header{ padding: 16px; }
+            .page{ padding: 10px; }
+            .card-header{ padding: 16px; display:block; }
             .card-header h1{ font-size: 20px; }
-            .card-body{ padding: 16px; }
+            .card-body{ padding: 14px; }
             .form-grid{ grid-template-columns: 1fr; }
             button{ width: 100%; }
+            .summary-grid{ grid-template-columns:1fr; }
+            .preview-title-row{ display:block; }
+            .pill{ margin-top:10px; }
+            table{ min-width:560px; }
         }
     </style>
 </head>
 <body>
     <div class="page">
-        <div class="card">
-            <div class="card-header">
-                <h1>Generate Monthly Report</h1>
-                <p>Select the reporting month and year, then generate the Excel monthly report.</p>
+        <div class="shell">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h1>Generate Monthly Report</h1>
+                        <p>Select the reporting month/year, preview the values, then download the final Excel once mapping is connected.</p>
+                    </div>
+                    <span class="pill">Monthly MOV Preview</span>
+                </div>
+
+                <div class="card-body">
+                    <div class="form-grid">
+                        <div>
+                            <label for="reportMonth">Month</label>
+                            <select id="reportMonth">
+                                <option value="1">January</option>
+                                <option value="2">February</option>
+                                <option value="3">March</option>
+                                <option value="4">April</option>
+                                <option value="5">May</option>
+                                <option value="6">June</option>
+                                <option value="7">July</option>
+                                <option value="8">August</option>
+                                <option value="9">September</option>
+                                <option value="10">October</option>
+                                <option value="11">November</option>
+                                <option value="12">December</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="reportYear">Year</label>
+                            <input id="reportYear" type="number" min="2020" max="2100" step="1">
+                        </div>
+                    </div>
+
+                    <div class="button-row">
+                        <button class="btn-secondary" type="button" onclick="setThisMonth()">This Month Only</button>
+                        <button class="btn-primary" type="button" onclick="previewMonthlyReport()">Preview Report</button>
+                        <button class="btn-green" type="button" id="downloadExcelBtn" onclick="downloadExcelReport()" disabled>Download Excel</button>
+                        <button class="btn-gray" type="button" onclick="clearPreview()">Clear Preview</button>
+                    </div>
+
+                    <div class="notice">
+                        Preview lets you check the computed values before downloading. The official Excel file will still use your uploaded workbook as the template, so the final download can preserve the same style, colors, spacing, merged cells, formulas, and computations once the cell mapping is added.
+                    </div>
+
+                    <div id="statusBox" class="status"></div>
+                </div>
             </div>
 
-            <div class="card-body">
-                <div class="form-grid">
-                    <div>
-                        <label for="reportMonth">Month</label>
-                        <select id="reportMonth">
-                            <option value="1">January</option>
-                            <option value="2">February</option>
-                            <option value="3">March</option>
-                            <option value="4">April</option>
-                            <option value="5">May</option>
-                            <option value="6">June</option>
-                            <option value="7">July</option>
-                            <option value="8">August</option>
-                            <option value="9">September</option>
-                            <option value="10">October</option>
-                            <option value="11">November</option>
-                            <option value="12">December</option>
-                        </select>
+            <div id="previewCard" class="card preview-card">
+                <div class="card-body">
+                    <div class="preview-title-row">
+                        <div>
+                            <h2 id="previewTitle">Monthly Report Preview</h2>
+                            <div id="previewSubtitle" class="sub"></div>
+                        </div>
+                        <span id="previewGeneratedAt" class="pill"></span>
                     </div>
 
-                    <div>
-                        <label for="reportYear">Year</label>
-                        <input id="reportYear" type="number" min="2020" max="2100" step="1">
-                    </div>
+                    <div id="summaryGrid" class="summary-grid"></div>
+                    <div id="sheetPreviewContainer"></div>
                 </div>
-
-                <div class="button-row">
-                    <button class="btn-secondary" onclick="setThisMonth()">This Month Only</button>
-                    <button class="btn-primary" onclick="generateMonthlyReport()">Generate Monthly Report</button>
-                </div>
-
-                <div class="notice">
-                    This is the simple report selection page. The next step is to connect this page to Firebase records and your Excel template so the downloaded file keeps the same style, colors, spacing, merged cells, formulas, and computations.
-                </div>
-
-                <div id="statusBox" class="status"></div>
             </div>
         </div>
     </div>
 
-    <script>
-        const monthNames = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
+<script>
+// ─── FIREBASE ────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+    authDomain: "galloners-club.firebaseapp.com",
+    databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "galloners-club",
+    storageBucket: "galloners-club.firebasestorage.app",
+    messagingSenderId: "213049860421",
+    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+    measurementId: "G-XYXJH9JNXJ"
+};
 
-        function getPhilippineDateParts() {
-            const parts = new Intl.DateTimeFormat("en-US", {
-                timeZone: "Asia/Manila",
-                year: "numeric",
-                month: "numeric",
-                day: "numeric"
-            }).formatToParts(new Date());
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const fs = firebase.firestore();
+const rtdb = firebase.database();
 
-            const data = {};
-            parts.forEach(part => {
-                if (part.type !== "literal") data[part.type] = Number(part.value);
+const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
+let lastPreviewData = null;
+let authReady = false;
+
+auth.onAuthStateChanged((user) => {
+    authReady = true;
+    if (!user) {
+        showStatus("Please login first before generating a monthly report.", "warn");
+    }
+});
+
+// ─── BASIC UI ────────────────────────────────────────────────────────────────
+function getPhilippineDateParts() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric"
+    }).formatToParts(new Date());
+
+    const data = {};
+    parts.forEach(part => {
+        if (part.type !== "literal") data[part.type] = Number(part.value);
+    });
+    return data;
+}
+
+function setThisMonth() {
+    const phDate = getPhilippineDateParts();
+    document.getElementById("reportMonth").value = String(phDate.month);
+    document.getElementById("reportYear").value = String(phDate.year);
+    showStatus("This month selected: " + monthNames[phDate.month - 1] + " " + phDate.year + ".", "ok");
+}
+
+function showStatus(message, type = "info") {
+    const statusBox = document.getElementById("statusBox");
+    statusBox.textContent = message;
+    statusBox.className = "status " + type;
+}
+
+function clearPreview() {
+    lastPreviewData = null;
+    document.getElementById("previewCard").classList.remove("show");
+    document.getElementById("summaryGrid").innerHTML = "";
+    document.getElementById("sheetPreviewContainer").innerHTML = "";
+    document.getElementById("downloadExcelBtn").disabled = true;
+    showStatus("Preview cleared.", "info");
+}
+
+function escH(v) {
+    return String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+}
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+function monthKey(year, month) { return `${year}-${pad2(month)}`; }
+
+// ─── DATE / NORMALIZATION HELPERS ────────────────────────────────────────────
+const MON = {jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+
+function parseDate(raw) {
+    if (!raw) return null;
+    if (raw instanceof Date) return isNaN(raw) ? null : raw;
+    if (typeof raw?.toDate === "function") return raw.toDate();
+    if (typeof raw === "object" && raw.seconds) return new Date(raw.seconds * 1000);
+    if (typeof raw === "string") {
+        const t = raw.trim();
+        if (!t) return null;
+        let m;
+        if ((m = t.match(/^(\d{4})[-_\/ ](\d{1,2})[-_\/ ](\d{1,2})$/))) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        if ((m = t.match(/^(\d{1,2})[-_\/ ](\d{1,2})[-_\/ ](\d{2,4})$/))) {
+            let y = Number(m[3]);
+            if (String(m[3]).length === 2) y = y < 50 ? 2000 + y : 1900 + y;
+            return new Date(y, Number(m[1]) - 1, Number(m[2]));
+        }
+        if ((m = t.toLowerCase().match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s\-_]*(\d{4})/))) {
+            const key = Object.keys(MON).find(k => m[1].startsWith(k));
+            if (key) return new Date(Number(m[2]), MON[key] - 1, 1);
+        }
+        const fb = new Date(t);
+        if (!isNaN(fb.getTime())) return fb;
+    }
+    return null;
+}
+
+function recordMatchesMonth(r, year, month) {
+    const key = monthKey(year, month);
+    if (String(r.collectionMonthKey || "") === key) return true;
+    if (Number(r.collectionYear) === Number(year) && Number(r.collectionMonth) === Number(month)) return true;
+
+    const d = parseDate(r.entryDate || r.donationDate || r.date || r.bleedingDate || r.requestDate || r.releasedDate || r.createdAt || null);
+    if (!d || isNaN(d.getTime())) return false;
+    return d.getFullYear() === Number(year) && d.getMonth() + 1 === Number(month);
+}
+
+function isVisible(r) {
+    if (!r || typeof r !== "object") return false;
+    if (r.isDeleted === true) return false;
+    if (typeof r.deletedBatchId === "string" && r.deletedBatchId.trim() !== "") return false;
+    return true;
+}
+
+function parseNum(v) {
+    if (v == null || v === "") return 0;
+    if (typeof v === "number" && isFinite(v)) return v;
+    const m = String(v).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : 0;
+}
+
+function normSex(v) {
+    const s = String(v || "").toUpperCase().trim();
+    if (s === "M" || s === "MALE") return "Male";
+    if (s === "F" || s === "FEMALE") return "Female";
+    return "Unspecified";
+}
+
+function normBT(v) {
+    let s = String(v || "").toUpperCase().trim()
+        .replace(/\./g, " ").replace(/_/g, " ").replace(/\s+/g, " ")
+        .replace(/TYPE\s*/g, "").replace(/GROUP\s*/g, "").replace(/BLOOD\s*/g, "")
+        .replace(/R\/H|RH\s*FACTOR|RH\s*TYPE|\bRH\b/g, "")
+        .replace(/POSITIVE|\bPOS\b/g, "+").replace(/NEGATIVE|\bNEG\b/g, "-")
+        .replace(/PLUS/g, "+").replace(/MINUS/g, "-").replace(/\s+/g, "").trim();
+
+    const aliases = {
+        "O+": ["O+", "OPOS", "O(+)"], "O-": ["O-", "ONEG", "O(-)"],
+        "A+": ["A+", "APOS", "A(+)"], "A-": ["A-", "ANEG", "A(-)"],
+        "B+": ["B+", "BPOS", "B(+)"], "B-": ["B-", "BNEG", "B(-)"],
+        "AB+": ["AB+", "ABPOS", "AB(+)"], "AB-": ["AB-", "ABNEG", "AB(-)"]
+    };
+    for (const [key, vals] of Object.entries(aliases)) if (vals.includes(s)) return key;
+    if (["O", "A", "B", "AB"].includes(s)) return s + "+";
+    return "Unknown";
+}
+
+function normBag(v) {
+    const s = String(v || "").toUpperCase().trim();
+    if (["S", "SINGLE", "1"].includes(s)) return "S";
+    if (["D", "DOUBLE", "2"].includes(s)) return "D";
+    if (["T", "TRIPLE", "3"].includes(s)) return "T";
+    if (["Q", "QUADRUPLE", "QUAD", "4"].includes(s)) return "Q";
+    return "Unknown";
+}
+
+function getAge(r) {
+    const direct = parseNum(r.age);
+    if (direct >= 1 && direct <= 120) return direct;
+    const birth = parseDate(r.birthday || r.birthDate || r.dateOfBirth || null);
+    const donation = parseDate(r.entryDate || r.donationDate || r.date || r.bleedingDate || r.createdAt || null);
+    if (!birth || !donation) return null;
+    let age = donation.getFullYear() - birth.getFullYear();
+    const md = donation.getMonth() - birth.getMonth();
+    if (md < 0 || (md === 0 && donation.getDate() < birth.getDate())) age--;
+    return age >= 0 && age <= 120 ? age : null;
+}
+
+function ageGroup(a) {
+    if (a == null) return "Unspecified";
+    if (a <= 17) return "16-17";
+    if (a <= 20) return "18-20";
+    if (a <= 30) return "21-30";
+    if (a <= 40) return "31-40";
+    if (a <= 50) return "41-50";
+    if (a <= 60) return "51-60";
+    if (a <= 65) return "60-65";
+    return "66 & above";
+}
+
+function donorFrequency(v) {
+    const s = String(v || "").toLowerCase();
+    if (s.includes("new") || s.includes("first")) return "First-time donors";
+    if (s.includes("lapse") || s.includes("non")) return "Repeat non-regular";
+    if (s.includes("repeat") || s.includes("regular")) return "Repeat regular";
+    return "Unspecified";
+}
+
+function getDonorTypes(r) {
+    const raw = String(r.donorType || "").trim();
+    const vals = [], seen = new Set();
+    raw.split(/[,|/]+/).forEach(part => {
+        const s = part.trim().toLowerCase().replace(/[-]+/g, " ").replace(/\s+/g, " ");
+        if (s === "mbd" && !seen.has("MBD")) { seen.add("MBD"); vals.push("MBD"); }
+        if ((s === "walk in" || s === "walkin") && !seen.has("Walk-in")) { seen.add("Walk-in"); vals.push("Walk-in"); }
+        if ((s === "patient directed" || s === "patientdirected") && !seen.has("Patient Directed")) { seen.add("Patient Directed"); vals.push("Patient Directed"); }
+    });
+    if (String(r.mbdDetails || "").trim() && !seen.has("MBD")) { seen.add("MBD"); vals.push("MBD"); }
+    if (String(r.patientDirectedDetails || "").trim() && !seen.has("Patient Directed")) { seen.add("Patient Directed"); vals.push("Patient Directed"); }
+    if (String(r.walkInRaw || "").trim() && !seen.has("Walk-in")) { seen.add("Walk-in"); vals.push("Walk-in"); }
+    return vals;
+}
+
+function primaryType(r) {
+    const t = getDonorTypes(r);
+    if (t.includes("MBD")) return "MBD";
+    if (t.includes("Patient Directed")) return "Patient Directed";
+    if (t.includes("Walk-in")) return "Walk-in";
+    return "Unspecified";
+}
+
+function addOne(obj, key, qty = 1) { obj[key] = (obj[key] || 0) + qty; }
+
+function componentFromBag(bag) {
+    if (bag === "Q") return {"450 cc":0, PRBC:1, FFP:1, PC:1, CRYO:1};
+    if (bag === "T") return {"450 cc":0, PRBC:1, FFP:1, PC:1, CRYO:0};
+    if (bag === "D") return {"450 cc":1, PRBC:0, FFP:0, PC:0, CRYO:0};
+    if (bag === "S") return {"450 cc":1, PRBC:0, FFP:0, PC:0, CRYO:0};
+    return {"450 cc":0, PRBC:0, FFP:0, PC:0, CRYO:0};
+}
+
+function normGroup(v) {
+    return String(v || "Unspecified").toUpperCase().trim().replace(/[’']/g, "").replace(/[._,\\/]+/g, " ").replace(/\s+/g, " ") || "Unspecified";
+}
+
+// ─── DATA LOAD ───────────────────────────────────────────────────────────────
+async function loadFirestoreMonth(collectionName, year, month) {
+    const key = monthKey(year, month);
+    let records = [];
+
+    try {
+        const snap = await fs.collection(collectionName).where("collectionMonthKey", "==", key).get();
+        snap.forEach(doc => records.push({id: doc.id, ...doc.data()}));
+    } catch (e) {
+        console.warn(collectionName + " monthKey query failed:", e);
+    }
+
+    if (!records.length) {
+        try {
+            const snap = await fs.collection(collectionName)
+                .where("collectionYear", "==", Number(year))
+                .where("collectionMonth", "==", Number(month))
+                .get();
+            snap.forEach(doc => records.push({id: doc.id, ...doc.data()}));
+        } catch (e) {
+            console.warn(collectionName + " year/month query failed:", e);
+        }
+    }
+
+    if (!records.length) {
+        try {
+            const snap = await fs.collection(collectionName).get();
+            snap.forEach(doc => {
+                const r = {id: doc.id, ...doc.data()};
+                if (recordMatchesMonth(r, year, month)) records.push(r);
             });
+        } catch (e) {
+            console.warn(collectionName + " fallback query failed:", e);
+        }
+    }
 
-            return data;
+    return records.filter(isVisible);
+}
+
+async function loadReleasingMonth(year, month) {
+    const out = [];
+    try {
+        const snap = await rtdb.ref("releasing").once("value");
+        flattenRTDB(snap.val(), out);
+    } catch (e) {
+        console.warn("Releasing load failed:", e);
+    }
+    return out.filter(r => recordMatchesMonth(r, year, month));
+}
+
+function flattenRTDB(node, out) {
+    if (node == null) return;
+    if (Array.isArray(node)) { node.forEach(x => flattenRTDB(x, out)); return; }
+    if (typeof node !== "object") return;
+    const keys = Object.keys(node).map(k => k.toLowerCase());
+    const isRec = ["date", "requestdate", "releaseddate", "requests", "wb", "prbc", "ffp", "pc", "cryo", "patientname", "facility"].some(k => keys.includes(k));
+    if (isRec) { out.push(node); return; }
+    Object.keys(node).forEach(k => flattenRTDB(node[k], out));
+}
+
+// ─── REPORT COMPUTATION ──────────────────────────────────────────────────────
+function emptyCounter(keys) {
+    const obj = {};
+    keys.forEach(k => obj[k] = 0);
+    return obj;
+}
+
+function buildDonorPreview(records) {
+    const data = {
+        totalRecords: records.length,
+        categorizedDonors: 0,
+        office: emptyCounter(["Walk-in", "Patient Directed", "Unspecified"]),
+        field: emptyCounter(["MBD", "Unspecified"]),
+        bag: emptyCounter(["S", "D", "T", "Q", "Unknown"]),
+        bloodType: emptyCounter(["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "Unknown"]),
+        sex: emptyCounter(["Male", "Female", "Unspecified"]),
+        age: emptyCounter(["16-17", "18-20", "21-30", "31-40", "41-50", "51-60", "60-65", "66 & above", "Unspecified"]),
+        frequency: emptyCounter(["First-time donors", "Repeat non-regular", "Repeat regular", "Unspecified"]),
+        components: emptyCounter(["450 cc", "PRBC", "FFP", "PC", "CRYO"]),
+        mbdGroups: {}
+    };
+
+    records.forEach(r => {
+        const pType = primaryType(r);
+        const bag = normBag(r.bloodBagType || r.bagType || r.bag || "");
+        const bt = normBT(r.bloodType || r.bloodGroup || "");
+        const sex = normSex(r.sex || r.gender || "");
+        const age = ageGroup(getAge(r));
+        const freq = donorFrequency(r.donorCategory || r.category || r.frequency || "");
+
+        if (pType !== "Unspecified") data.categorizedDonors++;
+        if (pType === "MBD") {
+            data.field.MBD++;
+            const group = normGroup(r.mbdDetails || r.groupName || r.partner || "Unspecified");
+            addOne(data.mbdGroups, group);
+        } else if (pType === "Walk-in" || pType === "Patient Directed") {
+            data.office[pType]++;
+        } else {
+            data.office.Unspecified++;
+            data.field.Unspecified++;
         }
 
-        function setThisMonth() {
-            const phDate = getPhilippineDateParts();
-            document.getElementById("reportMonth").value = String(phDate.month);
-            document.getElementById("reportYear").value = String(phDate.year);
-            showStatus("This month selected: " + monthNames[phDate.month - 1] + " " + phDate.year + ".");
-        }
+        addOne(data.bag, bag);
+        addOne(data.bloodType, bt);
+        addOne(data.sex, sex);
+        addOne(data.age, age);
+        addOne(data.frequency, freq);
 
-        function showStatus(message) {
-            const statusBox = document.getElementById("statusBox");
-            statusBox.textContent = message;
-            statusBox.style.display = "block";
-        }
+        const comps = componentFromBag(bag);
+        Object.keys(comps).forEach(k => data.components[k] += comps[k]);
+    });
 
-        function generateMonthlyReport() {
-            const month = Number(document.getElementById("reportMonth").value);
-            const year = Number(document.getElementById("reportYear").value);
+    return data;
+}
 
-            if (!month || !year) {
-                showStatus("Please select a valid month and year.");
-                return;
-            }
+function deferralType(r) {
+    const raw = String(r.type || r.deferralType || r.category || "").toLowerCase();
+    if (raw.includes("permanent") || raw === "p") return "Permanent";
+    if (raw.includes("temporary") || raw === "t") return "Temporary";
+    return "Unspecified";
+}
 
-            showStatus(
-                "Selected report: " + monthNames[month - 1] + " " + year +
-                ". Data connection and Excel generation will be added in the next step."
-            );
-        }
+function deferralReason(r) {
+    return String(r.deferral || r.reason || r.deferralReason || r.remarks || "Unspecified").trim() || "Unspecified";
+}
 
-        setThisMonth();
-    </script>
+function buildDeferralPreview(records) {
+    const data = {
+        total: records.length,
+        type: emptyCounter(["Temporary", "Permanent", "Unspecified"]),
+        ubQns: emptyCounter(["UB / Unsuccessful Bleeding", "QNS", "Others"]),
+        reasons: {}
+    };
+
+    records.forEach(r => {
+        const type = deferralType(r);
+        const reason = deferralReason(r);
+        const low = reason.toLowerCase();
+        addOne(data.type, type);
+        addOne(data.reasons, reason);
+        if (low.includes("qns") || low.includes("quantity not sufficient")) addOne(data.ubQns, "QNS");
+        else if (low.includes("ub") || low.includes("unsuccess") || low.includes("unsuccessful")) addOne(data.ubQns, "UB / Unsuccessful Bleeding");
+        else addOne(data.ubQns, "Others");
+    });
+
+    return data;
+}
+
+function getReleaseComponentCounts(r) {
+    const out = emptyCounter(["WB", "PRBC", "FFP", "PC", "CRYO"]);
+
+    const directFields = [
+        ["WB", ["wb", "WB", "wholeBlood", "whole_blood", "450cc", "blood450"]],
+        ["PRBC", ["prbc", "PRBC", "packedRBC", "packedCells"]],
+        ["FFP", ["ffp", "FFP", "freshFrozenPlasma"]],
+        ["PC", ["pc", "PC", "platelet", "platelets", "plateletConcentrate"]],
+        ["CRYO", ["cryo", "CRYO", "cryoprecipitate"]]
+    ];
+
+    directFields.forEach(([component, fields]) => {
+        fields.forEach(f => {
+            if (r[f] != null) out[component] += parseNum(r[f]);
+        });
+    });
+
+    const arrays = [r.requests, r.components, r.releasedComponents, r.items, r.products].filter(Array.isArray);
+    arrays.forEach(arr => arr.forEach(item => {
+        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
+        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
+        if (comp && qty) out[comp] += qty;
+    }));
+
+    return out;
+}
+
+function normReleaseComponent(v) {
+    const s = String(v || "").toUpperCase().trim();
+    if (["WB", "WHOLE BLOOD", "450CC", "450 CC", "450"].includes(s)) return "WB";
+    if (s.includes("PRBC") || s.includes("PACKED")) return "PRBC";
+    if (s.includes("FFP") || s.includes("PLASMA")) return "FFP";
+    if (s === "PC" || s.includes("PLATELET")) return "PC";
+    if (s.includes("CRYO")) return "CRYO";
+    return "";
+}
+
+function releaseFacility(r) {
+    return String(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified").trim() || "Unspecified";
+}
+
+function buildReleasingPreview(records) {
+    const data = {
+        totalTransactions: records.length,
+        patientsServed: records.length,
+        components: emptyCounter(["WB", "PRBC", "FFP", "PC", "CRYO"]),
+        facilities: {}
+    };
+
+    records.forEach(r => {
+        const counts = getReleaseComponentCounts(r);
+        const facility = releaseFacility(r);
+        if (!data.facilities[facility]) data.facilities[facility] = {patients: 0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
+        data.facilities[facility].patients++;
+        Object.keys(counts).forEach(k => {
+            data.components[k] += counts[k];
+            data.facilities[facility][k] += counts[k];
+        });
+    });
+
+    return data;
+}
+
+async function previewMonthlyReport() {
+    const month = Number(document.getElementById("reportMonth").value);
+    const year = Number(document.getElementById("reportYear").value);
+
+    if (!month || !year || month < 1 || month > 12) {
+        showStatus("Please select a valid month and year.", "warn");
+        return;
+    }
+
+    if (!authReady) {
+        showStatus("Checking login status. Please click Preview Report again after a moment.", "info");
+        return;
+    }
+
+    if (!auth.currentUser) {
+        showStatus("Please login first before generating a monthly report.", "warn");
+        return;
+    }
+
+    showStatus("Loading " + monthNames[month - 1] + " " + year + " records from Firebase...", "info");
+
+    try {
+        const [donors, deferrals, releases] = await Promise.all([
+            loadFirestoreMonth("donorDatabase", year, month),
+            loadFirestoreMonth("donorDeferrals", year, month),
+            loadReleasingMonth(year, month)
+        ]);
+
+        const donorPreview = buildDonorPreview(donors);
+        const deferralPreview = buildDeferralPreview(deferrals);
+        const releasingPreview = buildReleasingPreview(releases);
+
+        lastPreviewData = {
+            month, year,
+            donors, deferrals, releases,
+            donorPreview, deferralPreview, releasingPreview,
+            generatedAt: new Date()
+        };
+
+        renderPreview(lastPreviewData);
+        document.getElementById("downloadExcelBtn").disabled = false;
+        showStatus("Preview generated. Please review the values before downloading the final Excel.", "ok");
+    } catch (error) {
+        console.error(error);
+        showStatus("Preview failed: " + (error.message || error), "error");
+    }
+}
+
+// ─── RENDERING ────────────────────────────────────────────────────────────────
+function renderPreview(data) {
+    const title = `${monthNames[data.month - 1]} ${data.year} Monthly Report Preview`;
+    document.getElementById("previewTitle").textContent = title;
+    document.getElementById("previewSubtitle").textContent = "Values are computed from Firebase records. The Excel template cell mapping is the next step.";
+    document.getElementById("previewGeneratedAt").textContent = "Generated: " + new Intl.DateTimeFormat("en-PH", {timeZone:"Asia/Manila", dateStyle:"medium", timeStyle:"short"}).format(data.generatedAt);
+
+    const totalReleased = Object.values(data.releasingPreview.components).reduce((a,b)=>a+b,0);
+    const totalPrepared = Object.values(data.donorPreview.components).reduce((a,b)=>a+b,0);
+
+    document.getElementById("summaryGrid").innerHTML = `
+        ${summaryBox("Donor Records", data.donorPreview.totalRecords)}
+        ${summaryBox("Deferrals", data.deferralPreview.total)}
+        ${summaryBox("Components Prepared", totalPrepared)}
+        ${summaryBox("Units Released", totalReleased)}
+    `;
+
+    document.getElementById("sheetPreviewContainer").innerHTML = `
+        ${sheetBlock("BS 323 - Monthly Summary", "blue", renderBS323(data), true)}
+        ${sheetBlock("BS 324a - Collection / Components / Requests", "green", renderBS324a(data), true)}
+        ${sheetBlock("BS 325 - Donor Profile", "purple", renderBS325(data), false)}
+        ${sheetBlock("Wastages & Spoilage / Deferrals", "orange", renderDeferrals(data), false)}
+        ${sheetBlock("BM7 - Releasing Preview", "blue", renderBM7(data), false)}
+        ${sheetBlock("Manual Fields Still Needed", "orange", renderManualFields(), false)}
+    `;
+
+    document.getElementById("previewCard").classList.add("show");
+}
+
+function summaryBox(label, value) {
+    return `<div class="summary-box"><div class="label">${escH(label)}</div><div class="value">${Number(value || 0).toLocaleString()}</div></div>`;
+}
+
+function sheetBlock(title, color, body, open) {
+    const id = "sheet_" + Math.random().toString(36).slice(2, 8);
+    return `
+        <div class="sheet-block">
+            <div class="sheet-head ${escH(color)}" onclick="toggleSheet('${id}')">
+                <span>${escH(title)}</span><span>▼</span>
+            </div>
+            <div id="${id}" class="sheet-body ${open ? "open" : ""}">${body}</div>
+        </div>
+    `;
+}
+
+function toggleSheet(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("open");
+}
+
+function table(headers, rows) {
+    if (!rows.length) return `<div class="empty">No records found for this section.</div>`;
+    return `
+        <div class="table-wrap">
+            <table>
+                <thead><tr>${headers.map(h => `<th>${escH(h)}</th>`).join("")}</tr></thead>
+                <tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escH(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderBS323(data) {
+    const d = data.donorPreview;
+    const r = data.releasingPreview;
+    const totalReleased = Object.values(r.components).reduce((a,b)=>a+b,0);
+    return table(["Item", "Preview Value"], [
+        ["Total donor records", d.totalRecords],
+        ["Categorized donor records", d.categorizedDonors],
+        ["Temporary deferrals", data.deferralPreview.type.Temporary],
+        ["Permanent deferrals", data.deferralPreview.type.Permanent],
+        ["Patients / transactions served", r.patientsServed],
+        ["Total units released", totalReleased]
+    ]);
+}
+
+function renderBS324a(data) {
+    const d = data.donorPreview;
+    return `
+        ${table(["Collection Category", "Count"], [
+            ["Walk-in", d.office["Walk-in"]],
+            ["Patient Directed", d.office["Patient Directed"]],
+            ["Mobile Blood Donation / MBD", d.field.MBD],
+            ["Unspecified", d.office.Unspecified]
+        ])}
+        <br>
+        ${table(["Bag Type", "Count"], Object.entries(d.bag).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["Blood Type", "Count"], Object.entries(d.bloodType).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["Component Prepared", "Count"], Object.entries(d.components).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["MBD Group", "Donors"], Object.entries(d.mbdGroups).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([k,v]) => [k, v]))}
+    `;
+}
+
+function renderBS325(data) {
+    const d = data.donorPreview;
+    return `
+        ${table(["Sex", "Count"], Object.entries(d.sex).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["Age Group", "Count"], Object.entries(d.age).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["Donor Frequency", "Count"], Object.entries(d.frequency).map(([k,v]) => [k, v]))}
+    `;
+}
+
+function renderDeferrals(data) {
+    const d = data.deferralPreview;
+    return `
+        ${table(["Deferral Type", "Count"], Object.entries(d.type).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["UB / QNS Category", "Count"], Object.entries(d.ubQns).map(([k,v]) => [k, v]))}
+        <br>
+        ${table(["Reason", "Count"], Object.entries(d.reasons).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([k,v]) => [k, v]))}
+    `;
+}
+
+function renderBM7(data) {
+    const r = data.releasingPreview;
+    const componentRows = Object.entries(r.components).map(([k,v]) => [k, v]);
+    const facilityRows = Object.entries(r.facilities)
+        .sort((a,b) => b[1].patients - a[1].patients)
+        .slice(0, 80)
+        .map(([name, v]) => [name, v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+
+    return `
+        ${table(["Component Released", "Units"], componentRows)}
+        <br>
+        ${table(["Facility", "Patients/Transactions", "WB", "PRBC", "FFP", "PC", "CRYO"], facilityRows)}
+    `;
+}
+
+function renderManualFields() {
+    return `
+        <ul class="warn-list">
+            <li>BS 324b: trainings, mass blood typing, recruitment activities, counselling, and narrative fields if not encoded in the website.</li>
+            <li>BLOOD PROGRAM DEVELOPMENT: seminars, QA activities, MOA/MOU, Blood Samaritan, advocacy activities, and remarks.</li>
+            <li>Wastages & Spoilage: chylous, hemolyzed, clotted, reactive, expired, and other wastage categories if not encoded in the donor or deferral modules.</li>
+            <li>BM7 - DIAGNOSIS: diagnosis details only if your releasing module stores them and if you want them included.</li>
+            <li>Prepared by / reviewed by / noted by names and signatures.</li>
+        </ul>
+    `;
+}
+
+function downloadExcelReport() {
+    if (!lastPreviewData) {
+        showStatus("Please preview the report first before downloading.", "warn");
+        return;
+    }
+
+    showStatus("Excel download is the next step. The preview is ready; now we need the exact Excel cell mapping so the official workbook keeps the same style and formulas.", "warn");
+}
+
+setThisMonth();
+</script>
 </body>
 </html>
