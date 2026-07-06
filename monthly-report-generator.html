@@ -432,6 +432,7 @@ let lastPreviewData = null;
 let selectedTemplateFile = null;
 let authReady = false;
 let currentReleasingPrices = {WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, BOX:0};
+let lastRTDBDiagnostics = {};
 
 auth.onAuthStateChanged((user) => {
     authReady = true;
@@ -786,14 +787,146 @@ async function loadPartnerAliases() {
     return aliases;
 }
 
+function getMonthKeyFromValue(value) {
+    const iso = toISO(parseDate(value));
+    if (iso) return iso.slice(0, 7);
+
+    const s = String(value || "").trim();
+    if (!s) return "";
+
+    let m;
+    if ((m = s.match(/(20\d{2})[-_\/ ](\d{1,2})(?:[-_\/ ]\d{1,2})?/))) {
+        return `${m[1]}-${pad2(m[2])}`;
+    }
+    if ((m = s.match(/(\d{1,2})[-_\/ ](\d{1,2})[-_\/ ](20\d{2})/))) {
+        return `${m[3]}-${pad2(m[1])}`;
+    }
+
+    const txt = parseTxtDate(s);
+    if (txt) return txt.slice(0, 7);
+
+    return "";
+}
+
+function inferMonthKeyFromPath(pathText) {
+    const s = String(pathText || "").replace(/[\\]/g, "/");
+    if (!s) return "";
+
+    let m;
+    if ((m = s.match(/(20\d{2})[-_\/ ](\d{1,2})(?:[-_\/ ]\d{1,2})?/))) {
+        return `${m[1]}-${pad2(m[2])}`;
+    }
+    if ((m = s.match(/(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[-_\/ ]*(20\d{2})/i))) {
+        const monText = m[1].toLowerCase();
+        const key = Object.keys(MON).find(k => monText.startsWith(k));
+        if (key) return `${m[2]}-${pad2(MON[key])}`;
+    }
+    return "";
+}
+
+function recordMonthKey(r, fallbackPathKey) {
+    const fields = [
+        r?.date, r?.requestDate, r?.releasedDate, r?.releaseDate, r?.dateReleased,
+        r?.createdAt, r?.updatedAt, r?.timestamp, r?.dateEncoded
+    ];
+    for (const value of fields) {
+        const key = getMonthKeyFromValue(value);
+        if (key) return key;
+    }
+    return fallbackPathKey || "";
+}
+
+function hasRTDBComponentList(obj) {
+    return !!obj && typeof obj === "object" && (
+        Array.isArray(obj.requests) ||
+        Array.isArray(obj.issued) ||
+        Array.isArray(obj.bloodTypes) ||
+        Array.isArray(obj.products) ||
+        Array.isArray(obj.components) ||
+        Array.isArray(obj.items)
+    );
+}
+
+function normalizeRTDBReportRecord(value, id, pathText) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const fallbackMonth = inferMonthKeyFromPath(pathText);
+    return {
+        id:id || (pathText ? pathText.split("/").filter(Boolean).pop() : ""),
+        __path:pathText || "",
+        __monthKey:recordMonthKey(value, fallbackMonth),
+        ...value
+    };
+}
+
+function isLikelyRTDBReportRecord(obj, pathText) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+
+    const hasComponentLists = hasRTDBComponentList(obj);
+    const hasFacility = !!(obj.facility || obj.facilityName || obj.hospital || obj.requestingFacility || obj.institution || obj.patientHospital);
+    const hasPatient = !!(obj.surname || obj.firstname || obj.firstName || obj.patientName || obj.patient);
+    const hasPayment = obj.amountPaid !== undefined || obj.discount !== undefined || obj.boxContainerQty !== undefined || obj.or !== undefined;
+    const hasDateOrPathMonth = !!recordMonthKey(obj, inferMonthKeyFromPath(pathText));
+    const hasReleasingShape = hasDateOrPathMonth && (hasComponentLists || (hasFacility && (hasPatient || hasPayment)));
+    const hasAugmentationShape = hasDateOrPathMonth && hasFacility && Array.isArray(obj.bloodTypes);
+
+    // Releasing records are saved as RTDB child records with date/facility/requests/issued.
+    // Blood augmentation records are saved as date/facility/bloodTypes[], where each bloodTypes row has issued[].
+    // Older nested records may be under a month/date node, so the path can provide the month.
+    return hasReleasingShape || hasAugmentationShape;
+}
+
+function flattenRTDBReportRecords(value, pathText = "", out = []) {
+    if (!value || typeof value !== "object") return out;
+
+    if (isLikelyRTDBReportRecord(value, pathText)) {
+        const id = pathText ? pathText.split("/").filter(Boolean).pop() : "";
+        const normalized = normalizeRTDBReportRecord(value, id, pathText);
+        if (normalized) out.push(normalized);
+        return out;
+    }
+
+    Object.entries(value).forEach(([key, child]) => {
+        const childPath = pathText ? `${pathText}/${key}` : key;
+        flattenRTDBReportRecords(child, childPath, out);
+    });
+    return out;
+}
+
 async function loadRTDBPathMonth(path, year, month) {
-    const out = [];
+    const key = monthKey(year, month);
     try {
         const snap = await rtdb.ref(path).once("value");
-        snap.forEach(child => out.push({id: child.key, ...(child.val() || {})}));
-    } catch (e) { console.warn(path + " load failed:", e); }
-    const key = monthKey(year, month);
-    return out.filter(r => String(r.date || r.requestDate || r.releasedDate || "").slice(0,7) === key);
+        const raw = snap.val();
+        const directRows = [];
+
+        // Match releasing-statistics.html first: immediate children under releasing/ and bloodAugmentation/ are records.
+        snap.forEach(child => {
+            const childPath = `${path}/${child.key}`;
+            const val = child.val();
+            if (isLikelyRTDBReportRecord(val, childPath)) {
+                const normalized = normalizeRTDBReportRecord(val, child.key, childPath);
+                if (normalized) directRows.push(normalized);
+            }
+        });
+
+        // Keep the recursive fallback for old/date-grouped RTDB layouts without duplicating direct children.
+        const recursiveRows = flattenRTDBReportRecords(raw, path, []);
+        const byPath = {};
+        directRows.concat(recursiveRows).forEach(r => {
+            const uniqueKey = r.__path || r.id || JSON.stringify(r);
+            if (!byPath[uniqueKey]) byPath[uniqueKey] = r;
+        });
+
+        const rows = Object.values(byPath);
+        const filtered = rows.filter(r => r.__monthKey === key);
+        lastRTDBDiagnostics[path] = {raw:rows.length, direct:directRows.length, recursive:recursiveRows.length, selected:filtered.length, month:key};
+        console.log(`Monthly report ${path}: raw=${rows.length}, direct=${directRows.length}, recursive=${recursiveRows.length}, selected=${filtered.length}, month=${key}`);
+        return filtered;
+    } catch (e) {
+        console.warn(path + " load failed:", e);
+        lastRTDBDiagnostics[path] = {raw:0, direct:0, recursive:0, selected:0, month:key, error:String(e?.message || e)};
+        return [];
+    }
 }
 
 async function loadReleasingPrices() {
@@ -1002,21 +1135,34 @@ function buildDeferralData(deferralRecords, donorRecords) {
     return data;
 }
 
+function getComponentNameFromItem(item) {
+    if (item == null) return "";
+    if (typeof item !== "object") return item;
+    return item.type ?? item.component ?? item.product ?? item.name ?? item.componentType ?? item.bloodComponent ?? item.item ?? "";
+}
+
+function getComponentQtyFromItem(item) {
+    if (typeof item === "number") return item;
+    if (!item || typeof item !== "object") return 0;
+    return parseNum(item.qty ?? item.quantity ?? item.units ?? item.unit ?? item.count ?? item.number ?? item.value ?? 0);
+}
+
 function normReleaseComponent(v) {
-    const s = String(v || "").toUpperCase().trim();
-    if (["WB", "WHOLE BLOOD", "450CC", "450 CC", "450"].includes(s)) return "WB";
-    if (s.includes("PRBC") || s.includes("PACKED")) return "PRBC";
-    if (s.includes("FFP") || s.includes("PLASMA")) return "FFP";
-    if (s === "PC" || s.includes("PLATELET")) return "PC";
-    if (s.includes("CRYO")) return "CRYO";
+    const s = String(v || "").toUpperCase().trim().replace(/\s+/g, " ");
+    const compact = s.replace(/[^A-Z0-9]/g, "");
+    if (["WB", "WHOLEBLOOD", "450CC", "450ML", "450"].includes(compact) || s.includes("WHOLE BLOOD")) return "WB";
+    if (compact.includes("PRBC") || compact.includes("PACKEDREDCELL") || compact.includes("PACKEDRBC") || s.includes("PACKED RED")) return "PRBC";
+    if (compact === "FFP" || s.includes("FRESH FROZEN") || s.includes("PLASMA")) return "FFP";
+    if (compact === "PC" || compact.includes("PLATELET") || compact.includes("PLTC")) return "PC";
+    if (compact.includes("CRYO")) return "CRYO";
     return "";
 }
 
 function countComponentsFromList(list) {
     const out = emptyReleaseComponents();
     (Array.isArray(list) ? list : []).forEach(item => {
-        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
-        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
+        const comp = normReleaseComponent(getComponentNameFromItem(item));
+        const qty = getComponentQtyFromItem(item);
         if (comp && qty) out[comp] += qty;
     });
     return out;
@@ -1025,6 +1171,22 @@ function countComponentsFromList(list) {
 function addReleaseCounts(target, counts) { components.forEach(c => target[c] = (target[c] || 0) + (counts[c] || 0)); }
 function releaseFacility(r) { return normText(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified") || "Unspecified"; }
 function releaseSex(r) { return normSex(r.sex || r.gender || ""); }
+
+function getIssuedCountsForRecord(record) {
+    const out = countComponentsFromList(record?.issued);
+    if (sumObj(out) === 0 && Array.isArray(record?.bloodTypes)) {
+        record.bloodTypes.forEach(btRow => addReleaseCounts(out, countComponentsFromList(btRow?.issued)));
+    }
+    return out;
+}
+
+function getRequestedCountsForRecord(record) {
+    const out = countComponentsFromList(record?.requests);
+    if (sumObj(out) === 0 && Array.isArray(record?.bloodTypes)) {
+        record.bloodTypes.forEach(btRow => addReleaseCounts(out, countComponentsFromList(btRow?.requests)));
+    }
+    return out;
+}
 
 function getEntryPrices(entry) {
     const snap = entry?.priceSnapshot || {};
@@ -1045,8 +1207,8 @@ function getEntryPrices(entry) {
 function computeComponentListValue(list, prices) {
     const out = emptyReleaseComponents();
     (Array.isArray(list) ? list : []).forEach(item => {
-        const comp = normReleaseComponent(item.component || item.product || item.type || item.name || "");
-        const qty = parseNum(item.quantity || item.qty || item.units || item.count || 0);
+        const comp = normReleaseComponent(getComponentNameFromItem(item));
+        const qty = getComponentQtyFromItem(item);
         if (comp && qty) out[comp] += qty * (prices[comp] || 0);
     });
     return out;
@@ -1129,8 +1291,9 @@ function buildReleasingData(releases, augmentations) {
         const paymentGroup = actualIncome <= 0 ? "noCharge" : (discount > 0 ? "discounted" : "pay");
         data.patientServed[paymentGroup][sex] = (data.patientServed[paymentGroup][sex] || 0) + 1;
 
-        const reqCounts = countComponentsFromList(r.requests);
-        const issuedCounts = countComponentsFromList(r.issued);
+        // Same source shape as releasing-statistics.html: requests[] and issued[] with {type, qty}.
+        const reqCounts = getRequestedCountsForRecord(r);
+        const issuedCounts = getIssuedCountsForRecord(r);
         addReleaseCounts(data.requestTotal, reqCounts);
         addReleaseCounts(data.issuedTotal, issuedCounts);
         addReleaseCounts(data.unitsByPayment[paymentGroup], issuedCounts);
@@ -1155,13 +1318,11 @@ function buildReleasingData(releases, augmentations) {
         if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
         const af = data.augmentationFacilities[facility];
         af.patients++;
-        const prices = getEntryPrices(r);
         data.augmentationAmount += Math.max(0, parseNum(r.amountPaid) - parseNum(r.discount));
-        const bloodTypesArray = Array.isArray(r.bloodTypes) ? r.bloodTypes : [];
-        bloodTypesArray.forEach(btRow => {
-            const issuedCounts = countComponentsFromList(btRow.issued);
-            addReleaseCounts(af, issuedCounts);
-        });
+
+        // Blood augmentation records store issued components inside bloodTypes[].issued.
+        const issuedCounts = getIssuedCountsForRecord(r);
+        addReleaseCounts(af, issuedCounts);
     });
 
     return data;
@@ -1175,6 +1336,7 @@ async function previewMonthlyReport() {
     if (!auth.currentUser) { showStatus("Please login first before generating a monthly report.", "warn"); return; }
 
     showStatus("Loading " + monthNames[month - 1] + " " + year + " records from Firebase...", "info");
+    lastRTDBDiagnostics = {};
     try {
         const [donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, prices] = await Promise.all([
             loadFirestoreMonth("donorDatabase", year, month),
@@ -1191,7 +1353,7 @@ async function previewMonthlyReport() {
         const deferralData = buildDeferralData(deferrals, donors);
         const releasingData = buildReleasingData(releases, augmentations);
 
-        lastPreviewData = {month, year, donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, donorData, deferralData, releasingData, generatedAt: new Date()};
+        lastPreviewData = {month, year, donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, donorData, deferralData, releasingData, rtdbDiagnostics:{...lastRTDBDiagnostics}, generatedAt: new Date()};
         renderPreview(lastPreviewData);
         document.getElementById("downloadExcelBtn").disabled = false;
         showStatus("Preview generated. " + regularReleaseSummaryText(lastPreviewData) + ". You can now download the mapped Excel template.", "ok");
@@ -1286,7 +1448,7 @@ function renderBM7(data) {
 }
 
 function renderManualFields() {
-    return `<ul class="warn-list"><li>BS 324b and Blood Program Development remain manual unless you create a data-entry module for trainings, seminars, advocacy, MOA/MOU, recruitment sessions, and QA activities.</li><li>Reactive screening results and detailed wastage/spoilage categories remain manual because they are not fully encoded in the current website modules.</li><li>Prepared by / noted by names are kept from the template unless you add a manual monthly input record.</li></ul>`;
+    return `<ul class="warn-list"><li>BS 324b and Blood Program Development remain manual unless you create a data-entry module for trainings, seminars, advocacy, MOA/MOU, recruitment sessions, and QA activities.</li><li>Blood screening IR/RR/negative-to-5-diseases fields are cleared and left blank/manual because they are not fully encoded in the current website modules.</li><li>Prepared by / noted by / contact number / date reported cells are cleared and left blank for the reporter.</li></ul>`;
 }
 
 // ─── EXCEL WRITING HELPERS ──────────────────────────────────────────────────
@@ -1357,7 +1519,10 @@ function copySafeArray(arr) { return Array.isArray(arr) ? arr : []; }
 function regularReleaseSummaryText(data) {
     const r = data?.releasingData || {};
     const units = sumObj(r.issuedTotal || {});
-    return `Releasing records loaded: ${r.regularRecords || 0}; augmentation records: ${r.augmentationRecords || 0}; regular units issued: ${units}`;
+    const diag = data?.rtdbDiagnostics || {};
+    const relDiag = diag.releasing ? `; releasing source scan raw=${diag.releasing.raw}, selected=${diag.releasing.selected}` : "";
+    const augDiag = diag.bloodAugmentation ? `; augmentation source scan raw=${diag.bloodAugmentation.raw}, selected=${diag.bloodAugmentation.selected}` : "";
+    return `Releasing records loaded: ${r.regularRecords || 0}; augmentation records: ${r.augmentationRecords || 0}; regular units issued: ${units}${relDiag}${augDiag}`;
 }
 
 function fillBS323(workbook, data) {
@@ -1580,9 +1745,20 @@ function buildFacilityClassMap(workbook) {
     return map;
 }
 
+function clearWastageManualScreening(ws) {
+    if (!ws) return;
+    [
+        "B11:D11", "F11:H11", "J11:L11", "B14:D18", "F14:H18", "J14:L18",
+        "B34:D34", "F34:H34", "J34:L34", "B37:D41", "F37:H41", "J37:L41",
+        "B57:D57", "F57:H57", "J57:L57", "B60:D64", "F60:H64", "J60:L64",
+        "B80:D80", "F80:H80", "J80:L80", "B83:D87", "F83:H87", "J83:L87"
+    ].forEach(r => clearCellsIfNotFormula(ws, r));
+}
+
 function fillWastages(workbook, data) {
     const ws = workbook.getWorksheet("Wastages&Spoilage");
     if (!ws) return;
+    clearWastageManualScreening(ws);
     const month = data.month;
     const blocks = {
         1:{col:"B",row:3}, 2:{col:"F",row:3}, 3:{col:"J",row:3},
@@ -1596,12 +1772,28 @@ function fillWastages(workbook, data) {
     setNum(ws, `${b.col}${b.row + 9}`, data.donorData.ub);
 }
 
+function clearReporterFields(workbook) {
+    const targets = {
+        "BS 323": ["B94", "C96", "B98", "B100"],
+        "BS 324a": ["C191", "C193", "C195", "C197"],
+        "BS 324b": ["C60", "C62", "C64", "C66"],
+        "BM7": ["C232", "C234", "C236", "C238"],
+        "BS 325": ["C47", "C49", "C51", "C53"],
+        "BLOOD PROGRAM DEVELOPMENT": ["D23", "D25", "D27", "D29"]
+    };
+    Object.entries(targets).forEach(([sheetName, cells]) => {
+        const ws = workbook.getWorksheet(sheetName);
+        if (!ws) return;
+        cells.forEach(addr => setCell(ws, addr, ""));
+    });
+}
+
 function clearManualOnlySheets(workbook, data) {
     // BS 324b is purposely kept manual. Only clear previous sample/template answers, not headings.
     const b = workbook.getWorksheet("BS 324b");
     if (b) {
         setPeriodCell(b, "D1", data);
-        ["C2:C7", "C12:C20", "C23:C24", "B29:D38", "B42:E52", "C59:C65"].forEach(r => clearCellsIfNotFormula(b, r));
+        ["C2:C7", "C12:C20", "C23:C24", "B29:D38", "B42:E52", "C59:C66"].forEach(r => clearCellsIfNotFormula(b, r));
     }
 
     // Blood Program Development is manual in this website workflow. Keep labels/month period, clear only editable answer/name cells.
@@ -1622,6 +1814,7 @@ function fillWorkbook(workbook, data) {
     fillBM7(workbook, data);
     fillWastages(workbook, data);
     setReportPeriodCells(workbook, data);
+    clearReporterFields(workbook);
     workbook.calcProperties.fullCalcOnLoad = true;
     workbook.calcProperties.forceFullCalc = true;
     workbook.calcProperties.calcMode = "auto";
