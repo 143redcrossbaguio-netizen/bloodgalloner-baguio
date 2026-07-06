@@ -151,6 +151,43 @@
         }
 
         .notice{ background:#f8fafc; border:1px solid #e1e8f0; color:#475467; }
+
+        .template-fallback{
+            margin-top:12px;
+            padding:12px 14px;
+            border-radius:14px;
+            border:1px dashed #cbd5e1;
+            background:#ffffff;
+        }
+        .template-fallback label{
+            display:block;
+            margin-bottom:6px;
+            font-size:13px;
+            font-weight:800;
+            color:#334155;
+        }
+        .template-fallback input[type=file]{
+            width:100%;
+            padding:9px 10px;
+            border:1px solid #d6dde6;
+            border-radius:10px;
+            background:#f8fafc;
+            font-size:13px;
+        }
+        .template-fallback .template-note{
+            margin-top:6px;
+            color:#64748b;
+            font-size:12px;
+            font-weight:700;
+            line-height:1.45;
+        }
+        #templateFileStatus{
+            margin-top:6px;
+            font-size:12px;
+            font-weight:800;
+            color:#15803d;
+        }
+
         .status{ display:none; font-weight:700; }
         .status.info{ background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; display:block; }
         .status.ok{ background:#ecfdf5; border:1px solid #bbf7d0; color:#15803d; display:block; }
@@ -324,6 +361,14 @@
                         Preview lets you check the computed values before downloading. The official Excel file will still use your uploaded workbook as the template, so the final download can preserve the same style, colors, spacing, merged cells, formulas, and computations using the current mapped cells.
                     </div>
 
+                    <div class="template-fallback">
+                        <label for="templateFileInput">Excel Template Backup</label>
+                        <input type="file" id="templateFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                        <div class="template-note">Only use this if GitHub cannot load <b>monthly-report-template.xlsx</b>. Select the template file from your computer, then click Download Excel again.</div>
+                        <div id="templateFileStatus"></div>
+                    </div>
+
+
                     <div id="statusBox" class="status"></div>
                 </div>
             </div>
@@ -374,6 +419,7 @@ const reportBloodTypes = ["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"];
 const components = ["WB", "PRBC", "FFP", "PC", "CRYO"];
 
 let lastPreviewData = null;
+let selectedTemplateFile = null;
 let authReady = false;
 
 auth.onAuthStateChanged((user) => {
@@ -1386,15 +1432,61 @@ function fillWorkbook(workbook, data) {
     workbook.calcProperties.fullCalcOnLoad = true;
 }
 
+async function loadTemplateBuffer() {
+    const fetchCandidates = [
+        REPORT_TEMPLATE_FILE,
+        "./" + REPORT_TEMPLATE_FILE,
+        encodeURIComponent(REPORT_TEMPLATE_FILE)
+    ];
+
+    let fetchError = null;
+
+    for (const path of fetchCandidates) {
+        try {
+            const response = await fetch(path + "?v=" + Date.now(), {cache:"no-store"});
+            if (response.ok) {
+                return await response.arrayBuffer();
+            }
+            fetchError = new Error(path + " returned HTTP " + response.status);
+        } catch (error) {
+            fetchError = error;
+        }
+    }
+
+    if (selectedTemplateFile) {
+        showStatus("GitHub template was not found, so I am using the Excel template you selected manually...", "warn");
+        return await selectedTemplateFile.arrayBuffer();
+    }
+
+    throw new Error(
+        "Cannot load " + REPORT_TEMPLATE_FILE +
+        ". Upload it beside monthly-report-generator.html in GitHub, or choose the template using Excel Template Backup before clicking Download Excel. " +
+        (fetchError ? "Last fetch error: " + (fetchError.message || fetchError) : "")
+    );
+}
+
+function setupTemplateFileInput(){
+    const input = document.getElementById("templateFileInput");
+    const status = document.getElementById("templateFileStatus");
+    if(!input) return;
+
+    input.addEventListener("change", () => {
+        selectedTemplateFile = input.files && input.files[0] ? input.files[0] : null;
+        if(status){
+            status.textContent = selectedTemplateFile
+                ? "Selected template: " + selectedTemplateFile.name
+                : "";
+        }
+    });
+}
+
 async function downloadExcelReport() {
     if (!lastPreviewData) { showStatus("Please preview the report first before downloading.", "warn"); return; }
     if (typeof ExcelJS === "undefined") { showStatus("Excel library did not load. Please check internet connection and reload the page.", "error"); return; }
 
     showStatus("Loading Excel template and writing mapped cells...", "info");
     try {
-        const response = await fetch(REPORT_TEMPLATE_FILE + "?v=" + Date.now());
-        if (!response.ok) throw new Error("Cannot load " + REPORT_TEMPLATE_FILE + ". Upload this template file beside monthly-report-generator.html in GitHub.");
-        const buffer = await response.arrayBuffer();
+        const buffer = await loadTemplateBuffer();
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);
         fillWorkbook(workbook, lastPreviewData);
@@ -1415,6 +1507,7 @@ async function downloadExcelReport() {
     }
 }
 
+setupTemplateFileInput();
 setThisMonth();
 </script>
 
