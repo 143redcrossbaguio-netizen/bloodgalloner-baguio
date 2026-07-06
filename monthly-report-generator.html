@@ -431,6 +431,7 @@ const components = ["WB", "PRBC", "FFP", "PC", "CRYO"];
 let lastPreviewData = null;
 let selectedTemplateFile = null;
 let authReady = false;
+let currentReleasingPrices = {WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, BOX:0};
 
 auth.onAuthStateChanged((user) => {
     authReady = true;
@@ -795,6 +796,25 @@ async function loadRTDBPathMonth(path, year, month) {
     return out.filter(r => String(r.date || r.requestDate || r.releasedDate || "").slice(0,7) === key);
 }
 
+async function loadReleasingPrices() {
+    try {
+        const snap = await rtdb.ref("settings/releasingPrices").once("value");
+        const p = snap.val() || {};
+        currentReleasingPrices = {
+            WB: parseNum(p.wb ?? p.WB),
+            PRBC: parseNum(p.prbc ?? p.PRBC),
+            FFP: parseNum(p.ffp ?? p.FFP),
+            PC: parseNum(p.pc ?? p.PC),
+            CRYO: parseNum(p.cryo ?? p.CRYO),
+            BOX: parseNum(p.boxContainer ?? p.box ?? p.BOX)
+        };
+    } catch (e) {
+        console.warn("Releasing price load failed:", e);
+        currentReleasingPrices = {WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, BOX:0};
+    }
+    return currentReleasingPrices;
+}
+
 async function loadManualMonthlyInputs(year, month) {
     const key = monthKey(year, month);
     const paths = [
@@ -1008,7 +1028,7 @@ function releaseSex(r) { return normSex(r.sex || r.gender || ""); }
 
 function getEntryPrices(entry) {
     const snap = entry?.priceSnapshot || {};
-    return {
+    const out = {
         WB: parseNum(snap.WB ?? snap.wb),
         PRBC: parseNum(snap.PRBC ?? snap.prbc),
         FFP: parseNum(snap.FFP ?? snap.ffp),
@@ -1016,6 +1036,10 @@ function getEntryPrices(entry) {
         CRYO: parseNum(snap.CRYO ?? snap.cryo),
         BOX: parseNum(snap.BOX ?? snap.box ?? snap.boxContainer)
     };
+    Object.keys(out).forEach(k => {
+        if (!out[k]) out[k] = parseNum(currentReleasingPrices[k]);
+    });
+    return out;
 }
 
 function computeComponentMoney(list, prices) {
@@ -1096,17 +1120,7 @@ function buildReleasingData(releases, augmentations) {
         af.patients++;
         const bloodTypesArray = Array.isArray(r.bloodTypes) ? r.bloodTypes : [];
         bloodTypesArray.forEach(btRow => {
-            const bt = normBT(btRow.bloodType || "Unknown");
-            const reqCounts = countComponentsFromList(btRow.requests);
             const issuedCounts = countComponentsFromList(btRow.issued);
-            addReleaseCounts(data.requestTotal, reqCounts);
-            addReleaseCounts(data.issuedTotal, issuedCounts);
-            addReleaseCounts(data.unitsByPayment.pay, issuedCounts);
-            addReleaseCounts(data.moneyByPayment.pay, computeComponentMoney(btRow.issued, getEntryPrices(r)));
-            if (!data.requestedByBT[bt]) data.requestedByBT[bt] = emptyReleaseComponents();
-            if (!data.issuedByBT[bt]) data.issuedByBT[bt] = emptyReleaseComponents();
-            addReleaseCounts(data.requestedByBT[bt], reqCounts);
-            addReleaseCounts(data.issuedByBT[bt], issuedCounts);
             addReleaseCounts(af, issuedCounts);
         });
     });
@@ -1123,14 +1137,15 @@ async function previewMonthlyReport() {
 
     showStatus("Loading " + monthNames[month - 1] + " " + year + " records from Firebase...", "info");
     try {
-        const [donors, deferrals, releases, augmentations, mappings, partnerAliases, manual] = await Promise.all([
+        const [donors, deferrals, releases, augmentations, mappings, partnerAliases, manual, prices] = await Promise.all([
             loadFirestoreMonth("donorDatabase", year, month),
             loadFirestoreMonth("donorDeferrals", year, month),
             loadRTDBPathMonth("releasing", year, month),
             loadRTDBPathMonth("bloodAugmentation", year, month),
             loadMappings(),
             loadPartnerAliases(),
-            loadManualMonthlyInputs(year, month)
+            loadManualMonthlyInputs(year, month),
+            loadReleasingPrices()
         ]);
 
         const donorData = buildDonorData(donors, mappings, partnerAliases);
@@ -1242,6 +1257,16 @@ function clearCells(ws, range) {
     const s = ws.getCell(start), e = ws.getCell(end);
     for (let r = s.row; r <= e.row; r++) for (let c = s.col; c <= e.col; c++) ws.getCell(r,c).value = null;
 }
+function clearCellsIfNotFormula(ws, range) {
+    const [start, end] = range.split(":");
+    const s = ws.getCell(start), e = ws.getCell(end);
+    for (let r = s.row; r <= e.row; r++) {
+        for (let c = s.col; c <= e.col; c++) {
+            const cell = ws.getCell(r,c);
+            if (!isFormulaCell(cell)) cell.value = null;
+        }
+    }
+}
 function setDateCell(ws, addr, date) {
     const cell = ws.getCell(addr);
     cell.value = date;
@@ -1263,6 +1288,14 @@ function copySafeArray(arr) { return Array.isArray(arr) ? arr : []; }
 function fillBS323(workbook, data) {
     const ws = workbook.getWorksheet("BS 323");
     if (!ws) return;
+
+    // Clear stale template values first. These sections are either manual or will be recomputed below.
+    clearCellsIfNotFormula(ws, "C15:E33");      // Screening test tables are manual.
+    clearCellsIfNotFormula(ws, "D42:H44");      // Patient served.
+    clearCellsIfNotFormula(ws, "F52:Q69");      // Units dispensed / BPF collection input cells.
+    clearCellsIfNotFormula(ws, "B68:L69");      // Old-rate rows are manual and should start blank.
+    clearCellsIfNotFormula(ws, "T52:W69");      // Hidden/helper old-rate area from the source template.
+
     setDateCell(ws, "D3", monthStartDate(data.year, data.month));
     setNum(ws, "D5", data.donorData.totalRecords);
 
@@ -1271,7 +1304,9 @@ function fillBS323(workbook, data) {
     setNum(ws, "D43", ps.discounted.Male); setNum(ws, "E43", ps.discounted.Female);
     setNum(ws, "D44", ps.noCharge.Male); setNum(ws, "E44", ps.noCharge.Female);
 
-    const mapRows = {WB:52, PRBC:53, PC:54, FFP:55, CRYO:57};
+    // Correct rows in the official template:
+    // 53 = Whole Blood 450 ml, 54 = PRBC, 55 = Platelet Concentrate, 56 = FFP, 58 = Cryoprecipitate.
+    const mapRows = {WB:53, PRBC:54, PC:55, FFP:56, CRYO:58};
     Object.entries(mapRows).forEach(([comp,row]) => {
         setNum(ws, `F${row}`, data.releasingData.unitsByPayment.pay[comp]);
         setNum(ws, `G${row}`, data.releasingData.unitsByPayment.discounted[comp]);
@@ -1285,6 +1320,7 @@ function fillBS323(workbook, data) {
 function fillBS324a(workbook, data) {
     const ws = workbook.getWorksheet("BS 324a");
     if (!ws) return;
+    setDateCell(ws, "C1", monthStartDate(data.year, data.month));
     const d = data.donorData;
     writeRowValues(ws, 6, 6, [d.office["Walk-in"].S, d.office["Walk-in"].D, d.office["Walk-in"].T, d.office["Walk-in"].Q, 0,0,0]);
     writeRowValues(ws, 7, 6, [d.office["Patient Directed"].S, d.office["Patient Directed"].D, d.office["Patient Directed"].T, d.office["Patient Directed"].Q, 0,0,0]);
@@ -1366,6 +1402,7 @@ function fillBS325(workbook, data) {
 function fillBM7(workbook, data) {
     const ws = workbook.getWorksheet("BM7");
     if (!ws) return;
+    setDateCell(ws, "C7", monthStartDate(data.year, data.month));
     const classMap = buildFacilityClassMap(workbook);
     const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility)).slice(0,70);
     clearCells(ws, "B10:O79");
@@ -1433,7 +1470,23 @@ function fillWastages(workbook, data) {
     setNum(ws, `${b.col}${b.row + 9}`, data.donorData.ub);
 }
 
+function clearManualOnlySheets(workbook, data) {
+    // BS 324b is purposely kept manual. Only clear previous sample/template answers, not headings.
+    const b = workbook.getWorksheet("BS 324b");
+    if (b) {
+        setDateCell(b, "D1", monthStartDate(data.year, data.month));
+        ["C2:C7", "C12:C20", "C23:C24", "B29:D38", "B42:E52", "C59:C65"].forEach(r => clearCellsIfNotFormula(b, r));
+    }
+
+    // Blood Program Development is manual in this website workflow.
+    const bp = workbook.getWorksheet("BLOOD PROGRAM DEVELOPMENT");
+    if (bp) {
+        clearCellsIfNotFormula(bp, "A1:D74");
+    }
+}
+
 function fillWorkbook(workbook, data) {
+    clearManualOnlySheets(workbook, data);
     fillBS323(workbook, data);
     fillBS324a(workbook, data);
     fillBS325(workbook, data);
