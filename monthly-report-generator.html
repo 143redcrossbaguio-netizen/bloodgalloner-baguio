@@ -623,8 +623,8 @@ function isVisible(r) {
 // ─── DONOR NORMALIZATION ────────────────────────────────────────────────────
 function normSex(v) {
     const s = String(v || "").toUpperCase().trim();
-    if (s === "M" || s === "MALE") return "Male";
-    if (s === "F" || s === "FEMALE") return "Female";
+    if (s === "M" || s === "MALE" || s === "MAN" || s === "MASCULINE") return "Male";
+    if (s === "F" || s === "FEMALE" || s === "WOMAN" || s === "FEMININE") return "Female";
     return "Unspecified";
 }
 
@@ -1199,8 +1199,15 @@ function getComponentNameFromItem(item) {
 
 function getComponentQtyFromItem(item) {
     if (typeof item === "number") return item;
+    if (typeof item === "string") return parseNum(item);
     if (!item || typeof item !== "object") return 0;
     return parseNum(item.qty ?? item.quantity ?? item.units ?? item.unit ?? item.count ?? item.number ?? item.value ?? 0);
+}
+
+function asRTDBList(value) {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== "object") return [];
+    return Object.values(value);
 }
 
 function normReleaseComponent(v) {
@@ -1216,7 +1223,7 @@ function normReleaseComponent(v) {
 
 function countComponentsFromList(list) {
     const out = emptyReleaseComponents();
-    (Array.isArray(list) ? list : []).forEach(item => {
+    asRTDBList(list).forEach(item => {
         const comp = normReleaseComponent(getComponentNameFromItem(item));
         const qty = getComponentQtyFromItem(item);
         if (comp && qty) out[comp] += qty;
@@ -1226,7 +1233,36 @@ function countComponentsFromList(list) {
 
 function addReleaseCounts(target, counts) { components.forEach(c => target[c] = (target[c] || 0) + (counts[c] || 0)); }
 function releaseFacility(r) { return normText(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified") || "Unspecified"; }
-function releaseSex(r) { return normSex(r.sex || r.gender || ""); }
+function releaseSex(r) {
+    const values = [
+        r?.sex, r?.gender, r?.patientSex, r?.patientGender, r?.recipientSex, r?.recipientGender, r?.clientSex,
+        r?.patient?.sex, r?.patient?.gender, r?.patientInfo?.sex, r?.patientInfo?.gender,
+        r?.details?.sex, r?.details?.gender, r?.recipient?.sex, r?.recipient?.gender
+    ];
+    for (const value of values) {
+        const sex = normSex(value);
+        if (sex !== "Unspecified") return sex;
+    }
+    return "Unspecified";
+}
+
+function sexCountKey(sex) {
+    if (sex === "Male") return "male";
+    if (sex === "Female") return "female";
+    return "unspecified";
+}
+
+function patientGroupCount(patientServed, group, sex) {
+    const block = patientServed?.[group] || {};
+    const lower = sexCountKey(sex);
+    return Number(block[sex] ?? block[lower] ?? 0);
+}
+
+function patientGroupTotal(patientServed, group) {
+    return patientGroupCount(patientServed, group, "Male") +
+           patientGroupCount(patientServed, group, "Female") +
+           patientGroupCount(patientServed, group, "Unspecified");
+}
 
 function getIssuedCountsForRecord(record) {
     const out = countComponentsFromList(record?.issued);
@@ -1262,7 +1298,7 @@ function getEntryPrices(entry) {
 
 function computeComponentListValue(list, prices) {
     const out = emptyReleaseComponents();
-    (Array.isArray(list) ? list : []).forEach(item => {
+    asRTDBList(list).forEach(item => {
         const comp = normReleaseComponent(getComponentNameFromItem(item));
         const qty = getComponentQtyFromItem(item);
         if (comp && qty) out[comp] += qty * (prices[comp] || 0);
@@ -1311,9 +1347,9 @@ function buildReleasingData(releases, augmentations) {
         regularRecords: releases.length,
         augmentationRecords: augmentations.length,
         patientServed: {
-            pay:{Male:0,Female:0,Unspecified:0},
-            discounted:{Male:0,Female:0,Unspecified:0},
-            noCharge:{Male:0,Female:0,Unspecified:0}
+            pay:{Male:0,Female:0,Unspecified:0,male:0,female:0,unspecified:0,entries:[]},
+            discounted:{Male:0,Female:0,Unspecified:0,male:0,female:0,unspecified:0,entries:[]},
+            noCharge:{Male:0,Female:0,Unspecified:0,male:0,female:0,unspecified:0,entries:[]}
         },
         unitsByPayment: {
             pay: emptyReleaseComponents(),
@@ -1346,6 +1382,8 @@ function buildReleasingData(releases, augmentations) {
         const actualIncome = amountPaid - discount;
         const paymentGroup = actualIncome <= 0 ? "noCharge" : (discount > 0 ? "discounted" : "pay");
         data.patientServed[paymentGroup][sex] = (data.patientServed[paymentGroup][sex] || 0) + 1;
+        data.patientServed[paymentGroup][sexCountKey(sex)] = (data.patientServed[paymentGroup][sexCountKey(sex)] || 0) + 1;
+        data.patientServed[paymentGroup].entries.push(r);
 
         // Same source shape as releasing-statistics.html: requests[] and issued[] with {type, qty}.
         const reqCounts = getRequestedCountsForRecord(r);
@@ -1460,6 +1498,24 @@ function table(headers, rows) {
 
 function renderBS323(data) {
     const d = data.donorData, r = data.releasingData;
+    const ps = r.patientServed || {};
+    const patientRows = [
+        ["Pay", patientGroupCount(ps, "pay", "Male"), patientGroupCount(ps, "pay", "Female"), patientGroupTotal(ps, "pay")],
+        ["Discounted", patientGroupCount(ps, "discounted", "Male"), patientGroupCount(ps, "discounted", "Female"), patientGroupTotal(ps, "discounted")],
+        ["No charge / Indigent", patientGroupCount(ps, "noCharge", "Male"), patientGroupCount(ps, "noCharge", "Female"), patientGroupTotal(ps, "noCharge")],
+        ["Grand total patient served",
+            patientGroupCount(ps, "pay", "Male") + patientGroupCount(ps, "discounted", "Male") + patientGroupCount(ps, "noCharge", "Male"),
+            patientGroupCount(ps, "pay", "Female") + patientGroupCount(ps, "discounted", "Female") + patientGroupCount(ps, "noCharge", "Female"),
+            patientGroupTotal(ps, "pay") + patientGroupTotal(ps, "discounted") + patientGroupTotal(ps, "noCharge")
+        ]
+    ];
+    const unitRows = components.map(comp => [
+        comp,
+        r.unitsByPayment.pay[comp] || 0,
+        r.unitsByPayment.discounted[comp] || 0,
+        r.unitsByPayment.noCharge[comp] || 0,
+        (r.unitsByPayment.pay[comp] || 0) + (r.unitsByPayment.discounted[comp] || 0) + (r.unitsByPayment.noCharge[comp] || 0)
+    ]);
     return table(["Item", "Preview Value"], [
         ["Total donor records", d.totalRecords],
         ["MBD donors", Object.values(d.fieldTotals).reduce((s,x)=>s+sumObj(x),0)],
@@ -1469,8 +1525,9 @@ function renderBS323(data) {
         ["Permanent deferrals", data.deferralData.type.Permanent],
         ["Patients / transactions served", r.regularRecords],
         ["Blood augmentation records", r.augmentationRecords],
-        ["Total units released including augmentation", sumObj(r.issuedTotal)]
-    ]);
+        ["Total regular units released", sumObj(r.issuedTotal)]
+    ]) + "<br>" + table(["Patient Served", "Male", "Female", "Total"], patientRows) +
+       "<br>" + table(["Issued units", "Pay", "Discounted", "No Charge", "Total"], unitRows);
 }
 
 function renderBS324a(data) {
@@ -1596,20 +1653,23 @@ function fillBS323(workbook, data) {
     setNum(ws, "D5", data.donorData.totalRecords);
 
     const ps = data.releasingData.patientServed || {};
-    const payMale = ps.pay?.Male || 0;
-    const payFemale = ps.pay?.Female || 0;
-    const discMale = ps.discounted?.Male || 0;
-    const discFemale = ps.discounted?.Female || 0;
-    const noMale = ps.noCharge?.Male || 0;
-    const noFemale = ps.noCharge?.Female || 0;
+    const payMale = patientGroupCount(ps, "pay", "Male");
+    const payFemale = patientGroupCount(ps, "pay", "Female");
+    const payTotal = patientGroupTotal(ps, "pay");
+    const discMale = patientGroupCount(ps, "discounted", "Male");
+    const discFemale = patientGroupCount(ps, "discounted", "Female");
+    const discTotal = patientGroupTotal(ps, "discounted");
+    const noMale = patientGroupCount(ps, "noCharge", "Male");
+    const noFemale = patientGroupCount(ps, "noCharge", "Female");
+    const noTotal = patientGroupTotal(ps, "noCharge");
 
     setNum(ws, "D42", payMale);       setNum(ws, "E42", payFemale);
     setNum(ws, "D43", discMale);      setNum(ws, "E43", discFemale);
     setNum(ws, "D44", noMale);        setNum(ws, "E44", noFemale);
-    setFormulaResult(ws, "H42", "SUM(D42:G42)", payMale + payFemale);
-    setFormulaResult(ws, "H43", "SUM(D43:G43)", discMale + discFemale);
-    setFormulaResult(ws, "H44", "SUM(D44:G44)", noMale + noFemale);
-    setFormulaResult(ws, "H45", "SUM(H42:H44)", payMale + payFemale + discMale + discFemale + noMale + noFemale);
+    setFormulaResult(ws, "H42", "SUM(D42:G42)", payTotal);
+    setFormulaResult(ws, "H43", "SUM(D43:G43)", discTotal);
+    setFormulaResult(ws, "H44", "SUM(D44:G44)", noTotal);
+    setFormulaResult(ws, "H45", "SUM(H42:H44)", payTotal + discTotal + noTotal);
 
     // Official row positions in the uploaded template:
     // 52 = Whole Blood 450 ml, 53 = Packed Red Cells, 54 = Platelet Concentrate,
