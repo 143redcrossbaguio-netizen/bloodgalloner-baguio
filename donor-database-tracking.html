@@ -1504,6 +1504,7 @@
                 <div class="bulk-panel-buttons">
                     <button class="main-btn gray-btn"   id="bulkResetBtn"  type="button">Reset</button>
                     <button class="main-btn blue-btn"   id="bulkFindBtn"   type="button">Find Records</button>
+                    <button class="main-btn orange-btn" id="bulkClearWalkInBtn" type="button" disabled>Remove Walk-in from Matched MBD</button>
                     <button class="main-btn green-btn"  id="bulkSaveAllBtn" type="button" disabled>Save All Changes</button>
                 </div>
             </div>
@@ -1511,7 +1512,8 @@
             <div class="bulk-help-text" id="bulkHelpText" style="display:none;">
                 <b>Step 2 — Edit directly in the table below.</b>
                 Matched rows are highlighted purple and have editable fields.
-                Change anything you need (date, MBD name, category, blood bag, time, remarks, etc.).
+                Change anything you need (date, MBD name, Walk-in status, category, blood bag, time, remarks, etc.).
+                Use <b>Remove Walk-in from Matched MBD</b> to clear the invalid MBD + Walk-in combination for all matched MBD rows at once.
                 Cells with edits turn yellow with the old value crossed out below.
                 When done, click <b>Save All Changes</b> to save everything at once.
                 Click <b>Reset</b> to undo all your inline edits.
@@ -4407,6 +4409,8 @@ function isBulkEditingActive() { return bulkEditingIds.size > 0; }
 function openBulkEditPanel() {
     document.getElementById("bulkEditPanel").style.display = "block";
     document.getElementById("bulkSaveAllBtn").disabled = true;
+    const clearWalkInBtn = document.getElementById("bulkClearWalkInBtn");
+    if (clearWalkInBtn) clearWalkInBtn.disabled = bulkEditingIds.size === 0;
     document.getElementById("bulkHelpText").style.display = "none";
     document.getElementById("bulkPanelInfo").innerHTML = "Set criteria, then click <b>Find Records</b>.";
 }
@@ -4417,6 +4421,8 @@ function closeBulkEditPanel() {
     }
     bulkEditingIds.clear();
     bulkPendingChanges = {};
+    const clearWalkInBtn = document.getElementById("bulkClearWalkInBtn");
+    if (clearWalkInBtn) clearWalkInBtn.disabled = true;
     document.getElementById("bulkEditPanel").style.display = "none";
     renderTracking();
 }
@@ -4434,6 +4440,8 @@ function resetBulkEditFields() {
     bulkEditingIds.clear();
     bulkPendingChanges = {};
     document.getElementById("bulkSaveAllBtn").disabled = true;
+    const clearWalkInBtn = document.getElementById("bulkClearWalkInBtn");
+    if (clearWalkInBtn) clearWalkInBtn.disabled = true;
     document.getElementById("bulkHelpText").style.display = "none";
     document.getElementById("bulkPanelInfo").innerHTML = "Set criteria, then click <b>Find Records</b>.";
     renderTracking();
@@ -4448,6 +4456,70 @@ function readBulkCriteria() {
         pdName:          document.getElementById("bulkFilterPdName").value.trim().toLowerCase(),
         donorCategory:   document.getElementById("bulkFilterDonorCategory").value
     };
+}
+
+function normalizeBulkWalkInValue(value) {
+    const n = normalizeText(value).replace(/[_\s]+/g, "-");
+    return (n === "walk-in" || n === "walkin" || n === "yes" || n === "true") ? "WALK-IN" : "";
+}
+
+function setBulkPendingField(id, field, newValue) {
+    const original = allDonors.find(r => r.id === id);
+    if (!original) return false;
+
+    const oldValue = bulkOriginalFieldValue(original, field);
+    const normalizedNew = field === "walkIn" ? normalizeBulkWalkInValue(newValue) : ((typeof newValue === "string") ? newValue : String(newValue));
+
+    if (!bulkPendingChanges[id]) bulkPendingChanges[id] = {};
+
+    if (String(oldValue) === normalizedNew) {
+        delete bulkPendingChanges[id][field];
+        if (Object.keys(bulkPendingChanges[id]).length === 0) delete bulkPendingChanges[id];
+        return false;
+    }
+
+    bulkPendingChanges[id][field] = normalizedNew;
+    return true;
+}
+
+function buildBulkDonorTypeFromFinalValues(original, changes) {
+    const finalMbd = changes.mbdDetails !== undefined ? changes.mbdDetails : bulkOriginalFieldValue(original, "mbdDetails");
+    const finalPd  = changes.patientDirectedDetails !== undefined ? changes.patientDirectedDetails : bulkOriginalFieldValue(original, "patientDirectedDetails");
+    const finalWalkIn = changes.walkIn !== undefined ? changes.walkIn : bulkOriginalFieldValue(original, "walkIn");
+
+    const donorTypes = [];
+    if (toUpperTrim(finalMbd)) {
+        donorTypes.push("MBD");
+    } else if (normalizeBulkWalkInValue(finalWalkIn)) {
+        donorTypes.push("WALK-IN");
+    }
+    if (toUpperTrim(finalPd)) donorTypes.push("PATIENT DIRECTED");
+    return donorTypes.join(", ");
+}
+
+function bulkClearWalkInForMatchedMbd() {
+    if (bulkEditingIds.size === 0) {
+        showMessage("Please find records first before clearing Walk-in.", "error");
+        return;
+    }
+
+    let changedCount = 0;
+    bulkEditingIds.forEach(id => {
+        const r = allDonors.find(row => row.id === id);
+        if (!r) return;
+        if (isDonorType(r, "MBD") && isDonorType(r, "WALK-IN")) {
+            if (setBulkPendingField(id, "walkIn", "")) changedCount++;
+        }
+    });
+
+    if (changedCount === 0) {
+        showMessage("No matched MBD records with Walk-in were found.", "error");
+        return;
+    }
+
+    updateBulkSaveButton();
+    renderTracking();
+    showMessage(`Marked Walk-in for removal in ${changedCount} matched MBD record(s). Click Save All Changes to commit.`, "success");
 }
 
 function findBulkMatches(criteria) {
@@ -4476,6 +4548,8 @@ function bulkFindRecords() {
         bulkEditingIds.clear();
         bulkPendingChanges = {};
         document.getElementById("bulkSaveAllBtn").disabled = true;
+        const clearWalkInBtn = document.getElementById("bulkClearWalkInBtn");
+        if (clearWalkInBtn) clearWalkInBtn.disabled = true;
         document.getElementById("bulkHelpText").style.display = "none";
         document.getElementById("bulkPanelInfo").innerHTML = "<b>0</b> record(s) match your criteria. Try different filters.";
         renderTracking();
@@ -4490,6 +4564,8 @@ function bulkFindRecords() {
     bulkPendingChanges = {};
     document.getElementById("bulkPanelInfo").innerHTML = `<b>${matches.length}</b> record(s) found. Edit them in the table below — matched rows are highlighted purple.`;
     document.getElementById("bulkHelpText").style.display = "block";
+    const clearWalkInBtn = document.getElementById("bulkClearWalkInBtn");
+    if (clearWalkInBtn) clearWalkInBtn.disabled = false;
     document.getElementById("bulkSaveAllBtn").disabled = true; // becomes enabled when first edit is made
 
     // Auto-clear month filter so matches are visible if they span months
@@ -4583,17 +4659,7 @@ window.bulkInlineChange = function(id, field, newValue) {
 
     // Compare against the original value to decide if it's actually a change
     const oldValue = bulkOriginalFieldValue(original, field);
-    const normalizedNew = (typeof newValue === "string") ? newValue : String(newValue);
-
-    if (!bulkPendingChanges[id]) bulkPendingChanges[id] = {};
-
-    if (String(oldValue) === normalizedNew) {
-        // Reverted to original value — remove pending change
-        delete bulkPendingChanges[id][field];
-        if (Object.keys(bulkPendingChanges[id]).length === 0) delete bulkPendingChanges[id];
-    } else {
-        bulkPendingChanges[id][field] = normalizedNew;
-    }
+    setBulkPendingField(id, field, newValue);
 
     // Update cell visual state (yellow / not yellow) and the strikethrough old-value display
     const inputEl = document.querySelector(`[data-bulk-id="${id}"][data-bulk-field="${field}"]`);
@@ -4625,6 +4691,7 @@ function bulkOriginalFieldValue(r, field) {
     switch (field) {
         case "entryDate":              return r._resolvedEntryDate || "";
         case "mbdDetails":             return toUpperTrim(r.mbdDetails || "");
+        case "walkIn":                 return isDonorType(r,"WALK-IN") ? "WALK-IN" : "";
         case "patientDirectedDetails": return toUpperTrim(r.patientDirectedDetails || "");
         case "donorCategory":          return r.donorCategory || "";
         case "bloodBagBrand":          return toUpperTrim(r.bloodBagBrand || "");
@@ -4683,7 +4750,20 @@ async function bulkSaveAll() {
             const slice = entries.slice(i, i + BATCH_SIZE);
             const batch = db.batch();
             const preparedSlice = slice.map(([id, changes]) => {
+                const originalRecord = allDonors.find(r => r.id === id) || {};
                 const preparedChanges = { ...changes };
+
+                if (preparedChanges.mbdDetails !== undefined) preparedChanges.mbdDetails = toUpperTrim(preparedChanges.mbdDetails);
+                if (preparedChanges.patientDirectedDetails !== undefined) preparedChanges.patientDirectedDetails = toUpperTrim(preparedChanges.patientDirectedDetails);
+
+                // Walk-in is a pseudo bulk-edit field. Save the correct donorType instead.
+                // This enforces the valid combinations only:
+                // MBD + optional Patient Directed, OR Walk-in + optional Patient Directed.
+                if (preparedChanges.walkIn !== undefined || preparedChanges.mbdDetails !== undefined || preparedChanges.patientDirectedDetails !== undefined) {
+                    preparedChanges.donorType = buildBulkDonorTypeFromFinalValues(originalRecord, preparedChanges);
+                    delete preparedChanges.walkIn;
+                }
+
                 if (preparedChanges.entryDate !== undefined) {
                     const dateMeta = getMonthMetaFromIso(preparedChanges.entryDate);
                     preparedChanges.collectionYear = dateMeta.collectionYear;
@@ -4761,13 +4841,13 @@ function buildBulkEditableRowCells(r) {
     const latestTotal = currentDonationTotals[donorKey] ?? resolveDonationCountValue(r.numberOfDonations);
     const enteredVal  = resolveDonationCountValue(r.numberOfDonations);
 
-    // For the MBD/Walk-in/Patient-Directed columns, we still show the existing sequence
-    // label (read-only) but we let the user edit the underlying NAMES via cells 2 (MBD)
-    // and 4 (Patient Directed) — those are the mbdDetails / patientDirectedDetails fields.
+    // For the MBD/Walk-in/Patient-Directed columns, MBD and Patient Directed edit the
+    // underlying name fields. Walk-in is editable as a YES/blank status so invalid
+    // MBD + Walk-in combinations can be corrected in bulk.
     return `
         <td class="col-entrydate-cell ${cellCls('entryDate')}">${inp('entryDate', 'date')}${oldStrike('entryDate')}</td>
         <td class="${cellCls('mbdDetails')}">${inp('mbdDetails')}${oldStrike('mbdDetails')}</td>
-        <td>${escapeUpperHtml(isDonorType(r,"WALK-IN") ? getCategoryDisplay(r,"WALK-IN") : "")}</td>
+        <td class="${cellCls('walkIn')}">${sel('walkIn', ['WALK-IN'])}${oldStrike('walkIn')}</td>
         <td class="${cellCls('patientDirectedDetails')}">${inp('patientDirectedDetails')}${oldStrike('patientDirectedDetails')}</td>
         <td class="${cellCls('surname')}">${inp('surname')}${oldStrike('surname')}</td>
         <td class="${cellCls('firstName')}">${inp('firstName')}${oldStrike('firstName')}</td>
@@ -4877,6 +4957,7 @@ document.getElementById("bulkEditDateBtn").addEventListener("click", () => bulkE
 document.getElementById("bulkPanelCloseBtn").addEventListener("click", closeBulkEditPanel);
 document.getElementById("bulkResetBtn").addEventListener("click", resetBulkEditFields);
 document.getElementById("bulkFindBtn").addEventListener("click", bulkFindRecords);
+document.getElementById("bulkClearWalkInBtn").addEventListener("click", bulkClearWalkInForMatchedMbd);
 document.getElementById("bulkSaveAllBtn").addEventListener("click", bulkSaveAll);
 
 document.addEventListener("input", e => {
