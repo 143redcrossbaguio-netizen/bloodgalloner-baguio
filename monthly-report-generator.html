@@ -1704,12 +1704,12 @@ function renderBS324a(data) {
 
 function renderBS325(data) {
     const d = data.donorData;
-    return `${table(["Sex", "Count"], Object.entries(d.sex).map(([k,v]) => [k, v]))}<br>${table(["Age Group", "Total", "Male", "Female"], Object.keys(d.age).map(k => [k, d.age[k], d.ageSex[k]?.Male || 0, d.ageSex[k]?.Female || 0]))}<br>${table(["Donor Frequency", "Count"], Object.entries(d.frequency).map(([k,v]) => [k, v]))}`;
+    return `${table(["Sex", "Count"], Object.entries(d.sex).map(([k,v]) => [k, v]))}<br>${table(["Age Group", "Total", "Male", "Female"], Object.keys(d.age).map(k => [k, d.age[k], d.ageSex[k]?.Male || 0, d.ageSex[k]?.Female || 0]))}<br>${table(["Donor Frequency", "Count", "Male", "Female"], Object.entries(d.frequency).map(([k,v]) => [k, v, d.frequencySex[k]?.Male || 0, d.frequencySex[k]?.Female || 0]))}`;
 }
 
 function renderDeferrals(data) {
     const d = data.deferralData;
-    return `${table(["Deferral Type", "Count"], Object.entries(d.type).map(([k,v]) => [k, v]))}<br>${table(["UB / QNS Category", "Count"], Object.entries(d.ubQns).map(([k,v]) => [k, v]))}<br>${table(["Reason", "Count", "Template Remarks"], d.reasonRows.slice(0,50).map(r => [r.reason, r.count, r.remarks]))}`;
+    return `${table(["Deferral Type", "Count"], Object.entries(d.type).map(([k,v]) => [k, v]))}<br>${table(["UB / QNS Category", "Count"], Object.entries(d.ubQns).map(([k,v]) => [k, v]))}<br>${table(["Reason", "Count", "Category"], d.reasonRows.slice(0,50).map(r => [r.reason, r.count, r.remarks]))}`;
 }
 
 function renderBM7(data) {
@@ -1981,7 +1981,7 @@ function fillBS324a(workbook, data) {
         const row = 102 + idx;
         setCell(ws, `B${row}`, r.reason);
         setNum(ws, `C${row}`, r.count);
-        setCell(ws, `E${row}`, r.remarks);
+        setCell(ws, `D${row}`, r.remarks);
     });
 
     const prepRows = {"O+":160,"A+":161,"B+":162,"AB+":163,"O-":164,"A-":165,"B-":166,"AB-":167};
@@ -2030,9 +2030,28 @@ function fillBS325(workbook, data) {
     setPeriodCell(ws, "D1", data);
     const d = data.donorData;
     setNum(ws, "C7", d.sex.Male); setNum(ws, "C8", d.sex.Female);
-    setNum(ws, "C13", d.frequency["First-time donors"]);
-    setNum(ws, "C14", d.frequency["Repeat non-regular"]);
-    setNum(ws, "C23", d.frequency["Repeat regular"]);
+    const firstTime = d.frequency["First-time donors"] || 0;
+    const repeatNonRegular = d.frequency["Repeat non-regular"] || 0;
+    const repeatRegular = d.frequency["Repeat regular"] || 0;
+    const firstTimeSex = d.frequencySex["First-time donors"] || {Male:0, Female:0};
+    const repeatNonRegularSex = d.frequencySex["Repeat non-regular"] || {Male:0, Female:0};
+    const repeatRegularSex = d.frequencySex["Repeat regular"] || {Male:0, Female:0};
+
+    setNum(ws, "C13", firstTime);
+    setNum(ws, "D13", firstTimeSex.Male);
+    setNum(ws, "E13", firstTimeSex.Female);
+
+    setNum(ws, "C14", repeatNonRegular);
+    setNum(ws, "D14", repeatNonRegularSex.Male);
+    setNum(ws, "E14", repeatNonRegularSex.Female);
+
+    setNum(ws, "C15", repeatRegular);
+    setNum(ws, "D15", repeatRegularSex.Male);
+    setNum(ws, "E15", repeatRegularSex.Female);
+
+    setFormulaResult(ws, "C23", "SUM(C13:C22)", firstTime + repeatNonRegular + repeatRegular);
+    setFormulaResult(ws, "D23", "SUM(D13:D22)", firstTimeSex.Male + repeatNonRegularSex.Male + repeatRegularSex.Male);
+    setFormulaResult(ws, "E23", "SUM(E13:E22)", firstTimeSex.Female + repeatNonRegularSex.Female + repeatRegularSex.Female);
     const ageRows = {"16-17":34,"18-20":35,"21-30":36,"31-40":37,"41-50":38,"51-60":39,"60-65":40,"66 & above":41};
     Object.entries(ageRows).forEach(([ag,row]) => {
         setNum(ws, `C${row}`, d.age[ag]);
