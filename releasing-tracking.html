@@ -693,9 +693,6 @@ flex-direction:column;
       <button type="button" class="addBtn" onclick="addEditRelIssued()">+</button>
     </div>
 
-    <label class="formLabel">AMOUNT PAID</label>
-    <input type="number" id="editRelAmountPaid" class="formInput" readonly>
-
     <label class="formLabel">DISCOUNT</label>
     <input type="number" id="editRelDiscount" class="formInput">
 
@@ -1484,6 +1481,21 @@ function escHtml(s){
 // ── end label helpers ────────────────────────────────────────────────────────
 
 // ── Shared Year > Month > Date render helper ──────────────────────────────────
+// ── Collapse-state memory (persists open/closed sections across re-renders) ──
+const sectionCollapseState = {};
+
+function getSectionOpenState(kind, key, defaultOpen){
+  const fullKey = `${currentView}|${kind}|${key}`;
+  return Object.prototype.hasOwnProperty.call(sectionCollapseState, fullKey)
+    ? sectionCollapseState[fullKey]
+    : defaultOpen;
+}
+
+function setSectionOpenState(kind, key, isOpen){
+  sectionCollapseState[`${currentView}|${kind}|${key}`] = isOpen;
+}
+// ── end collapse-state memory ─────────────────────────────────────────────────
+
 function renderYearMonthDateInto(parentEl, groupedByMonth, renderDateContent){
   const groupedByYear={};
   Object.keys(groupedByMonth).forEach(month=>{
@@ -1495,33 +1507,36 @@ function renderYearMonthDateInto(parentEl, groupedByMonth, renderDateContent){
   Object.keys(groupedByYear).sort().reverse().forEach(year=>{
     const yms=groupedByYear[year];
     const ytotal=yms.reduce((s,m)=>s+groupedByMonth[m].length,0);
+    const yearOpen=getSectionOpenState("year",year,true);
     const yh=document.createElement("div");
     yh.className="yearHeader";
-    yh.innerHTML=`<span>📅 ${year} &nbsp;<span style="font-weight:normal;font-size:13px;opacity:0.85;">(${ytotal} record${ytotal!==1?"s":""})</span></span><span class="collapsibleIcon" style="color:white;">−</span>`;
+    yh.innerHTML=`<span>📅 ${year} &nbsp;<span style="font-weight:normal;font-size:13px;opacity:0.85;">(${ytotal} record${ytotal!==1?"s":""})</span></span><span class="collapsibleIcon" style="color:white;">${yearOpen?"−":"+"}</span>`;
     const yc=document.createElement("div");
-    yc.className="yearContent show";
-    attachCollapseBehavior(yh,yc);
+    yc.className="yearContent"+(yearOpen?" show":"");
+    attachCollapseBehavior(yh,yc,(isOpen)=>setSectionOpenState("year",year,isOpen));
 
     yms.sort().reverse().forEach(month=>{
       const me=groupedByMonth[month];
-      const mh=createCollapsibleHeader("monthHeader",formatMonthLabel(month),`${me.length} record${me.length!==1?"s":""}`);
+      const monthOpen=getSectionOpenState("month",month,false);
+      const mh=createCollapsibleHeader("monthHeader",formatMonthLabel(month),`${me.length} record${me.length!==1?"s":""}`,monthOpen);
       const mc=document.createElement("div");
-      mc.className="monthContent";
+      mc.className="monthContent"+(monthOpen?" show":"");
 
       const gbd={};
       me.forEach(e=>{const dk=e.date||"NO DATE";if(!gbd[dk])gbd[dk]=[];gbd[dk].push(e);});
 
       Object.keys(gbd).sort().reverse().forEach(dk=>{
         const de=gbd[dk];
-        const dh=createCollapsibleHeader("dateHeader",formatDateLabel(dk),`${de.length} record${de.length!==1?"s":""}`);
+        const dateOpen=getSectionOpenState("date",dk,false);
+        const dh=createCollapsibleHeader("dateHeader",formatDateLabel(dk),`${de.length} record${de.length!==1?"s":""}`,dateOpen);
         const dc=document.createElement("div");
-        dc.className="dateContent";
+        dc.className="dateContent"+(dateOpen?" show":"");
         renderDateContent(dc,de);
-        attachCollapseBehavior(dh,dc);
+        attachCollapseBehavior(dh,dc,(isOpen)=>setSectionOpenState("date",dk,isOpen));
         mc.appendChild(dh); mc.appendChild(dc);
       });
 
-      attachCollapseBehavior(mh,mc);
+      attachCollapseBehavior(mh,mc,(isOpen)=>setSectionOpenState("month",month,isOpen));
       yc.appendChild(mh); yc.appendChild(mc);
     });
 
@@ -1609,6 +1624,9 @@ function renderFlatWaivedResults(entries){
 // ── end flat search ───────────────────────────────────────────────────────────
 
 function renderCurrentView(){
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
   if(isSearchActive()){
     if(currentView==="releasing")       renderFlatReleasingResults(getFilteredReleasingEntries());
     else if(currentView==="augmentation") renderFlatAugmentationResults(getFilteredAugmentationEntries());
@@ -1619,24 +1637,27 @@ function renderCurrentView(){
     else                                 renderWaivedTable();
   }
   refreshDuplicateBox();
+
+  window.scrollTo(scrollX, scrollY);
 }
 
-function createCollapsibleHeader(className, label, countText){
+function createCollapsibleHeader(className, label, countText, isOpen=false){
   const header = document.createElement("div");
   header.className = className;
   header.innerHTML = `
     <span>${label}${countText ? ` (${countText})` : ""}</span>
-    <span class="collapsibleIcon">+</span>
+    <span class="collapsibleIcon">${isOpen ? "−" : "+"}</span>
   `;
   return header;
 }
 
-function attachCollapseBehavior(header, content){
+function attachCollapseBehavior(header, content, onToggle){
   const icon = header.querySelector(".collapsibleIcon");
   header.addEventListener("click", () => {
     const isOpen = content.classList.contains("show");
     content.classList.toggle("show", !isOpen);
     icon.textContent = isOpen ? "+" : "−";
+    if(typeof onToggle === "function") onToggle(!isOpen);
   });
 }
 
@@ -2011,7 +2032,7 @@ function addEditRelIssuedRow(container, item = {type:"WB", qty:""}){
       <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
     </select>
     <input type="number" class="editRelIssuedQty" placeholder="Qty" value="${item.qty ?? ""}">
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); recomputeEditReleasingAmountPaid();">-</button>
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
   `;
   container.appendChild(row);
 }
@@ -2022,27 +2043,7 @@ window.addEditRelRequest = function(){
 
 window.addEditRelIssued = function(){
   addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"));
-  recomputeEditReleasingAmountPaid();
 };
-
-function recomputeEditReleasingAmountPaid(){
-  const prices = currentReleasingPriceSnapshot || currentPrices;
-  let total = 0;
-
-  document.querySelectorAll("#editRelIssuedContainer .editRelIssuedRow").forEach(row => {
-    const type = row.querySelector(".editRelIssuedType").value;
-    const qty = Number(row.querySelector(".editRelIssuedQty").value) || 0;
-
-    if(prices[type] !== undefined){
-      total += prices[type] * qty;
-    }
-  });
-
-  const boxQty = Number(document.getElementById("editRelBoxContainerQty").value) || 0;
-  total += boxQty * (prices.BOX || 0);
-
-  document.getElementById("editRelAmountPaid").value = total.toFixed(2);
-}
 
 function openReleasingModal(){
   document.getElementById("releasingModal").style.display = "block";
@@ -2065,7 +2066,6 @@ window.closeReleasingModal = function(){
   document.getElementById("editRelWaivedFields").style.display = "none";
   document.getElementById("editRelWaivedComponent").value = "";
   document.getElementById("editRelWaivedUnit").value = "";
-  document.getElementById("editRelAmountPaid").value = "";
   document.getElementById("editRelDiscount").value = "";
   document.getElementById("editRelRequestContainer").innerHTML = "";
   document.getElementById("editRelIssuedContainer").innerHTML = "";
@@ -2114,7 +2114,6 @@ async function openEditReleasing(id){
     requests.forEach(item => addEditRelRequestRow(document.getElementById("editRelRequestContainer"), item));
     issued.forEach(item => addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"), item));
 
-    recomputeEditReleasingAmountPaid();
     openReleasingModal();
   }catch(error){
     console.error(error);
@@ -2149,6 +2148,8 @@ window.saveReleasingEdit = async function(){
     }
   });
 
+  const existing = allReleasingEntries.find(x => x.id === currentReleasingEditId) || {};
+
   const payload = {
     date: document.getElementById("editRelDate").value,
     facility: document.getElementById("editRelFacility").value.toUpperCase(),
@@ -2161,7 +2162,7 @@ window.saveReleasingEdit = async function(){
     boxContainerQty: document.getElementById("editRelBoxContainerQty").value || 0,
     requests,
     issued,
-    amountPaid: document.getElementById("editRelAmountPaid").value,
+    amountPaid: existing.amountPaid || "",
     discount: document.getElementById("editRelDiscount").value,
     priceSnapshot: currentReleasingPriceSnapshot
   };
@@ -2174,7 +2175,6 @@ window.saveReleasingEdit = async function(){
 
   try{
     await update(ref(db, "releasing/" + currentReleasingEditId), payload);
-    alert("Releasing record updated successfully!");
     window.closeReleasingModal();
   }catch(error){
     console.error(error);
@@ -2536,14 +2536,6 @@ document.addEventListener("input", function(e){
     e.target.classList.contains("editAugIssuedType")
   ){
     recomputeEditAugmentationAmountPaid();
-  }
-
-  if(
-    e.target.id === "editRelBoxContainerQty" ||
-    e.target.classList.contains("editRelIssuedQty") ||
-    e.target.classList.contains("editRelIssuedType")
-  ){
-    recomputeEditReleasingAmountPaid();
   }
 });
 
