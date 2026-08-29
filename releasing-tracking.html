@@ -916,6 +916,34 @@ function computeAugEntryTotal(entry){
   return total.toFixed(2);
 }
 
+function computeWaivedDeduction(entry, prices){
+  const waivedType = entry.waivedComponent ? String(entry.waivedComponent).toUpperCase() : "";
+  const waivedQty = Number(entry.waivedUnit) || 0;
+  const waivedValue = (waivedType && prices[waivedType] !== undefined) ? prices[waivedType] * waivedQty : 0;
+  return { waivedType, waivedQty, waivedValue };
+}
+
+function computeFinalTotal(entry, computedTotalStr){
+  const prices = getEntryPrices(entry);
+  const discount = Number(entry.discount) || 0;
+  const { waivedValue } = computeWaivedDeduction(entry, prices);
+  let total = Number(computedTotalStr) - discount - waivedValue;
+  if(total < 0) total = 0;
+  return total.toFixed(2);
+}
+
+function buildAmountPaidCell(entry, computedTotalStr){
+  const prices = getEntryPrices(entry);
+  const { waivedType, waivedQty, waivedValue } = computeWaivedDeduction(entry, prices);
+  const finalTotal = computeFinalTotal(entry, computedTotalStr);
+
+  let html = finalTotal;
+  if(waivedValue > 0){
+    html += `<br><span style="font-size:11px;color:#b71c1c;">less ${waivedQty} ${waivedType} waived (${waivedValue.toFixed(2)})</span>`;
+  }
+  return html;
+}
+
 function getOrSortValue(orValue){
   const raw = String(orValue || "").trim().toUpperCase();
   if(raw === "") return { empty: 1, text: "", num: Number.MAX_SAFE_INTEGER };
@@ -1024,6 +1052,7 @@ function renderDuplicateReleasingGroup(group){
           <th>WAIVED UNIT</th>
           <th>REQUESTED</th>
           <th>ISSUED</th>
+          <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
           <th>DISCOUNT</th>
           <th>ACTION</th>
@@ -1044,7 +1073,8 @@ function renderDuplicateReleasingGroup(group){
             <td>${entry.waivedUnit || 0}</td>
             <td class="componentBox">${formatComponents(entry.requests)}</td>
             <td class="componentBox">${formatComponents(entry.issued)}</td>
-            <td>${entry.amountPaid || ""}</td>
+            <td>${computeReleasingTotal(entry)}</td>
+            <td>${buildAmountPaidCell(entry, computeReleasingTotal(entry))}</td>
             <td>${entry.discount || ""}</td>
             <td>
               <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
@@ -1066,6 +1096,7 @@ function renderDuplicateAugmentationGroup(group){
           <th>FACILITY</th>
           <th>BOX</th>
           <th>AUGMENTATION DETAILS</th>
+          <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
           <th>DISCOUNT</th>
           <th>PAID</th>
@@ -1079,7 +1110,8 @@ function renderDuplicateAugmentationGroup(group){
             <td>${entry.facility || ""}</td>
             <td>${entry.boxContainerQty || 0}</td>
             <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
-            <td>${entry.amountPaid || ""}</td>
+            <td>${computeAugEntryTotal(entry)}</td>
+            <td>${buildAmountPaidCell(entry, computeAugEntryTotal(entry))}</td>
             <td>${entry.discount || ""}</td>
             <td>${String(entry.augmentationPaid || "NO").toUpperCase()}</td>
             <td>
@@ -1574,7 +1606,7 @@ function renderFlatReleasingResults(entries){
     const r=document.createElement("tr");
     r.dataset.releaseId=entry.id;
     if(ck) r.classList.add("checkedHighlight");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1596,7 +1628,7 @@ function renderFlatAugmentationResults(entries){
     const ct=computeAugEntryTotal(entry);
     const ip=String(entry.augmentationPaid||"NO").toUpperCase()==="YES";
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1616,7 +1648,7 @@ function renderFlatWaivedResults(entries){
   entries.forEach(entry=>{
     const ct=computeReleasingTotal(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1688,7 +1720,7 @@ function renderReleasingTable(){
       const r=document.createElement("tr");
       r.dataset.releaseId=entry.id;
       if(ck) r.classList.add("checkedHighlight");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -1721,7 +1753,7 @@ function renderAugmentationTable(){
       const ct=computeAugEntryTotal(entry);
       const ip=String(entry.augmentationPaid||"NO").toUpperCase()==="YES";
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -1753,7 +1785,7 @@ function renderWaivedTable(){
     de.forEach(entry=>{
       const ct=computeReleasingTotal(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${entry.amountPaid||""}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -2371,7 +2403,7 @@ function exportReleasingCSV(){
       req,
       iss,
       computeReleasingTotal(e),
-      e.amountPaid || "",
+      computeFinalTotal(e, computeReleasingTotal(e)),
       e.discount || ""
     ]);
   });
@@ -2417,7 +2449,7 @@ function exportAugmentationCSV(){
       e.boxContainerQty || 0,
       details,
       computeAugEntryTotal(e),
-      e.amountPaid || "",
+      computeFinalTotal(e, computeAugEntryTotal(e)),
       e.discount || "",
       String(e.augmentationPaid || "NO").toUpperCase()
     ]);
@@ -2467,7 +2499,7 @@ function exportWaivedCSV(){
       req,
       iss,
       computeReleasingTotal(e),
-      e.amountPaid || "",
+      computeFinalTotal(e, computeReleasingTotal(e)),
       e.discount || ""
     ]);
   });
