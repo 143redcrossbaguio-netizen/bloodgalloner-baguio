@@ -611,6 +611,101 @@ flex-direction:column;
   </div>
 </div>
 
+<!-- RELEASING / WAIVED EDIT MODAL -->
+<div id="releasingModal" class="modal">
+  <div class="modalContent">
+    <h3 style="margin-top:0;">EDIT RELEASING RECORD</h3>
+
+    <label class="formLabel">DATE</label>
+    <input type="date" id="editRelDate" class="formInput">
+
+    <label class="formLabel">FACILITY</label>
+    <input type="text" id="editRelFacility" class="formInput">
+
+    <div class="row">
+      <div style="flex:1">
+        <label class="formLabel">SURNAME</label>
+        <input type="text" id="editRelSurname" class="formInput">
+      </div>
+      <div style="flex:1">
+        <label class="formLabel">FIRST NAME</label>
+        <input type="text" id="editRelFirstname" class="formInput">
+      </div>
+    </div>
+
+    <div class="row">
+      <div style="flex:1">
+        <label class="formLabel">AGE</label>
+        <input type="text" id="editRelAge" class="formInput">
+      </div>
+      <div style="flex:1">
+        <label class="formLabel">SEX</label>
+        <input type="text" id="editRelSex" class="formInput">
+      </div>
+    </div>
+
+    <div class="row">
+      <div style="flex:1">
+        <label class="formLabel">BLOOD TYPE</label>
+        <select id="editRelBloodtype" class="formSelect">
+          <option value="">Select</option>
+          <option>A+</option>
+          <option>A-</option>
+          <option>B+</option>
+          <option>B-</option>
+          <option>AB+</option>
+          <option>AB-</option>
+          <option>O+</option>
+          <option>O-</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="formLabel">OR</label>
+        <input type="text" id="editRelOr" class="formInput">
+      </div>
+    </div>
+
+    <label class="formLabel">BOX CONTAINER</label>
+    <input type="number" id="editRelBoxContainerQty" class="formInput">
+
+    <div id="editRelWaivedFields" style="display:none;">
+      <div class="row">
+        <div style="flex:1">
+          <label class="formLabel">WAIVED COMPONENT</label>
+          <input type="text" id="editRelWaivedComponent" class="formInput">
+        </div>
+        <div style="flex:1">
+          <label class="formLabel">WAIVED UNIT</label>
+          <input type="number" id="editRelWaivedUnit" class="formInput">
+        </div>
+      </div>
+    </div>
+
+    <div class="innerBox">
+      <label class="formLabel">REQUESTED</label>
+      <div id="editRelRequestContainer"></div>
+      <button type="button" class="addBtn" onclick="addEditRelRequest()">+</button>
+    </div>
+
+    <div class="innerBox">
+      <label class="formLabel">ISSUED</label>
+      <div id="editRelIssuedContainer"></div>
+      <button type="button" class="addBtn" onclick="addEditRelIssued()">+</button>
+    </div>
+
+    <label class="formLabel">AMOUNT PAID</label>
+    <input type="number" id="editRelAmountPaid" class="formInput" readonly>
+
+    <label class="formLabel">DISCOUNT</label>
+    <input type="number" id="editRelDiscount" class="formInput">
+
+    <div class="modalActions">
+      <button type="button" class="saveBtn" onclick="saveReleasingEdit()">SAVE CHANGES</button>
+      <button type="button" class="closeBtn" onclick="closeReleasingModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -652,6 +747,9 @@ let allReleasingEntries = [];
 let allAugmentationEntries = [];
 let currentAugmentationEditId = null;
 let currentAugmentationPriceSnapshot = null;
+let currentReleasingEditId = null;
+let currentReleasingPriceSnapshot = null;
+let currentReleasingWaived = false;
 let authReady = false;
 let checkedReleaseRows = new Set();
 let duplicatePanelOpen = false;
@@ -1883,6 +1981,207 @@ window.saveAugmentationEdit = async function(){
   }
 };
 
+/* RELEASING / WAIVED INLINE EDIT MODAL */
+function addEditRelRequestRow(container, item = {type:"WB", qty:""}){
+  const row = document.createElement("div");
+  row.className = "row editRelRequestRow";
+  row.innerHTML = `
+    <select class="editRelRequestType">
+      <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+      <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+      <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+      <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+      <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+    </select>
+    <input type="number" class="editRelRequestQty" placeholder="Qty" value="${item.qty ?? ""}">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
+  `;
+  container.appendChild(row);
+}
+
+function addEditRelIssuedRow(container, item = {type:"WB", qty:""}){
+  const row = document.createElement("div");
+  row.className = "row editRelIssuedRow";
+  row.innerHTML = `
+    <select class="editRelIssuedType">
+      <option ${item.type==="WB" ? "selected" : ""}>WB</option>
+      <option ${item.type==="PRBC" ? "selected" : ""}>PRBC</option>
+      <option ${item.type==="PC" ? "selected" : ""}>PC</option>
+      <option ${item.type==="FFP" ? "selected" : ""}>FFP</option>
+      <option ${item.type==="CRYO" ? "selected" : ""}>CRYO</option>
+    </select>
+    <input type="number" class="editRelIssuedQty" placeholder="Qty" value="${item.qty ?? ""}">
+    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); recomputeEditReleasingAmountPaid();">-</button>
+  `;
+  container.appendChild(row);
+}
+
+window.addEditRelRequest = function(){
+  addEditRelRequestRow(document.getElementById("editRelRequestContainer"));
+};
+
+window.addEditRelIssued = function(){
+  addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"));
+  recomputeEditReleasingAmountPaid();
+};
+
+function recomputeEditReleasingAmountPaid(){
+  const prices = currentReleasingPriceSnapshot || currentPrices;
+  let total = 0;
+
+  document.querySelectorAll("#editRelIssuedContainer .editRelIssuedRow").forEach(row => {
+    const type = row.querySelector(".editRelIssuedType").value;
+    const qty = Number(row.querySelector(".editRelIssuedQty").value) || 0;
+
+    if(prices[type] !== undefined){
+      total += prices[type] * qty;
+    }
+  });
+
+  const boxQty = Number(document.getElementById("editRelBoxContainerQty").value) || 0;
+  total += boxQty * (prices.BOX || 0);
+
+  document.getElementById("editRelAmountPaid").value = total.toFixed(2);
+}
+
+function openReleasingModal(){
+  document.getElementById("releasingModal").style.display = "block";
+}
+
+window.closeReleasingModal = function(){
+  document.getElementById("releasingModal").style.display = "none";
+  currentReleasingEditId = null;
+  currentReleasingPriceSnapshot = null;
+  currentReleasingWaived = false;
+  document.getElementById("editRelDate").value = "";
+  document.getElementById("editRelFacility").value = "";
+  document.getElementById("editRelSurname").value = "";
+  document.getElementById("editRelFirstname").value = "";
+  document.getElementById("editRelAge").value = "";
+  document.getElementById("editRelSex").value = "";
+  document.getElementById("editRelBloodtype").value = "";
+  document.getElementById("editRelOr").value = "";
+  document.getElementById("editRelBoxContainerQty").value = "";
+  document.getElementById("editRelWaivedFields").style.display = "none";
+  document.getElementById("editRelWaivedComponent").value = "";
+  document.getElementById("editRelWaivedUnit").value = "";
+  document.getElementById("editRelAmountPaid").value = "";
+  document.getElementById("editRelDiscount").value = "";
+  document.getElementById("editRelRequestContainer").innerHTML = "";
+  document.getElementById("editRelIssuedContainer").innerHTML = "";
+};
+
+async function openEditReleasing(id){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  try{
+    const snapshot = await get(ref(db, "releasing/" + id));
+    if(!snapshot.exists()){
+      alert("Record not found.");
+      return;
+    }
+
+    const data = snapshot.val();
+    currentReleasingEditId = id;
+    currentReleasingPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : currentPrices;
+    currentReleasingWaived = !!data.waived;
+
+    document.getElementById("editRelDate").value = data.date || "";
+    document.getElementById("editRelFacility").value = data.facility || "";
+    document.getElementById("editRelSurname").value = data.surname || "";
+    document.getElementById("editRelFirstname").value = data.firstname || "";
+    document.getElementById("editRelAge").value = data.age || "";
+    document.getElementById("editRelSex").value = data.sex || "";
+    document.getElementById("editRelBloodtype").value = data.bloodtype || "";
+    document.getElementById("editRelOr").value = data.or || "";
+    document.getElementById("editRelBoxContainerQty").value = data.boxContainerQty || "";
+    document.getElementById("editRelDiscount").value = data.discount || "";
+
+    document.getElementById("editRelWaivedFields").style.display = currentReleasingWaived ? "block" : "none";
+    document.getElementById("editRelWaivedComponent").value = data.waivedComponent || "";
+    document.getElementById("editRelWaivedUnit").value = data.waivedUnit || "";
+
+    document.getElementById("editRelRequestContainer").innerHTML = "";
+    document.getElementById("editRelIssuedContainer").innerHTML = "";
+
+    const requests = Array.isArray(data.requests) && data.requests.length ? data.requests : [{type:"WB", qty:""}];
+    const issued = Array.isArray(data.issued) && data.issued.length ? data.issued : [{type:"WB", qty:""}];
+
+    requests.forEach(item => addEditRelRequestRow(document.getElementById("editRelRequestContainer"), item));
+    issued.forEach(item => addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"), item));
+
+    recomputeEditReleasingAmountPaid();
+    openReleasingModal();
+  }catch(error){
+    console.error(error);
+    alert("Failed to load releasing record.");
+  }
+}
+
+window.saveReleasingEdit = async function(){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  if(!currentReleasingEditId) return;
+
+  const requests = [];
+  document.querySelectorAll("#editRelRequestContainer .editRelRequestRow").forEach(row => {
+    const type = row.querySelector(".editRelRequestType").value;
+    const qty = row.querySelector(".editRelRequestQty").value;
+    if(qty !== ""){
+      requests.push({type, qty});
+    }
+  });
+
+  const issued = [];
+  document.querySelectorAll("#editRelIssuedContainer .editRelIssuedRow").forEach(row => {
+    const type = row.querySelector(".editRelIssuedType").value;
+    const qty = row.querySelector(".editRelIssuedQty").value;
+    if(qty !== ""){
+      issued.push({type, qty});
+    }
+  });
+
+  const payload = {
+    date: document.getElementById("editRelDate").value,
+    facility: document.getElementById("editRelFacility").value.toUpperCase(),
+    surname: document.getElementById("editRelSurname").value.toUpperCase(),
+    firstname: document.getElementById("editRelFirstname").value.toUpperCase(),
+    age: document.getElementById("editRelAge").value,
+    sex: document.getElementById("editRelSex").value.toUpperCase(),
+    bloodtype: document.getElementById("editRelBloodtype").value,
+    or: document.getElementById("editRelOr").value,
+    boxContainerQty: document.getElementById("editRelBoxContainerQty").value || 0,
+    requests,
+    issued,
+    amountPaid: document.getElementById("editRelAmountPaid").value,
+    discount: document.getElementById("editRelDiscount").value,
+    priceSnapshot: currentReleasingPriceSnapshot
+  };
+
+  if(currentReleasingWaived){
+    payload.waived = true;
+    payload.waivedComponent = document.getElementById("editRelWaivedComponent").value;
+    payload.waivedUnit = document.getElementById("editRelWaivedUnit").value || 0;
+  }
+
+  try{
+    await update(ref(db, "releasing/" + currentReleasingEditId), payload);
+    alert("Releasing record updated successfully!");
+    window.closeReleasingModal();
+  }catch(error){
+    console.error(error);
+    alert("Failed to save changes.");
+  }
+};
+
 async function toggleAugmentationPaid(id){
   if(!auth.currentUser){
     alert("You are not logged in.");
@@ -1924,7 +2223,7 @@ container.addEventListener("click", async (event) => {
   }
 
   if(action === "edit-release"){
-    window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
+    await openEditReleasing(id);
     return;
   }
 
@@ -1983,7 +2282,7 @@ duplicatePanel.addEventListener("click", async (event) => {
   }
 
   if(action === "edit-release"){
-    window.location.href = "releasing-entry.html?id=" + encodeURIComponent(id);
+    await openEditReleasing(id);
     return;
   }
 
@@ -2238,12 +2537,25 @@ document.addEventListener("input", function(e){
   ){
     recomputeEditAugmentationAmountPaid();
   }
+
+  if(
+    e.target.id === "editRelBoxContainerQty" ||
+    e.target.classList.contains("editRelIssuedQty") ||
+    e.target.classList.contains("editRelIssuedType")
+  ){
+    recomputeEditReleasingAmountPaid();
+  }
 });
 
 window.onclick = function(event){
-  const modal = document.getElementById("augmentationModal");
-  if(event.target === modal){
+  const augmentationModal = document.getElementById("augmentationModal");
+  if(event.target === augmentationModal){
     window.closeAugmentationModal();
+  }
+
+  const releasingModal = document.getElementById("releasingModal");
+  if(event.target === releasingModal){
+    window.closeReleasingModal();
   }
 };
 
