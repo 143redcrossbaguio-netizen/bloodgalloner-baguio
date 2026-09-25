@@ -584,6 +584,7 @@ flex-direction:column;
 <!-- SOA VIEW MODAL -->
 <div id="soaModal" class="modal">
   <div class="modalContent" style="max-width:880px;">
+    <div id="orgEditorMount"></div>
     <div style="overflow-x:auto;border:1px dashed #999;border-radius:6px;"><div id="soaViewBody"></div></div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
       <div style="flex:1;min-width:220px;"><label class="formLabel">PRINTED / PREPARED BY</label><input type="text" id="soaViewPrintedBy" class="formInput" placeholder="Name of person printing"></div>
@@ -748,8 +749,19 @@ flex-direction:column;
 .soaDoc .soaSign div{flex:1;text-align:center}
 .soaDoc .soaSign .line{border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:11px}
 .soaDoc .soaSign .nm{min-height:16px;font-weight:700;text-transform:uppercase}
+.soaDoc .soaContact{font-size:10.5px;color:#333}
 .soaWrap{border:1px dashed #999;border-radius:6px;margin:14px 0;overflow-x:auto}
 .soaBox{background:#f4f8ff;border:1px solid #1565c0;border-radius:8px;padding:12px;margin-top:12px}
+.soaOrgBar{display:flex;justify-content:flex-end;margin:4px 0}
+.soaOrgLink{background:none;border:none;color:#1565c0;font-size:11.5px;text-decoration:underline;cursor:pointer;padding:2px}
+.soaOrgEditor{display:none;background:#fffbe6;border:1px solid #d4b106;border-radius:8px;padding:12px;margin:6px 0 14px}
+.soaOrgEditor.open{display:block}
+.soaOrgEditor label{display:block;font-size:11px;font-weight:600;margin-top:8px}
+.soaOrgEditor input{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #bbb;border-radius:5px;font-size:12px;margin-top:2px}
+.soaOrgEditor .soaOrgActions{margin-top:10px;display:flex;gap:8px}
+.soaOrgEditor button{padding:6px 12px;border:none;border-radius:5px;cursor:pointer;font-size:12px}
+.soaOrgEditor .soaOrgSave{background:#1565c0;color:#fff}
+.soaOrgEditor .soaOrgCancel{background:#ddd;}
 </style>
 <script>
 window.SOA=(function(){
@@ -759,6 +771,44 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;"
 const LS="soaMemory_v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}}};
 const store=d=>{try{localStorage.setItem(LS,JSON.stringify(d))}catch(e){}};
+
+const ORG_LS="soaOrgInfo_v1";
+const ORG_DEFAULT={
+  name:"PHILIPPINE RED CROSS BAGUIO CITY CHAPTER",
+  address:"39 Harrison Rd. Baguio City Chapter",
+  tin:"NON-VAT Reg. TIN: 000-804-271-000",
+  email1:"bloodservices.redcrossbaguio@gmail.com",
+  email2:"baguio@redcross.org.ph",
+  mobile:"+639 08 885 2707",
+  telephone:""
+};
+function getOrg(){try{return {...ORG_DEFAULT, ...(JSON.parse(localStorage.getItem(ORG_LS))||{})}}catch(e){return {...ORG_DEFAULT}}}
+function setOrg(o){try{localStorage.setItem(ORG_LS,JSON.stringify(o))}catch(e){}}
+const ORG_FIELDS=[
+  ["name","Organization Name"],["address","Address"],["tin","TIN / VAT line"],
+  ["email1","Email 1"],["email2","Email 2"],["mobile","Mobile Number"],["telephone","Telephone (add when available)"]
+];
+function mountOrgEditor(container){
+  const barId="orgBar_"+Math.random().toString(36).slice(2), edId="orgEd_"+Math.random().toString(36).slice(2);
+  container.insertAdjacentHTML("beforeend",
+    `<div class="soaOrgBar"><button type="button" class="soaOrgLink" id="${barId}">✎ Edit Organization Details</button></div>
+     <div class="soaOrgEditor" id="${edId}">
+       ${ORG_FIELDS.map(([k,label])=>`<label>${esc(label)}</label><input type="text" data-org="${k}">`).join("")}
+       <div class="soaOrgActions">
+         <button type="button" class="soaOrgSave">SAVE</button>
+         <button type="button" class="soaOrgCancel">CANCEL</button>
+       </div>
+     </div>`);
+  const bar=document.getElementById(barId), ed=document.getElementById(edId);
+  const fill=()=>{const o=getOrg();ed.querySelectorAll("[data-org]").forEach(inp=>inp.value=o[inp.dataset.org]||"")};
+  bar.addEventListener("click",()=>{fill();ed.classList.toggle("open")});
+  ed.querySelector(".soaOrgCancel").addEventListener("click",()=>ed.classList.remove("open"));
+  ed.querySelector(".soaOrgSave").addEventListener("click",()=>{
+    const o=getOrg();ed.querySelectorAll("[data-org]").forEach(inp=>o[inp.dataset.org]=inp.value.trim());
+    setOrg(o);ed.classList.remove("open");
+    document.dispatchEvent(new CustomEvent("soaOrgChanged"));
+  });
+}
 const norm=s=>String(s).trim().replace(/\s+/g," ").toLowerCase();
 function list(key){return (load()[key]||[]).slice().sort((a,b)=>b.n-a.n||b.t-a.t).map(x=>x.v)}
 function remember(key,val){
@@ -801,8 +851,11 @@ function build(e,prices){
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
   for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
   if(disc>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount</b></td><td class="n">(${money(disc)})</td></tr>`;
+  const org=getOrg();
+  const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
+  const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
   return `<div class="soaDoc">
-<div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>PHILIPPINE RED CROSS BAGUIO CITY CHAPTER</b><br>39 Harrison Rd. Baguio City Chapter<br>NON-VAT Reg. TIN: 000-804-271-000</div></div>
+<div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
 <div class="soaTitle">BILLING STATEMENT</div>
 <div class="soaMeta"><div><div>CUSTOMER: <span class="ul" style="min-width:230px">${esc(e.facility)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
 <div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div></div></div>
@@ -819,7 +872,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor};
 })();
 </script>
 
@@ -2736,6 +2789,8 @@ onAuthStateChanged(auth, async (user) => {
 
 /* ───────── SOA view / print / edit ───────── */
 SOA.attach(document.getElementById("editAugAddress"), "address");
+SOA.mountOrgEditor(document.getElementById("orgEditorMount"));
+document.addEventListener("soaOrgChanged", () => { if(soaViewId) renderSoaView(); });
 SOA.attach(document.getElementById("soaViewPrintedBy"), "printedBy");
 SOA.attach(document.getElementById("soaViewApprovedBy"), "approvedBy");
 let soaViewId = null;
