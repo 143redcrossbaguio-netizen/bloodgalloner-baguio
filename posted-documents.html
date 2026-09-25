@@ -195,6 +195,10 @@ tr.expanded .caret{transform:rotate(90deg);}
 .detailActions{display:flex;gap:8px;margin-bottom:8px;}
 .detailActions .btn{padding:6px 12px;font-size:11.5px;}
 .empty{text-align:center;padding:40px;color:#888;font-size:14px;}
+.statusBadge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:none;letter-spacing:.3px;}
+.statusBadge.paid{background:#e6f4ea;color:#1e7e34;}
+.statusBadge.unpaid{background:#fdecea;color:#c62828;}
+.statusBadge:hover{filter:brightness(0.95);}
 .periodTabs{display:flex;gap:6px;}
 .periodTabs button{padding:8px 14px;border:1px solid #1a1450;background:#fff;color:#1a1450;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;}
 .periodTabs button.active{background:#1a1450;color:#fff;}
@@ -253,6 +257,7 @@ tr.expanded .caret{transform:rotate(90deg);}
           <th>Customer Name</th>
           <th class="n">Amount</th>
           <th class="n">Discount</th>
+          <th class="c">Status</th>
           <th class="c">No. of Print</th>
           <th>Name of Person Printed</th>
         </tr>
@@ -267,7 +272,7 @@ tr.expanded .caret{transform:rotate(90deg);}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -346,7 +351,7 @@ function inPeriod(e){
 function matchesSearch(e, q){
   if(!q) return true;
   q = q.toLowerCase();
-  return [e.invoiceNo, e.facility, e.printedBy, e.approvedBy, e.address]
+  return [e.invoiceNo, e.facility, e.printedBy, e.approvedBy, e.address, statusOf(e)]
     .some(v => String(v||"").toLowerCase().includes(q));
 }
 
@@ -357,9 +362,12 @@ function filteredEntries(){
     .sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.invoiceNo||"").localeCompare(a.invoiceNo||""));
 }
 
+function statusOf(e){ return e.paymentStatus === "Paid" ? "Paid" : "Unpaid"; }
+
 function rowHtml(e){
   const t = SOA.totals(e, getEntryPrices(e));
   const isOpen = e.id === expandedId;
+  const st = statusOf(e);
   return `
     <tr class="dataRow${isOpen?" expanded":""}" data-id="${e.id}" onclick="toggleRow('${e.id}')">
       <td class="caret">▶</td>
@@ -368,11 +376,12 @@ function rowHtml(e){
       <td>${SOA.esc(e.facility || "")}</td>
       <td class="n">${money(t.gross)}</td>
       <td class="n">${money(t.disc)}</td>
+      <td class="c"><button type="button" class="statusBadge ${st==="Paid"?"paid":"unpaid"}" onclick="event.stopPropagation();toggleStatus('${e.id}')">${st}</button></td>
       <td class="c">${Number(e.printCount)||0}</td>
       <td>${SOA.esc(e.printedBy || "")}</td>
     </tr>
     <tr class="detailRow" style="display:${isOpen?"table-row":"none"};">
-      <td colspan="8">
+      <td colspan="9">
         <div class="detailWrap">
           <div class="detailActions">
             <button type="button" class="btn printF" onclick="event.stopPropagation();printOne('${e.id}')">🖨 Print This Statement</button>
@@ -386,6 +395,15 @@ function rowHtml(e){
 window.toggleRow = function(id){
   expandedId = (expandedId === id) ? null : id;
   render();
+};
+
+window.toggleStatus = async function(id){
+  const e = allEntries.find(x => x.id === id); if(!e) return;
+  const next = statusOf(e) === "Paid" ? "Unpaid" : "Paid";
+  e.paymentStatus = next; // optimistic UI update
+  render();
+  try{ await update(ref(db, "bloodAugmentation/" + id), { paymentStatus: next }); }
+  catch(err){ console.error("Could not update payment status:", err); }
 };
 
 window.printOne = function(id){
@@ -410,7 +428,7 @@ function render(){
   renderSummary(rows);
   $("tblBody").innerHTML = rows.length
     ? rows.map(rowHtml).join("")
-    : `<tr><td colspan="8" class="empty">No posted documents found for this period.</td></tr>`;
+    : `<tr><td colspan="9" class="empty">No posted documents found for this period.</td></tr>`;
 }
 
 function buildPrintTable(rows, label){
@@ -425,6 +443,7 @@ function buildPrintTable(rows, label){
       <td>${SOA.esc(e.facility||"")}</td>
       <td style="text-align:right;">${money(t.gross)}</td>
       <td style="text-align:right;">${money(t.disc)}</td>
+      <td style="text-align:center;">${statusOf(e)}</td>
       <td style="text-align:center;">${Number(e.printCount)||0}</td>
       <td>${SOA.esc(e.printedBy||"")}</td>
     </tr>`;
@@ -443,15 +462,16 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">Customer Name</th>
         <th style="border:1px solid #000;padding:4px;">Amount</th>
         <th style="border:1px solid #000;padding:4px;">Discount</th>
+        <th style="border:1px solid #000;padding:4px;">Status</th>
         <th style="border:1px solid #000;padding:4px;">No. of Print</th>
         <th style="border:1px solid #000;padding:4px;">Name of Person Printed</th>
       </tr></thead>
-      <tbody>${body || '<tr><td colspan="7" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
+      <tbody>${body || '<tr><td colspan="8" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:700;">
         <td colspan="3" style="border:1px solid #000;padding:4px;text-align:right;">TOTAL</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totGross)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totDisc)}</td>
-        <td colspan="2" style="border:1px solid #000;"></td>
+        <td colspan="3" style="border:1px solid #000;"></td>
       </tr></tfoot>
     </table>
   </div>`;
@@ -472,11 +492,11 @@ window.printList = function(all){
 
 window.exportCsv = function(){
   const rows = filteredEntries();
-  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","No. of Print","Name of Person Printed"];
+  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Status","No. of Print","Name of Person Printed"];
   const lines = [head.join(",")];
   rows.forEach(e => {
     const t = SOA.totals(e, getEntryPrices(e));
-    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), Number(e.printCount)||0, e.printedBy||""];
+    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), statusOf(e), Number(e.printCount)||0, e.printedBy||""];
     lines.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","));
   });
   const blob = new Blob(["\ufeff"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
