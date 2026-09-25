@@ -836,7 +836,7 @@ function fmtDate(s){
   const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||"");if(!m)return s||"";
   return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
 }
-function build(e,prices){
+function totals(e,prices){
   prices=prices||{};const rows=[];let gross=0;
   (e.bloodTypes||[]).forEach(bt=>{
     const agg={};(bt.issued||[]).forEach(i=>{const t=String(i.type||"").toUpperCase();agg[t]=(agg[t]||0)+(Number(i.qty)||0)});
@@ -848,6 +848,10 @@ function build(e,prices){
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
   const disc=Number(e.discount)||0,net=gross-disc;
+  return {rows,gross,disc,net};
+}
+function build(e,prices){
+  const {rows,disc,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
   for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
   if(disc>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount</b></td><td class="n">(${money(disc)})</td></tr>`;
@@ -872,7 +876,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc};
 })();
 </script>
 
@@ -2836,6 +2840,8 @@ window.printSoaView = async function(){
       const tx = await runTransaction(ref(db, "settings/soaCounter/" + y), c => (Number(c) || 0) + 1);
       d.invoiceNo = patch.invoiceNo = `INV-${y}-${String(tx.snapshot.val()).padStart(5,"0")}`;
     }
+    const tx2 = await runTransaction(ref(db, "bloodAugmentation/" + d.id + "/printCount"), c => (Number(c) || 0) + 1);
+    d.printCount = tx2.snapshot.val();
     await update(ref(db, "bloodAugmentation/" + d.id), patch);
   }catch(err){ console.error(err); alert("Could not store the invoice/print details, but printing will continue."); }
   renderSoaView();
