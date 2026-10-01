@@ -968,7 +968,11 @@ async function loadRTDBPathMonth(path, year, month) {
         snap.forEach(child => {
             const childPath = `${path}/${child.key}`;
             const val = child.val();
-            if (isLikelyRTDBReportRecord(val, childPath)) {
+            // Same rule as releasing-statistics.html: every child record that has a date counts.
+            if (val && typeof val === "object" && !Array.isArray(val) && String(val.date || "") !== "") {
+                const normalized = normalizeRTDBReportRecord(val, child.key, childPath);
+                if (normalized) { normalized.__monthKey = String(val.date).slice(0,7); directRows.push(normalized); }
+            } else if (isLikelyRTDBReportRecord(val, childPath)) {
                 const normalized = normalizeRTDBReportRecord(val, child.key, childPath);
                 if (normalized) directRows.push(normalized);
             }
@@ -1297,7 +1301,91 @@ function countComponentsFromList(list) {
 }
 
 function addReleaseCounts(target, counts) { components.forEach(c => target[c] = (target[c] || 0) + (counts[c] || 0)); }
-function releaseFacility(r) { return normText(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "Unspecified") || "Unspecified"; }
+// Same facility alias engine as releasing-statistics.html, so BM7 groups hospitals exactly like the website.
+const STATS_FACILITY_ALIASES = [
+    { canonical:"BAGUIO GENERAL HOSPITAL AND MEDICAL CENTER",
+      aliases:["BGHMC","BGH","BAGUIO GENERAL","BAGUIO GEN","BAGUIO GENERAL HOSPITAL",
+               "BAGUIO GEN HOSP","B.G.H.M.C","B.G.H","BGMC","BAGUIO GENERAL MED CENTER"] },
+    { canonical:"NOTRE DAME DE CHARTRES HOSPITAL",
+      aliases:["NDCH","NOTRE DAME DE CHARTRES","NOTRE DAME CHARTRES","NOTRE DAME",
+               "ND CHARTRES","N.D.C.H","NDCH BAGUIO"] },
+    { canonical:"REGION 1 MEDICAL CENTER",
+      aliases:["R1MC","REGION 1 MED CENTER","REGION 1 MEDICAL","REGION I MEDICAL CENTER",
+               "REGION I MED CENTER","R1 MED CENTER","R-1MC","R1 MEDICAL CENTER",
+               "REGION1 MEDICAL CENTER","R.1.M.C","REGION 1MC"] },
+    { canonical:"SAINT LOUIS UNIVERSITY HOSPITAL",
+      aliases:["SLUH","SLU HOSPITAL","SLU HOSP","SAINT LOUIS UNIV HOSPITAL",
+               "ST LOUIS UNIVERSITY HOSPITAL","ST. LOUIS UNIVERSITY HOSPITAL","SLU","S.L.U.H"] },
+    { canonical:"BENGUET GENERAL HOSPITAL",
+      aliases:["BGH BENGUET","BENGUET GEN HOSP","BENGUET GENERAL","BGH-BENGUET","B.G.H BENGUET"] },
+    { canonical:"PINES CITY DOCTORS HOSPITAL",
+      aliases:["PCDH","PINES CITY DOCTORS","PINES DOCTORS","PINES CITY DOC HOSP","P.C.D.H","PINES CITY"] },
+    { canonical:"BAGUIO CITY HEALTH SERVICES OFFICE",
+      aliases:["BCHSO","BAGUIO CHO","BAGUIO CITY HEALTH","BAGUIO HEALTH OFFICE","BCHSO BAGUIO"] },
+    { canonical:"WESTERN PANGASINAN DISTRICT HOSPITAL",
+      aliases:["WPDH","WESTERN PANGASINAN","WEST PANGASINAN DISTRICT HOSP",
+               "WESTERN PANGASINAN DIST HOSP","W.P.D.H","WPDC","WESTERN PANGASINAN HOSPITAL"] },
+    { canonical:"EASTERN PANGASINAN DISTRICT HOSPITAL",
+      aliases:["EPDH","EASTERN PANGASINAN","EAST PANGASINAN DISTRICT HOSP",
+               "EASTERN PANGASINAN DIST HOSP","E.P.D.H","EASTERN PANGASINAN HOSPITAL"] },
+    { canonical:"DAGUPAN DOCTORS VILLAFLOR MEMORIAL HOSPITAL",
+      aliases:["DDVMH","DAGUPAN DOCTORS","VILLAFLOR MEMORIAL","DAGUPAN DOCTORS HOSP","D.D.V.M.H"] },
+    { canonical:"URDANETA CITY GENERAL HOSPITAL",
+      aliases:["UCGH","URDANETA GENERAL","URDANETA CITY HOSP","URDANETA HOSPITAL","U.C.G.H"] },
+    { canonical:"PANGASINAN PROVINCIAL HOSPITAL",
+      aliases:["PPH","PANGASINAN PROV HOSP","PANGASINAN PROVINCIAL","PROV HOSP PANGASINAN","P.P.H"] },
+    { canonical:"ILOCOS TRAINING AND REGIONAL MEDICAL CENTER",
+      aliases:["ITRMC","ILOCOS TRAINING","ILOCOS REGIONAL","ITRMC LA UNION","I.T.R.M.C"] },
+    { canonical:"DON MARIANO MARCOS MEMORIAL HOSPITAL",
+      aliases:["DMMMH","DON MARIANO MARCOS","DMMMH BATAC","D.M.M.M.H","DON MARIANO MARCOS MEMORIAL"] },
+    { canonical:"PHILIPPINE GENERAL HOSPITAL",
+      aliases:["PGH","PHIL GENERAL HOSPITAL","PHILIPPINE GEN HOSP","P.G.H"] },
+    { canonical:"PHILIPPINE HEART CENTER",
+      aliases:["PHC","PHIL HEART CENTER","P.H.C"] },
+    { canonical:"NATIONAL KIDNEY AND TRANSPLANT INSTITUTE",
+      aliases:["NKTI","NATIONAL KIDNEY","N.K.T.I","NAT KIDNEY TRANSPLANT"] },
+    { canonical:"LUNG CENTER OF THE PHILIPPINES",
+      aliases:["LCP","LUNG CENTER","L.C.P","LUNG CENTER PHILS"] },
+];
+
+const STATS_ALIAS_MAP = {};
+STATS_FACILITY_ALIASES.forEach(entry => {
+    const canon = entry.canonical.toUpperCase().trim();
+    STATS_ALIAS_MAP[canon] = canon;
+    STATS_ALIAS_MAP[statsNormKey(canon)] = canon;
+    entry.aliases.forEach(alias => {
+        const a = alias.toUpperCase().trim();
+        STATS_ALIAS_MAP[a] = canon;
+        STATS_ALIAS_MAP[statsNormKey(a)] = canon;
+    });
+});
+
+function statsNormKey(s){
+    return String(s||"").toUpperCase().replace(/[\s.\-()&,\/]+/g,"");
+}
+
+function normalizeFacilityLikeStats(raw){
+    if(!raw) return "UNKNOWN FACILITY";
+    const upper = raw.toUpperCase().trim();
+    if(!upper) return "UNKNOWN FACILITY";
+    if(STATS_ALIAS_MAP[upper]) return STATS_ALIAS_MAP[upper];
+    const nk = statsNormKey(upper);
+    if(STATS_ALIAS_MAP[nk]) return STATS_ALIAS_MAP[nk];
+    for(const [alias, canon] of Object.entries(STATS_ALIAS_MAP)){
+        if(alias.length < 3) continue;
+        if(upper.startsWith(alias) || alias.startsWith(upper)) return canon;
+    }
+    for(const entry of STATS_FACILITY_ALIASES){
+        const canon = entry.canonical.toUpperCase().trim();
+        for(const alias of [entry.canonical, ...entry.aliases]){
+            const aliasUp = alias.toUpperCase().trim();
+            if(aliasUp.length >= 4 && (upper.includes(aliasUp) || aliasUp.includes(upper))) return canon;
+        }
+    }
+    return upper;
+}
+// ═══════════════════════════════════════════════════════════════════════
+function releaseFacility(r) { return normalizeFacilityLikeStats(String(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "")); }
 function releaseSex(r) {
     const values = [
         r?.sex, r?.gender, r?.patientSex, r?.patientGender, r?.recipientSex, r?.recipientGender, r?.clientSex,
@@ -1522,6 +1610,8 @@ function buildReleasingData(releases, augmentations) {
         facilities: {},
         augmentationFacilities: {},
         augmentationAmount: 0,
+        augmentationCollectable: 0,
+        augmentationUnpaidEntries: 0,
         remittance: emptyRemittanceBlock()
     };
 
@@ -1565,14 +1655,32 @@ function buildReleasingData(releases, augmentations) {
 
     augmentations.forEach(r => {
         const facility = releaseFacility(r);
-        if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0};
+        if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, unpaidEntries:0, collectable:0};
         const af = data.augmentationFacilities[facility];
         af.patients++;
-        data.augmentationAmount += Math.max(0, parseNum(r.amountPaid) - parseNum(r.discount));
 
         // Blood augmentation records store issued components inside bloodTypes[].issued.
         const issuedCounts = getIssuedCountsForRecord(r);
         addReleaseCounts(af, issuedCounts);
+
+        // Same paid flag as releasing-tracking.html (augmentationPaid YES/NO, default NO).
+        const isPaid = String(r.augmentationPaid || "NO").toUpperCase() === "YES";
+        const prices = getEntryPrices(r);
+        let gross = 0;
+        (Array.isArray(r.bloodTypes) ? r.bloodTypes : []).forEach(btRow => {
+            gross += sumObj(computeComponentListValue(btRow && btRow.issued, prices));
+        });
+        gross += parseNum(r.boxContainerQty) * (prices.BOX || 0);
+        const net = Math.max(0, gross - parseNum(r.discount));
+
+        if (isPaid) {
+            data.augmentationAmount += net;
+        } else {
+            data.augmentationCollectable += net;
+            data.augmentationUnpaidEntries++;
+            af.unpaidEntries++;
+            af.collectable += net;
+        }
     });
 
     return data;
@@ -1682,6 +1790,7 @@ function renderBS323(data) {
         ["Permanent deferrals", data.deferralData.type.Permanent],
         ["Patients / transactions served", r.regularRecords],
         ["Blood augmentation records", r.augmentationRecords],
+        ["Blood augmentation COLLECTABLES (unpaid)", (r.augmentationCollectable || 0).toFixed(2)],
         ["Total regular units released", sumObj(r.issuedTotal)],
         ["BPF Remittance to NHQ", (r.remittance?.total || 0) + (r.remittance?.bloodTypingAmount || 0)]
     ]) + "<br>" + table(["Patient Served", "Male", "Female", "Total"], patientRows) +
@@ -1713,9 +1822,9 @@ function renderDeferrals(data) {
 }
 
 function renderBM7(data) {
-    const rows = Object.values(data.releasingData.facilities).sort((a,b) => b.patients - a.patients).slice(0,80).map(v => [v.facility, v.patients, v.Male, v.Female, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
-    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b) => b.patients - a.patients).slice(0,80).map(v => [v.facility, v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
-    return `${table(["Facility", "Patients", "Male", "Female", "WB", "PRBC", "FFP", "PC", "CRYO"], rows)}<br>${table(["Augmentation Facility", "Entries", "WB", "PRBC", "FFP", "PC", "CRYO"], augRows)}`;
+    const rows = Object.values(data.releasingData.facilities).sort((a,b) => String(a.facility).localeCompare(String(b.facility))).map(v => [v.facility, v.patients, v.Male, v.Female, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b) => String(a.facility).localeCompare(String(b.facility))).map(v => [v.facility + (v.unpaidEntries ? " (COLLECTABLES)" : ""), v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+    return `<b>B. Distribution to Patients/Relatives</b>${table(["Facility", "Patients", "Male", "Female", "WB", "PRBC", "FFP", "PC", "CRYO"], rows)}<br><b>C. Blood augmentation</b>${table(["Augmentation Facility", "Entries", "WB", "PRBC", "FFP", "PC", "CRYO"], augRows)}`;
 }
 
 function renderManualFields() {
@@ -1867,10 +1976,11 @@ function fillBS323(workbook, data) {
     setNum(ws, "D42", payMale);       setNum(ws, "E42", payFemale);
     setNum(ws, "D43", discMale);      setNum(ws, "E43", discFemale);
     setNum(ws, "D44", noMale);        setNum(ws, "E44", noFemale);
-    setFormulaResult(ws, "H42", "SUM(D42:G42)", payTotal);
-    setFormulaResult(ws, "H43", "SUM(D43:G43)", discTotal);
-    setFormulaResult(ws, "H44", "SUM(D44:G44)", noTotal);
-    setFormulaResult(ws, "H45", "SUM(H42:H44)", payTotal + discTotal + noTotal);
+    // The website's Patient Served table is Male + Female only; the Excel total is SUM(D:G), so cache the same number.
+    setFormulaResult(ws, "H42", "SUM(D42:G42)", payMale + payFemale);
+    setFormulaResult(ws, "H43", "SUM(D43:G43)", discMale + discFemale);
+    setFormulaResult(ws, "H44", "SUM(D44:G44)", noMale + noFemale);
+    setFormulaResult(ws, "H45", "SUM(H42:H44)", payMale + payFemale + discMale + discFemale + noMale + noFemale);
 
     // Official row positions in the uploaded template:
     // 52 = Whole Blood 450 ml, 53 = Packed Red Cells, 54 = Platelet Concentrate,
@@ -1895,10 +2005,18 @@ function fillBS323(workbook, data) {
     // Blood augmentation is tracked separately in the Releasing module. Put total augmentation units/amount on its own row only.
     const augUnits = Object.values(data.releasingData.augmentationFacilities || {}).reduce((sum, x) => sum + (x.WB||0) + (x.PRBC||0) + (x.FFP||0) + (x.PC||0) + (x.CRYO||0), 0);
     const augAmount = Number(data.releasingData.augmentationAmount || 0);
-    if (augUnits || augAmount) {
+    const augCollectable = Number(data.releasingData.augmentationCollectable || 0);
+    const augUnpaidEntries = Number(data.releasingData.augmentationUnpaidEntries || 0);
+    if (augUnits || augAmount || augCollectable) {
         setNum(ws, "F66", augUnits);
         setFormulaResult(ws, "I66", "SUM(F66:H66)", augUnits);
-        setNum(ws, "J66", augAmount);
+        setNum(ws, "J66", augAmount);   // only PAID augmentation is counted as collected BPF
+    }
+    if (augUnpaidEntries > 0) {
+        const note = "COLLECTABLES\nUnpaid blood augmentation: PHP " + augCollectable.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + " (" + augUnpaidEntries + " unpaid " + (augUnpaidEntries === 1 ? "entry" : "entries") + ")";
+        ws.getCell("B66").note = note;
+        ws.getCell("J66").note = note;
+        ws.getCell("B66").value = "Blood augmentation - COLLECTABLES";   // text in B only; J:Q columns are summed as numbers
     }
 
     ["J","K","L","M","N","O","P","Q"].forEach(col => {
@@ -2066,15 +2184,38 @@ function fillBM7(workbook, data) {
     setPeriodCell(ws, "C7", data);
     const monthLabel = monthNames[Number(data.month) - 1] || "";
     const classMap = buildFacilityClassMap(workbook);
+    const SECTION_ROWS = 70;
+    const cols = ["E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"];
+    const byName = (a,b) => String(a.facility).localeCompare(String(b.facility));   // alphabetical, same as the website
 
-    const rows = Object.values(data.releasingData.facilities || {})
-        .sort((a,b) => b.patients - a.patients || a.facility.localeCompare(b.facility))
-        .slice(0,70);
+    // The template hides most detail rows ("hide if unused"), so unhide every row that gets data.
+    const unhide = (firstRow, count) => { for (let i = 0; i < count; i++) ws.getRow(firstRow + i).hidden = false; };
+    const writeTotals = (totalRow, firstRow, lastRow, totals) => {
+        setCell(ws, `C${totalRow}`, "Total");
+        cols.forEach(c => setFormulaResult(ws, `${c}${totalRow}`, `SUM(${c}${firstRow}:${c}${lastRow})`, totals[c] || 0));
+    };
+    const sumFacilities = (list) => {
+        const t = {};
+        list.forEach(x => {
+            t.E = (t.E||0) + (x.patients||0); t.F = (t.F||0) + (x.Male||0); t.G = (t.G||0) + (x.Female||0);
+            t.H = (t.H||0) + (x.WB||0); t.I = (t.I||0) + (x.PRBC||0); t.J = (t.J||0) + (x.FFP||0);
+            t.K = (t.K||0) + (x.PC||0); t.O = (t.O||0) + (x.CRYO||0);
+        });
+        return t;
+    };
 
-    // Section A: Direct Hospital Distribution. Clear all editable cells and rebuild from releasing statistics.
+    const rows = Object.values(data.releasingData.facilities || {}).sort(byName);
+    if (rows.length > SECTION_ROWS) console.warn(`BM7: ${rows.length} facilities but the template has only ${SECTION_ROWS} rows per section.`);
+    const shown = rows.slice(0, SECTION_ROWS);
+
+    // A. Direct Hospital Distribution (rows 10-79) and B. Distribution to Patients/Relatives (rows 83-152) were swapped:
+    // all releasing statistics now go to B, and A is left blank.
     clearCells(ws, "B10:T79");
-    rows.forEach((item, idx) => {
-        const row = 10 + idx;
+    writeTotals(80, 10, 79, {});
+
+    clearCells(ws, "B83:T152");
+    shown.forEach((item, idx) => {
+        const row = 83 + idx;
         setCell(ws, `B${row}`, monthLabel);
         setCell(ws, `C${row}`, item.facility);
         setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
@@ -2087,21 +2228,11 @@ function fillBM7(workbook, data) {
         setNum(ws, `K${row}`, item.PC || 0);
         setNum(ws, `O${row}`, item.CRYO || 0);
     });
-    const tot = rows.reduce((a,x)=>{["patients","Male","Female","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
-    setCell(ws,"C80","Total");
-    // Force independent formulas/results so ExcelJS does not retain broken shared-formula clones from the template.
-    setFormulaResult(ws,"E80","SUM(E10:E79)",tot.patients);
-    setFormulaResult(ws,"F80","SUM(F10:F79)",tot.Male);
-    setFormulaResult(ws,"G80","SUM(G10:G79)",tot.Female);
-    setFormulaResult(ws,"H80","SUM(H10:H79)",tot.WB);
-    setFormulaResult(ws,"I80","SUM(I10:I79)",tot.PRBC);
-    setFormulaResult(ws,"J80","SUM(J10:J79)",tot.FFP);
-    setFormulaResult(ws,"K80","SUM(K10:K79)",tot.PC);
+    unhide(83, Math.max(shown.length, 1));
+    writeTotals(153, 83, 152, sumFacilities(shown));
 
-    // Section C: Blood augmentation / distribution to other PRC BSF.
-    const augRows = Object.values(data.releasingData.augmentationFacilities || {})
-        .sort((a,b)=>b.patients-a.patients || a.facility.localeCompare(b.facility))
-        .slice(0,70);
+    // C. Blood augmentation / distribution to other PRC BSF (rows 156-225)
+    const augRows = Object.values(data.releasingData.augmentationFacilities || {}).sort(byName).slice(0, SECTION_ROWS);
     clearCells(ws, "B156:T225");
     augRows.forEach((item, idx) => {
         const row = 156 + idx;
@@ -2113,27 +2244,16 @@ function fillBM7(workbook, data) {
         setNum(ws, `J${row}`, item.FFP || 0);
         setNum(ws, `K${row}`, item.PC || 0);
         setNum(ws, `O${row}`, item.CRYO || 0);
+        // Unpaid augmentation = not collected yet: label it COLLECTABLES (visible text + cell comment).
+        if (item.unpaidEntries > 0) {
+            const amt = Number(item.collectable || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+            setCell(ws, `D${row}`, "COLLECTABLES");
+            ws.getCell(`D${row}`).note = "COLLECTABLES\nUnpaid: PHP " + amt + " (" + item.unpaidEntries + " unpaid " + (item.unpaidEntries === 1 ? "entry" : "entries") + ")";
+        }
     });
-    const augTot = augRows.reduce((a,x)=>{["patients","WB","PRBC","FFP","PC","CRYO"].forEach(k=>a[k]=(a[k]||0)+(x[k]||0)); return a;},{});
-    setCell(ws,"C226","Total");
-    // Row 226 in the template contains shared formulas. Rewrite every formula cell in the row
-    // because writing only E/H/I/J/K/O leaves F226/G226/etc as broken shared-formula clones.
-    setFormulaResult(ws,"E226","SUM(E156:E225)",augTot.patients);
-    setFormulaResult(ws,"F226","SUM(F156:F225)",0);
-    setFormulaResult(ws,"G226","SUM(G156:G225)",0);
-    setFormulaResult(ws,"H226","SUM(H156:H225)",augTot.WB);
-    setFormulaResult(ws,"I226","SUM(I156:I225)",augTot.PRBC);
-    setFormulaResult(ws,"J226","SUM(J156:J225)",augTot.FFP);
-    setFormulaResult(ws,"K226","SUM(K156:K225)",augTot.PC);
-    setFormulaResult(ws,"L226","SUM(L156:L225)",0);
-    setFormulaResult(ws,"M226","SUM(M156:M225)",0);
-    setFormulaResult(ws,"N226","SUM(N156:N225)",0);
-    setFormulaResult(ws,"O226","SUM(O156:O225)",augTot.CRYO);
-    setFormulaResult(ws,"P226","SUM(P156:P225)",0);
-    setFormulaResult(ws,"Q226","SUM(Q156:Q225)",0);
-    setFormulaResult(ws,"R226","SUM(R156:R225)",0);
-    setFormulaResult(ws,"S226","SUM(S156:S225)",0);
-    setFormulaResult(ws,"T226","SUM(T156:T225)",0);
+    unhide(156, Math.max(augRows.length, 1));
+    const augT = sumFacilities(augRows); augT.F = 0; augT.G = 0;
+    writeTotals(226, 156, 225, augT);
 }
 
 function buildFacilityClassMap(workbook) {
@@ -2146,7 +2266,10 @@ function buildFacilityClassMap(workbook) {
         const n = normKey(name);
         if (n && cls) {
             const c = normText(cls);
-            map[n] = c.includes("GOV") ? "Government" : (c.includes("MIL") ? "Military" : (c.includes("PRC") ? "PRC Chapter" : "Private"));
+            const klass = c.includes("GOV") ? "Government" : (c.includes("MIL") ? "Military" : (c.includes("PRC") ? "PRC Chapter" : "Private"));
+            map[n] = klass;
+            const canonKey = normKey(normalizeFacilityLikeStats(String(name)));
+            if (canonKey && !map[canonKey]) map[canonKey] = klass;
         }
     }
     return map;
