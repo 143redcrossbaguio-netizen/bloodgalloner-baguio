@@ -1585,6 +1585,7 @@ function addRemittanceForEntry(remittance, entry, issuedCounts) {
 }
 
 function buildReleasingData(releases, augmentations) {
+    augmentations = Array.isArray(augmentations) ? augmentations : [];
     const data = {
         regularRecords: releases.length,
         augmentationRecords: augmentations.length,
@@ -1612,6 +1613,7 @@ function buildReleasingData(releases, augmentations) {
         augmentationAmount: 0,
         augmentationCollectable: 0,
         augmentationUnpaidEntries: 0,
+        augmentationByComp: {WB:{units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0}, PRBC:{units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0}, FFP:{units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0}, PC:{units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0}, CRYO:{units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0}},
         remittance: emptyRemittanceBlock()
     };
 
@@ -1653,6 +1655,8 @@ function buildReleasingData(releases, augmentations) {
         addReleaseCounts(f, issuedCounts);
     });
 
+    // Oldest augmentation first, so section C of BM7 lists facilities in the order they were served.
+    augmentations = augmentations.slice().sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")));
     augmentations.forEach(r => {
         const facility = releaseFacility(r);
         if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, unpaidEntries:0, collectable:0};
@@ -1672,6 +1676,23 @@ function buildReleasingData(releases, augmentations) {
         });
         gross += parseNum(r.boxContainerQty) * (prices.BOX || 0);
         const net = Math.max(0, gross - parseNum(r.discount));
+
+        // Per-component units and money (used by BS 323 "Blood augmentation" rows). Discount is spread pro-rata.
+        const compValue = emptyReleaseComponents();
+        (Array.isArray(r.bloodTypes) ? r.bloodTypes : []).forEach(btRow => {
+            const v = computeComponentListValue(btRow && btRow.issued, prices);
+            components.forEach(c => compValue[c] += v[c] || 0);
+        });
+        const compGross = sumObj(compValue);
+        const compFactor = compGross > 0 ? Math.max(0, compGross - parseNum(r.discount)) / compGross : 1;
+        components.forEach(c => {
+            const units = issuedCounts[c] || 0;
+            if (!units) return;
+            const bucket = data.augmentationByComp[c];
+            bucket.units += units;
+            if (isPaid) { bucket.paidUnits += units; bucket.paidAmount += (compValue[c] || 0) * compFactor; }
+            else { bucket.unpaidUnits += units; bucket.unpaidAmount += (compValue[c] || 0) * compFactor; }
+        });
 
         if (isPaid) {
             data.augmentationAmount += net;
@@ -1789,6 +1810,9 @@ function renderBS323(data) {
         ["Temporary deferrals", data.deferralData.type.Temporary],
         ["Permanent deferrals", data.deferralData.type.Permanent],
         ["Patients / transactions served", r.regularRecords],
+        ["Donors with unspecified sex (not in BS 325 A)", d.sex.Unspecified || 0],
+        ["Donors with unspecified frequency (not in BS 325 B)", d.frequency.Unspecified || 0],
+        ["Donors with unspecified age (not in BS 325 C)", d.age.Unspecified || 0],
         ["Blood augmentation records", r.augmentationRecords],
         ["Blood augmentation COLLECTABLES (unpaid)", (r.augmentationCollectable || 0).toFixed(2)],
         ["Total regular units released", sumObj(r.issuedTotal)],
@@ -1953,10 +1977,12 @@ function fillBS323(workbook, data) {
     clearCellsIfNotFormula(ws, "D6:D11");       // Items 2 to 6 are manual.
     clearCellsIfNotFormula(ws, "C36:C36");      // Item 7 blood typed is manual.
     clearCells(ws, "D42:H45");                  // Patient served block, including displayed totals.
-    clearCells(ws, "F51:R70");                  // Units dispensed / BPF collection rows and totals.
+    clearCells(ws, "F51:R70");
+    clearCells(ws, "B67:B67");                  // Units dispensed / BPF collection rows and totals.
     clearCells(ws, "T51:W74");                  // Hidden/helper sample values from the source template.
     clearCells(ws, "Y74:Y74");                  // Hidden/helper BPF remittance total from the source template.
-    clearCells(ws, "B68:L69");                  // Old-rate rows are manual and should start blank.
+    clearCells(ws, "B68:O69");                  // Old-rate sample rows are replaced by the blood augmentation rows below.
+    clearCells(ws, "N67:O67");
     clearCellsIfNotFormula(ws, "C84:C86");      // BPF Remittance / Total BPF collected must be rebuilt for this month.
 
     setPeriodCell(ws, "D3", data);
@@ -2002,31 +2028,44 @@ function fillBS323(workbook, data) {
         setNum(ws, `L${row}`, data.releasingData.moneyByPayment.noCharge[comp]);
     });
 
-    // Blood augmentation is tracked separately in the Releasing module. Put total augmentation units/amount on its own row only.
-    const augUnits = Object.values(data.releasingData.augmentationFacilities || {}).reduce((sum, x) => sum + (x.WB||0) + (x.PRBC||0) + (x.FFP||0) + (x.PC||0) + (x.CRYO||0), 0);
-    const augAmount = Number(data.releasingData.augmentationAmount || 0);
-    const augCollectable = Number(data.releasingData.augmentationCollectable || 0);
+    // Rows 66-69 follow the August report layout:
+    //   66 Therapeutic Phlebotomy | 67 Blood augmentation WB | 68 PRBC | 69 PC
+    // Paid augmentation = normal BPF collection (Pay column). Unpaid augmentation = COLLECTIBLES (columns N/O), not counted as collected.
+    ws.getCell("B66").value = "Therapeutic Phlebotomy"; ws.getCell("E66").value = 500;
+    ws.getCell("B67").value = "Blood augmentation";
+    [[67,"WB"],[68,"PRBC"],[69,"PC"]].forEach(([row,comp]) => {
+        const bucket = (data.releasingData.augmentationByComp || {})[comp] || {units:0,paidUnits:0,unpaidUnits:0,paidAmount:0,unpaidAmount:0};
+        ws.getCell(`D${row}`).value = comp;
+        ws.getCell(`E${row}`).value = Number(currentReleasingPrices[comp] || 0) || ws.getCell(`E${row}`).value;
+        if (bucket.units > 0) {
+            setNum(ws, `F${row}`, bucket.units);
+            setFormulaResult(ws, `I${row}`, `SUM(F${row}:H${row})`, bucket.units);
+            if (bucket.paidAmount > 0) setNum(ws, `J${row}`, Number(bucket.paidAmount.toFixed(2)));
+            if (bucket.unpaidAmount > 0) {
+                setCell(ws, `N${row}`, "COLLECTIBLES");
+                setNum(ws, `O${row}`, Number(bucket.unpaidAmount.toFixed(2)));
+                ws.getCell(`N${row}`).note = "COLLECTABLES\nUnpaid blood augmentation (" + bucket.unpaidUnits + " unit" + (bucket.unpaidUnits === 1 ? "" : "s") + ")";
+            }
+        }
+    });
+    const augOther = (data.releasingData.augmentationByComp || {});
+    const augExtra = ["FFP","CRYO"].filter(c => augOther[c] && augOther[c].units > 0).map(c => c + " " + augOther[c].units + " unit(s)");
+    if (augExtra.length) ws.getCell("B67").note = "Also augmented (no separate BS 323 row, see BM7 section C): " + augExtra.join(", ");
     const augUnpaidEntries = Number(data.releasingData.augmentationUnpaidEntries || 0);
-    if (augUnits || augAmount || augCollectable) {
-        setNum(ws, "F66", augUnits);
-        setFormulaResult(ws, "I66", "SUM(F66:H66)", augUnits);
-        setNum(ws, "J66", augAmount);   // only PAID augmentation is counted as collected BPF
-    }
     if (augUnpaidEntries > 0) {
-        const note = "COLLECTABLES\nUnpaid blood augmentation: PHP " + augCollectable.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + " (" + augUnpaidEntries + " unpaid " + (augUnpaidEntries === 1 ? "entry" : "entries") + ")";
-        ws.getCell("B66").note = note;
-        ws.getCell("J66").note = note;
-        ws.getCell("B66").value = "Blood augmentation - COLLECTABLES";   // text in B only; J:Q columns are summed as numbers
+        const augCollectable = Number(data.releasingData.augmentationCollectable || 0);
+        ws.getCell("B67").note = "COLLECTABLES\nUnpaid blood augmentation: PHP " + augCollectable.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + " (" + augUnpaidEntries + " unpaid " + (augUnpaidEntries === 1 ? "entry" : "entries") + ")" + (augExtra.length ? "\nAlso augmented: " + augExtra.join(", ") : "");
     }
 
     ["J","K","L","M","N","O","P","Q"].forEach(col => {
-        const values = [];
-        for (let row = 51; row <= 69; row++) values.push(Number(ws.getCell(`${col}${row}`).value || 0));
-        const total = values.reduce((a,b)=>a+b,0);
+        let total = 0;
+        for (let row = 51; row <= 69; row++) { const v = ws.getCell(`${col}${row}`).value; total += (typeof v === "number") ? v : 0; }
+        if (col === "N") { ws.getCell("N70").value = "COLLECTIBLES"; return; }
         setFormulaResult(ws, `${col}70`, `SUM(${col}51:${col}69)`, total);
     });
-    const totalBpfCollected = ["J","K","L","M","N","O","P","Q"].reduce((s,col)=>s+Number(ws.getCell(`${col}70`).value?.result ?? ws.getCell(`${col}70`).value ?? 0),0);
-    setFormulaResult(ws, "R70", "SUM(J70:Q70)", totalBpfCollected);
+    // Total BPF collected = Pay + Discounted + No charge + Distributed to hospital (J:M). COLLECTIBLES (unpaid) are not collected yet.
+    const totalBpfCollected = ["J","K","L","M"].reduce((s2,col)=>s2+Number(ws.getCell(`${col}70`).value?.result ?? 0),0);
+    setFormulaResult(ws, "R70", "SUM(J70:M70)", totalBpfCollected);
 
     const rem = data.releasingData.remittance || emptyRemittanceBlock();
     const remRows = [
@@ -2095,7 +2134,12 @@ function fillBS324a(workbook, data) {
     writeRowValuesIfNotFormula(ws, 95, 7, [bagTotals.D, bagTotals.T, bagTotals.Q, 0,0,0]);
 
     clearCells(ws, "B102:E127");
-    data.deferralData.reasonRows.slice(0,26).forEach((r, idx) => {
+    let defRows = data.deferralData.reasonRows.slice();
+    if (defRows.length > 26) {
+        const rest = defRows.slice(25);
+        defRows = defRows.slice(0, 25).concat([{reason:`OTHER REASONS (${rest.length} more)`, count: rest.reduce((a,x)=>a+x.count,0), remarks:"Others"}]);
+    }
+    defRows.forEach((r, idx) => {
         const row = 102 + idx;
         setCell(ws, `B${row}`, r.reason);
         setNum(ws, `C${row}`, r.count);
@@ -2120,7 +2164,16 @@ function fillBS324a(workbook, data) {
 
 function writeMbdSection(ws, rows, startRow, endRow, totalRow) {
     clearCells(ws, `B${startRow}:L${endRow}`);
-    const limited = rows.slice(0, endRow - startRow + 1);
+    // If there are more MBD lines than template rows, the last row carries the combined remainder so nothing is lost.
+    const capacity = endRow - startRow + 1;
+    let limited = rows.slice();
+    if (limited.length > capacity) {
+        const keep = limited.slice(0, capacity - 1);
+        const rest = limited.slice(capacity - 1);
+        const merged = {name:`OTHER MBD (${rest.length} more)`, place:"", date:"", category:rest[0].category, S:0,D:0,T:0,Q:0};
+        rest.forEach(x => ["S","D","T","Q"].forEach(k => merged[k] += x[k] || 0));
+        limited = keep.concat([merged]);
+    }
     limited.forEach((item, idx) => {
         const r = startRow + idx;
         setCell(ws, `B${r}`, item.name);
@@ -2155,21 +2208,24 @@ function fillBS325(workbook, data) {
     const repeatNonRegularSex = d.frequencySex["Repeat non-regular"] || {Male:0, Female:0};
     const repeatRegularSex = d.frequencySex["Repeat regular"] || {Male:0, Female:0};
 
-    setNum(ws, "C13", firstTime);
-    setNum(ws, "D13", firstTimeSex.Male);
-    setNum(ws, "E13", firstTimeSex.Female);
-
-    setNum(ws, "C14", repeatNonRegular);
-    setNum(ws, "D14", repeatNonRegularSex.Male);
-    setNum(ws, "E14", repeatNonRegularSex.Female);
-
-    setNum(ws, "C15", repeatRegular);
-    setNum(ws, "D15", repeatRegularSex.Male);
-    setNum(ws, "E15", repeatRegularSex.Female);
-
-    setFormulaResult(ws, "C23", "SUM(C13:C22)", firstTime + repeatNonRegular + repeatRegular);
-    setFormulaResult(ws, "D23", "SUM(D13:D22)", firstTimeSex.Male + repeatNonRegularSex.Male + repeatRegularSex.Male);
-    setFormulaResult(ws, "E23", "SUM(E13:E22)", firstTimeSex.Female + repeatNonRegularSex.Female + repeatRegularSex.Female);
+    // The sheet has TWO "Repeat regular" rows: row 15 (hidden, apheresis) and row 23 (visible). The old code put the
+    // counts in row 15 while C23 = SUM(C13:C22) re-added everything, so Total (C31 = SUM(C13:C30)) came out doubled.
+    // Fix: every row's C = Male + Female, Repeat regular is written to the visible row 23 only, row 15 stays empty.
+    const putFreq = (row, sex, formula) => {
+        setNum(ws, `D${row}`, sex.Male);
+        setNum(ws, `E${row}`, sex.Female);
+        setFormulaResult(ws, `C${row}`, `SUM(D${row}:E${row})`, sex.Male + sex.Female);
+    };
+    putFreq(13, firstTimeSex);
+    putFreq(14, repeatNonRegularSex);
+    putFreq(23, repeatRegularSex);
+    clearCells(ws, "C15:E15");
+    const totM = firstTimeSex.Male + repeatNonRegularSex.Male + repeatRegularSex.Male;
+    const totF = firstTimeSex.Female + repeatNonRegularSex.Female + repeatRegularSex.Female;
+    setFormulaResult(ws, "C31", "SUM(C13:C30)", totM + totF);
+    setFormulaResult(ws, "D31", "SUM(D13:D30)", totM);
+    setFormulaResult(ws, "E31", "SUM(E13:E30)", totF);
+    setFormulaResult(ws, "C9", "SUM(C7:C8)", (d.sex.Male || 0) + (d.sex.Female || 0));
     const ageRows = {"16-17":34,"18-20":35,"21-30":36,"31-40":37,"41-50":38,"51-60":39,"60-65":40,"66 & above":41};
     Object.entries(ageRows).forEach(([ag,row]) => {
         setNum(ws, `C${row}`, d.age[ag]);
@@ -2184,12 +2240,16 @@ function fillBM7(workbook, data) {
     setPeriodCell(ws, "C7", data);
     const monthLabel = monthNames[Number(data.month) - 1] || "";
     const classMap = buildFacilityClassMap(workbook);
-    const SECTION_ROWS = 70;
     const cols = ["E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"];
-    const byName = (a,b) => String(a.facility).localeCompare(String(b.facility));   // alphabetical, same as the website
 
-    // The template hides most detail rows ("hide if unused"), so unhide every row that gets data.
-    const unhide = (firstRow, count) => { for (let i = 0; i < count; i++) ws.getRow(firstRow + i).hidden = false; };
+    // Layout follows the August report:
+    //   A. Direct Hospital Distribution  = ALL releasing statistics, hospitals sorted by number of patients (then name)
+    //   B. Distribution to Patients/Relatives = left blank (no data source)
+    //   C. Blood augmentation (listed by facility, oldest first, incl. hospitals and PRC chapters)
+    // Unused rows are hidden so the sheet looks like the manually trimmed August file.
+    const showRows = (firstRow, lastRow, used) => {
+        for (let r = firstRow; r <= lastRow; r++) ws.getRow(r).hidden = (r - firstRow) >= Math.max(used, 1);
+    };
     const writeTotals = (totalRow, firstRow, lastRow, totals) => {
         setCell(ws, `C${totalRow}`, "Total");
         cols.forEach(c => setFormulaResult(ws, `${c}${totalRow}`, `SUM(${c}${firstRow}:${c}${lastRow})`, totals[c] || 0));
@@ -2203,19 +2263,16 @@ function fillBM7(workbook, data) {
         });
         return t;
     };
+    const SECTION_ROWS = 70;
 
-    const rows = Object.values(data.releasingData.facilities || {}).sort(byName);
-    if (rows.length > SECTION_ROWS) console.warn(`BM7: ${rows.length} facilities but the template has only ${SECTION_ROWS} rows per section.`);
+    const rows = Object.values(data.releasingData.facilities || {})
+        .sort((a,b) => (b.patients - a.patients) || String(a.facility).localeCompare(String(b.facility)));
+    if (rows.length > SECTION_ROWS) console.warn(`BM7: ${rows.length} facilities but the template has only ${SECTION_ROWS} rows in section A.`);
     const shown = rows.slice(0, SECTION_ROWS);
 
-    // A. Direct Hospital Distribution (rows 10-79) and B. Distribution to Patients/Relatives (rows 83-152) were swapped:
-    // all releasing statistics now go to B, and A is left blank.
     clearCells(ws, "B10:T79");
-    writeTotals(80, 10, 79, {});
-
-    clearCells(ws, "B83:T152");
     shown.forEach((item, idx) => {
-        const row = 83 + idx;
+        const row = 10 + idx;
         setCell(ws, `B${row}`, monthLabel);
         setCell(ws, `C${row}`, item.facility);
         setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
@@ -2228,11 +2285,15 @@ function fillBM7(workbook, data) {
         setNum(ws, `K${row}`, item.PC || 0);
         setNum(ws, `O${row}`, item.CRYO || 0);
     });
-    unhide(83, Math.max(shown.length, 1));
-    writeTotals(153, 83, 152, sumFacilities(shown));
+    showRows(10, 79, shown.length);
+    writeTotals(80, 10, 79, sumFacilities(shown));
 
-    // C. Blood augmentation / distribution to other PRC BSF (rows 156-225)
-    const augRows = Object.values(data.releasingData.augmentationFacilities || {}).sort(byName).slice(0, SECTION_ROWS);
+    // B stays empty (like August). Keep one blank row visible, hide the rest.
+    clearCells(ws, "B83:T152");
+    showRows(83, 152, 1);
+    writeTotals(153, 83, 152, {});
+
+    const augRows = Object.values(data.releasingData.augmentationFacilities || {}).slice(0, SECTION_ROWS);
     clearCells(ws, "B156:T225");
     augRows.forEach((item, idx) => {
         const row = 156 + idx;
@@ -2244,14 +2305,13 @@ function fillBM7(workbook, data) {
         setNum(ws, `J${row}`, item.FFP || 0);
         setNum(ws, `K${row}`, item.PC || 0);
         setNum(ws, `O${row}`, item.CRYO || 0);
-        // Unpaid augmentation = not collected yet: label it COLLECTABLES (visible text + cell comment).
+        // Unpaid augmentation = COLLECTABLES (cell comment on the facility name).
         if (item.unpaidEntries > 0) {
             const amt = Number(item.collectable || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
-            setCell(ws, `D${row}`, "COLLECTABLES");
-            ws.getCell(`D${row}`).note = "COLLECTABLES\nUnpaid: PHP " + amt + " (" + item.unpaidEntries + " unpaid " + (item.unpaidEntries === 1 ? "entry" : "entries") + ")";
+            ws.getCell(`C${row}`).note = "COLLECTABLES\nUnpaid: PHP " + amt + " (" + item.unpaidEntries + " unpaid " + (item.unpaidEntries === 1 ? "entry" : "entries") + ")";
         }
     });
-    unhide(156, Math.max(augRows.length, 1));
+    showRows(156, 225, augRows.length);
     const augT = sumFacilities(augRows); augT.F = 0; augT.G = 0;
     writeTotals(226, 156, 225, augT);
 }
