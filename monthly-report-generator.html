@@ -1385,7 +1385,15 @@ function normalizeFacilityLikeStats(raw){
     return upper;
 }
 // ═══════════════════════════════════════════════════════════════════════
-function releaseFacility(r) { return normalizeFacilityLikeStats(String(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "")); }
+function isPrcFacilityName(raw) {
+    const t = String(raw || "").toUpperCase();
+    return /(^|[^A-Z])P\.?R\.?C\.?([^A-Z]|$)/.test(t) || t.includes("RED CROSS");
+}
+function releaseFacility(r) {
+    const raw = String(r.facilityName || r.facility || r.hospital || r.requestingFacility || r.institution || r.patientHospital || "");
+    if (isPrcFacilityName(raw)) return normText(raw) || "Unspecified";
+    return normalizeFacilityLikeStats(raw);
+}
 function releaseSex(r) {
     const values = [
         r?.sex, r?.gender, r?.patientSex, r?.patientGender, r?.recipientSex, r?.recipientGender, r?.clientSex,
@@ -1659,7 +1667,7 @@ function buildReleasingData(releases, augmentations) {
     augmentations = augmentations.slice().sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")));
     augmentations.forEach(r => {
         const facility = releaseFacility(r);
-        if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, unpaidEntries:0, collectable:0};
+        if (!data.augmentationFacilities[facility]) data.augmentationFacilities[facility] = {facility, isPRC:isPrcFacilityName(facility), patients:0, Male:0, Female:0, Unspecified:0, WB:0, PRBC:0, FFP:0, PC:0, CRYO:0, unpaidEntries:0, collectable:0};
         const af = data.augmentationFacilities[facility];
         af.patients++;
 
@@ -1846,9 +1854,15 @@ function renderDeferrals(data) {
 }
 
 function renderBM7(data) {
-    const rows = Object.values(data.releasingData.facilities).sort((a,b) => String(a.facility).localeCompare(String(b.facility))).map(v => [v.facility, v.patients, v.Male, v.Female, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
-    const augRows = Object.values(data.releasingData.augmentationFacilities).sort((a,b) => String(a.facility).localeCompare(String(b.facility))).map(v => [v.facility + (v.unpaidEntries ? " (COLLECTABLES)" : ""), v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
-    return `<b>B. Distribution to Patients/Relatives</b>${table(["Facility", "Patients", "Male", "Female", "WB", "PRBC", "FFP", "PC", "CRYO"], rows)}<br><b>C. Blood augmentation</b>${table(["Augmentation Facility", "Entries", "WB", "PRBC", "FFP", "PC", "CRYO"], augRows)}`;
+    const r = data.releasingData;
+    const aug = Object.values(r.augmentationFacilities || {});
+    const prc = aug.filter(x => x.isPRC);
+    const hosp = aug.filter(x => !x.isPRC).sort((a,b) => (b.patients - a.patients) || String(a.facility).localeCompare(String(b.facility)));
+    const augTable = (list) => table(["Facility", "Entries", "WB", "PRBC", "FFP", "PC", "CRYO"], list.map(v => [v.facility + (v.unpaidEntries ? " (COLLECTABLES)" : ""), v.patients, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]));
+    const rel = Object.values(r.facilities).sort((a,b) => (b.patients - a.patients) || String(a.facility).localeCompare(String(b.facility))).map(v => [v.facility, v.patients, v.Male, v.Female, v.WB, v.PRBC, v.FFP, v.PC, v.CRYO]);
+    return `<b>A. Direct Hospital Distribution (augmentation to hospitals)</b>${augTable(hosp)}<br>` +
+           `<b>B. Distribution to Patients/Relatives (releasing)</b>${table(["Facility", "Patients", "Male", "Female", "WB", "PRBC", "FFP", "PC", "CRYO"], rel)}<br>` +
+           `<b>C. Distribution to other PRC BSF (augmentation to PRC)</b>${augTable(prc)}`;
 }
 
 function renderManualFields() {
@@ -2241,12 +2255,12 @@ function fillBM7(workbook, data) {
     const monthLabel = monthNames[Number(data.month) - 1] || "";
     const classMap = buildFacilityClassMap(workbook);
     const cols = ["E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"];
+    const SECTION_ROWS = 70;
 
-    // Layout follows the August report:
-    //   A. Direct Hospital Distribution  = ALL releasing statistics, hospitals sorted by number of patients (then name)
-    //   B. Distribution to Patients/Relatives = left blank (no data source)
-    //   C. Blood augmentation (listed by facility, oldest first, incl. hospitals and PRC chapters)
-    // Unused rows are hidden so the sheet looks like the manually trimmed August file.
+    // A. Direct Hospital Distribution       = blood AUGMENTATION given to hospitals only
+    // B. Distribution to Patients/Relatives = all direct releasing statistics (patients / relatives)
+    // C. Distribution to other PRC BSF      = blood AUGMENTATION given to PRC chapters only (e.g. PRC VIZCAYA)
+    // Unused rows are hidden so the sheet looks trimmed.
     const showRows = (firstRow, lastRow, used) => {
         for (let r = firstRow; r <= lastRow; r++) ws.getRow(r).hidden = (r - firstRow) >= Math.max(used, 1);
     };
@@ -2263,16 +2277,45 @@ function fillBM7(workbook, data) {
         });
         return t;
     };
-    const SECTION_ROWS = 70;
+    const byPatientsThenName = (a,b) => (b.patients - a.patients) || String(a.facility).localeCompare(String(b.facility));
+    const unpaidNote = (item) => {
+        const amt = Number(item.collectable || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+        return "COLLECTABLES\nUnpaid: PHP " + amt + " (" + item.unpaidEntries + " unpaid " + (item.unpaidEntries === 1 ? "entry" : "entries") + ")";
+    };
+    const writeAugRows = (firstRow, list, withClass) => {
+        list.forEach((item, idx) => {
+            const row = firstRow + idx;
+            setCell(ws, `B${row}`, monthLabel);
+            setCell(ws, `C${row}`, item.facility);
+            if (withClass) setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
+            setNum(ws, `E${row}`, item.patients || 0);
+            setNum(ws, `H${row}`, item.WB || 0);
+            setNum(ws, `I${row}`, item.PRBC || 0);
+            setNum(ws, `J${row}`, item.FFP || 0);
+            setNum(ws, `K${row}`, item.PC || 0);
+            setNum(ws, `O${row}`, item.CRYO || 0);
+            if (item.unpaidEntries > 0) ws.getCell(`C${row}`).note = unpaidNote(item);   // COLLECTABLES
+        });
+    };
 
-    const rows = Object.values(data.releasingData.facilities || {})
-        .sort((a,b) => (b.patients - a.patients) || String(a.facility).localeCompare(String(b.facility)));
-    if (rows.length > SECTION_ROWS) console.warn(`BM7: ${rows.length} facilities but the template has only ${SECTION_ROWS} rows in section A.`);
-    const shown = rows.slice(0, SECTION_ROWS);
+    const augAll = Object.values(data.releasingData.augmentationFacilities || {});
+    const isPrc = (x) => x.isPRC || classMap[normKey(x.facility)] === "PRC Chapter";
+    const augHospitals = augAll.filter(x => !isPrc(x)).sort(byPatientsThenName).slice(0, SECTION_ROWS);
+    const augPrc = augAll.filter(x => isPrc(x)).slice(0, SECTION_ROWS);   // keeps oldest-first order
 
+    // A: hospital augmentation
     clearCells(ws, "B10:T79");
+    writeAugRows(10, augHospitals, true);
+    showRows(10, 79, augHospitals.length);
+    writeTotals(80, 10, 79, sumFacilities(augHospitals));
+
+    // B: direct releasing statistics (patients / relatives)
+    const rows = Object.values(data.releasingData.facilities || {}).sort(byPatientsThenName);
+    if (rows.length > SECTION_ROWS) console.warn(`BM7: ${rows.length} facilities but section B has only ${SECTION_ROWS} rows.`);
+    const shown = rows.slice(0, SECTION_ROWS);
+    clearCells(ws, "B83:T152");
     shown.forEach((item, idx) => {
-        const row = 10 + idx;
+        const row = 83 + idx;
         setCell(ws, `B${row}`, monthLabel);
         setCell(ws, `C${row}`, item.facility);
         setCell(ws, `D${row}`, classMap[normKey(item.facility)] || "Private");
@@ -2285,35 +2328,14 @@ function fillBM7(workbook, data) {
         setNum(ws, `K${row}`, item.PC || 0);
         setNum(ws, `O${row}`, item.CRYO || 0);
     });
-    showRows(10, 79, shown.length);
-    writeTotals(80, 10, 79, sumFacilities(shown));
+    showRows(83, 152, shown.length);
+    writeTotals(153, 83, 152, sumFacilities(shown));
 
-    // B stays empty (like August). Keep one blank row visible, hide the rest.
-    clearCells(ws, "B83:T152");
-    showRows(83, 152, 1);
-    writeTotals(153, 83, 152, {});
-
-    const augRows = Object.values(data.releasingData.augmentationFacilities || {}).slice(0, SECTION_ROWS);
+    // C: PRC chapters only
     clearCells(ws, "B156:T225");
-    augRows.forEach((item, idx) => {
-        const row = 156 + idx;
-        setCell(ws, `B${row}`, monthLabel);
-        setCell(ws, `C${row}`, item.facility);
-        setNum(ws, `E${row}`, item.patients || 0);
-        setNum(ws, `H${row}`, item.WB || 0);
-        setNum(ws, `I${row}`, item.PRBC || 0);
-        setNum(ws, `J${row}`, item.FFP || 0);
-        setNum(ws, `K${row}`, item.PC || 0);
-        setNum(ws, `O${row}`, item.CRYO || 0);
-        // Unpaid augmentation = COLLECTABLES (cell comment on the facility name).
-        if (item.unpaidEntries > 0) {
-            const amt = Number(item.collectable || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
-            ws.getCell(`C${row}`).note = "COLLECTABLES\nUnpaid: PHP " + amt + " (" + item.unpaidEntries + " unpaid " + (item.unpaidEntries === 1 ? "entry" : "entries") + ")";
-        }
-    });
-    showRows(156, 225, augRows.length);
-    const augT = sumFacilities(augRows); augT.F = 0; augT.G = 0;
-    writeTotals(226, 156, 225, augT);
+    writeAugRows(156, augPrc, false);
+    showRows(156, 225, augPrc.length);
+    writeTotals(226, 156, 225, sumFacilities(augPrc));
 }
 
 function buildFacilityClassMap(workbook) {
