@@ -761,6 +761,9 @@ font-weight:bold;
 }
 .add-serial-btn:hover:not(:disabled){ background:#0d47a1; }
 .add-serial-btn:disabled{ background:#94a3b8; cursor:not-allowed; }
+.serial-del-btn{ background:#c62828; color:#fff; border:none; border-radius:5px; padding:4px 9px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.serial-del-btn:hover{ background:#8e0000; }
+.serial-del-btn:disabled{ background:#bdbdbd; cursor:not-allowed; }
 .add-serial-hint{
 font-size:11px;
 color:#666;
@@ -1922,27 +1925,152 @@ count: 0
 return rows;
 }
 
-function buildSerialsArrayFromDetailRows(detailRows){
-let serials = [];
-let seen = {};
-
-for(let i=0;i<detailRows.length;i++){
-let row = detailRows[i] || {};
-let serial = safeText(row.serial);
-let date = safeText(row.date);
-if(!serial && !date) continue;
-
-let key = [serial, date].join("|");
-if(seen[key]) continue;
-seen[key] = true;
-
-serials.push({
-serial: serial,
-date: date
-});
+function normSerialKey(v){
+return safeText(v).replace(/\s+/g," ").toLowerCase();
 }
 
+// One donation = one blood-bag serial. Rows are collapsed so the same donation
+// is never listed (or counted) twice:
+//  - same serial number  -> same donation, even if one copy has no date or the
+//    other comes from a different source. Missing details (date / record id)
+//    are filled in from the duplicate instead of being lost.
+//  - no serial, same date -> the same day can only be one donation, so it is
+//    covered by the row that already has that date.
+//  - rows with neither serial nor date are kept as-is (deduped by record id).
+function dedupeDonationRows(rows){
+let list = Array.isArray(rows) ? rows : [];
+let bySerial = new Map();
+let usedDates = new Set();
+let out = [];
+let infoless = [];
+let infolessSeen = new Set();
+
+for(let i=0;i<list.length;i++){
+let r = list[i] || {};
+let sk = normSerialKey(r.serial);
+if(!sk) continue;
+let existing = bySerial.get(sk);
+if(existing){
+if(!safeText(existing.date) && safeText(r.date)) existing.date = safeText(r.date);
+if(!safeText(existing.docId) && safeText(r.docId)) existing.docId = safeText(r.docId);
+let a = safeText(existing.source), b = safeText(r.source);
+if(a && b && a !== b) existing.source = "Both";
+continue;
+}
+let copy = Object.assign({}, r, { serial: safeText(r.serial), date: safeText(r.date) });
+bySerial.set(sk, copy);
+out.push(copy);
+}
+out.forEach(r => { if(safeText(r.date)) usedDates.add(safeText(r.date)); });
+
+for(let i=0;i<list.length;i++){
+let r = list[i] || {};
+if(normSerialKey(r.serial)) continue;
+let d = safeText(r.date);
+if(d){
+if(usedDates.has(d)) continue;
+usedDates.add(d);
+out.push(Object.assign({}, r, { serial: "", date: d }));
+}else{
+let k = [safeText(r.source), safeText(r.docId), safeText(r.count)].join("|");
+if(infolessSeen.has(k)) continue;
+infolessSeen.add(k);
+infoless.push(Object.assign({}, r));
+}
+}
+
+out.sort((a,b)=>{
+let dateA = safeText(a.date);
+let dateB = safeText(b.date);
+if(dateA !== dateB) return dateB.localeCompare(dateA);
+return safeText(a.serial).localeCompare(safeText(b.serial), undefined, { numeric:true, sensitivity:"base" });
+});
+
+return out.concat(infoless);
+}
+
+function buildSerialsArrayFromDetailRows(detailRows){
+let rows = dedupeDonationRows(detailRows || []);
+let serials = [];
+for(let i=0;i<rows.length;i++){
+let serial = safeText(rows[i].serial);
+let date = safeText(rows[i].date);
+if(!serial && !date) continue;
+serials.push({ serial: serial, date: date });
+}
 return serials;
+}
+
+// Serials the user deleted from a donor that also live in donorDatabase are
+// remembered on the donor doc (excludedSerials) so they stay hidden.
+function buildExcludedKeySet(excluded){
+let set = new Set();
+(Array.isArray(excluded) ? excluded : []).forEach(x => {
+let sk = normSerialKey(x && (x.serial || x.serialNumber));
+if(sk) set.add("s:" + sk);
+else if(safeText(x && (x.date || x.entryDate))) set.add("d:" + safeText(x.date || x.entryDate));
+});
+return set;
+}
+
+function isExcludedRow(row, exSet){
+if(!exSet || exSet.size === 0) return false;
+let sk = normSerialKey(row.serial);
+if(sk) return exSet.has("s:" + sk);
+let d = safeText(row.date);
+return !!d && exSet.has("d:" + d);
+}
+
+function filterExcludedRows(rows, excluded){
+let ex = buildExcludedKeySet(excluded);
+if(ex.size === 0) return rows;
+return rows.filter(r => !isExcludedRow(r, ex));
+}
+
+function mergeExcludedLists(a, b){
+let seen = new Set();
+let out = [];
+[].concat(Array.isArray(a) ? a : [], Array.isArray(b) ? b : []).forEach(x => {
+let sk = normSerialKey(x && (x.serial || x.serialNumber));
+let key = sk ? "s:" + sk : "d:" + safeText(x && (x.date || x.entryDate));
+if(seen.has(key)) return;
+seen.add(key);
+out.push({ serial: safeText(x && (x.serial || x.serialNumber)), date: safeText(x && (x.date || x.entryDate)) });
+});
+return out;
+}
+
+// Every unique donation we know about for a donor (donors serial list +
+// donorDatabase rows), minus anything the user deleted.
+function donationRowsOf(d){
+let rows = dedupeDonationRows([
+...mergeSerialRowsFromDonors(d.serials || []),
+...(Array.isArray(d.detailRows) ? d.detailRows : [])
+]).filter(r => safeText(r.serial) || safeText(r.date));
+return filterExcludedRows(rows, d.excludedSerials);
+}
+
+// Works out what a manual merge will do. There is NO cap: every donation the
+// target is missing gets added, and anything the target already has is skipped.
+function computeMergePlan(target, source){
+let tRows = donationRowsOf(target);
+let sRows = donationRowsOf(source);
+let combinedRows = dedupeDonationRows([...tRows, ...sRows]).filter(r => safeText(r.serial) || safeText(r.date));
+let added = Math.max(0, combinedRows.length - tRows.length);
+let skipped = Math.max(0, sRows.length - added);
+let combinedSerials = combinedRows.map(r => ({ serial: safeText(r.serial), date: safeText(r.date) }));
+let targetCount = Number(target.smartDonationCount || 0);
+let sourceCount = Number(source.smartDonationCount || 0);
+let mergedCount = Math.max(targetCount + added, combinedRows.length, sourceCount);
+return {
+combinedRows: combinedRows,
+combinedSerials: combinedSerials,
+added: added,
+skipped: skipped,
+targetCount: targetCount,
+mergedCount: mergedCount,
+excluded: mergeExcludedLists(target.excludedSerials, source.excludedSerials)
+};
 }
 
 function mergeBothCollections(donorsDocs, donorDatabaseDocs){
@@ -1981,10 +2109,16 @@ sourceLabel = "Donor Database";
 sourceLabel = "Serial Count";
 }
 
-let mergedDetailRows = dedupeDetailRows([
+let excludedList = Array.isArray(data.excludedSerials) ? data.excludedSerials : [];
+if(excludedList.length){
+let exSet = buildExcludedKeySet(excludedList);
+let removedFromAgg = dedupeDonationRows(aggregateResult.detailRows || []).filter(r => isExcludedRow(r, exSet)).length;
+if(removedFromAgg > 0) finalCount = Math.max(0, finalCount - removedFromAgg);
+}
+let mergedDetailRows = filterExcludedRows(dedupeDonationRows([
 ...mergeSerialRowsFromDonors(data.serials),
 ...(aggregateResult.detailRows || [])
-]);
+]), excludedList);
 
 let item = {
 id: data.id || "",
@@ -1996,6 +2130,7 @@ bloodType: safeText(data.bloodType || aggregateResult.bloodType || ""),
 rhFactor: safeText(data.rhFactor || aggregateResult.rhFactor || ""),
 contact: safeText(data.contact || aggregateResult.contact || ""),
 serials: Array.isArray(data.serials) ? data.serials : [],
+excludedSerials: excludedList,
 serialCount: donorSide.serialCount || 0,
 remarks: safeText(data.remarks || ""),
 awardStatus: safeText(data.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED",
@@ -2217,7 +2352,7 @@ winner.serials = buildSerialsArrayFromDetailRows([
 ...mergeSerialRowsFromDonors(winnerSerials),
 ...winnerDetails
 ]);
-winner.detailRows = dedupeDetailRows(winnerDetails);
+winner.detailRows = dedupeDonationRows(winnerDetails);
 winner.donorDatabaseDocIds = Array.from(new Set(winnerDocIds));
 winner.smartDonationCount = bestCount;
 winner.smartMatchedRows = bestMatchedRows;
@@ -2380,6 +2515,7 @@ bloodType: safeText(d.bloodType || ""),
 rhFactor: safeText(d.rhFactor || ""),
 contact: safeText(d.contact || d.contactNumber || ""),
 serials: Array.isArray(d.serials) ? d.serials : [],
+excludedSerials: Array.isArray(d.excludedSerials) ? d.excludedSerials : [],
 serialCount: serialDisplayCount,
 remarks: safeText(d.remarks || ""),
 awardStatus: safeText(d.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED",
@@ -2467,10 +2603,10 @@ surname: item.surname, birthday: item.birthday, contact: item.contact
 };
 let aggregateResult = getAggregateResultForDonor(donorLike, aggregates);
 
-let mergedDetail = dedupeDetailRows([
+let mergedDetail = filterExcludedRows(dedupeDonationRows([
 ...mergeSerialRowsFromDonors(item.serials),
 ...(aggregateResult.detailRows || [])
-]);
+]), item.excludedSerials);
 item.detailRows = mergedDetail;
 item.detailRowsLoaded = true;
 
@@ -2988,85 +3124,47 @@ let allRows = Array.isArray(donor.detailRows) ? donor.detailRows : [];
 let awardStatus = safeText(donor.awardStatus || "NOT AWARDED").toUpperCase() || "NOT AWARDED";
 let yearAwarded = safeText(donor.yearAwarded || "");
 
-// Build serial rows — show each serial number individually and clearly
-let serialRows = "";
-let serialsWithValues = allRows.filter(r => safeText(r.serial) !== "" || safeText(r.date) !== "");
+// Build serial rows — one row per unique donation. The donors serial list and
+// the donorDatabase rows are merged by serial number so the same bag is never
+// shown (or counted) twice.
+let displayRows = filterExcludedRows(
+dedupeDonationRows([...allRows, ...mergeSerialRowsFromDonors(donor.serials)]),
+donor.excludedSerials
+);
+donor._serialView = displayRows;
 
-if(serialsWithValues.length > 0){
-for(let i=0;i<serialsWithValues.length;i++){
-let row = serialsWithValues[i] || {};
+let serialRows = "";
+if(displayRows.length > 0){
+for(let i=0;i<displayRows.length;i++){
+let row = displayRows[i] || {};
 let serial = safeText(row.serial);
 let date = safeText(row.date);
 let source = safeText(row.source);
 let srcClass = getSourceClass(source);
 let srcLabel = getSourceLabel(source);
 let rowClass = i % 2 === 0 ? "" : "serial-highlight";
+let hasInfo = !!(serial || date);
 
 serialRows += `
 <tr class="${rowClass}">
 <td>${i+1}</td>
-<td><span class="serial-val">${serial ? escapeHtml(serial) : '<span style="color:#bbb;font-style:italic;">—</span>'}</span></td>
+<td><span class="serial-val">${serial ? escapeHtml(serial) : '<span style="color:#bbb;font-style:italic;">No serial</span>'}</span></td>
 <td><span class="serial-date-val">${date ? escapeHtml(date) : '<span style="color:#bbb;">—</span>'}</span></td>
 <td>${srcLabel ? `<span class="serial-source-badge ${srcClass}">${escapeHtml(srcLabel)}</span>` : ""}</td>
 <td style="color:#888;font-size:11px;">${escapeHtml(row.docId || "")}</td>
-</tr>
-`;
-}
-} else if(allRows.length > 0){
-// Has rows but no serial values — show what we have
-for(let i=0;i<allRows.length;i++){
-let row = allRows[i] || {};
-let source = safeText(row.source);
-let srcClass = getSourceClass(source);
-let srcLabel = getSourceLabel(source);
-let rowClass = i % 2 === 0 ? "" : "serial-highlight";
-serialRows += `
-<tr class="${rowClass}">
-<td>${i+1}</td>
-<td><span style="color:#bbb;font-style:italic;">No serial</span></td>
-<td><span class="serial-date-val">${escapeHtml(row.date || "—")}</span></td>
-<td>${srcLabel ? `<span class="serial-source-badge ${srcClass}">${escapeHtml(srcLabel)}</span>` : ""}</td>
-<td style="color:#888;font-size:11px;">${escapeHtml(row.docId || "")}</td>
+<td>${hasInfo ? `<button type="button" class="serial-del-btn" onclick="deleteSerialFromDetail(${index}, ${i})" title="Delete this serial number from this donor">Delete</button>` : ""}</td>
 </tr>
 `;
 }
 } else {
 serialRows = `
 <tr class="serial-empty-row">
-<td colspan="5">No serial or donation rows found in this record.</td>
+<td colspan="6">No serial or donation rows found in this record.</td>
 </tr>
 `;
 }
 
-// Also include raw donors serials array if not already in detailRows
-let rawSerials = Array.isArray(donor.serials) ? donor.serials : [];
-let rawSerialRows = "";
-let detailSerialKeys = new Set(allRows.map(r => [safeText(r.serial), safeText(r.date)].join("|")));
-let extraRaw = rawSerials.filter(s => {
-let serial = safeText(s.serial || s.serialNumber || "");
-let date = safeText(s.date || s.entryDate || "");
-let key = [serial, date].join("|");
-return !detailSerialKeys.has(key);
-});
-
-if(extraRaw.length > 0){
-for(let i=0;i<extraRaw.length;i++){
-let s = extraRaw[i] || {};
-let serial = safeText(s.serial || s.serialNumber || "");
-let date = safeText(s.date || s.entryDate || "");
-rawSerialRows += `
-<tr style="background:#f0fff0;">
-<td>${serialsWithValues.length + i + 1}</td>
-<td><span class="serial-val">${serial ? escapeHtml(serial) : '<span style="color:#bbb;font-style:italic;">—</span>'}</span></td>
-<td><span class="serial-date-val">${date ? escapeHtml(date) : '<span style="color:#bbb;">—</span>'}</span></td>
-<td><span class="serial-source-badge src-donors">Donors</span></td>
-<td style="color:#888;font-size:11px;">—</td>
-</tr>
-`;
-}
-}
-
-let totalVisibleSerials = serialsWithValues.length + extraRaw.length;
+let totalVisibleSerials = displayRows.filter(r => safeText(r.serial)).length;
 
 let awardPanel = `
 <div class="remarks-panel">
@@ -3128,18 +3226,18 @@ Serial Number Detail — Each Row is One Donation
 <th style="width:140px;">Date</th>
 <th style="width:80px;">Source</th>
 <th>Record ID</th>
+<th style="width:80px;">Action</th>
 </tr>
 </thead>
 <tbody>
 ${serialRows}
-${rawSerialRows}
 </tbody>
 </table>
 
 <div style="margin-top:8px;font-size:11px;color:#666;">
 <span style="display:inline-block;margin-right:10px;"><span class="serial-source-badge src-donors">Donors</span> = from donors collection</span>
 <span style="display:inline-block;margin-right:10px;"><span class="serial-source-badge src-database">DB</span> = from donorDatabase</span>
-<span style="display:inline-block;"><span style="background:#f0fff0;padding:2px 6px;border:1px solid #c8e6c9;border-radius:4px;font-size:11px;">Green row</span> = extra from donors array</span>
+<span style="display:inline-block;"><span class="serial-source-badge src-merged">Both</span> = same serial found in both (counted once)</span>
 </div>
 
 <!-- Inline "add a serial" panel — saves directly into the donor's
@@ -3152,7 +3250,7 @@ ${rawSerialRows}
 <input type="date" id="newSerialDate${index}">
 <button class="add-serial-btn" onclick="addSerialFromDetail(${index})">Add Serial</button>
 </div>
-<div class="add-serial-hint">Saved directly to this donor's record. The table above will refresh once saved.</div>
+<div class="add-serial-hint">Saved directly to this donor's record and counted as one more donation. A serial number that is already listed is not added twice. Use Delete in the table above to remove a wrong serial.</div>
 <div id="addSerialStatus${index}" class="add-serial-status"></div>
 </div>
 </div>
@@ -3344,47 +3442,78 @@ try{
 // Make sure the donor has a donors-collection doc to write to
 let donorId = await ensureDonorRecordForAward(index);
 
-// Pull existing serials, append, dedupe by serial+date
+// Compare against everything we know (donors list + donorDatabase rows)
+if(donor.hasCache && !donor.detailRowsLoaded){
+try{ await ensureDetailRowsLoaded(donor); }catch(err){ console.warn("Detail load before add failed:", err); }
+}
+
+let sk = normSerialKey(serial);
+let knownRows = donationRowsOf(donor);
 let existingSerials = Array.isArray(donor.serials) ? donor.serials.slice() : [];
-let key = (s,d) => [safeText(s).toLowerCase(), safeText(d)].join("|");
-let already = existingSerials.some(s => key(s.serial || s.serialNumber, s.date || s.entryDate) === key(serial, date));
-if(already){
-showStatus("That serial+date is already saved for this donor.", "error");
-if(btn) btn.disabled = false;
+let alreadyListed = knownRows.some(r => normSerialKey(r.serial) === sk)
+|| existingSerials.some(s => normSerialKey(s.serial || s.serialNumber) === sk);
+if(alreadyListed){
+showStatus("That serial number is already listed for this donor.", "error");
 return;
 }
 
+// A DB row on the same day with no serial is the same donation — this serial
+// just fills in the missing detail, so the count must not go up.
+let fillsGap = knownRows.some(r => !normSerialKey(r.serial) && safeText(r.date) === date);
+
 let newEntry = { serial: serial, date: date };
 let combined = existingSerials.concat([newEntry]);
+let newDetail = dedupeDonationRows([
+...(Array.isArray(donor.detailRows) ? donor.detailRows : []),
+{ docId: "", source: "donors", serial: serial, date: date, count: 0 }
+]);
 
-await db.collection("donors").doc(donorId).set({
+// If this serial had been deleted before, it is allowed back in
+let excluded = (Array.isArray(donor.excludedSerials) ? donor.excludedSerials : [])
+.filter(x => normSerialKey(x.serial || x.serialNumber) !== sk);
+let excludedChanged = excluded.length !== (Array.isArray(donor.excludedSerials) ? donor.excludedSerials.length : 0);
+
+let curCount = Number(donor.smartDonationCount || 0);
+let uniqueRows = newDetail.filter(r => safeText(r.serial) || safeText(r.date)).length;
+let newCount = Math.max(fillsGap ? curCount : curCount + 1, uniqueRows);
+
+let payload = Object.assign({
 serials: combined,
 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-}, { merge:true });
+}, {
+// keep the cached totals in step, otherwise the table keeps showing the old count
+cachedSmartCount: newCount,
+cachedSerialCount: combined.length,
+cachedTotalSerials: Math.max(combined.length, newDetail.filter(r => safeText(r.serial)).length)
+});
+if(excludedChanged) payload.excludedSerials = excluded;
+
+await db.collection("donors").doc(donorId).set(payload, { merge:true });
 
 // Update in-memory representation
 donor.serials = combined;
 donor.serialCount = combined.length;
-if(!Array.isArray(donor.detailRows)) donor.detailRows = [];
-donor.detailRows.push({
-docId: "",
-source: "donors",
-serial: serial,
-date: date,
-count: 0
-});
+donor.detailRows = newDetail;
+donor.excludedSerials = excluded;
+donor.smartDonationCount = newCount;
+donor.badgeLevel = getBadgeLevel(newCount);
 // Mirror to the canonical donorsData entry too
 let realIdx = donorsData.indexOf(donor);
 if(realIdx === -1) realIdx = donorsData.findIndex(d => d.id === donorId);
-if(realIdx >= 0){
-donorsData[realIdx].serials = combined;
-donorsData[realIdx].serialCount = combined.length;
-donorsData[realIdx].detailRows = donor.detailRows;
+if(realIdx >= 0 && donorsData[realIdx] !== donor){
+Object.assign(donorsData[realIdx], {
+serials: combined,
+serialCount: combined.length,
+detailRows: newDetail,
+excludedSerials: excluded,
+smartDonationCount: newCount,
+badgeLevel: donor.badgeLevel
+});
 }
 
 invalidateCache();
 
-showStatus("Serial added.", "success");
+showStatus(fillsGap ? "Serial added (filled in a missing detail — count unchanged)." : "Serial added.", "success");
 if(serialInput) serialInput.value = "";
 if(dateInput) dateInput.valueAsDate = new Date();
 
@@ -3403,6 +3532,114 @@ console.error("Add serial error:", error);
 showStatus("Failed to add serial: " + error.message, "error");
 }finally{
 if(btn) btn.disabled = false;
+}
+}
+
+// Removes ONE serial/donation row from a donor. Rows that came from the donors
+// serial list are removed from it; rows that also exist in donorDatabase are
+// remembered in excludedSerials so they stay hidden (donorDatabase itself is
+// never modified). The donation count goes down by one.
+async function deleteSerialFromDetail(index, rowIdx){
+let donor = filteredDonorsData[index];
+if(!donor) return;
+
+if(!auth.currentUser){
+alert("You are not logged in.");
+window.location.href = "index.html";
+return;
+}
+
+let row = Array.isArray(donor._serialView) ? donor._serialView[rowIdx] : null;
+if(!row){
+alert("Could not find that serial row. Please close and reopen View Serials.");
+return;
+}
+
+let serialText = safeText(row.serial);
+let dateText = safeText(row.date);
+let label = serialText ? serialText : "(no serial number)";
+if(!confirm("Delete " + label + (dateText ? " dated " + dateText : "") + " from " + (getFullName(donor) || "this donor") + "?\n\nThis lowers the donation count by 1.")) return;
+
+let statusEl = document.getElementById("addSerialStatus"+index);
+function showStatus(msg, cls){
+if(!statusEl) return;
+statusEl.className = "add-serial-status" + (cls ? " " + cls : "");
+statusEl.textContent = msg || "";
+}
+showStatus("Deleting serial...", "loading");
+
+try{
+let donorId = await ensureDonorRecordForAward(index);
+
+let sk = normSerialKey(serialText);
+let sameRow = r => {
+let k = normSerialKey(r.serial);
+return sk ? k === sk : (!k && safeText(r.date) === dateText);
+};
+let sameSerialEntry = s => {
+let k = normSerialKey(s.serial || s.serialNumber);
+return sk ? k === sk : (!k && safeText(s.date || s.entryDate) === dateText);
+};
+
+let remainingSerials = (Array.isArray(donor.serials) ? donor.serials : []).filter(s => !sameSerialEntry(s));
+let remainingDetail = (Array.isArray(donor.detailRows) ? donor.detailRows : []).filter(r => !sameRow(r));
+
+let excluded = Array.isArray(donor.excludedSerials) ? donor.excludedSerials.slice() : [];
+if(safeText(row.source) !== "donors"){
+excluded.push({ serial: serialText, date: dateText });
+}
+
+let uniqueRows = dedupeDonationRows(remainingDetail.concat(mergeSerialRowsFromDonors(remainingSerials)))
+.filter(r => safeText(r.serial) || safeText(r.date)).length;
+let curCount = Number(donor.smartDonationCount || 0);
+let newCount = Math.max(uniqueRows, curCount - 1);
+
+let payload = {
+serials: remainingSerials,
+cachedSmartCount: newCount,
+cachedSerialCount: remainingSerials.length,
+cachedTotalSerials: Math.max(remainingSerials.length, remainingDetail.filter(r => safeText(r.serial)).length),
+updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+};
+if(excluded.length) payload.excludedSerials = excluded;
+
+await db.collection("donors").doc(donorId).set(payload, { merge:true });
+
+donor.serials = remainingSerials;
+donor.serialCount = remainingSerials.length;
+donor.detailRows = remainingDetail;
+donor.excludedSerials = excluded;
+donor.smartDonationCount = newCount;
+donor.badgeLevel = getBadgeLevel(newCount);
+let realIdx = donorsData.indexOf(donor);
+if(realIdx === -1) realIdx = donorsData.findIndex(d => d.id === donorId);
+if(realIdx >= 0 && donorsData[realIdx] !== donor){
+Object.assign(donorsData[realIdx], {
+serials: remainingSerials,
+serialCount: remainingSerials.length,
+detailRows: remainingDetail,
+excludedSerials: excluded,
+smartDonationCount: newCount,
+badgeLevel: donor.badgeLevel
+});
+}
+
+invalidateCache();
+
+applyFiltersAndRender();
+let reopenedIndex = filteredDonorsData.findIndex(x => x === donor || x.id === donorId);
+if(reopenedIndex > -1){
+let reopenedRow = document.getElementById("serialRow"+reopenedIndex);
+if(reopenedRow){
+reopenedRow.style.display = "table-row";
+renderSerialAndRemarks(reopenedIndex);
+let st = document.getElementById("addSerialStatus"+reopenedIndex);
+if(st){ st.className = "add-serial-status success"; st.textContent = "Serial deleted."; }
+}
+}
+}catch(error){
+console.error("Delete serial error:", error);
+showStatus("Failed to delete serial: " + error.message, "error");
 }
 }
 
@@ -3657,18 +3894,12 @@ renderTable();
 function summarizeDonorForMerge(d){
 let serialCount = Array.isArray(d.serials) ? d.serials.length : 0;
 let detailCount = Array.isArray(d.detailRows) ? d.detailRows.filter(r => safeText(r.serial)).length : 0;
-let visible = Math.max(serialCount, detailCount);
+let visible = Math.max(serialCount, detailCount, donationRowsOf(d).filter(r => safeText(r.serial)).length);
 return `${escapeHtml(getFullName(d) || "—")} <small style="color:#64748b;">(${visible} serial${visible===1?"":"s"}, ${escapeHtml(d.bloodType||"?")}${escapeHtml(d.rhFactor||"")}, ${escapeHtml(d.contact||"no contact")})</small>`;
 }
 
 function combinedSerialPreview(target, source){
-let combined = buildSerialsArrayFromDetailRows([
-...mergeSerialRowsFromDonors(target.serials || []),
-...(Array.isArray(target.detailRows) ? target.detailRows : []),
-...mergeSerialRowsFromDonors(source.serials || []),
-...(Array.isArray(source.detailRows) ? source.detailRows : [])
-]);
-return combined;
+return computeMergePlan(target, source).combinedSerials;
 }
 
 async function openMergeConfirm(sourceIndex){
@@ -3706,7 +3937,7 @@ return;
 }
 }
 
-let combined = combinedSerialPreview(target, source);
+let plan = computeMergePlan(target, source);
 let sourceDbDocCount = Array.isArray(source.donorDatabaseDocIds) ? source.donorDatabaseDocIds.length : 0;
 let summaryEl = document.getElementById("mergeModalSummary");
 if(summaryEl){
@@ -3715,8 +3946,9 @@ summaryEl.innerHTML = `
 <span class="merge-arrow">→</span>
 <strong>into</strong> ${summarizeDonorForMerge(target)}</div>
 <ul class="merge-summary-list">
-<li>Combined serial total after merge: <strong>${combined.length}</strong></li>
-<li>The target's donor record will gain ${Math.max(0, combined.length - (Array.isArray(target.serials) ? target.serials.length : 0))} new serial entr${combined.length === 1 ? "y" : "ies"} from the source.</li>
+<li>Combined unique donations after merge: <strong>${plan.combinedRows.length}</strong> (no limit — every record the target is missing is added).</li>
+<li><strong>${plan.added}</strong> missing donation record${plan.added===1?"":"s"} will be added to the target${plan.skipped > 0 ? `; <strong>${plan.skipped}</strong> duplicate${plan.skipped===1?"":"s"} the target already has will be skipped` : ""}.</li>
+<li>Donation count: <strong>${plan.targetCount}</strong> → <strong>${plan.mergedCount}</strong></li>
 <li>The source's <em>donors</em> record (if any) will be <strong>deleted</strong>.</li>
 <li>${sourceDbDocCount} donor-database record${sourceDbDocCount===1?"":"s"} from the source will be tagged so future reloads count them under the target.</li>
 <li>The source's contact / blood type will be copied to the target only if the target is missing those fields.</li>
@@ -3773,7 +4005,8 @@ let targetId = await ensureDonorRecordForAward(mergeTargetIndex);
 if(!targetId) throw new Error("Could not establish a donors record for the target.");
 
 // 2. Build the union of serials from both donors.
-let combinedSerials = combinedSerialPreview(target, source);
+let plan = computeMergePlan(target, source);
+let combinedSerials = plan.combinedSerials;
 
 // 3. Fields we'd like to forward from source IF target is missing them.
 let forwardable = {};
@@ -3792,11 +4025,22 @@ forwardable.yearAwarded = safeText(source.yearAwarded);
 }
 
 // 4. Update the target's donors doc with the combined serials + forwardables.
+let mergedDocIds = Array.from(new Set([
+...(Array.isArray(target.donorDatabaseDocIds) ? target.donorDatabaseDocIds : []),
+...(Array.isArray(source.donorDatabaseDocIds) ? source.donorDatabaseDocIds : [])
+])).slice(0, 500);
 let updatePayload = Object.assign({}, forwardable, {
 serials: combinedSerials,
+// Refresh the cached totals — without this the table keeps showing the
+// target's OLD count after the merge.
+cachedSmartCount: plan.mergedCount,
+cachedSerialCount: combinedSerials.length,
+cachedTotalSerials: combinedSerials.length,
+cachedDonorDatabaseDocIds: mergedDocIds,
 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
 lastManualMergeAt: firebase.firestore.FieldValue.serverTimestamp()
 });
+if(plan.excluded.length) updatePayload.excludedSerials = plan.excluded;
 await db.collection("donors").doc(targetId).set(updatePayload, { merge:true });
 
 // 5. Tag the source's donorDatabase docs so future fetches route them to
@@ -3833,7 +4077,7 @@ console.warn("Failed to delete source donors doc", source.id, err);
 }
 
 invalidateCache();
-showStatus("Merged. Refreshing…", "success");
+showStatus("Merged — " + plan.added + " record" + (plan.added===1?"":"s") + " added, " + plan.skipped + " duplicate" + (plan.skipped===1?"":"s") + " skipped. Count is now " + plan.mergedCount + ". Refreshing…", "success");
 
 // 7. Reset merge state and refresh from Firestore so the user sees the
 //    merged result and the source row disappears.
@@ -3843,7 +4087,7 @@ pendingMergeSourceIndex = -1;
 closeMergeModal();
 updateMergeBanner();
 fetchEligibleDonors();
-}, 500);
+}, 1600);
 }catch(error){
 console.error("Manual merge error:", error);
 showStatus("Failed to merge: " + error.message, "error");
