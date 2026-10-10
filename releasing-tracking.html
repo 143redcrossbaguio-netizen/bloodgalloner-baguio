@@ -628,15 +628,48 @@ flex-direction:column;
       <option value="Paid">Paid</option>
     </select>
 
+    <div id="editAugPaidFields" style="display:none;">
+      <label class="formLabel">OR NUMBER <span style="color:#c62828;">*</span></label>
+      <input type="text" id="editAugPaidOrNo" class="formInput" placeholder="Official Receipt number">
+
+      <label class="formLabel">DATE OF PAYMENT <span style="color:#c62828;">*</span></label>
+      <input type="date" id="editAugPaidDate" class="formInput">
+    </div>
+
     <label class="formLabel">ADDRESS</label>
     <input type="text" id="editAugAddress" class="formInput">
 
     <label class="formLabel">REMARKS</label>
     <input type="text" id="editAugRemarks" class="formInput">
 
+    <label class="formLabel">NOTE (printed just before the signatories)</label>
+    <textarea id="editAugNote" class="formInput" rows="3" placeholder="Optional note to appear on the printed statement" style="font-family:inherit;resize:vertical;"></textarea>
+
     <div class="modalActions">
       <button type="button" class="saveBtn" onclick="saveAugmentationEdit()">SAVE CHANGES</button>
       <button type="button" class="closeBtn" onclick="closeAugmentationModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUGMENTATION PAYMENT MODAL (OR number + date of payment) -->
+<div id="paymentModal" class="modal">
+  <div class="modalContent" style="max-width:460px;">
+    <h3 id="payModalTitle" style="margin-top:0;">MARK AS PAID</h3>
+    <div id="payModalInfo" style="font-size:13px;color:#555;line-height:1.5;"></div>
+
+    <label class="formLabel">OR NUMBER <span style="color:#c62828;">*</span></label>
+    <input type="text" id="payOrNo" class="formInput" placeholder="Official Receipt number" autocomplete="off">
+
+    <label class="formLabel">DATE OF PAYMENT <span style="color:#c62828;">*</span></label>
+    <input type="date" id="payDate" class="formInput">
+
+    <div id="payModalError" style="color:#b30000;font-size:12px;min-height:16px;margin-top:8px;"></div>
+
+    <div class="modalActions">
+      <button type="button" class="saveBtn" id="paySaveBtn" onclick="savePayment()">SAVE PAYMENT</button>
+      <button type="button" class="deleteBtn" id="payUnpaidBtn" style="display:none;color:white;" onclick="markAugmentationUnpaid()">MARK AS UNPAID</button>
+      <button type="button" class="closeBtn" onclick="closePaymentModal()">CLOSE</button>
     </div>
   </div>
 </div>
@@ -751,6 +784,7 @@ flex-direction:column;
 .soaDoc .tot td{font-weight:700;border-top:2px solid #000}
 .soaDoc .noB{border:none!important;background:none!important}
 .soaDoc .rem{margin-top:12px;min-height:34px}
+.soaDoc .soaNote{margin-top:12px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
 .soaDoc .soaSign{display:flex;justify-content:space-between;gap:30px;margin-top:26px}
 .soaDoc .soaSign div{flex:1;text-align:center}
 .soaDoc .soaSign .line{border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:11px}
@@ -868,11 +902,12 @@ function build(e,prices){
 <div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
 <div class="soaTitle">BILLING STATEMENT</div>
 <div class="soaMeta"><div><div>CUSTOMER: <span class="ul" style="min-width:230px">${esc(e.facility)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
-<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div></div></div>
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>
 <table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
 <thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
 <tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
+${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
 <div class="soaSign"><div><div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div><div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
 }
 function print(html){
@@ -985,6 +1020,19 @@ async function loadPrices(){
       BOX: 0
     };
   }
+}
+
+function isAugPaid(entry){
+  return String((entry && entry.augmentationPaid) || "NO").toUpperCase() === "YES"
+    || (entry && entry.paymentStatus === "Paid");
+}
+
+function augPaidTitle(entry){
+  if(!isAugPaid(entry)) return "Click to record payment (OR number + date required)";
+  const bits = [];
+  if(entry.paidOrNo) bits.push("OR " + String(entry.paidOrNo).replace(/"/g, "&quot;"));
+  if(entry.paidDate) bits.push("paid " + entry.paidDate);
+  return (bits.length ? bits.join(" · ") + " — " : "") + "click to edit / mark unpaid";
 }
 
 function normalizePriceSnapshot(snapshot){
@@ -1296,11 +1344,11 @@ function renderDuplicateAugmentationGroup(group){
             <td>${computeAugEntryTotal(entry)}</td>
             <td>${buildAmountPaidCell(entry, computeAugEntryTotal(entry))}</td>
             <td>${entry.discount || ""}</td>
-            <td>${String(entry.augmentationPaid || "NO").toUpperCase()}</td>
+            <td>${isAugPaid(entry) ? "YES" : "NO"}</td>
             <td>
               <button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
-              <button class="actionBtn ${String(entry.augmentationPaid || "NO").toUpperCase() === "YES" ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}">
-                PAID ${String(entry.augmentationPaid || "NO").toUpperCase() === "YES" ? 'YES' : 'NO'}
+              <button class="actionBtn ${isAugPaid(entry) ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">
+                PAID ${isAugPaid(entry) ? 'YES' : 'NO'}
               </button>
               <button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button>
             </td>
@@ -1809,9 +1857,9 @@ function renderFlatAugmentationResults(entries){
   const tb=t.querySelector("tbody");
   entries.forEach(entry=>{
     const ct=computeAugEntryTotal(entry);
-    const ip=String(entry.augmentationPaid||"NO").toUpperCase()==="YES";
+    const ip=isAugPaid(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1934,9 +1982,9 @@ function renderAugmentationTable(){
     const tb=t.querySelector("tbody");
     de.forEach(entry=>{
       const ct=computeAugEntryTotal(entry);
-      const ip=String(entry.augmentationPaid||"NO").toUpperCase()==="YES";
+      const ip=isAugPaid(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -1992,6 +2040,10 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugPaymentStatus").value = "Unpaid";
   document.getElementById("editAugAddress").value = "";
   document.getElementById("editAugRemarks").value = "";
+  document.getElementById("editAugNote").value = "";
+  document.getElementById("editAugPaidOrNo").value = "";
+  document.getElementById("editAugPaidDate").value = "";
+  document.getElementById("editAugPaidFields").style.display = "none";
   document.getElementById("editAugBloodTypeContainer").innerHTML = "";
 };
 
@@ -2140,7 +2192,11 @@ async function openEditAugmentation(id){
     document.getElementById("editAugDiscount").value = data.discount || "";
     document.getElementById("editAugAddress").value = data.address || "";
     document.getElementById("editAugRemarks").value = data.remarks || "";
-    document.getElementById("editAugPaymentStatus").value = data.paymentStatus || "Unpaid";
+    document.getElementById("editAugNote").value = data.note || "";
+    document.getElementById("editAugPaymentStatus").value = isAugPaid(data) ? "Paid" : "Unpaid";
+    document.getElementById("editAugPaidOrNo").value = data.paidOrNo || "";
+    document.getElementById("editAugPaidDate").value = data.paidDate || "";
+    syncEditAugPaidFields();
     document.getElementById("editAugBloodTypeContainer").innerHTML = "";
 
     const bloodTypes = Array.isArray(data.bloodTypes) ? data.bloodTypes : [];
@@ -2200,7 +2256,22 @@ window.saveAugmentationEdit = async function(){
     }
   });
 
-  const existing = allAugmentationEntries.find(x => x.id === currentAugmentationEditId) || {};
+  const editStatus = document.getElementById("editAugPaymentStatus").value;
+  const editOrNo = document.getElementById("editAugPaidOrNo").value.trim();
+  const editPaidDate = document.getElementById("editAugPaidDate").value;
+
+  if(editStatus === "Paid"){
+    if(!editOrNo){
+      alert("OR number is required when the statement is marked as Paid.");
+      document.getElementById("editAugPaidOrNo").focus();
+      return;
+    }
+    if(!editPaidDate){
+      alert("Date of payment is required when the statement is marked as Paid.");
+      document.getElementById("editAugPaidDate").focus();
+      return;
+    }
+  }
 
   const payload = {
     date: document.getElementById("editAugDate").value,
@@ -2211,9 +2282,12 @@ window.saveAugmentationEdit = async function(){
     discount: document.getElementById("editAugDiscount").value,
     address: SOA.remember("address", document.getElementById("editAugAddress").value),
     remarks: document.getElementById("editAugRemarks").value.trim(),
-    paymentStatus: document.getElementById("editAugPaymentStatus").value,
+    note: document.getElementById("editAugNote").value.trim(),
+    paymentStatus: editStatus,
     priceSnapshot: currentAugmentationPriceSnapshot,
-    augmentationPaid: existing.augmentationPaid || "NO"
+    augmentationPaid: editStatus === "Paid" ? "YES" : "NO",
+    paidOrNo: editStatus === "Paid" ? editOrNo : null,
+    paidDate: editStatus === "Paid" ? editPaidDate : null
   };
 
   try{
@@ -2406,6 +2480,23 @@ window.saveReleasingEdit = async function(){
   }
 };
 
+function phToday(){
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+let paymentEditId = null;
+
+function syncEditAugPaidFields(){
+  const paid = document.getElementById("editAugPaymentStatus").value === "Paid";
+  document.getElementById("editAugPaidFields").style.display = paid ? "block" : "none";
+  if(paid && !document.getElementById("editAugPaidDate").value){
+    document.getElementById("editAugPaidDate").value = phToday();
+  }
+}
+
+// Clicking PAID opens a small dialog that requires the OR number and the date
+// of payment. When the statement is already paid the dialog shows the saved
+// values so they can be corrected, or the statement can be marked unpaid.
 async function toggleAugmentationPaid(id){
   if(!auth.currentUser){
     alert("You are not logged in.");
@@ -2413,22 +2504,86 @@ async function toggleAugmentationPaid(id){
     return;
   }
 
-  try{
-    const current = allAugmentationEntries.find(item => item.id === id);
-    if(!current){
-      alert("Record not found.");
-      return;
-    }
+  const current = allAugmentationEntries.find(item => item.id === id);
+  if(!current){
+    alert("Record not found.");
+    return;
+  }
 
-    const nextValue = String(current.augmentationPaid || "NO").toUpperCase() === "YES" ? "NO" : "YES";
-    await update(ref(db, "bloodAugmentation/" + id), {
-      augmentationPaid: nextValue
+  const paid = isAugPaid(current);
+  paymentEditId = id;
+
+  document.getElementById("payModalTitle").textContent = paid ? "EDIT PAYMENT DETAILS" : "MARK AS PAID";
+  document.getElementById("payModalInfo").innerHTML =
+    "Invoice: <b>" + SOA.esc(current.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(current.facility || "") + "</b>";
+  document.getElementById("payOrNo").value = current.paidOrNo || "";
+  document.getElementById("payDate").value = current.paidDate || phToday();
+  document.getElementById("payModalError").textContent = "";
+  document.getElementById("paySaveBtn").textContent = paid ? "UPDATE PAYMENT" : "SAVE PAYMENT";
+  document.getElementById("payUnpaidBtn").style.display = paid ? "inline-block" : "none";
+  document.getElementById("paymentModal").style.display = "block";
+  document.getElementById("payOrNo").focus();
+}
+
+window.closePaymentModal = function(){
+  document.getElementById("paymentModal").style.display = "none";
+  paymentEditId = null;
+};
+
+window.savePayment = async function(){
+  if(!auth.currentUser){
+    alert("You are not logged in.");
+    window.location.href = "index.html";
+    return;
+  }
+  if(!paymentEditId) return;
+
+  const err = document.getElementById("payModalError");
+  const orNo = document.getElementById("payOrNo").value.trim();
+  const paidDate = document.getElementById("payDate").value;
+
+  if(!orNo){
+    err.textContent = "OR number is required.";
+    document.getElementById("payOrNo").focus();
+    return;
+  }
+  if(!paidDate){
+    err.textContent = "Date of payment is required.";
+    document.getElementById("payDate").focus();
+    return;
+  }
+
+  try{
+    await update(ref(db, "bloodAugmentation/" + paymentEditId), {
+      augmentationPaid: "YES",
+      paymentStatus: "Paid",
+      paidOrNo: orNo,
+      paidDate: paidDate
     });
+    window.closePaymentModal();
   }catch(error){
     console.error(error);
-    alert("Failed to update augmentation paid status.");
+    err.textContent = "Failed to save payment details.";
   }
-}
+};
+
+window.markAugmentationUnpaid = async function(){
+  if(!paymentEditId) return;
+  if(!confirm("Mark this statement as UNPAID?\n\nThe OR number and date of payment will be removed.")) return;
+
+  try{
+    await update(ref(db, "bloodAugmentation/" + paymentEditId), {
+      augmentationPaid: "NO",
+      paymentStatus: "Unpaid",
+      paidOrNo: null,
+      paidDate: null
+    });
+    window.closePaymentModal();
+  }catch(error){
+    console.error(error);
+    document.getElementById("payModalError").textContent = "Failed to update payment status.";
+  }
+};
 
 /* ACTIONS */
 container.addEventListener("click", async (event) => {
@@ -2627,7 +2782,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","PAID"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
   ];
 
   filtered.forEach(e => {
@@ -2653,7 +2808,9 @@ function exportAugmentationCSV(){
       computeAugEntryTotal(e),
       computeFinalTotal(e, computeAugEntryTotal(e)),
       e.discount || "",
-      String(e.augmentationPaid || "NO").toUpperCase()
+      isAugPaid(e) ? "YES" : "NO",
+      e.paidOrNo || "",
+      e.paidDate || ""
     ]);
   });
 
@@ -2783,7 +2940,14 @@ window.onclick = function(event){
   if(event.target === releasingModal){
     window.closeReleasingModal();
   }
+
+  const paymentModal = document.getElementById("paymentModal");
+  if(event.target === paymentModal){
+    window.closePaymentModal();
+  }
 };
+
+document.getElementById("editAugPaymentStatus").addEventListener("change", syncEditAugPaidFields);
 
 /* AUTH CHECK + INIT */
 onAuthStateChanged(auth, async (user) => {
