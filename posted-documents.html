@@ -22,6 +22,7 @@
 .soaDoc .tot td{font-weight:700;border-top:2px solid #000}
 .soaDoc .noB{border:none!important;background:none!important}
 .soaDoc .rem{margin-top:12px;min-height:34px}
+.soaDoc .soaNote{margin-top:12px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
 .soaDoc .soaSign{display:flex;justify-content:space-between;gap:30px;margin-top:26px}
 .soaDoc .soaSign div{flex:1;text-align:center}
 .soaDoc .soaSign .line{border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:11px}
@@ -139,11 +140,12 @@ function build(e,prices){
 <div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
 <div class="soaTitle">BILLING STATEMENT</div>
 <div class="soaMeta"><div><div>CUSTOMER: <span class="ul" style="min-width:230px">${esc(e.facility)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
-<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div></div></div>
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>
 <table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
 <thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
 <tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
+${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
 <div class="soaSign"><div><div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div><div><div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div></div></div>`;
 }
 function print(html){
@@ -199,6 +201,18 @@ tr.expanded .caret{transform:rotate(90deg);}
 .statusBadge.paid{background:#e6f4ea;color:#1e7e34;}
 .statusBadge.unpaid{background:#fdecea;color:#c62828;}
 .statusBadge:hover{filter:brightness(0.95);}
+.payCell{white-space:nowrap;}
+.payEditBtn{background:none;border:none;color:#1565c0;cursor:pointer;font-size:12px;padding:0 0 0 6px;}
+.payEditBtn:hover{text-decoration:underline;}
+.payModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;overflow:auto;}
+.payModal .box{background:#fff;max-width:440px;margin:60px auto;padding:20px;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.payModal h3{margin:0 0 6px;color:#1a1450;}
+.payModal .info{font-size:13px;color:#555;line-height:1.5;margin-bottom:4px;}
+.payModal label{display:block;font-weight:700;font-size:12.5px;margin-top:12px;}
+.payModal input{width:100%;box-sizing:border-box;padding:9px 10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:14px;}
+.payModal .err{color:#b30000;font-size:12px;min-height:16px;margin-top:8px;}
+.payModal .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+.btn.red{background:#c62828;}
 .periodTabs{display:flex;gap:6px;}
 .periodTabs button{padding:8px 14px;border:1px solid #1a1450;background:#fff;color:#1a1450;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;}
 .periodTabs button.active{background:#1a1450;color:#fff;}
@@ -258,6 +272,8 @@ tr.expanded .caret{transform:rotate(90deg);}
           <th class="n">Amount</th>
           <th class="n">Discount</th>
           <th class="c">Status</th>
+          <th>OR No.</th>
+          <th>Date of Payment</th>
           <th class="c">No. of Print</th>
           <th>Name of Person Printed</th>
         </tr>
@@ -268,6 +284,23 @@ tr.expanded .caret{transform:rotate(90deg);}
 </div>
 
 <div id="printArea"></div>
+
+<div id="payModal" class="payModal" onclick="if(event.target===this)closePayModal()">
+  <div class="box">
+    <h3 id="payTitle">MARK AS PAID</h3>
+    <div class="info" id="payInfo"></div>
+    <label>OR NUMBER <span style="color:#c62828;">*</span></label>
+    <input type="text" id="payOrNo" placeholder="Official Receipt number" autocomplete="off">
+    <label>DATE OF PAYMENT <span style="color:#c62828;">*</span></label>
+    <input type="date" id="payDate">
+    <div class="err" id="payErr"></div>
+    <div class="acts">
+      <button type="button" class="btn printF" id="paySaveBtn" onclick="savePay()">SAVE PAYMENT</button>
+      <button type="button" class="btn red" id="payUnpaidBtn" style="display:none;" onclick="markUnpaid()">MARK AS UNPAID</button>
+      <button type="button" class="btn clear" onclick="closePayModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -351,7 +384,7 @@ function inPeriod(e){
 function matchesSearch(e, q){
   if(!q) return true;
   q = q.toLowerCase();
-  return [e.invoiceNo, e.facility, e.printedBy, e.approvedBy, e.address, statusOf(e)]
+  return [e.invoiceNo, e.facility, e.printedBy, e.approvedBy, e.address, statusOf(e), e.paidOrNo, e.paidDate]
     .some(v => String(v||"").toLowerCase().includes(q));
 }
 
@@ -362,7 +395,9 @@ function filteredEntries(){
     .sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.invoiceNo||"").localeCompare(a.invoiceNo||""));
 }
 
-function statusOf(e){ return e.paymentStatus === "Paid" ? "Paid" : "Unpaid"; }
+function statusOf(e){
+  return (e.paymentStatus === "Paid" || String(e.augmentationPaid || "").toUpperCase() === "YES") ? "Paid" : "Unpaid";
+}
 
 function rowHtml(e){
   const t = SOA.totals(e, getEntryPrices(e));
@@ -376,12 +411,14 @@ function rowHtml(e){
       <td>${SOA.esc(e.facility || "")}</td>
       <td class="n">${money(t.gross)}</td>
       <td class="n">${money(t.disc)}</td>
-      <td class="c"><button type="button" class="statusBadge ${st==="Paid"?"paid":"unpaid"}" onclick="event.stopPropagation();toggleStatus('${e.id}')">${st}</button></td>
+      <td class="c"><button type="button" class="statusBadge ${st==="Paid"?"paid":"unpaid"}" onclick="event.stopPropagation();openPayModal('${e.id}')">${st}</button></td>
+      <td>${st==="Paid" ? SOA.esc(e.paidOrNo || "—") : ""}</td>
+      <td class="payCell">${st==="Paid" ? (SOA.esc(e.paidDate ? SOA.fmtDate(e.paidDate) : "—") + `<button type="button" class="payEditBtn" title="Edit OR number / date of payment" onclick="event.stopPropagation();openPayModal('${e.id}')">✎ Edit</button>`) : ""}</td>
       <td class="c">${Number(e.printCount)||0}</td>
       <td>${SOA.esc(e.printedBy || "")}</td>
     </tr>
     <tr class="detailRow" style="display:${isOpen?"table-row":"none"};">
-      <td colspan="9">
+      <td colspan="11">
         <div class="detailWrap">
           <div class="detailActions">
             <button type="button" class="btn printF" onclick="event.stopPropagation();printOne('${e.id}')">🖨 Print This Statement</button>
@@ -397,13 +434,72 @@ window.toggleRow = function(id){
   render();
 };
 
-window.toggleStatus = async function(id){
+let payEditId = null;
+
+function phToday(){
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+// Clicking the status badge (or ✎ Edit) opens the payment dialog. Marking a
+// statement Paid requires the OR number and the date of payment; for an
+// already-paid statement the saved values can be edited or the statement can
+// be marked Unpaid again.
+window.openPayModal = function(id){
   const e = allEntries.find(x => x.id === id); if(!e) return;
-  const next = statusOf(e) === "Paid" ? "Unpaid" : "Paid";
-  e.paymentStatus = next; // optimistic UI update
-  render();
-  try{ await update(ref(db, "bloodAugmentation/" + id), { paymentStatus: next }); }
-  catch(err){ console.error("Could not update payment status:", err); }
+  const paid = statusOf(e) === "Paid";
+  payEditId = id;
+  $("payTitle").textContent = paid ? "EDIT PAYMENT DETAILS" : "MARK AS PAID";
+  $("payInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(e.facility || "") + "</b>";
+  $("payOrNo").value = e.paidOrNo || "";
+  $("payDate").value = e.paidDate || phToday();
+  $("payErr").textContent = "";
+  $("paySaveBtn").textContent = paid ? "UPDATE PAYMENT" : "SAVE PAYMENT";
+  $("payUnpaidBtn").style.display = paid ? "inline-block" : "none";
+  $("payModal").style.display = "block";
+  $("payOrNo").focus();
+};
+
+window.closePayModal = function(){
+  $("payModal").style.display = "none";
+  payEditId = null;
+};
+
+window.savePay = async function(){
+  if(!payEditId) return;
+  const orNo = $("payOrNo").value.trim();
+  const paidDate = $("payDate").value;
+  if(!orNo){ $("payErr").textContent = "OR number is required."; $("payOrNo").focus(); return; }
+  if(!paidDate){ $("payErr").textContent = "Date of payment is required."; $("payDate").focus(); return; }
+
+  const id = payEditId;
+  const patch = { paymentStatus: "Paid", augmentationPaid: "YES", paidOrNo: orNo, paidDate: paidDate };
+  try{
+    await update(ref(db, "bloodAugmentation/" + id), patch);
+    const e = allEntries.find(x => x.id === id);
+    if(e) Object.assign(e, patch);
+    closePayModal();
+    render();
+  }catch(err){
+    console.error("Could not save payment details:", err);
+    $("payErr").textContent = "Failed to save payment details.";
+  }
+};
+
+window.markUnpaid = async function(){
+  if(!payEditId) return;
+  if(!confirm("Mark this statement as UNPAID?\n\nThe OR number and date of payment will be removed.")) return;
+
+  const id = payEditId;
+  try{
+    await update(ref(db, "bloodAugmentation/" + id), { paymentStatus: "Unpaid", augmentationPaid: "NO", paidOrNo: null, paidDate: null });
+    const e = allEntries.find(x => x.id === id);
+    if(e){ e.paymentStatus = "Unpaid"; e.augmentationPaid = "NO"; delete e.paidOrNo; delete e.paidDate; }
+    closePayModal();
+    render();
+  }catch(err){
+    console.error("Could not update payment status:", err);
+    $("payErr").textContent = "Failed to update payment status.";
+  }
 };
 
 window.printOne = function(id){
@@ -428,7 +524,7 @@ function render(){
   renderSummary(rows);
   $("tblBody").innerHTML = rows.length
     ? rows.map(rowHtml).join("")
-    : `<tr><td colspan="9" class="empty">No posted documents found for this period.</td></tr>`;
+    : `<tr><td colspan="11" class="empty">No posted documents found for this period.</td></tr>`;
 }
 
 function buildPrintTable(rows, label){
@@ -444,6 +540,8 @@ function buildPrintTable(rows, label){
       <td style="text-align:right;">${money(t.gross)}</td>
       <td style="text-align:right;">${money(t.disc)}</td>
       <td style="text-align:center;">${statusOf(e)}</td>
+      <td>${statusOf(e)==="Paid" ? SOA.esc(e.paidOrNo||"") : ""}</td>
+      <td>${statusOf(e)==="Paid" && e.paidDate ? SOA.esc(SOA.fmtDate(e.paidDate)) : ""}</td>
       <td style="text-align:center;">${Number(e.printCount)||0}</td>
       <td>${SOA.esc(e.printedBy||"")}</td>
     </tr>`;
@@ -463,15 +561,17 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">Amount</th>
         <th style="border:1px solid #000;padding:4px;">Discount</th>
         <th style="border:1px solid #000;padding:4px;">Status</th>
+        <th style="border:1px solid #000;padding:4px;">OR No.</th>
+        <th style="border:1px solid #000;padding:4px;">Date of Payment</th>
         <th style="border:1px solid #000;padding:4px;">No. of Print</th>
         <th style="border:1px solid #000;padding:4px;">Name of Person Printed</th>
       </tr></thead>
-      <tbody>${body || '<tr><td colspan="8" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
+      <tbody>${body || '<tr><td colspan="10" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:700;">
         <td colspan="3" style="border:1px solid #000;padding:4px;text-align:right;">TOTAL</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totGross)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totDisc)}</td>
-        <td colspan="3" style="border:1px solid #000;"></td>
+        <td colspan="5" style="border:1px solid #000;"></td>
       </tr></tfoot>
     </table>
   </div>`;
@@ -492,11 +592,11 @@ window.printList = function(all){
 
 window.exportCsv = function(){
   const rows = filteredEntries();
-  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Status","No. of Print","Name of Person Printed"];
+  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Status","OR No.","Date of Payment","No. of Print","Name of Person Printed"];
   const lines = [head.join(",")];
   rows.forEach(e => {
     const t = SOA.totals(e, getEntryPrices(e));
-    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), statusOf(e), Number(e.printCount)||0, e.printedBy||""];
+    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
     lines.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","));
   });
   const blob = new Blob(["\ufeff"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
