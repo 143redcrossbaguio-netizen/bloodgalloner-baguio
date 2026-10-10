@@ -213,6 +213,8 @@ tr.expanded .caret{transform:rotate(90deg);}
 .payModal .err{color:#b30000;font-size:12px;min-height:16px;margin-top:8px;}
 .payModal .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
 .btn.red{background:#c62828;}
+.payModal textarea{width:100%;box-sizing:border-box;padding:9px 10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:14px;font-family:inherit;resize:vertical;}
+.btn.note{background:#6a1b9a;}
 .periodTabs{display:flex;gap:6px;}
 .periodTabs button{padding:8px 14px;border:1px solid #1a1450;background:#fff;color:#1a1450;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;}
 .periodTabs button.active{background:#1a1450;color:#fff;}
@@ -284,6 +286,22 @@ tr.expanded .caret{transform:rotate(90deg);}
 </div>
 
 <div id="printArea"></div>
+
+<div id="noteModal" class="payModal" onclick="if(event.target===this)closeNoteModal()">
+  <div class="box">
+    <h3 id="noteTitle">ADD NOTE</h3>
+    <div class="info" id="noteInfo"></div>
+    <label>NOTE (printed just before the signatories)</label>
+    <textarea id="noteText" rows="5" placeholder="Type a note for this statement"></textarea>
+    <div class="info" style="margin-top:6px;">The note only appears on the printed statement when it is not empty.</div>
+    <div class="err" id="noteErr"></div>
+    <div class="acts">
+      <button type="button" class="btn printF" onclick="saveNote()">SAVE NOTE</button>
+      <button type="button" class="btn red" id="noteClearBtn" style="display:none;" onclick="clearNote()">REMOVE NOTE</button>
+      <button type="button" class="btn clear" onclick="closeNoteModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
 
 <div id="payModal" class="payModal" onclick="if(event.target===this)closePayModal()">
   <div class="box">
@@ -422,6 +440,7 @@ function rowHtml(e){
         <div class="detailWrap">
           <div class="detailActions">
             <button type="button" class="btn printF" onclick="event.stopPropagation();printOne('${e.id}')">🖨 Print This Statement</button>
+            <button type="button" class="btn note" onclick="event.stopPropagation();openNoteModal('${e.id}')">📝 ${e.note ? "Edit Note" : "Add Note"}</button>
           </div>
           <div style="border:1px dashed #99a;border-radius:6px;overflow-x:auto;">${SOA.build(e, getEntryPrices(e))}</div>
         </div>
@@ -500,6 +519,47 @@ window.markUnpaid = async function(){
     console.error("Could not update payment status:", err);
     $("payErr").textContent = "Failed to update payment status.";
   }
+};
+
+let noteEditId = null;
+
+window.openNoteModal = function(id){
+  const e = allEntries.find(x => x.id === id); if(!e) return;
+  noteEditId = id;
+  $("noteTitle").textContent = e.note ? "EDIT NOTE" : "ADD NOTE";
+  $("noteInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(e.facility || "") + "</b>";
+  $("noteText").value = e.note || "";
+  $("noteErr").textContent = "";
+  $("noteClearBtn").style.display = e.note ? "inline-block" : "none";
+  $("noteModal").style.display = "block";
+  $("noteText").focus();
+};
+
+window.closeNoteModal = function(){
+  $("noteModal").style.display = "none";
+  noteEditId = null;
+};
+
+async function writeNote(value){
+  if(!noteEditId) return;
+  const id = noteEditId;
+  try{
+    await update(ref(db, "bloodAugmentation/" + id), { note: value || null });
+    const e = allEntries.find(x => x.id === id);
+    if(e){ if(value) e.note = value; else delete e.note; }
+    closeNoteModal();
+    render();
+  }catch(err){
+    console.error("Could not save note:", err);
+    $("noteErr").textContent = "Failed to save note.";
+  }
+}
+
+window.saveNote = function(){ writeNote($("noteText").value.trim()); };
+
+window.clearNote = function(){
+  if(!confirm("Remove the note from this statement?")) return;
+  writeNote("");
 };
 
 window.printOne = function(id){
