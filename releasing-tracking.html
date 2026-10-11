@@ -587,9 +587,10 @@ flex-direction:column;
     <div id="orgEditorMount"></div>
     <div style="overflow-x:auto;border:1px dashed #999;border-radius:6px;"><div id="soaViewBody"></div></div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
-      <div style="flex:1;min-width:220px;"><label class="formLabel">PRINTED / PREPARED BY</label><input type="text" id="soaViewPrintedBy" class="formInput" placeholder="Name of person printing"></div>
-      <div style="flex:1;min-width:220px;"><label class="formLabel">APPROVED BY</label><input type="text" id="soaViewApprovedBy" class="formInput" placeholder="Name of approver"></div>
+      <div style="flex:1;min-width:220px;"><label class="formLabel">PRINTED / PREPARED BY</label><input type="text" id="soaViewPrintedBy" class="formInput" placeholder="Name of person printing"><label class="formLabel">E-SIGNATURE (optional)</label><select id="soaViewPrintedBySig" class="formInput"><option value="">— no e-signature —</option></select></div>
+      <div style="flex:1;min-width:220px;"><label class="formLabel">APPROVED BY</label><input type="text" id="soaViewApprovedBy" class="formInput" placeholder="Name of approver"><label class="formLabel">E-SIGNATURE (optional)</label><select id="soaViewApprovedBySig" class="formInput"><option value="">— no e-signature —</option></select></div>
     </div>
+    <button type="button" class="esigLink" onclick="ESIG.openManager()">✍ Add / manage staff e-signatures</button>
     <div class="modalActions">
       <button type="button" class="saveBtn" onclick="printSoaView()">🖨 PRINT</button>
       <button type="button" class="editBtn" onclick="editSoaView()">✎ EDIT</button>
@@ -785,6 +786,7 @@ flex-direction:column;
 .soaDoc .noB{border:none!important;background:none!important}
 .soaDoc .rem{margin-top:12px;min-height:34px}
 .soaDoc .soaNote{margin-top:12px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.soaDoc .sigImg{display:block;margin:0 auto -6px;max-height:48px;max-width:180px;object-fit:contain}
 .soaDoc .soaSign{display:flex;justify-content:space-between;gap:30px;margin-top:26px}
 .soaDoc .soaSign div{flex:1;text-align:center}
 .soaDoc .soaSign .line{border-top:1px solid #000;margin-top:4px;padding-top:3px;font-size:11px}
@@ -890,6 +892,7 @@ function totals(e,prices){
   const disc=Number(e.discount)||0,net=gross-disc;
   return {rows,gross,disc,net};
 }
+const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
   const {rows,disc,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
@@ -908,7 +911,7 @@ function build(e,prices){
 <tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
 ${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
-<div class="soaSign"><div><div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div><div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
+<div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
 }
 function print(html){
   const f=document.createElement("iframe");f.style.cssText="position:fixed;width:0;height:0;border:0;right:0;bottom:0";
@@ -2970,6 +2973,11 @@ SOA.mountOrgEditor(document.getElementById("orgEditorMount"));
 document.addEventListener("soaOrgChanged", () => { if(soaViewId) renderSoaView(); });
 SOA.attach(document.getElementById("soaViewPrintedBy"), "printedBy");
 SOA.attach(document.getElementById("soaViewApprovedBy"), "approvedBy");
+const sigOf = id => (window.ESIG ? window.ESIG.imageFor(id) : "");
+window.addEventListener("load", () => {
+  ESIG.attachSelect(document.getElementById("soaViewPrintedBySig"), document.getElementById("soaViewPrintedBy"), () => renderSoaView());
+  ESIG.attachSelect(document.getElementById("soaViewApprovedBySig"), document.getElementById("soaViewApprovedBy"), () => renderSoaView());
+});
 let soaViewId = null;
 const soaEntry = () => allAugmentationEntries.find(e => e.id === soaViewId);
 
@@ -2977,7 +2985,9 @@ function soaCurrent(){
   const e = soaEntry(); if(!e) return null;
   return { ...e,
     printedBy: document.getElementById("soaViewPrintedBy").value.trim(),
-    approvedBy: document.getElementById("soaViewApprovedBy").value.trim() };
+    approvedBy: document.getElementById("soaViewApprovedBy").value.trim(),
+    printedBySig: sigOf(document.getElementById("soaViewPrintedBySig").value),
+    approvedBySig: sigOf(document.getElementById("soaViewApprovedBySig").value) };
 }
 function renderSoaView(){
   const d = soaCurrent(); if(!d) return;
@@ -2988,6 +2998,10 @@ window.openSoaView = function(id){
   const e = soaEntry(); if(!e) return;
   document.getElementById("soaViewPrintedBy").value = e.printedBy || "";
   document.getElementById("soaViewApprovedBy").value = e.approvedBy || "";
+  if(window.ESIG){
+    ESIG.setValue(document.getElementById("soaViewPrintedBySig"), e.printedBySigId || "");
+    ESIG.setValue(document.getElementById("soaViewApprovedBySig"), e.approvedBySigId || "");
+  }
   renderSoaView();
   document.getElementById("soaModal").style.display = "block";
 };
@@ -3006,7 +3020,10 @@ window.printSoaView = async function(){
   d.printedBy = SOA.remember("printedBy", d.printedBy);
   d.approvedBy = SOA.remember("approvedBy", d.approvedBy);
   if(!d.printedBy){ alert("Please type the name of the person printing."); document.getElementById("soaViewPrintedBy").focus(); return; }
-  const patch = { printedBy: d.printedBy, approvedBy: d.approvedBy };
+  const patch = { printedBy: d.printedBy, approvedBy: d.approvedBy,
+    printedBySig: d.printedBySig || null, approvedBySig: d.approvedBySig || null,
+    printedBySigId: document.getElementById("soaViewPrintedBySig").value || null,
+    approvedBySigId: document.getElementById("soaViewApprovedBySig").value || null };
   try{
     if(!d.invoiceNo){ // older records saved before invoice numbering
       const y = (d.date || "").slice(0,4) || String(new Date().getFullYear());
@@ -3019,6 +3036,173 @@ window.printSoaView = async function(){
   }catch(err){ console.error(err); alert("Could not store the invoice/print details, but printing will continue."); }
   renderSoaView();
   SOA.print(SOA.build(d, getEntryPrices(d)));
+};
+</script>
+
+
+<!-- E-SIGNATURE MANAGER: staff signatures saved in the database (settings/eSignatures) -->
+<style>
+.esigLink{background:none;border:none;color:#1565c0;font-size:12px;text-decoration:underline;cursor:pointer;padding:4px 0;margin-top:6px}
+#esigModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;overflow:auto}
+#esigModal .eBox{background:#fff;max-width:560px;margin:30px auto;padding:20px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.3);font-family:Arial,sans-serif;color:#000}
+#esigModal h3{margin:0 0 4px;color:#1a1450}
+#esigModal .eHint{font-size:12px;color:#555;margin-bottom:8px;line-height:1.4}
+#esigModal label{display:block;font-weight:bold;font-size:12.5px;margin-top:10px}
+#esigModal input[type=text]{width:100%;box-sizing:border-box;padding:9px 10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+#esigModal canvas{width:100%;height:140px;border:1px dashed #888;border-radius:6px;background:#fff;touch-action:none;margin-top:6px;cursor:crosshair}
+#esigModal .eRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+#esigModal button{padding:8px 14px;border:none;border-radius:6px;font-weight:bold;font-size:12.5px;cursor:pointer;color:#fff}
+#esigModal .bSave{background:#1565c0}#esigModal .bGrey{background:#757575}#esigModal .bRed{background:#c62828}#esigModal .bClose{background:#444}
+#esigModal .eList{margin-top:14px;border-top:1px solid #ddd;padding-top:8px}
+#esigModal .eItem{display:flex;align-items:center;gap:10px;border-bottom:1px solid #eee;padding:6px 0}
+#esigModal .eItem img{height:38px;max-width:120px;object-fit:contain;border:1px solid #eee;background:#fff}
+#esigModal .eItem .eName{flex:1;font-weight:bold;font-size:13px}
+#esigModal .eMsg{font-size:12px;min-height:16px;margin-top:6px;color:#b30000}
+</style>
+<div id="esigModal" onclick="if(event.target===this)ESIG.closeManager()">
+  <div class="eBox">
+    <h3>✍ E-SIGNATURES</h3>
+    <div class="eHint">Add each staff member once. Their signature is saved in the system and can then be selected when printing a statement.</div>
+    <label>STAFF NAME</label>
+    <input type="text" id="esigName" placeholder="Full name as it should appear on the statement" autocomplete="off">
+    <label>SIGNATURE <span style="font-weight:normal;color:#666">(draw with mouse / finger, or upload an image)</span></label>
+    <canvas id="esigCanvas" width="560" height="190"></canvas>
+    <div class="eRow">
+      <button type="button" class="bGrey" onclick="ESIG.clearPad()">CLEAR</button>
+      <label style="margin:0;font-weight:normal"><input type="file" id="esigFile" accept="image/*" style="font-size:12px"></label>
+    </div>
+    <div class="eMsg" id="esigMsg"></div>
+    <div class="eRow">
+      <button type="button" class="bSave" id="esigSaveBtn" onclick="ESIG.save()">SAVE E-SIGNATURE</button>
+      <button type="button" class="bClose" onclick="ESIG.closeManager()">CLOSE</button>
+    </div>
+    <div class="eList" id="esigList"></div>
+  </div>
+</div>
+
+<script type="module">
+import { getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const app = getApp(), auth = getAuth(app), db = getDatabase(app);
+const PATH = "settings/eSignatures";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+let sigs = {};
+let editingId = null;
+const selects = new Set();
+
+const list = () => Object.keys(sigs).map(id => ({ id, name: sigs[id].name || "", image: sigs[id].image || "" }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+function fillSelect(sel){
+  const want = sel.dataset.want !== undefined ? sel.dataset.want : sel.value;
+  sel.innerHTML = '<option value="">— no e-signature —</option>' + list().map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
+  sel.value = sigs[want] ? want : "";
+}
+
+function renderList(){
+  const box = $("esigList");
+  const items = list();
+  box.innerHTML = items.length
+    ? items.map(s => `<div class="eItem"><img src="${esc(s.image)}" alt=""><div class="eName">${esc(s.name)}</div>
+        <button type="button" class="bGrey" onclick="ESIG.replace('${esc(s.id)}')">REPLACE</button>
+        <button type="button" class="bRed" onclick="ESIG.remove('${esc(s.id)}')">DELETE</button></div>`).join("")
+    : '<div class="eHint">No e-signatures saved yet.</div>';
+}
+
+onAuthStateChanged(auth, user => {
+  if(!user) return;
+  onValue(ref(db, PATH), snap => {
+    sigs = snap.val() || {};
+    selects.forEach(fillSelect);
+    renderList();
+  });
+});
+
+// ---- drawing pad ----
+const cv = $("esigCanvas"), ctx = cv.getContext("2d");
+let drawing = false, dirty = false;
+ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#111";
+const pos = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; };
+cv.addEventListener("pointerdown", e => { drawing = true; dirty = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + .1, p.y + .1); ctx.stroke(); cv.setPointerCapture(e.pointerId); });
+cv.addEventListener("pointermove", e => { if(!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+["pointerup","pointercancel"].forEach(t => cv.addEventListener(t, () => { drawing = false; }));
+
+function clearPad(){ ctx.clearRect(0, 0, cv.width, cv.height); dirty = false; $("esigFile").value = ""; }
+
+$("esigFile").addEventListener("change", e => {
+  const file = e.target.files[0]; if(!file) return;
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const k = Math.min(cv.width / img.width, cv.height / img.height);
+    const w = img.width * k, h = img.height * k, x = (cv.width - w) / 2, y = (cv.height - h) / 2;
+    ctx.drawImage(img, x, y, w, h);
+    // turn the white paper background transparent
+    const d = ctx.getImageData(0, 0, cv.width, cv.height), px = d.data;
+    for(let i = 0; i < px.length; i += 4){
+      if(px[i] > 225 && px[i+1] > 225 && px[i+2] > 225) px[i+3] = 0;
+    }
+    ctx.putImageData(d, 0, 0);
+    dirty = true;
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+function msg(t){ $("esigMsg").textContent = t || ""; }
+
+async function save(){
+  if(!auth.currentUser){ msg("You are not logged in."); return; }
+  const name = $("esigName").value.trim().replace(/\s+/g, " ");
+  if(!name){ msg("Please type the staff name."); $("esigName").focus(); return; }
+  if(!dirty){ msg("Please draw or upload a signature first."); return; }
+  const image = cv.toDataURL("image/png");
+  if(image.length > 250000){ msg("That signature image is too large. Please draw it or use a smaller image."); return; }
+
+  // same name already saved -> update that one instead of creating a duplicate
+  let id = editingId;
+  if(!id){ const same = list().find(s => s.name.toLowerCase() === name.toLowerCase()); if(same) id = same.id; }
+  if(!id) id = "sig_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  try{
+    await update(ref(db, PATH + "/" + id), { name, image, updatedAt: Date.now() });
+    editingId = null; $("esigName").value = ""; clearPad(); msg("");
+  }catch(err){ console.error(err); msg("Failed to save e-signature."); }
+}
+
+async function removeSig(id){
+  if(!sigs[id]) return;
+  if(!confirm("Delete the e-signature of " + sigs[id].name + "?\n\nStatements already printed keep their signature.")) return;
+  try{ await update(ref(db, PATH), { [id]: null }); }catch(err){ console.error(err); msg("Failed to delete."); }
+}
+
+window.ESIG = {
+  imageFor: id => (sigs[id] && sigs[id].image) || "",
+  nameFor: id => (sigs[id] && sigs[id].name) || "",
+  setValue(sel, id){ if(!sel) return; sel.dataset.want = id || ""; fillSelect(sel); },
+  // Drop-down of saved e-signatures next to a name box. Choosing one fills the
+  // name; typing a saved name also picks its signature.
+  attachSelect(sel, nameInput, onChange){
+    if(!sel) return;
+    selects.add(sel); fillSelect(sel);
+    sel.addEventListener("change", () => {
+      sel.dataset.want = sel.value;
+      if(sel.value && nameInput) nameInput.value = sigs[sel.value].name;
+      if(onChange) onChange();
+    });
+    if(nameInput) nameInput.addEventListener("blur", () => {
+      if(sel.value) return;
+      const hit = list().find(s => s.name.toLowerCase() === nameInput.value.trim().toLowerCase());
+      if(hit){ sel.dataset.want = hit.id; fillSelect(sel); if(onChange) onChange(); }
+    });
+  },
+  openManager(){ msg(""); renderList(); $("esigModal").style.display = "block"; },
+  closeManager(){ $("esigModal").style.display = "none"; },
+  clearPad, save,
+  replace(id){ editingId = id; $("esigName").value = sigs[id].name; clearPad(); msg("Draw or upload the new signature for " + sigs[id].name + ", then save."); $("esigName").focus(); },
+  remove: removeSig
 };
 </script>
 
