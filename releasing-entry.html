@@ -603,7 +603,7 @@ button{
 <label>9. AMOUNT PAID</label>
 <div class="row">
     <input type="number" id="amountPaid" readonly>
-    <button type="button" class="discountBtn smallBtn" onclick="toggleDiscount()">DISCOUNT</button>
+    <button type="button" class="discountBtn smallBtn" id="discountBtn" onclick="toggleDiscount()">DISCOUNT</button>
     <button type="button" class="waivedBtn smallBtn" id="waivedBtn" onclick="toggleWaived()">WAIVED</button>
 </div>
 
@@ -631,16 +631,7 @@ button{
     </div>
 </div>
 
-<div id="discountSection" style="display:none;">
-    <label>DISCOUNTED PRICE</label>
-    <input type="number" id="discountPrice">
-
-    <label>DISCOUNT %</label>
-    <input type="number" id="discountPercent">
-
-    <label>10. DISCOUNT</label>
-    <input type="number" id="discount" readonly>
-</div>
+<div id="discountSection" style="display:none;"></div>
 
 <button class="save" id="saveBtn">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
@@ -672,19 +663,14 @@ button{
     <label style="margin-top:15px;">AMOUNT PAID</label>
     <div class="row">
         <input type="number" id="augAmountPaid" readonly>
-        <button type="button" class="discountBtn smallBtn" onclick="toggleAugDiscount()">DISCOUNT</button>
+        <button type="button" class="discountBtn smallBtn" id="augDiscountBtn" onclick="toggleAugDiscount()">DISCOUNT</button>
     </div>
 
-    <div id="augDiscountSection" style="display:none;">
-        <label>DISCOUNTED PRICE</label>
-        <input type="number" id="augDiscountPrice">
+    <div id="augDiscountSection" style="display:none;"></div>
 
-        <label>DISCOUNT %</label>
-        <input type="number" id="augDiscountPercent">
-
-        <label>DISCOUNT</label>
-        <input type="number" id="augDiscount" readonly>
-    </div>
+    <label style="margin-top:12px;">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;font-size:12px;">(optional &ndash; printed on the statement when filled in)</span></label>
+    <input type="number" id="augFreight" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
+    <div id="augPayable" class="discSummary"></div>
 
     <label style="margin-top:12px;">ADDRESS (type manually)</label>
     <input type="text" id="augAddress" placeholder="Customer address">
@@ -718,6 +704,113 @@ button{
     <button class="back" type="button" onclick="toggleAugmentation()">CLOSE</button>
 </div>
 
+<style id="discStyles">
+.discBox{background:#f4f8ff;border:1px solid #1565c0;border-radius:8px;padding:12px;margin:10px 0;text-align:left}
+.discBox .discTitle{font-weight:bold;color:#0d47a1;font-size:13px;letter-spacing:.5px}
+.discBox .discHint{font-size:11.5px;color:#455a64;margin:3px 0 8px;line-height:1.4}
+.discBox .discTotal{font-size:13px;margin-bottom:8px}
+.discBox .discGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.discBox .discGrid label{display:block;font-weight:bold;font-size:11.5px;margin:0 0 4px;color:#000}
+.discBox .discGrid label small{display:block;font-weight:normal;color:#607d8b;font-size:10.5px}
+.discBox .discGrid input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #90a4ae;border-radius:6px;font-size:15px;background:#fff;margin:0}
+.discBox .discGrid input:focus{outline:2px solid #1565c0;border-color:#1565c0}
+.discBox .discMsg{font-size:12.5px;margin-top:8px;min-height:16px;color:#1b5e20;font-weight:600}
+.discBox .discMsg.err{color:#b71c1c}
+.discBox .discClear{margin-top:8px;background:#eceff1;color:#37474f;border:1px solid #b0bec5;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:bold;cursor:pointer;width:auto}
+.discSummary{margin-top:8px;padding:8px 10px;background:#e8f5e9;border:1px solid #2e7d32;border-radius:6px;font-size:13px;line-height:1.6;color:#1b5e20;display:none}
+.discSummary b{color:#000}
+@media (max-width:520px){.discBox .discGrid{grid-template-columns:1fr}}
+</style>
+<script id="discScript">
+/* Shared DISCOUNT panel: three linked, freely-editable boxes.
+   Type in ANY ONE (amount to pay / % / ₱ less) and the other two are calculated.
+   The box being typed in is never rewritten; clearing it removes the discount. */
+window.DiscountBox=(function(){
+const money=n=>(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
+function create(cfg){
+  const root=cfg.mount, ids=cfg.ids;
+  root.innerHTML=`<div class="discBox">
+    <div class="discTitle">DISCOUNT</div>
+    <div class="discHint">Type in <b>any one</b> of the three boxes &mdash; the other two are calculated automatically. Clear the box to remove the discount.</div>
+    <div class="discTotal">Total before discount: <b data-d="total">&#8369;0.00</b></div>
+    <div class="discGrid">
+      <div><label for="${ids.price}">AMOUNT TO PAY<small>discounted price</small></label><input type="number" inputmode="decimal" step="any" min="0" id="${ids.price}" placeholder="0.00" autocomplete="off"></div>
+      <div><label for="${ids.percent}">DISCOUNT %<small>percentage off</small></label><input type="number" inputmode="decimal" step="any" min="0" max="100" id="${ids.percent}" placeholder="0" autocomplete="off"></div>
+      <div><label for="${ids.less}">LESS (&#8369;)<small>amount taken off the total</small></label><input type="number" inputmode="decimal" step="any" min="0" id="${ids.less}" placeholder="0.00" autocomplete="off"></div>
+    </div>
+    <div class="discMsg" data-d="msg"></div>
+    <button type="button" class="discClear" data-d="clear">&#10005; CLEAR DISCOUNT</button>
+    <input type="hidden" id="${ids.amount}">
+  </div>`;
+  const F={price:document.getElementById(ids.price),percent:document.getElementById(ids.percent),less:document.getElementById(ids.less)};
+  const hid=document.getElementById(ids.amount);
+  const totalEl=root.querySelector('[data-d="total"]'), msgEl=root.querySelector('[data-d="msg"]');
+  let src=null, err="";
+  const total=()=>Math.max(0,Number(cfg.getTotal())||0);
+  const put=(k,v,force)=>{ if(!force && F[k]===document.activeElement) return; F[k].value=v; };
+  function show(text,isErr){ msgEl.textContent=text||""; msgEl.classList.toggle("err",!!isErr); }
+  function done(less){
+    if(cfg.button) cfg.button.textContent = less>0 ? ("DISCOUNT \u2212\u20B1"+money(less)) : "DISCOUNT";
+    if(cfg.onChange) cfg.onChange(less);
+  }
+  function apply(){
+    const T=total(); totalEl.textContent="\u20B1"+money(T);
+    const el=src?F[src]:null, raw=el?el.value.trim():"";
+    if(!src||raw===""){
+      ["price","percent","less"].forEach(k=>{ if(k!==src) put(k,""); });
+      hid.value=""; err=""; show(""); done(0); return;
+    }
+    const x=Number(raw); let less=0, error="";
+    if(!isFinite(x)) error="Please enter a valid number.";
+    else if(x<0) error="The value cannot be negative.";
+    else if(src==="percent"){ if(x>100) error="Discount cannot be more than 100%."; else less=r2(T*x/100); }
+    else if(src==="price"){ if(x>T+0.004) error="Amount to pay cannot be higher than the total (\u20B1"+money(T)+")."; else less=r2(T-x); }
+    else { if(x>T+0.004) error="Discount cannot be more than the total (\u20B1"+money(T)+")."; else less=r2(x); }
+    if(error){
+      ["price","percent","less"].forEach(k=>{ if(k!==src) put(k,""); });
+      hid.value=""; err=error; show(error,true); done(0); return;
+    }
+    if(less<0) less=0;
+    const price=r2(T-less), pct=T>0?r2(less/T*100):0;
+    if(src!=="price") put("price",price.toFixed(2));
+    if(src!=="percent") put("percent",String(pct));
+    if(src!=="less") put("less",less.toFixed(2));
+    hid.value=less>0?less.toFixed(2):""; err="";
+    show(T<=0 ? "There is no total yet \u2014 enter the quantities first." :
+         (less>0 ? "Discount: \u2212\u20B1"+money(less)+" ("+pct+"%)  \u2022  Customer pays \u20B1"+money(price) : ""));
+    done(less);
+  }
+  Object.keys(F).forEach(k=>F[k].addEventListener("input",()=>{
+    if(F[k].validity && F[k].validity.badInput) return;   // half-typed value like "-" : wait
+    src=k; apply();
+  }));
+  root.querySelector('[data-d="clear"]').addEventListener("click",()=>api.clear());
+  const api={
+    refresh:apply,
+    clear(){ src=null; ["price","percent","less"].forEach(k=>put(k,"",true)); hid.value=""; apply(); },
+    set(amount){
+      amount=Number(amount)||0;
+      if(amount>0){ src="less"; put("price","",true); put("percent","",true); put("less",amount.toFixed(2),true); }
+      else { src=null; ["price","percent","less"].forEach(k=>put(k,"",true)); }
+      apply();
+    },
+    get:()=>Number(hid.value)||0,
+    isInvalid:()=>!!err,
+    errorText:()=>err,
+    focus(){ const f=[F.price,F.percent,F.less].find(i=>i.value==="")||F.price; f.focus(); },
+    toggle(){
+      const open=root.style.display==="none";
+      root.style.display=open?"block":"none";
+      if(open) setTimeout(()=>api.focus(),0);
+    }
+  };
+  apply();
+  return api;
+}
+return {create,money};
+})();
+</script>
 <style id="soaStyles">
 .soaDoc{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:18px 22px;font-size:12px;box-sizing:border-box;width:100%}
 .soaDoc .soaHead{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1a1450;padding-bottom:8px}
@@ -840,15 +933,16 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,net=gross-disc;
-  return {rows,gross,disc,net};
+  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
+  return {rows,gross,disc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
-  const {rows,disc,net}=totals(e,prices);
+  const {rows,gross,disc,freight,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
   for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount</b></td><td class="n">(${money(disc)})</td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -1639,8 +1733,7 @@ window.addWaived = function(){
 };
 
 window.toggleDiscount = function(){
-  const section = document.getElementById("discountSection");
-  section.style.display = section.style.display === "none" ? "block" : "none";
+  DISC_MAIN.toggle();
 };
 
 window.toggleWaived = function(forceState = null){
@@ -1778,50 +1871,17 @@ function computeIssuedTotal(){
   total = Math.max(0, total);
 
   document.getElementById("amountPaid").value = total.toFixed(2);
-  computeMainDiscountFromPercentOrPrice();
+  DISC_MAIN.refresh();
   validateRequestedIssuedCompatibility();
 }
 
-function computeMainDiscountFromPrice(){
-  const original = Number(document.getElementById("amountPaid").value) || 0;
-  const discounted = Number(document.getElementById("discountPrice").value) || 0;
-
-  if(original <= 0){
-    document.getElementById("discountPercent").value = "";
-    document.getElementById("discount").value = "";
-    return;
-  }
-
-  const discountAmount = original - discounted;
-  const percent = (discountAmount / original) * 100;
-
-  document.getElementById("discountPercent").value = percent.toFixed(2);
-  document.getElementById("discount").value = discountAmount.toFixed(2);
-}
-
-function computeMainDiscountFromPercent(){
-  const original = Number(document.getElementById("amountPaid").value) || 0;
-  const percent = Number(document.getElementById("discountPercent").value) || 0;
-
-  const discountAmount = original * (percent / 100);
-  const discounted = original - discountAmount;
-
-  document.getElementById("discountPrice").value = discounted.toFixed(2);
-  document.getElementById("discount").value = discountAmount.toFixed(2);
-}
-
-function computeMainDiscountFromPercentOrPrice(){
-  const discountPrice = document.getElementById("discountPrice").value;
-  const discountPercent = document.getElementById("discountPercent").value;
-
-  if(discountPrice !== ""){
-    computeMainDiscountFromPrice();
-  }else if(discountPercent !== ""){
-    computeMainDiscountFromPercent();
-  }else{
-    document.getElementById("discount").value = "";
-  }
-}
+/* Discount panel for the main releasing form (amount to pay / % / less are all editable) */
+const DISC_MAIN = DiscountBox.create({
+  mount: document.getElementById("discountSection"),
+  ids: { price:"discountPrice", percent:"discountPercent", less:"discountLess", amount:"discount" },
+  getTotal: () => Number(document.getElementById("amountPaid").value) || 0,
+  button: document.getElementById("discountBtn")
+});
 
 function resetForm(){
   currentReleasingPriceSnapshot = null;
@@ -1839,9 +1899,7 @@ function resetForm(){
   document.getElementById("or").value = "";
   document.getElementById("boxContainerQty").value = "";
   document.getElementById("amountPaid").value = "";
-  document.getElementById("discountPrice").value = "";
-  document.getElementById("discountPercent").value = "";
-  document.getElementById("discount").value = "";
+  DISC_MAIN.clear();
   document.getElementById("waivedSection").style.display = "none";
   document.getElementById("waivedBtn").textContent = "WAIVED";
   document.getElementById("discountSection").style.display = "none";
@@ -1972,7 +2030,6 @@ function loadEntryIntoForm(id, entry){
   document.getElementById("or").value = entry.or || "";
   document.getElementById("boxContainerQty").value = entry.boxContainerQty || "";
   document.getElementById("amountPaid").value = entry.amountPaid || "";
-  document.getElementById("discount").value = entry.discount || "";
 
   const waivedItems = Array.isArray(entry.waivedItems) && entry.waivedItems.length > 0
     ? entry.waivedItems
@@ -1984,17 +2041,13 @@ function loadEntryIntoForm(id, entry){
 
   toggleWaived(!!entry.waived);
 
-  const original = Number(entry.amountPaid || 0);
   const discountAmount = Number(entry.discount || 0);
 
   if(discountAmount > 0){
     document.getElementById("discountSection").style.display = "block";
-    document.getElementById("discountPrice").value = (original - discountAmount).toFixed(2);
-    document.getElementById("discountPercent").value = original > 0 ? ((discountAmount / original) * 100).toFixed(2) : "";
+    DISC_MAIN.set(discountAmount);
   }else{
-    document.getElementById("discountPrice").value = "";
-    document.getElementById("discountPercent").value = "";
-    document.getElementById("discount").value = "";
+    DISC_MAIN.clear();
     document.getElementById("discountSection").style.display = "none";
   }
 
@@ -2055,14 +2108,11 @@ function requireRowQuantities(rowSelector, qtySelector, label){
   return true;
 }
 
-function requireDiscountFields(sectionId, priceId, percentId){
-  const section = document.getElementById(sectionId);
-  if(!section || section.style.display === "none") return true;
-
-  if(!requireFieldById(priceId, "Discounted price")) return false;
-  if(!requireFieldById(percentId, "Discount percent")) return false;
-
-  return true;
+function requireDiscountBox(box){
+  if(!box.isInvalid()) return true;
+  alert("Discount: " + box.errorText());
+  box.focus();
+  return false;
 }
 
 function validateWaivedRequiredFields(){
@@ -2102,7 +2152,7 @@ function validateMainRequiredFields(){
   if(!requireRowQuantities(".issuedRow", ".issuedQty", "Issued")) return false;
   if(!requireFieldById("or", "OR")) return false;
   if(!validateWaivedRequiredFields()) return false;
-  if(!requireDiscountFields("discountSection", "discountPrice", "discountPercent")) return false;
+  if(!requireDiscountBox(DISC_MAIN)) return false;
 
   return true;
 }
@@ -2150,7 +2200,12 @@ function validateAugmentationRequiredFields(){
     }
   }
 
-  if(!requireDiscountFields("augDiscountSection", "augDiscountPrice", "augDiscountPercent")) return false;
+  if(!requireDiscountBox(DISC_AUG)) return false;
+
+  const freightEl = document.getElementById("augFreight");
+  if(freightEl.value.trim() !== "" && !(Number(freightEl.value) >= 0)){
+    return alertAndFocus(freightEl, "Freight / transport fee must be 0 or more.");
+  }
 
   return true;
 }
@@ -2259,8 +2314,7 @@ window.toggleAugmentation = function(){
 };
 
 window.toggleAugDiscount = function(){
-  const section = document.getElementById("augDiscountSection");
-  section.style.display = section.style.display === "none" ? "block" : "none";
+  DISC_AUG.toggle();
 };
 
 function computeAugmentationTotal(){
@@ -2279,48 +2333,32 @@ function computeAugmentationTotal(){
   total += componentPrices.BOXCONTAINER * augBoxContainerQty;
 
   document.getElementById("augAmountPaid").value = total.toFixed(2);
-  computeAugDiscountFromPercentOrPrice();
+  DISC_AUG.refresh();
+  updateAugPayable();
 }
 
-function computeAugDiscountFromPrice(){
-  const original = Number(document.getElementById("augAmountPaid").value) || 0;
-  const discounted = Number(document.getElementById("augDiscountPrice").value) || 0;
+/* Discount panel for blood augmentation */
+const DISC_AUG = DiscountBox.create({
+  mount: document.getElementById("augDiscountSection"),
+  ids: { price:"augDiscountPrice", percent:"augDiscountPercent", less:"augDiscountLess", amount:"augDiscount" },
+  getTotal: () => Number(document.getElementById("augAmountPaid").value) || 0,
+  button: document.getElementById("augDiscountBtn")
+});
 
-  if(original <= 0){
-    document.getElementById("augDiscountPercent").value = "";
-    document.getElementById("augDiscount").value = "";
-    return;
-  }
-
-  const discountAmount = original - discounted;
-  const percent = (discountAmount / original) * 100;
-
-  document.getElementById("augDiscountPercent").value = percent.toFixed(2);
-  document.getElementById("augDiscount").value = discountAmount.toFixed(2);
-}
-
-function computeAugDiscountFromPercent(){
-  const original = Number(document.getElementById("augAmountPaid").value) || 0;
-  const percent = Number(document.getElementById("augDiscountPercent").value) || 0;
-
-  const discountAmount = original * (percent / 100);
-  const discounted = original - discountAmount;
-
-  document.getElementById("augDiscountPrice").value = discounted.toFixed(2);
-  document.getElementById("augDiscount").value = discountAmount.toFixed(2);
-}
-
-function computeAugDiscountFromPercentOrPrice(){
-  const discountPrice = document.getElementById("augDiscountPrice").value;
-  const discountPercent = document.getElementById("augDiscountPercent").value;
-
-  if(discountPrice !== ""){
-    computeAugDiscountFromPrice();
-  }else if(discountPercent !== ""){
-    computeAugDiscountFromPercent();
-  }else{
-    document.getElementById("augDiscount").value = "";
-  }
+/* Shows: blood total - discount + freight = total payable */
+function updateAugPayable(){
+  const box = document.getElementById("augPayable");
+  if(!box) return;
+  const gross = Number(document.getElementById("augAmountPaid").value) || 0;
+  const disc = Number(document.getElementById("augDiscount").value) || 0;
+  const freight = Math.max(0, Number(document.getElementById("augFreight").value) || 0);
+  if(gross <= 0 && freight <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
+  const m = SOA.money;
+  let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
+  if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
+  if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
+  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight)}</b>`;
+  box.style.display = "block";
 }
 
 window.addAugmentationBloodType = function(){
@@ -2486,6 +2524,7 @@ window.saveAugmentation = async function(){
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
     discount: document.getElementById("augDiscount").value || 0,
+    freight: Math.max(0, Number(document.getElementById("augFreight").value) || 0),
     priceSnapshot: priceSnapshotToSave,
     address: SOA.remember("address", document.getElementById("augAddress").value),
     remarks: document.getElementById("augRemarks").value.trim(),
@@ -2522,14 +2561,6 @@ document.addEventListener("input", function(e){
     validateRequestedIssuedCompatibility();
   }
 
-  if(e.target.id === "discountPrice"){
-    computeMainDiscountFromPrice();
-  }
-
-  if(e.target.id === "discountPercent"){
-    computeMainDiscountFromPercent();
-  }
-
   if(
     e.target.classList.contains("waivedComponent") ||
     e.target.classList.contains("waivedUnit")
@@ -2545,13 +2576,6 @@ document.addEventListener("input", function(e){
     computeAugmentationTotal();
   }
 
-  if(e.target.id === "augDiscountPrice"){
-    computeAugDiscountFromPrice();
-  }
-
-  if(e.target.id === "augDiscountPercent"){
-    computeAugDiscountFromPercent();
-  }
 });
 
 document.addEventListener("change", function(e){
@@ -2646,7 +2670,7 @@ function collectAugForSoa(){
   return {
     date: $("augDate").value, facility: $("augFacility").value.trim(),
     boxContainerQty: $("augBoxContainerQty").value || 0, bloodTypes,
-    discount: $("augDiscount").value || 0, invoiceNo: nextInvoiceNo,
+    discount: $("augDiscount").value || 0, freight: Math.max(0, Number($("augFreight").value) || 0), invoiceNo: nextInvoiceNo,
     address: $("augAddress").value.trim(), remarks: $("augRemarks").value.trim(), note: $("augNote").value.trim(),
     printedBy: $("soaPrintedBy").value.trim(), approvedBy: $("soaApprovedBy").value.trim(),
     printedBySig: sigOf($("soaPrintedBySig").value), approvedBySig: sigOf($("soaApprovedBySig").value)
@@ -2691,9 +2715,11 @@ window.newAugEntry = function(){
   lastSavedAug = null;
   currentAugmentationPriceSnapshot = null;
   $("augDate").value = getPhilippinesDateString();
-  ["augFacility","augBoxContainerQty","augAmountPaid","augDiscountPrice","augDiscountPercent","augDiscount","augAddress","augRemarks","augNote","soaPrintedBy","soaApprovedBy"].forEach(id => $(id).value = "");
+  ["augFacility","augBoxContainerQty","augAmountPaid","augDiscountPrice","augDiscountPercent","augDiscountLess","augDiscount","augFreight","augAddress","augRemarks","augNote","soaPrintedBy","soaApprovedBy"].forEach(id => $(id).value = "");
   $("augmentationBloodTypeContainer").innerHTML = "";
+  DISC_AUG.clear();
   $("augDiscountSection").style.display = "none";
+  updateAugPayable();
   $("soaPostSave").style.display = "none";
   ESIG.setValue($("soaPrintedBySig"), ""); ESIG.setValue($("soaApprovedBySig"), "");
   $("augSaveBtn").disabled = false;
