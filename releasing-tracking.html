@@ -620,8 +620,11 @@ flex-direction:column;
     <label class="formLabel">AMOUNT PAID</label>
     <input type="number" id="editAugAmountPaid" class="formInput" readonly>
 
-    <label class="formLabel">DISCOUNT</label>
-    <input type="number" id="editAugDiscount" class="formInput">
+    <div id="editAugDiscountMount"></div>
+
+    <label class="formLabel">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;">(optional &ndash; printed on the statement when filled in)</span></label>
+    <input type="number" id="editAugFreight" class="formInput" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
+    <div id="editAugPayable" class="discSummary"></div>
 
     <label class="formLabel">PAYMENT STATUS</label>
     <select id="editAugPaymentStatus" class="formInput">
@@ -757,8 +760,7 @@ flex-direction:column;
       <button type="button" class="addBtn" onclick="addEditRelIssued()">+</button>
     </div>
 
-    <label class="formLabel">DISCOUNT</label>
-    <input type="number" id="editRelDiscount" class="formInput">
+    <div id="editRelDiscountMount"></div>
 
     <div class="modalActions">
       <button type="button" class="saveBtn" onclick="saveReleasingEdit()">SAVE CHANGES</button>
@@ -767,6 +769,113 @@ flex-direction:column;
   </div>
 </div>
 
+<style id="discStyles">
+.discBox{background:#f4f8ff;border:1px solid #1565c0;border-radius:8px;padding:12px;margin:10px 0;text-align:left}
+.discBox .discTitle{font-weight:bold;color:#0d47a1;font-size:13px;letter-spacing:.5px}
+.discBox .discHint{font-size:11.5px;color:#455a64;margin:3px 0 8px;line-height:1.4}
+.discBox .discTotal{font-size:13px;margin-bottom:8px}
+.discBox .discGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.discBox .discGrid label{display:block;font-weight:bold;font-size:11.5px;margin:0 0 4px;color:#000}
+.discBox .discGrid label small{display:block;font-weight:normal;color:#607d8b;font-size:10.5px}
+.discBox .discGrid input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #90a4ae;border-radius:6px;font-size:15px;background:#fff;margin:0}
+.discBox .discGrid input:focus{outline:2px solid #1565c0;border-color:#1565c0}
+.discBox .discMsg{font-size:12.5px;margin-top:8px;min-height:16px;color:#1b5e20;font-weight:600}
+.discBox .discMsg.err{color:#b71c1c}
+.discBox .discClear{margin-top:8px;background:#eceff1;color:#37474f;border:1px solid #b0bec5;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:bold;cursor:pointer;width:auto}
+.discSummary{margin-top:8px;padding:8px 10px;background:#e8f5e9;border:1px solid #2e7d32;border-radius:6px;font-size:13px;line-height:1.6;color:#1b5e20;display:none}
+.discSummary b{color:#000}
+@media (max-width:520px){.discBox .discGrid{grid-template-columns:1fr}}
+</style>
+<script id="discScript">
+/* Shared DISCOUNT panel: three linked, freely-editable boxes.
+   Type in ANY ONE (amount to pay / % / ₱ less) and the other two are calculated.
+   The box being typed in is never rewritten; clearing it removes the discount. */
+window.DiscountBox=(function(){
+const money=n=>(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
+function create(cfg){
+  const root=cfg.mount, ids=cfg.ids;
+  root.innerHTML=`<div class="discBox">
+    <div class="discTitle">DISCOUNT</div>
+    <div class="discHint">Type in <b>any one</b> of the three boxes &mdash; the other two are calculated automatically. Clear the box to remove the discount.</div>
+    <div class="discTotal">Total before discount: <b data-d="total">&#8369;0.00</b></div>
+    <div class="discGrid">
+      <div><label for="${ids.price}">AMOUNT TO PAY<small>discounted price</small></label><input type="number" inputmode="decimal" step="any" min="0" id="${ids.price}" placeholder="0.00" autocomplete="off"></div>
+      <div><label for="${ids.percent}">DISCOUNT %<small>percentage off</small></label><input type="number" inputmode="decimal" step="any" min="0" max="100" id="${ids.percent}" placeholder="0" autocomplete="off"></div>
+      <div><label for="${ids.less}">LESS (&#8369;)<small>amount taken off the total</small></label><input type="number" inputmode="decimal" step="any" min="0" id="${ids.less}" placeholder="0.00" autocomplete="off"></div>
+    </div>
+    <div class="discMsg" data-d="msg"></div>
+    <button type="button" class="discClear" data-d="clear">&#10005; CLEAR DISCOUNT</button>
+    <input type="hidden" id="${ids.amount}">
+  </div>`;
+  const F={price:document.getElementById(ids.price),percent:document.getElementById(ids.percent),less:document.getElementById(ids.less)};
+  const hid=document.getElementById(ids.amount);
+  const totalEl=root.querySelector('[data-d="total"]'), msgEl=root.querySelector('[data-d="msg"]');
+  let src=null, err="";
+  const total=()=>Math.max(0,Number(cfg.getTotal())||0);
+  const put=(k,v,force)=>{ if(!force && F[k]===document.activeElement) return; F[k].value=v; };
+  function show(text,isErr){ msgEl.textContent=text||""; msgEl.classList.toggle("err",!!isErr); }
+  function done(less){
+    if(cfg.button) cfg.button.textContent = less>0 ? ("DISCOUNT \u2212\u20B1"+money(less)) : "DISCOUNT";
+    if(cfg.onChange) cfg.onChange(less);
+  }
+  function apply(){
+    const T=total(); totalEl.textContent="\u20B1"+money(T);
+    const el=src?F[src]:null, raw=el?el.value.trim():"";
+    if(!src||raw===""){
+      ["price","percent","less"].forEach(k=>{ if(k!==src) put(k,""); });
+      hid.value=""; err=""; show(""); done(0); return;
+    }
+    const x=Number(raw); let less=0, error="";
+    if(!isFinite(x)) error="Please enter a valid number.";
+    else if(x<0) error="The value cannot be negative.";
+    else if(src==="percent"){ if(x>100) error="Discount cannot be more than 100%."; else less=r2(T*x/100); }
+    else if(src==="price"){ if(x>T+0.004) error="Amount to pay cannot be higher than the total (\u20B1"+money(T)+")."; else less=r2(T-x); }
+    else { if(x>T+0.004) error="Discount cannot be more than the total (\u20B1"+money(T)+")."; else less=r2(x); }
+    if(error){
+      ["price","percent","less"].forEach(k=>{ if(k!==src) put(k,""); });
+      hid.value=""; err=error; show(error,true); done(0); return;
+    }
+    if(less<0) less=0;
+    const price=r2(T-less), pct=T>0?r2(less/T*100):0;
+    if(src!=="price") put("price",price.toFixed(2));
+    if(src!=="percent") put("percent",String(pct));
+    if(src!=="less") put("less",less.toFixed(2));
+    hid.value=less>0?less.toFixed(2):""; err="";
+    show(T<=0 ? "There is no total yet \u2014 enter the quantities first." :
+         (less>0 ? "Discount: \u2212\u20B1"+money(less)+" ("+pct+"%)  \u2022  Customer pays \u20B1"+money(price) : ""));
+    done(less);
+  }
+  Object.keys(F).forEach(k=>F[k].addEventListener("input",()=>{
+    if(F[k].validity && F[k].validity.badInput) return;   // half-typed value like "-" : wait
+    src=k; apply();
+  }));
+  root.querySelector('[data-d="clear"]').addEventListener("click",()=>api.clear());
+  const api={
+    refresh:apply,
+    clear(){ src=null; ["price","percent","less"].forEach(k=>put(k,"",true)); hid.value=""; apply(); },
+    set(amount){
+      amount=Number(amount)||0;
+      if(amount>0){ src="less"; put("price","",true); put("percent","",true); put("less",amount.toFixed(2),true); }
+      else { src=null; ["price","percent","less"].forEach(k=>put(k,"",true)); }
+      apply();
+    },
+    get:()=>Number(hid.value)||0,
+    isInvalid:()=>!!err,
+    errorText:()=>err,
+    focus(){ const f=[F.price,F.percent,F.less].find(i=>i.value==="")||F.price; f.focus(); },
+    toggle(){
+      const open=root.style.display==="none";
+      root.style.display=open?"block":"none";
+      if(open) setTimeout(()=>api.focus(),0);
+    }
+  };
+  apply();
+  return api;
+}
+return {create,money};
+})();
+</script>
 <style id="soaStyles">
 .soaDoc{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;padding:18px 22px;font-size:12px;box-sizing:border-box;width:100%}
 .soaDoc .soaHead{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1a1450;padding-bottom:8px}
@@ -889,15 +998,16 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,net=gross-disc;
-  return {rows,gross,disc,net};
+  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
+  return {rows,gross,disc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
-  const {rows,disc,net}=totals(e,prices);
+  const {rows,gross,disc,freight,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
   for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount</b></td><td class="n">(${money(disc)})</td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -968,6 +1078,7 @@ let currentAugmentationPriceSnapshot = null;
 let currentReleasingEditId = null;
 let currentReleasingPriceSnapshot = null;
 let currentReleasingWaived = false;
+let currentReleasingWaivedItems = [];
 let authReady = false;
 let checkedReleaseRows = new Set();
 let duplicatePanelOpen = false;
@@ -1150,32 +1261,70 @@ function computeAugEntryTotal(entry){
   return total.toFixed(2);
 }
 
-function computeWaivedDeduction(entry, prices){
-  const waivedType = entry.waivedComponent ? String(entry.waivedComponent).toUpperCase() : "";
-  const waivedQty = Number(entry.waivedUnit) || 0;
-  const waivedValue = (waivedType && prices[waivedType] !== undefined) ? prices[waivedType] * waivedQty : 0;
-  return { waivedType, waivedQty, waivedValue };
+function waivedItemsOf(entry){
+  if(Array.isArray(entry.waivedItems) && entry.waivedItems.length) return entry.waivedItems;
+  if(entry.waivedComponent) return [{ component: entry.waivedComponent, unit: entry.waivedUnit }];
+  return [];
 }
 
+/* Same rule as the releasing entry page: every waived row counts, and BOX CONTAINER is priced too. */
+function computeWaivedDeduction(entry, prices){
+  let waivedValue = 0;
+  const labels = [];
+  waivedItemsOf(entry).forEach(item => {
+    const type = String(item.component || "").trim().toUpperCase();
+    const qty = Number(item.unit) || 0;
+    const key = (type === "BOX CONTAINER" || type === "BOX") ? "BOX" : type;
+    if(type && qty > 0 && prices[key] !== undefined){
+      waivedValue += prices[key] * qty;
+      labels.push(`${qty} ${type}`);
+    }
+  });
+  return { waivedLabel: labels.join(" + "), waivedValue };
+}
+
+/* final amount = computed total - discount - waived + freight (freight only exists on augmentation) */
 function computeFinalTotal(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
   const discount = Number(entry.discount) || 0;
+  const freight = Math.max(0, Number(entry.freight) || 0);
   const { waivedValue } = computeWaivedDeduction(entry, prices);
-  let total = Number(computedTotalStr) - discount - waivedValue;
+  let total = Number(computedTotalStr) - discount - waivedValue + freight;
   if(total < 0) total = 0;
   return total.toFixed(2);
 }
 
 function buildAmountPaidCell(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
-  const { waivedType, waivedQty, waivedValue } = computeWaivedDeduction(entry, prices);
+  const { waivedLabel, waivedValue } = computeWaivedDeduction(entry, prices);
   const finalTotal = computeFinalTotal(entry, computedTotalStr);
+  const freight = Math.max(0, Number(entry.freight) || 0);
 
   let html = finalTotal;
   if(waivedValue > 0){
-    html += `<br><span style="font-size:11px;color:#b71c1c;">less ${waivedQty} ${waivedType} waived (${waivedValue.toFixed(2)})</span>`;
+    html += `<br><span style="font-size:11px;color:#b71c1c;">less ${waivedLabel} waived (${waivedValue.toFixed(2)})</span>`;
+  }
+  if(freight > 0){
+    html += `<br><span style="font-size:11px;color:#1b5e20;">incl. freight ${freight.toFixed(2)}</span>`;
   }
   return html;
+}
+
+/* Discount cell: amount + the percentage it represents (same figure shown on the entry form and the printed SOA) */
+function buildDiscountCell(entry){
+  const disc = Number(entry.discount) || 0;
+  if(!(disc > 0)) return "";
+  const isAug = Array.isArray(entry.bloodTypes);
+  const base = isAug
+    ? Number(computeAugEntryTotal(entry))
+    : Number(computeReleasingTotal(entry)) - computeWaivedDeduction(entry, getEntryPrices(entry)).waivedValue;
+  const pct = base > 0 ? Math.round(disc / base * 10000) / 100 : 0;
+  return `${entry.discount}` + (pct ? `<br><span style="font-size:11px;color:#1565c0;">${pct}% off</span>` : "");
+}
+
+function buildFreightCell(entry){
+  const f = Math.max(0, Number(entry.freight) || 0);
+  return f > 0 ? f.toFixed(2) : "";
 }
 
 function getOrSortValue(orValue){
@@ -1220,7 +1369,8 @@ function getAugmentationDuplicateKey(entry){
     safeUpper(entry.boxContainerQty),
     safeUpper(JSON.stringify(entry.bloodTypes || [])),
     safeUpper(entry.amountPaid),
-    safeUpper(entry.discount)
+    safeUpper(entry.discount),
+    safeUpper(entry.freight)
   ].join("||");
 }
 
@@ -1309,7 +1459,7 @@ function renderDuplicateReleasingGroup(group){
             <td class="componentBox">${formatComponents(entry.issued)}</td>
             <td>${computeReleasingTotal(entry)}</td>
             <td>${buildAmountPaidCell(entry, computeReleasingTotal(entry))}</td>
-            <td>${entry.discount || ""}</td>
+            <td>${buildDiscountCell(entry)}</td>
             <td>
               <button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button>
               <button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button>
@@ -1332,7 +1482,7 @@ function renderDuplicateAugmentationGroup(group){
           <th>AUGMENTATION DETAILS</th>
           <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th>
+          <th>DISCOUNT</th><th>FREIGHT</th>
           <th>PAID</th>
           <th>ACTION</th>
         </tr>
@@ -1346,7 +1496,7 @@ function renderDuplicateAugmentationGroup(group){
             <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
             <td>${computeAugEntryTotal(entry)}</td>
             <td>${buildAmountPaidCell(entry, computeAugEntryTotal(entry))}</td>
-            <td>${entry.discount || ""}</td>
+            <td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td>
             <td>${isAugPaid(entry) ? "YES" : "NO"}</td>
             <td>
               <button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
@@ -1840,7 +1990,7 @@ function renderFlatReleasingResults(entries){
     const r=document.createElement("tr");
     r.dataset.releaseId=entry.id;
     if(ck) r.classList.add("checkedHighlight");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1856,13 +2006,13 @@ function renderFlatAugmentationResults(entries){
   container.appendChild(renderFlatBanner(entries.length,term));
   const t=document.createElement("table");
   t.className="augTable";
-  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
   const tb=t.querySelector("tbody");
   entries.forEach(entry=>{
     const ct=computeAugEntryTotal(entry);
     const ip=isAugPaid(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1882,7 +2032,7 @@ function renderFlatWaivedResults(entries){
   entries.forEach(entry=>{
     const ct=computeReleasingTotal(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -1954,7 +2104,7 @@ function renderReleasingTable(){
       const r=document.createElement("tr");
       r.dataset.releaseId=entry.id;
       if(ck) r.classList.add("checkedHighlight");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${entry.discount||""}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -1981,13 +2131,13 @@ function renderAugmentationTable(){
   renderYearMonthDateInto(container, groupedByMonth, (dc, de) => {
     const t=document.createElement("table");
     t.className="augTable";
-    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
     const tb=t.querySelector("tbody");
     de.forEach(entry=>{
       const ct=computeAugEntryTotal(entry);
       const ip=isAugPaid(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -2019,7 +2169,7 @@ function renderWaivedTable(){
     de.forEach(entry=>{
       const ct=computeReleasingTotal(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${entry.discount||""}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
@@ -2039,7 +2189,9 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugFacility").value = "";
   document.getElementById("editAugBoxContainerQty").value = "";
   document.getElementById("editAugAmountPaid").value = "";
-  document.getElementById("editAugDiscount").value = "";
+  DISC_EDIT_AUG.clear();
+  document.getElementById("editAugFreight").value = "";
+  updateEditAugPayable();
   document.getElementById("editAugPaymentStatus").value = "Unpaid";
   document.getElementById("editAugAddress").value = "";
   document.getElementById("editAugRemarks").value = "";
@@ -2049,6 +2201,27 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugPaidFields").style.display = "none";
   document.getElementById("editAugBloodTypeContainer").innerHTML = "";
 };
+
+/* Discount panel (amount to pay / % / less) for the augmentation edit form */
+const DISC_EDIT_AUG = DiscountBox.create({
+  mount: document.getElementById("editAugDiscountMount"),
+  ids: { price:"editAugDiscountPrice", percent:"editAugDiscountPercent", less:"editAugDiscountLess", amount:"editAugDiscount" },
+  getTotal: () => Number(document.getElementById("editAugAmountPaid").value) || 0
+});
+
+function updateEditAugPayable(){
+  const box = document.getElementById("editAugPayable");
+  const gross = Number(document.getElementById("editAugAmountPaid").value) || 0;
+  const disc = Number(document.getElementById("editAugDiscount").value) || 0;
+  const freight = Math.max(0, Number(document.getElementById("editAugFreight").value) || 0);
+  if(gross <= 0 && freight <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
+  const m = SOA.money;
+  let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
+  if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
+  if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
+  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight)}</b>`;
+  box.style.display = "block";
+}
 
 function recomputeEditAugmentationAmountPaid(){
   const prices = currentAugmentationPriceSnapshot || currentPrices;
@@ -2067,6 +2240,8 @@ function recomputeEditAugmentationAmountPaid(){
   total += boxQty * (prices.BOX || 0);
 
   document.getElementById("editAugAmountPaid").value = total.toFixed(2);
+  DISC_EDIT_AUG.refresh();
+  updateEditAugPayable();
 }
 
 window.addEditAugmentationBloodType = function(data = null){
@@ -2192,7 +2367,8 @@ async function openEditAugmentation(id){
     document.getElementById("editAugDate").value = data.date || "";
     document.getElementById("editAugFacility").value = data.facility || "";
     document.getElementById("editAugBoxContainerQty").value = data.boxContainerQty || "";
-    document.getElementById("editAugDiscount").value = data.discount || "";
+    DISC_EDIT_AUG.set(data.discount);
+    document.getElementById("editAugFreight").value = data.freight || "";
     document.getElementById("editAugAddress").value = data.address || "";
     document.getElementById("editAugRemarks").value = data.remarks || "";
     document.getElementById("editAugNote").value = data.note || "";
@@ -2276,6 +2452,18 @@ window.saveAugmentationEdit = async function(){
     }
   }
 
+  if(DISC_EDIT_AUG.isInvalid()){
+    alert("Discount: " + DISC_EDIT_AUG.errorText());
+    DISC_EDIT_AUG.focus();
+    return;
+  }
+  const freightRaw = document.getElementById("editAugFreight").value.trim();
+  if(freightRaw !== "" && !(Number(freightRaw) >= 0)){
+    alert("Freight / transport fee must be 0 or more.");
+    document.getElementById("editAugFreight").focus();
+    return;
+  }
+
   const payload = {
     date: document.getElementById("editAugDate").value,
     facility: document.getElementById("editAugFacility").value.toUpperCase(),
@@ -2283,6 +2471,7 @@ window.saveAugmentationEdit = async function(){
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
     discount: document.getElementById("editAugDiscount").value,
+    freight: Math.max(0, Number(freightRaw) || 0),
     address: SOA.remember("address", document.getElementById("editAugAddress").value),
     remarks: document.getElementById("editAugRemarks").value.trim(),
     note: document.getElementById("editAugNote").value.trim(),
@@ -2346,6 +2535,34 @@ window.addEditRelIssued = function(){
   addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"));
 };
 
+/* Releasing edit form: same discount panel as the entry page. Base = issued + box container - waived. */
+function editRelWaivedItems(){
+  if(!currentReleasingWaived) return [];
+  const component = document.getElementById("editRelWaivedComponent").value.trim();
+  const unit = document.getElementById("editRelWaivedUnit").value;
+  const rest = (currentReleasingWaivedItems || []).slice(1);
+  return (component || Number(unit)) ? [{ component, unit: unit || 0 }, ...rest] : rest;
+}
+
+function computeEditReleasingBase(){
+  const prices = currentReleasingPriceSnapshot || currentPrices;
+  let total = 0;
+  document.querySelectorAll("#editRelIssuedContainer .editRelIssuedRow").forEach(row => {
+    const type = row.querySelector(".editRelIssuedType").value;
+    const qty = Number(row.querySelector(".editRelIssuedQty").value) || 0;
+    if(prices[type] !== undefined) total += prices[type] * qty;
+  });
+  total += (Number(document.getElementById("editRelBoxContainerQty").value) || 0) * (prices.BOX || 0);
+  total -= computeWaivedDeduction({ waivedItems: editRelWaivedItems() }, prices).waivedValue;
+  return Math.max(0, total);
+}
+
+const DISC_EDIT_REL = DiscountBox.create({
+  mount: document.getElementById("editRelDiscountMount"),
+  ids: { price:"editRelDiscountPrice", percent:"editRelDiscountPercent", less:"editRelDiscountLess", amount:"editRelDiscount" },
+  getTotal: computeEditReleasingBase
+});
+
 function openReleasingModal(){
   document.getElementById("releasingModal").style.display = "block";
 }
@@ -2355,6 +2572,7 @@ window.closeReleasingModal = function(){
   currentReleasingEditId = null;
   currentReleasingPriceSnapshot = null;
   currentReleasingWaived = false;
+  currentReleasingWaivedItems = [];
   document.getElementById("editRelDate").value = "";
   document.getElementById("editRelFacility").value = "";
   document.getElementById("editRelSurname").value = "";
@@ -2367,7 +2585,7 @@ window.closeReleasingModal = function(){
   document.getElementById("editRelWaivedFields").style.display = "none";
   document.getElementById("editRelWaivedComponent").value = "";
   document.getElementById("editRelWaivedUnit").value = "";
-  document.getElementById("editRelDiscount").value = "";
+  DISC_EDIT_REL.clear();
   document.getElementById("editRelRequestContainer").innerHTML = "";
   document.getElementById("editRelIssuedContainer").innerHTML = "";
 };
@@ -2390,6 +2608,7 @@ async function openEditReleasing(id){
     currentReleasingEditId = id;
     currentReleasingPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : currentPrices;
     currentReleasingWaived = !!data.waived;
+    currentReleasingWaivedItems = waivedItemsOf(data);
 
     document.getElementById("editRelDate").value = data.date || "";
     document.getElementById("editRelFacility").value = data.facility || "";
@@ -2400,7 +2619,6 @@ async function openEditReleasing(id){
     document.getElementById("editRelBloodtype").value = data.bloodtype || "";
     document.getElementById("editRelOr").value = data.or || "";
     document.getElementById("editRelBoxContainerQty").value = data.boxContainerQty || "";
-    document.getElementById("editRelDiscount").value = data.discount || "";
 
     document.getElementById("editRelWaivedFields").style.display = currentReleasingWaived ? "block" : "none";
     document.getElementById("editRelWaivedComponent").value = data.waivedComponent || "";
@@ -2415,6 +2633,7 @@ async function openEditReleasing(id){
     requests.forEach(item => addEditRelRequestRow(document.getElementById("editRelRequestContainer"), item));
     issued.forEach(item => addEditRelIssuedRow(document.getElementById("editRelIssuedContainer"), item));
 
+    DISC_EDIT_REL.set(data.discount);
     openReleasingModal();
   }catch(error){
     console.error(error);
@@ -2449,7 +2668,12 @@ window.saveReleasingEdit = async function(){
     }
   });
 
-  const existing = allReleasingEntries.find(x => x.id === currentReleasingEditId) || {};
+  if(DISC_EDIT_REL.isInvalid()){
+    alert("Discount: " + DISC_EDIT_REL.errorText());
+    DISC_EDIT_REL.focus();
+    return;
+  }
+
 
   const payload = {
     date: document.getElementById("editRelDate").value,
@@ -2463,7 +2687,7 @@ window.saveReleasingEdit = async function(){
     boxContainerQty: document.getElementById("editRelBoxContainerQty").value || 0,
     requests,
     issued,
-    amountPaid: existing.amountPaid || "",
+    amountPaid: computeEditReleasingBase().toFixed(2),
     discount: document.getElementById("editRelDiscount").value,
     priceSnapshot: currentReleasingPriceSnapshot
   };
@@ -2472,6 +2696,7 @@ window.saveReleasingEdit = async function(){
     payload.waived = true;
     payload.waivedComponent = document.getElementById("editRelWaivedComponent").value;
     payload.waivedUnit = document.getElementById("editRelWaivedUnit").value || 0;
+    payload.waivedItems = editRelWaivedItems();
   }
 
   try{
@@ -2785,7 +3010,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","FREIGHT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
   ];
 
   filtered.forEach(e => {
@@ -2811,6 +3036,7 @@ function exportAugmentationCSV(){
       computeAugEntryTotal(e),
       computeFinalTotal(e, computeAugEntryTotal(e)),
       e.discount || "",
+      e.freight || "",
       isAugPaid(e) ? "YES" : "NO",
       e.paidOrNo || "",
       e.paidDate || ""
@@ -2930,6 +3156,26 @@ document.addEventListener("input", function(e){
     e.target.classList.contains("editAugIssuedType")
   ){
     recomputeEditAugmentationAmountPaid();
+  }
+
+  if(e.target.id === "editAugFreight"){
+    updateEditAugPayable();
+  }
+
+  if(
+    e.target.id === "editRelBoxContainerQty" ||
+    e.target.id === "editRelWaivedComponent" ||
+    e.target.id === "editRelWaivedUnit" ||
+    e.target.classList.contains("editRelIssuedQty") ||
+    e.target.classList.contains("editRelIssuedType")
+  ){
+    DISC_EDIT_REL.refresh();
+  }
+});
+
+document.addEventListener("click", function(e){
+  if(e.target.classList && e.target.classList.contains("removeBtn") && e.target.closest("#releasingModal")){
+    setTimeout(() => DISC_EDIT_REL.refresh(), 0);
   }
 });
 
