@@ -155,6 +155,8 @@
 }
 
     </style>
+<meta name="theme-color" content="#c62828">
+<link rel="stylesheet" href="donor-theme.css">
 </head>
 <body>
 <header>Donor Database Statistics</header>
@@ -310,6 +312,12 @@ function isVisible(r){
   return true;
 }
 
+// ─── SESSION CACHE (2 minutes) ────────────────────────────────────────────────
+// Changing a filter and changing it back used to download everything again.
+const _statCache=new Map();
+function _cget(k){const e=_statCache.get(k);return(e&&Date.now()-e.t<120000)?e.v:null;}
+function _cset(k,v){_statCache.set(k,{t:Date.now(),v});if(_statCache.size>14)_statCache.delete(_statCache.keys().next().value);}
+
 // ─── DATA LOAD ────────────────────────────────────────────────────────────────
 async function loadDonors(ver){
   const y=document.getElementById("filterYear")?.value||"ALL";
@@ -326,6 +334,10 @@ async function loadDonors(ver){
     ref=ref.where("collectionMonth","==",Number(m));
   }
 
+  const ckey="d|"+y+"|"+m;
+  const hit=_cget(ckey);
+  if(hit){ if(ver!==initVersion)return; allRecords=hit.all; donorRecords=hit.active; return; }
+
   const snap=await ref.get();
   const all=[], active=[];
   snap.forEach(doc=>{
@@ -333,6 +345,7 @@ async function loadDonors(ver){
     all.push(r);
     if(isVisible(r)) active.push(r);
   });
+  _cset(ckey,{all,active});
   if(ver!==initVersion)return;
   allRecords=all;
   donorRecords=active;
@@ -361,9 +374,13 @@ async function loadDeferrals(ver){
       ref=ref.where("collectionMonth","==",Number(m));
     }
 
+    const dkey="f|"+y+"|"+m;
+    const dhit=_cget(dkey);
+    if(dhit){ if(ver===initVersion) deferralRecords=dhit; return; }
     const snap=await ref.get();
     const local=[];
     snap.forEach(doc=>local.push({id:doc.id,...doc.data()}));
+    _cset(dkey,local);
     if(ver===initVersion) deferralRecords=local;
   }catch(e){
     console.warn("Failed to load donor deferrals:",e);
@@ -372,12 +389,17 @@ async function loadDeferrals(ver){
 }
 
 async function loadReleasing(ver){
-  let local=[];
+  // The whole releasing history is read once and reused for 2 minutes.
+  const rhit=_cget("rel");
+  if(rhit){ if(ver===initVersion) releasingRecords=rhit; return; }
+  let local=[], ok=false;
   try{
-    const tout=new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),6000));
+    const tout=new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),8000));
     const snap=await Promise.race([rtdb.ref("releasing").once("value"),tout]);
     local=flattenRTDB(snap.val());
+    ok=true;
   }catch(e){local=[];}
+  if(ok) _cset("rel",local);            // never cache a failed / timed-out read
   if(ver===initVersion) releasingRecords=local;
 }
 
@@ -1183,6 +1205,12 @@ async function autoCreateMissingGroupMappings(grouped){
 
   _autoMapInFlight=true;
   try{
+    // Another person may have just created the same groups: re-read first,
+    // then create only what is still missing.
+    await loadMappings(initVersion);
+    for(let i=toCreate.length-1;i>=0;i--){ if(smartFindMapping(toCreate[i]).mapping) toCreate.splice(i,1); }
+    if(!toCreate.length && !Object.keys(aliasAdds).length) return;
+
     const batch=fs.batch();
     const stamps={
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
@@ -2061,5 +2089,6 @@ function exportCSV(ev){
 window.printStatistics=printStatistics;
 window.exportCSV=exportCSV;
 </script>
+<script src="prc-nav.js"></script>
 </body>
 </html>
