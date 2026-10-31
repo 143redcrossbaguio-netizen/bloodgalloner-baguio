@@ -126,16 +126,19 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
-  return {rows,gross,disc,freight,net};
+  const disc=Number(e.discount)||0,misc=Math.max(0,Number(e.miscAmount)||0),freight=Math.max(0,Number(e.freight)||0),net=gross-disc+misc+freight;
+  const extra=[];   /* extra charges are printed as ordinary rows of the same table, misc first, then freight */
+  if(misc>0)extra.push({d:String(e.miscLabel||"").trim()||"Miscellaneous",q:1,u:"lot",p:misc,a:misc});
+  if(freight>0)extra.push({d:"Freight (Transport Fee)",q:1,u:"lot",p:freight,a:freight});
+  return {rows,extra,gross,disc,misc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
-  const {rows,gross,disc,freight,net}=totals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
-  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
+  const {rows,extra,gross,disc,misc,freight,net}=totals(e,prices);
+  const items=rows.concat(extra);
+  let body=items.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=items.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB" style="text-align:right;font-size:10px;font-style:italic;color:#555">${extra.length?"Discount applies to blood components only":""}</td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -278,6 +281,7 @@ tr.expanded .caret{transform:rotate(90deg);}
           <th>Customer Name</th>
           <th class="n">Amount</th>
           <th class="n">Discount</th>
+          <th class="n">Misc</th>
           <th class="n">Freight</th>
           <th class="n">Total Payable</th>
           <th class="c">Status</th>
@@ -436,6 +440,7 @@ function rowHtml(e){
       <td>${SOA.esc(e.facility || "")}</td>
       <td class="n">${money(t.gross)}</td>
       <td class="n">${money(t.disc)}</td>
+      <td class="n">${t.misc > 0 ? money(t.misc) : ""}</td>
       <td class="n">${t.freight > 0 ? money(t.freight) : ""}</td>
       <td class="n"><b>${money(t.net)}</b></td>
       <td class="c"><button type="button" class="statusBadge ${st==="Paid"?"paid":"unpaid"}" onclick="event.stopPropagation();openPayModal('${e.id}')">${st}</button></td>
@@ -445,7 +450,7 @@ function rowHtml(e){
       <td>${SOA.esc(e.printedBy || "")}</td>
     </tr>
     <tr class="detailRow" style="display:${isOpen?"table-row":"none"};">
-      <td colspan="13">
+      <td colspan="14">
         <div class="detailWrap">
           <div class="detailActions">
             <button type="button" class="btn printF" onclick="event.stopPropagation();printOne('${e.id}')">🖨 Print This Statement</button>
@@ -579,13 +584,15 @@ window.printOne = function(id){
 function renderSummary(rows){
   const totGross = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).gross,0);
   const totDisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).disc,0);
+  const totMisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).misc,0);
   const totFreight = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).freight,0);
-  const totNet = totGross - totDisc + totFreight;
+  const totNet = totGross - totDisc + totMisc + totFreight;
   $("summaryBar").innerHTML =
     `<div>Period: <b>${SOA.esc(periodLabel())}</b></div>
      <div>Statements: <b>${rows.length}</b></div>
      <div>Total Amount: <b>₱${money(totGross)}</b></div>
      <div>Total Discount: <b>₱${money(totDisc)}</b></div>
+     <div>Total Misc: <b>₱${money(totMisc)}</b></div>
      <div>Total Freight: <b>₱${money(totFreight)}</b></div>
      <div>Total Net: <b>₱${money(totNet)}</b></div>`;
 }
@@ -595,15 +602,16 @@ function render(){
   renderSummary(rows);
   $("tblBody").innerHTML = rows.length
     ? rows.map(rowHtml).join("")
-    : `<tr><td colspan="13" class="empty">No posted documents found for this period.</td></tr>`;
+    : `<tr><td colspan="14" class="empty">No posted documents found for this period.</td></tr>`;
 }
 
 function buildPrintTable(rows, label){
   const org = SOA.getOrg();
   const totGross = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).gross,0);
   const totDisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).disc,0);
+  const totMisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).misc,0);
   const totFreight = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).freight,0);
-  const totNet = totGross - totDisc + totFreight;
+  const totNet = totGross - totDisc + totMisc + totFreight;
   const body = rows.map(e => {
     const t = SOA.totals(e, getEntryPrices(e));
     return `<tr>
@@ -612,6 +620,7 @@ function buildPrintTable(rows, label){
       <td>${SOA.esc(e.facility||"")}</td>
       <td style="text-align:right;">${money(t.gross)}</td>
       <td style="text-align:right;">${money(t.disc)}</td>
+      <td style="text-align:right;">${t.misc > 0 ? money(t.misc) : ""}</td>
       <td style="text-align:right;">${t.freight > 0 ? money(t.freight) : ""}</td>
       <td style="text-align:right;font-weight:700;">${money(t.net)}</td>
       <td style="text-align:center;">${statusOf(e)}</td>
@@ -635,6 +644,7 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">Customer Name</th>
         <th style="border:1px solid #000;padding:4px;">Amount</th>
         <th style="border:1px solid #000;padding:4px;">Discount</th>
+        <th style="border:1px solid #000;padding:4px;">Misc</th>
         <th style="border:1px solid #000;padding:4px;">Freight</th>
         <th style="border:1px solid #000;padding:4px;">Total Payable</th>
         <th style="border:1px solid #000;padding:4px;">Status</th>
@@ -643,11 +653,12 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">No. of Print</th>
         <th style="border:1px solid #000;padding:4px;">Name of Person Printed</th>
       </tr></thead>
-      <tbody>${body || '<tr><td colspan="12" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
+      <tbody>${body || '<tr><td colspan="13" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:700;">
         <td colspan="3" style="border:1px solid #000;padding:4px;text-align:right;">TOTAL</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totGross)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totDisc)}</td>
+        <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totMisc)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totFreight)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totNet)}</td>
         <td colspan="5" style="border:1px solid #000;"></td>
@@ -671,11 +682,11 @@ window.printList = function(all){
 
 window.exportCsv = function(){
   const rows = filteredEntries();
-  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Freight","Total Payable","Status","OR No.","Date of Payment","No. of Print","Name of Person Printed"];
+  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Misc","Freight","Total Payable","Status","OR No.","Date of Payment","No. of Print","Name of Person Printed"];
   const lines = [head.join(",")];
   rows.forEach(e => {
     const t = SOA.totals(e, getEntryPrices(e));
-    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
+    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), t.misc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
     lines.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","));
   });
   const blob = new Blob(["\ufeff"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
