@@ -201,6 +201,9 @@
         .predictive-inline-note{font-size:11px;color:#64748b;margin-top:4px}
 
     </style>
+<meta name="theme-color" content="#c62828">
+<link rel="stylesheet" href="donor-theme.css">
+<script src="donor-common.js"></script>
 </head>
 <body>
 <header>
@@ -496,7 +499,29 @@ function markLoaded(ids){ids.forEach(id=>{const el=document.getElementById(id);i
 function clearHighlights(){IDENTITY_FIELDS.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove("loaded-field");});}
 function renderLookup(results){donorLookupResults=results;if(!results.length){lookupResultsBox.classList.add("hidden");lookupResultsBody.innerHTML="";showMsg("No existing donor matched your search.","error");return;}lookupResultsBody.innerHTML=results.map((rec,i)=>`<tr><td><button type="button" class="small-btn blue-btn" onclick="loadDonor(${i})">Load</button></td><td>${esc(rec.surname||"")}</td><td>${esc(rec.firstName||"")}</td><td>${esc(rec.middleName||"")}</td><td>${esc(rec.birthday||"")}</td><td>${esc(rec.bloodType||"")}</td><td>${esc(rec.entryDate||"")}</td><td>${esc(rec.donorCategory||"New")}</td><td>${esc(getCountDisplay(getStoredCount(rec)))}</td></tr>`).join("");lookupResultsBox.classList.remove("hidden");}
 function idKey(rec){return[na(rec.surname),na(rec.firstName),String(rec.birthday||"").trim()].join("|");}
-async function searchDonors(){try{clearMsg();const s=nt(lookupSurname.value),f=nt(lookupFirstName.value),m=nt(lookupMiddleName.value);if(!s&&!f&&!m){donorLookupResults=[];lookupResultsBody.innerHTML="";lookupResultsBox.classList.add("hidden");return;}const snap=await db.collection("donorDatabase").orderBy("entryDate","desc").get();const all=snap.docs.map(d=>({id:d.id,...d.data()}));const latest={};all.forEach(rec=>{const k=idKey(rec);if(!latest[k]||rec.entryDate>latest[k].entryDate)latest[k]=rec;});let unique=Object.values(latest).filter(rec=>(!s||nt(rec.surname).includes(s))&&(!f||nt(rec.firstName).includes(f))&&(!m||nt(rec.middleName).includes(m)));unique.sort((a,b)=>(b.entryDate||"").localeCompare(a.entryDate||""));renderLookup(unique);if(unique.length)showMsg(`${unique.length} donor match(es) found.`,"success");else showMsg("No existing donor matched your search.","error");}catch(err){console.error(err);showMsg("Failed to search: "+err.message,"error");}}
+let lookupSeq=0;
+async function searchDonors(){
+    const seq=++lookupSeq;                       // lets us ignore slow, out-of-date answers
+    try{
+        clearMsg();
+        const s=nt(lookupSurname.value),f=nt(lookupFirstName.value),m=nt(lookupMiddleName.value);
+        if(!s&&!f&&!m){donorLookupResults=[];lookupResultsBody.innerHTML="";lookupResultsBox.classList.add("hidden");return;}
+        if((s||f||m).length<2){showMsg("Type at least 2 letters to search.","error");return;}
+        showMsg("Searching...","success");
+        // FAST SEARCH: the database returns only donors whose name STARTS WITH what was typed
+        const res=await DonorCommon.searchByName(db,{surname:s,firstName:f,middleName:m},{limit:150});
+        if(seq!==lookupSeq)return;
+        const unique=DonorCommon.latestPerDonor(res.records);
+        unique.sort((a,b)=>(b.entryDate||"").localeCompare(a.entryDate||""));
+        renderLookup(unique);
+        if(unique.length)showMsg(`${unique.length} donor match(es) found.`+(res.truncated?" Many records matched - type more letters to narrow the list.":""),"success");
+        else showMsg("No existing donor matched your search.","error");
+    }catch(err){
+        if(seq!==lookupSeq)return;
+        console.error(err);
+        showMsg("Failed to search: "+err.message,"error");
+    }
+}
 
 window.loadDonor=function(index){
     const donor=donorLookupResults[index];
@@ -624,11 +649,10 @@ async function loadCityProvinceSuggestions(){
     seedDefaultCitySuggestions();
     try{
         // Background-only helper. It does not block encoding and only updates the Province/City custom suggestion box.
-        const snap=await db.collection("donorDatabase").limit(3000).get();
+        const sampleRows=await DonorCommon.getSuggestionSample(db);
         const counts={};
-        snap.forEach(doc=>{
-            const r=doc.data()||{};
-            const raw=r.cityProvince||r.provinceCity||r.city||r.province||"";
+        sampleRows.forEach(r=>{
+            const raw=r.c||"";
             const city=normalizeCitySuggestion(raw);
             if(!city)return;
             counts[city]=(counts[city]||0)+1;
@@ -808,11 +832,10 @@ async function loadOccupationSuggestions(){
     if(occupationSuggestionLoaded)return;
     occupationSuggestionLoaded=true;
     try{
-        const snap=await db.collection("donorDatabase").limit(3000).get();
+        const sampleRows=await DonorCommon.getSuggestionSample(db);
         const counts={};
-        snap.forEach(doc=>{
-            const r=doc.data()||{};
-            const occ=normalizePredictiveValue(r.occupation||"");
+        sampleRows.forEach(r=>{
+            const occ=normalizePredictiveValue(r.o||"");
             if(!occ)return;
             counts[occ]=(counts[occ]||0)+1;
         });
@@ -889,8 +912,8 @@ async function checkSerialRealTime() {
             .limit(3)
             .get();
 
-        if (!snap.empty) {
-            const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const matches = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(DonorCommon.isVisible);
+        if (matches.length) {
             // Red border on serial field
             serialNumberInput.style.borderColor = "#b91c1c";
             serialNumberInput.style.boxShadow   = "0 0 0 3px rgba(185,28,28,0.22)";
@@ -969,8 +992,8 @@ async function checkDuplicates(finalSerial, surname, firstName, middleName, birt
         .limit(3)
         .get();
 
-    if(!serialSnap.empty){
-        const matches = serialSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const matches = serialSnap.docs.map(d=>({id:d.id,...d.data()})).filter(DonorCommon.isVisible);
+    if(matches.length){
         showDupWarning(matches, "serial");
         return {isDuplicate: true, type: "serial"};
     }
@@ -983,6 +1006,7 @@ async function checkDuplicates(finalSerial, surname, firstName, middleName, birt
     const newKey = buildDupKey(surname, firstName, middleName, birthday, sex);
     const identityMatches = identitySnap.docs
         .map(d=>({id:d.id,...d.data()}))
+        .filter(DonorCommon.isVisible)
         .filter(rec => buildDupKey(rec.surname, rec.firstName, rec.middleName, rec.birthday, rec.sex) === newKey);
 
     if(identityMatches.length > 0){
@@ -996,7 +1020,7 @@ async function checkDuplicates(finalSerial, surname, firstName, middleName, birt
 // END DUPLICATE DETECTION HELPERS
 // ============================================================
 
-donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();clearDupWarning();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}if(mbdDetails.value.trim())mbdDetails.value=canonicalizeMbdGroupValue(mbdDetails.value);const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select at least one donor type.","error");return false;}if(hasDonorType("Patient Directed")&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(hasDonorType("MBD")&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!birthday.value.trim()){showMsg("Please enter birthday.","error");birthday.focus();return false;}if(!normalizeBirthdayInput(true)){showMsg("Please enter a valid birthday. Use YYYY-MM-DD or MM/DD/YY.","error");birthday.focus();return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:hasDonorType("Patient Directed")?pdVal:"",mbdDetails:hasDonorType("MBD")?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+donorForm.addEventListener("submit",async function(e){e.preventDefault();if(isSaving)return false;try{clearMsg();clearDupWarning();if(!authReady||!currentUser){showMsg("You must be logged in first.","error");return false;}if(mbdDetails.value.trim())mbdDetails.value=canonicalizeMbdGroupValue(mbdDetails.value);const finalSerial=getFinalSerial(),donorType=selDonorType(),pdVal=patientDirectedDetails.value.trim(),mbdVal=mbdDetails.value.trim(),ag=getAG(),tv=validateTimes();if(!tv.valid)return false;let hasGroup=false;if(ag&&ag.entryDate===entryDate.value&&ag.remaining>0){if(ag.donorType==="Walk-in"){hasGroup=true;if(!donorType)setDonorType("Walk-in");}else if(ag.donorType==="MBD"){hasGroup=true;setDonorType("MBD");if(!mbdDetails.value.trim())mbdDetails.value=ag.organization||"";}else if(ag.donorType==="Patient Directed"){hasGroup=true;setDonorType("Patient Directed");if(!patientDirectedDetails.value.trim())patientDirectedDetails.value=ag.details||"";}}if(!entryDate.value){showMsg("Please enter date.","error");return false;}if(!finalSerial){showMsg("Please enter serial number.","error");return false;}if(!selDonorType()){showMsg("Please select at least one donor type.","error");return false;}if(hasDonorType("Patient Directed")&&!patientDirectedDetails.value.trim()){showMsg("Please enter patient directed details.","error");return false;}if(hasDonorType("MBD")&&!mbdDetails.value.trim()){showMsg("Please enter MBD site / organization.","error");return false;}if(!document.getElementById("surname").value.trim()){showMsg("Please enter surname.","error");return false;}if(!document.getElementById("firstName").value.trim()){showMsg("Please enter first name.","error");return false;}if(!birthday.value.trim()){showMsg("Please enter birthday.","error");birthday.focus();return false;}if(!normalizeBirthdayInput(true)){showMsg("Please enter a valid birthday. Use YYYY-MM-DD or MM/DD/YY.","error");birthday.focus();return false;}if(!document.getElementById("civilStatus").value){showMsg("Please select civil status.","error");return false;}if(!document.getElementById("sex").value){showMsg("Please select sex.","error");return false;}if(!document.getElementById("address").value.trim()){showMsg("Please enter address.","error");return false;}if(!document.getElementById("cityProvince").value.trim()){showMsg("Please enter city / province.","error");return false;}if(!document.getElementById("bloodType").value){showMsg("Please select blood type.","error");return false;}if(!document.getElementById("bloodBagBrand").value){showMsg("Please select blood bag brand.","error");return false;}if(!document.getElementById("bloodBagType").value){showMsg("Please select blood bag type.","error");return false;}if(!document.getElementById("amount").value){showMsg("Please select amount.","error");return false;}if(!selCatMode()){showMsg("Please select donor category: New, Repeat, or Lapse.","error");return false;}if(!numberOfDonations.value.trim()){showMsg("Please enter number of donations.","error");numberOfDonations.focus();return false;}normCountField();updateAutoType();setSaving(true);const cnt=normCount(numberOfDonations.value.trim())||numberOfDonations.value.trim();const collectionParts=getCollectionDateParts(entryDate.value);const data={entryDate:entryDate.value,...collectionParts,serialNumber:finalSerial,serialPrefixEnabled:useSerialPrefix.checked,serialPrefixValue:serialPrefix.textContent.trim(),donorType:selDonorType(),patientDirectedDetails:hasDonorType("Patient Directed")?pdVal:"",mbdDetails:hasDonorType("MBD")?mbdVal:"",suffix:document.getElementById("suffix").value.trim(),surname:document.getElementById("surname").value.trim(),firstName:document.getElementById("firstName").value.trim(),middleName:document.getElementById("middleName").value.trim(),birthday:document.getElementById("birthday").value,age:parseInt(document.getElementById("age").value||"0"),civilStatus:document.getElementById("civilStatus").value,sex:document.getElementById("sex").value,address:document.getElementById("address").value.trim(),cityProvince:document.getElementById("cityProvince").value.trim(),occupation:document.getElementById("occupation").value.trim(),contactNumber:document.getElementById("contactNumber").value.trim(),donorCategoryMode:selCatMode(),donorCategory:getFinalCat(),donorCategoryAutoSuggestion:"",donorCategoryAutoReason:"",numberOfDonations:cnt,numberOfDonationsNumeric:parseInt(cnt,10)||0,bloodType:document.getElementById("bloodType").value,bloodBagBrand:document.getElementById("bloodBagBrand").value,bloodBagType:document.getElementById("bloodBagType").value,amount:document.getElementById("amount").value,timeStarted:document.getElementById("timeStarted").value.trim(),timeEnded:document.getElementById("timeEnded").value.trim(),timeStartedNormalized:tv.normalizedStarted||"",timeEndedNormalized:tv.normalizedEnded||"",timeDurationMinutes:tv.durationMinutes,timeCrossedMidnight:tv.overnight,remarks:document.getElementById("remarks").value.trim(),loadedFromRecordId:loadedDonorRecord?loadedDonorRecord.id:"",lastDonationDateReference:loadedDonorRecord?(loadedDonorRecord.entryDate||""):"",groupedEntryApplied:hasGroup,groupedEntryType:hasGroup?ag.donorType:"",groupedEntryOrganization:hasGroup?(ag.organization||""):"",createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid,...DonorCommon.searchFields({surname:document.getElementById("surname").value,firstName:document.getElementById("firstName").value,middleName:document.getElementById("middleName").value})};
 
 // ── DUPLICATE CHECK before saving ──────────────────────────
 setSaving(true);
@@ -1020,6 +1044,7 @@ if(dupResult.isDuplicate){
 }
 // Save to Firebase first
 await db.collection("donorDatabase").add(data);
+DonorCommon.clearCache();
 
 // Also send to Google Sheets backup (fire-and-forget — won't block on errors)
 sendToGoogleSheets(data);
@@ -1073,5 +1098,6 @@ cityProvinceInput.addEventListener("keydown",e=>{
 auth.onAuthStateChanged(user=>{authReady=true;currentUser=user;if(user){setAuthInd(`Logged in as: ${user.email||user.uid}`,true);renderAG();setTimeout(()=>{loadCityProvinceSuggestions();loadMbdGroupSuggestions();loadOccupationSuggestions();},800);}else setAuthInd("No logged in user detected.",false);});
 setTodayDate();setCatMode("");numberOfDonations.value="";updateAutoType();updateSerialUI();validateTimes();renderAG();
 </script>
+<script src="prc-nav.js"></script>
 </body>
 </html>
