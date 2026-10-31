@@ -528,6 +528,35 @@ flex-direction:column;
     </style>
 <meta name="theme-color" content="#c62828">
 <link rel="stylesheet" href="prc-theme.css">
+<style id="trackingScrollFix">
+/* Every table sits in its own sideways-scrolling box (fixes: could not scroll tables sideways on phones) */
+.tableScrollWrap{
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+  max-width:100%;
+  margin-top:10px;
+  border-radius:8px;
+  scrollbar-width:thin;
+}
+.tableScrollWrap > table{margin-top:0 !important;}
+.tableScrollWrap::-webkit-scrollbar{height:10px;}
+.tableScrollWrap::-webkit-scrollbar-thumb{background:#b8c2cf;border-radius:8px;}
+.swipeHint{display:none;}
+@media (max-width:980px){
+  /* the small table inside "Augmentation Details" was forced to 600px wide, which blew the whole row up */
+  .augMiniTable,.augDetailsWrap table{min-width:0 !important;width:100% !important;}
+  .augDetailsWrap{min-width:210px;}
+  .augDetailsWrap th,.augDetailsWrap td{padding:4px 5px !important;font-size:11px !important;}
+  /* keep the DATE column in view while swiping across the other columns */
+  .augTable th:first-child,.augTable td:first-child{position:sticky;left:0;z-index:2;box-shadow:2px 0 0 rgba(0,0,0,.14);}
+  .augTable th:first-child{z-index:3;}
+  .swipeHint.on{
+    display:block;text-align:center;font-size:12px;font-weight:700;color:#0d47a1;
+    background:#e3f2fd;border:1px dashed #90caf9;border-radius:8px;padding:6px 8px;margin:8px 0 0;
+  }
+}
+</style>
 </head>
 
 <body>
@@ -623,6 +652,12 @@ flex-direction:column;
     <input type="number" id="editAugAmountPaid" class="formInput" readonly>
 
     <div id="editAugDiscountMount"></div>
+
+    <label class="formLabel">MISCELLANEOUS CHARGE <span style="font-weight:normal;color:#666;">(optional &ndash; printed in the table, before freight)</span></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="editAugMiscLabel" class="formInput" placeholder="Description (e.g. Processing fee)" autocomplete="off" style="flex:2 1 220px;min-width:0;">
+      <input type="number" id="editAugMiscAmount" class="formInput" min="0" step="0.01" inputmode="decimal" placeholder="Amount (0.00)" style="flex:1 1 130px;min-width:0;">
+    </div>
 
     <label class="formLabel">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;">(optional &ndash; printed on the statement when filled in)</span></label>
     <input type="number" id="editAugFreight" class="formInput" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
@@ -1000,16 +1035,19 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
-  return {rows,gross,disc,freight,net};
+  const disc=Number(e.discount)||0,misc=Math.max(0,Number(e.miscAmount)||0),freight=Math.max(0,Number(e.freight)||0),net=gross-disc+misc+freight;
+  const extra=[];   /* extra charges are printed as ordinary rows of the same table, misc first, then freight */
+  if(misc>0)extra.push({d:String(e.miscLabel||"").trim()||"Miscellaneous",q:1,u:"lot",p:misc,a:misc});
+  if(freight>0)extra.push({d:"Freight (Transport Fee)",q:1,u:"lot",p:freight,a:freight});
+  return {rows,extra,gross,disc,misc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
-  const {rows,gross,disc,freight,net}=totals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
-  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
+  const {rows,extra,gross,disc,misc,freight,net}=totals(e,prices);
+  const items=rows.concat(extra);
+  let body=items.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=items.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB" style="text-align:right;font-size:10px;font-style:italic;color:#555">${extra.length?"Discount applies to blood components only":""}</td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -1285,13 +1323,14 @@ function computeWaivedDeduction(entry, prices){
   return { waivedLabel: labels.join(" + "), waivedValue };
 }
 
-/* final amount = computed total - discount - waived + freight (freight only exists on augmentation) */
+/* final amount = computed total - discount - waived + miscellaneous + freight (misc/freight only exist on augmentation) */
 function computeFinalTotal(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
   const discount = Number(entry.discount) || 0;
+  const misc = Math.max(0, Number(entry.miscAmount) || 0);
   const freight = Math.max(0, Number(entry.freight) || 0);
   const { waivedValue } = computeWaivedDeduction(entry, prices);
-  let total = Number(computedTotalStr) - discount - waivedValue + freight;
+  let total = Number(computedTotalStr) - discount - waivedValue + misc + freight;
   if(total < 0) total = 0;
   return total.toFixed(2);
 }
@@ -1300,11 +1339,15 @@ function buildAmountPaidCell(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
   const { waivedLabel, waivedValue } = computeWaivedDeduction(entry, prices);
   const finalTotal = computeFinalTotal(entry, computedTotalStr);
+  const misc = Math.max(0, Number(entry.miscAmount) || 0);
   const freight = Math.max(0, Number(entry.freight) || 0);
 
   let html = finalTotal;
   if(waivedValue > 0){
     html += `<br><span style="font-size:11px;color:#b71c1c;">less ${waivedLabel} waived (${waivedValue.toFixed(2)})</span>`;
+  }
+  if(misc > 0){
+    html += `<br><span style="font-size:11px;color:#1b5e20;">incl. ${escapeHtml(String(entry.miscLabel || "").trim() || "misc.")} ${misc.toFixed(2)}</span>`;
   }
   if(freight > 0){
     html += `<br><span style="font-size:11px;color:#1b5e20;">incl. freight ${freight.toFixed(2)}</span>`;
@@ -1322,6 +1365,13 @@ function buildDiscountCell(entry){
     : Number(computeReleasingTotal(entry)) - computeWaivedDeduction(entry, getEntryPrices(entry)).waivedValue;
   const pct = base > 0 ? Math.round(disc / base * 10000) / 100 : 0;
   return `${entry.discount}` + (pct ? `<br><span style="font-size:11px;color:#1565c0;">${pct}% off</span>` : "");
+}
+
+function buildMiscCell(entry){
+  const m = Math.max(0, Number(entry.miscAmount) || 0);
+  if(!(m > 0)) return "";
+  const label = String(entry.miscLabel || "").trim();
+  return m.toFixed(2) + (label ? `<br><span style="font-size:11px;color:#455a64;">${escapeHtml(label)}</span>` : "");
 }
 
 function buildFreightCell(entry){
@@ -1372,6 +1422,8 @@ function getAugmentationDuplicateKey(entry){
     safeUpper(JSON.stringify(entry.bloodTypes || [])),
     safeUpper(entry.amountPaid),
     safeUpper(entry.discount),
+    safeUpper(entry.miscAmount),
+    safeUpper(entry.miscLabel),
     safeUpper(entry.freight)
   ].join("||");
 }
@@ -1423,7 +1475,7 @@ function refreshDuplicateBox(){
 
 function renderDuplicateReleasingGroup(group){
   return `
-    <table>
+    <div class="tableScrollWrap"><table>
       <thead>
         <tr>
           <th>DATE</th>
@@ -1469,13 +1521,13 @@ function renderDuplicateReleasingGroup(group){
           </tr>
         `).join("")}
       </tbody>
-    </table>
+    </table></div>
   `;
 }
 
 function renderDuplicateAugmentationGroup(group){
   return `
-    <table class="augTable">
+    <div class="tableScrollWrap"><table class="augTable">
       <thead>
         <tr>
           <th>DATE</th>
@@ -1484,7 +1536,7 @@ function renderDuplicateAugmentationGroup(group){
           <th>AUGMENTATION DETAILS</th>
           <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th><th>FREIGHT</th>
+          <th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th>
           <th>PAID</th>
           <th>ACTION</th>
         </tr>
@@ -1498,7 +1550,7 @@ function renderDuplicateAugmentationGroup(group){
             <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
             <td>${computeAugEntryTotal(entry)}</td>
             <td>${buildAmountPaidCell(entry, computeAugEntryTotal(entry))}</td>
-            <td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td>
+            <td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td>
             <td>${isAugPaid(entry) ? "YES" : "NO"}</td>
             <td>
               <button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
@@ -1510,7 +1562,7 @@ function renderDuplicateAugmentationGroup(group){
           </tr>
         `).join("")}
       </tbody>
-    </table>
+    </table></div>
   `;
 }
 
@@ -1968,6 +2020,30 @@ function isSearchActive(){ return searchBox.value.trim().length>0; }
 
 function clearSearch(){ searchBox.value=""; renderCurrentView(); }
 
+/* Puts a table inside a sideways-scrolling box and shows a one-time "swipe" hint on phones */
+function appendScrollable(parent, table){
+  const wrap = document.createElement("div");
+  wrap.className = "tableScrollWrap";
+  wrap.appendChild(table);
+  const wide = table.querySelectorAll("thead th").length > 6;
+  let hint = null;
+  if(wide){
+    hint = document.createElement("div");
+    hint.className = "swipeHint";
+    hint.textContent = "\u2194 Swipe sideways to see all columns";
+    parent.appendChild(hint);
+  }
+  parent.appendChild(wrap);
+  if(hint){
+    requestAnimationFrame(() => {
+      if(wrap.scrollWidth > wrap.clientWidth + 4){
+        hint.classList.add("on");
+        wrap.addEventListener("scroll", () => hint.classList.remove("on"), { once:true, passive:true });
+      }
+    });
+  }
+}
+
 function renderFlatBanner(count,term){
   const b=document.createElement("div");
   b.className="searchResultsBanner";
@@ -1995,7 +2071,7 @@ function renderFlatReleasingResults(entries){
     r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  container.appendChild(t);
+  appendScrollable(container, t);
 }
 
 function renderFlatAugmentationResults(entries){
@@ -2008,16 +2084,16 @@ function renderFlatAugmentationResults(entries){
   container.appendChild(renderFlatBanner(entries.length,term));
   const t=document.createElement("table");
   t.className="augTable";
-  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
   const tb=t.querySelector("tbody");
   entries.forEach(entry=>{
     const ct=computeAugEntryTotal(entry);
     const ip=isAugPaid(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  container.appendChild(t);
+  appendScrollable(container, t);
 }
 
 function renderFlatWaivedResults(entries){
@@ -2037,7 +2113,7 @@ function renderFlatWaivedResults(entries){
     r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  container.appendChild(t);
+  appendScrollable(container, t);
 }
 // ── end flat search ───────────────────────────────────────────────────────────
 
@@ -2109,7 +2185,7 @@ function renderReleasingTable(){
       r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    dc.appendChild(t);
+    appendScrollable(dc, t);
   });
 }
 
@@ -2133,16 +2209,16 @@ function renderAugmentationTable(){
   renderYearMonthDateInto(container, groupedByMonth, (dc, de) => {
     const t=document.createElement("table");
     t.className="augTable";
-    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
     const tb=t.querySelector("tbody");
     de.forEach(entry=>{
       const ct=computeAugEntryTotal(entry);
       const ip=isAugPaid(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    dc.appendChild(t);
+    appendScrollable(dc, t);
   });
 }
 
@@ -2174,7 +2250,7 @@ function renderWaivedTable(){
       r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    dc.appendChild(t);
+    appendScrollable(dc, t);
   });
 }
 
@@ -2192,6 +2268,8 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugBoxContainerQty").value = "";
   document.getElementById("editAugAmountPaid").value = "";
   DISC_EDIT_AUG.clear();
+  document.getElementById("editAugMiscLabel").value = "";
+  document.getElementById("editAugMiscAmount").value = "";
   document.getElementById("editAugFreight").value = "";
   updateEditAugPayable();
   document.getElementById("editAugPaymentStatus").value = "Unpaid";
@@ -2215,13 +2293,15 @@ function updateEditAugPayable(){
   const box = document.getElementById("editAugPayable");
   const gross = Number(document.getElementById("editAugAmountPaid").value) || 0;
   const disc = Number(document.getElementById("editAugDiscount").value) || 0;
+  const misc = Math.max(0, Number(document.getElementById("editAugMiscAmount").value) || 0);
   const freight = Math.max(0, Number(document.getElementById("editAugFreight").value) || 0);
-  if(gross <= 0 && freight <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
+  if(gross <= 0 && freight <= 0 && misc <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
   const m = SOA.money;
   let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
   if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
+  if(misc > 0) parts += ` + Misc. <b>\u20B1${m(misc)}</b>`;
   if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
-  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight)}</b>`;
+  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + misc + freight)}</b>`;
   box.style.display = "block";
 }
 
@@ -2370,6 +2450,8 @@ async function openEditAugmentation(id){
     document.getElementById("editAugFacility").value = data.facility || "";
     document.getElementById("editAugBoxContainerQty").value = data.boxContainerQty || "";
     DISC_EDIT_AUG.set(data.discount);
+    document.getElementById("editAugMiscLabel").value = data.miscLabel || "";
+    document.getElementById("editAugMiscAmount").value = data.miscAmount || "";
     document.getElementById("editAugFreight").value = data.freight || "";
     document.getElementById("editAugAddress").value = data.address || "";
     document.getElementById("editAugRemarks").value = data.remarks || "";
@@ -2459,6 +2541,18 @@ window.saveAugmentationEdit = async function(){
     DISC_EDIT_AUG.focus();
     return;
   }
+  const miscLabelRaw = document.getElementById("editAugMiscLabel").value.trim();
+  const miscRaw = document.getElementById("editAugMiscAmount").value.trim();
+  if(miscRaw !== "" && !(Number(miscRaw) >= 0)){
+    alert("Miscellaneous amount must be 0 or more.");
+    document.getElementById("editAugMiscAmount").focus();
+    return;
+  }
+  if(miscLabelRaw !== "" && !(Number(miscRaw) > 0)){
+    alert("Enter the amount for the miscellaneous charge, or clear its description.");
+    document.getElementById("editAugMiscAmount").focus();
+    return;
+  }
   const freightRaw = document.getElementById("editAugFreight").value.trim();
   if(freightRaw !== "" && !(Number(freightRaw) >= 0)){
     alert("Freight / transport fee must be 0 or more.");
@@ -2473,6 +2567,8 @@ window.saveAugmentationEdit = async function(){
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
     discount: document.getElementById("editAugDiscount").value,
+    miscLabel: miscLabelRaw,
+    miscAmount: Math.max(0, Number(miscRaw) || 0),
     freight: Math.max(0, Number(freightRaw) || 0),
     address: SOA.remember("address", document.getElementById("editAugAddress").value),
     remarks: document.getElementById("editAugRemarks").value.trim(),
@@ -3012,7 +3108,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","FREIGHT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","MISC_DESCRIPTION","MISC_AMOUNT","FREIGHT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
   ];
 
   filtered.forEach(e => {
@@ -3038,6 +3134,8 @@ function exportAugmentationCSV(){
       computeAugEntryTotal(e),
       computeFinalTotal(e, computeAugEntryTotal(e)),
       e.discount || "",
+      e.miscLabel || "",
+      e.miscAmount || "",
       e.freight || "",
       isAugPaid(e) ? "YES" : "NO",
       e.paidOrNo || "",
@@ -3160,7 +3258,7 @@ document.addEventListener("input", function(e){
     recomputeEditAugmentationAmountPaid();
   }
 
-  if(e.target.id === "editAugFreight"){
+  if(e.target.id === "editAugFreight" || e.target.id === "editAugMiscAmount" || e.target.id === "editAugMiscLabel"){
     updateEditAugPayable();
   }
 
