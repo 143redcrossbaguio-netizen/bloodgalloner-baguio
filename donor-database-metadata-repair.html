@@ -40,6 +40,9 @@
     @media(max-width:850px){.grid{grid-template-columns:1fr 1fr}.btnrow button{flex:1 1 100%}}
     @media(max-width:520px){.grid{grid-template-columns:1fr}}
   </style>
+<meta name="theme-color" content="#c62828">
+<link rel="stylesheet" href="donor-theme.css">
+<script src="donor-common.js"></script>
 </head>
 <body>
 <header>
@@ -91,6 +94,21 @@
         <tbody id="previewBody"><tr><td colspan="10">Click Scan Records.</td></tr></tbody>
       </table>
     </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;color:#8b0000">3. Fast Donor Search Fields</h3>
+    <div class="small" style="margin-bottom:12px">
+      Donor search on the Entry and Deferrals pages now asks the database for matching names only,
+      instead of downloading every donor. For that, each donor record needs three lowercase helper fields:
+      <code>surnameSearch</code>, <code>firstNameSearch</code>, <code>middleNameSearch</code>.
+      New and edited records get them automatically. This step adds them to your <b>existing</b> records.
+      Names, serial numbers and all other data are <b>not changed</b>. It is safe to run again at any time &mdash; only records that are missing the fields are written.
+      Until it is done, searching still works for older records, just with fewer name spellings matched.
+    </div>
+    <div class="btnrow">
+      <button class="green" id="sfBtn">3. Add Search Fields to Existing Records</button>
+    </div>
+    <div id="sfResult" class="small" style="margin-top:10px"></div>
   </div>
 </div>
 
@@ -285,10 +303,70 @@ $("repairMismatchBtn").addEventListener("click",()=>repairRecords(true).catch(e=
 $("clearBtn").addEventListener("click",clearResults);
 $("limitPreview").addEventListener("change",renderPreview);
 
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+/* Step 3: reads the collection in pages of 1,000 (so it never needs the whole
+   database in memory) and writes the 3 helper fields only where they are missing. */
+async function addSearchFields(){
+  if(!auth.currentUser){setStatus("You are not logged in. Open this tool from your dashboard after login.","error");return;}
+  if(!confirm("This adds three lowercase search helper fields to every donor record that does not have them yet. It does not change names, serial numbers or any other data. Continue?")) return;
+
+  ["sfBtn","scanBtn","repairMissingBtn","repairMismatchBtn"].forEach(id => $(id).disabled = true);
+  $("sfResult").textContent = "";
+  setStatus("Adding search fields... Do not close this page.","info"); setProgress(3);
+
+  const PAGE = 1000, skipDel = $("skipDeleted").checked;
+  let cursor = null, scanned = 0, updated = 0, failed = 0, skipped = 0;
+
+  try{
+    while(true){
+      let q = db.collection("donorDatabase").orderBy(firebase.firestore.FieldPath.documentId()).limit(PAGE);
+      if(cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      if(snap.empty) break;
+
+      const todo = [];
+      snap.forEach(doc => {
+        const r = doc.data();
+        scanned++;
+        if(skipDel && isDeleted(r)){ skipped++; return; }
+        if(DonorCommon.needsSearchFields(r)) todo.push({id:doc.id, fields:DonorCommon.searchFields(r)});
+      });
+
+      for(let i = 0; i < todo.length; i += 400){
+        const batch = db.batch();
+        const chunk = todo.slice(i, i + 400);
+        chunk.forEach(x => batch.update(db.collection("donorDatabase").doc(x.id), x.fields));
+        try{ await batch.commit(); updated += chunk.length; }
+        catch(err){ console.error(err); failed += chunk.length; }
+      }
+
+      cursor = snap.docs[snap.docs.length - 1];
+      setStatus(`Search fields: ${scanned.toLocaleString()} records checked, ${updated.toLocaleString()} updated, ${failed.toLocaleString()} failed...`, failed ? "warn" : "info");
+      setProgress(Math.min(95, 8 + Math.log10(scanned + 1) * 20));   // total is unknown, so this just shows movement
+      if(snap.size < PAGE) break;
+      await sleep(120);
+    }
+    setProgress(100);
+    setStatus(`Done. ${scanned.toLocaleString()} records checked, ${updated.toLocaleString()} updated, ${failed.toLocaleString()} failed.`, failed ? "warn" : "success");
+    $("sfResult").innerHTML = `Checked: <b>${scanned.toLocaleString()}</b> &nbsp; Updated: <b>${updated.toLocaleString()}</b> &nbsp; Skipped deleted: <b>${skipped.toLocaleString()}</b> &nbsp; Failed: <b>${failed.toLocaleString()}</b>` +
+      (failed ? "<br>Some writes failed. Run this step again to retry only those records." : "<br>All records now have the fast search fields.");
+  }catch(err){
+    console.error(err);
+    setStatus("Adding search fields stopped: " + err.message + " (run it again to continue - finished records are skipped).", "error");
+  }finally{
+    ["sfBtn","scanBtn"].forEach(id => $(id).disabled = false);
+    $("repairMissingBtn").disabled = scanStats.missing < 1;
+    $("repairMismatchBtn").disabled = (scanStats.missing + scanStats.mismatch) < 1;
+  }
+}
+$("sfBtn").addEventListener("click", () => addSearchFields());
+
 auth.onAuthStateChanged(user=>{
   if(user) setStatus("Ready. Click Scan Records.","info");
   else setStatus("Not logged in. Open this page after logging in through the dashboard.","error");
 });
 </script>
+<script src="prc-nav.js"></script>
 </body>
 </html>
