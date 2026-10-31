@@ -284,6 +284,9 @@ td:first-child,th:first-child{
     header{font-size:20px}
 }
 </style>
+<meta name="theme-color" content="#c62828">
+<link rel="stylesheet" href="donor-theme.css">
+<script src="donor-common.js"></script>
 </head>
 
 <body>
@@ -643,65 +646,78 @@ function getDonorSearchText(r){
 }
 
 async function loadDonorIndex(){
-    try{
-        setStatus("Loading donor search index...","info");
-        const snap = await fs.collection("donorDatabase").get();
-        const arr = [];
-        snap.forEach(doc => {
-            const r = {id:doc.id, ...doc.data()};
-            if(isVisibleDonor(r)){
-                r._search = getDonorSearchText(r);
-                arr.push(r);
-            }
-        });
-        donorIndex = arr;
-        setStatus(`Ready. Donor search index loaded (${donorIndex.length} donors).`,"ok");
-    }catch(e){
-        console.error(e);
-        donorIndex = [];
-        setStatus("Deferral page loaded, but donor live search failed: " + (e.message || e),"warn");
-    }
+    /* FAST MODE: the donor list is no longer downloaded when the page opens.
+       Donors are looked up on demand (see renderDonorSuggestions) so this page
+       opens instantly no matter how many donors are in the database. */
+    donorIndex = [];
+    setStatus("Ready. Type a donor name or serial number to search.","ok");
 }
 
+let donorSearchSeq = 0, donorSearchTimer = null;
+
 function renderDonorSuggestions(){
+    clearTimeout(donorSearchTimer);
     const q = norm(document.getElementById("liveSearch").value);
     const box = document.getElementById("donorSuggestBox");
 
     if(q.length < 2){
+        donorSearchSeq++;
         box.classList.remove("open");
         box.innerHTML = "";
         return;
     }
 
-    const words = q.split(" ").filter(Boolean);
-    const matches = donorIndex
-        .filter(r => words.every(w => r._search.includes(w)))
-        .slice(0,10);
-
-    if(!matches.length){
-        box.innerHTML = `<div class="suggest-item"><div class="suggest-meta">No matching donor found. You can still type the details manually.</div></div>`;
-        box.classList.add("open");
-        return;
-    }
-
-    box.innerHTML = matches.map(r => {
-        const displayName = donorName(r) || "Unnamed donor";
-        const meta = [
-            r.serialNumber ? "Serial: " + r.serialNumber : "",
-            r.age ? "Age: " + r.age : "",
-            r.sex ? "Sex: " + r.sex : "",
-            r.bloodType ? "BT: " + r.bloodType : ""
-        ].filter(Boolean).join(" | ");
-
-        return `
-            <div class="suggest-item" onclick="selectDonor('${esc(r.id)}')">
-                <div class="suggest-name">${esc(displayName)}</div>
-                <div class="suggest-meta">${esc(meta)}</div>
-            </div>
-        `;
-    }).join("");
-
+    box.innerHTML = `<div class="suggest-item"><div class="suggest-meta">Searching...</div></div>`;
     box.classList.add("open");
+
+    donorSearchTimer = setTimeout(async () => {
+        const seq = ++donorSearchSeq;
+        try{
+            const res = await DonorCommon.searchByText(fs, q, {limit:30});
+            if(seq !== donorSearchSeq) return;           // a newer search replaced this one
+
+            const matches = DonorCommon.latestPerDonor(res.records)
+                .sort((a,b) => donorName(a).localeCompare(donorName(b)))
+                .slice(0,10);
+
+            // remember them so selectDonor() can find the one that gets clicked
+            matches.forEach(r => {
+                r._search = getDonorSearchText(r);
+                const i = donorIndex.findIndex(x => x.id === r.id);
+                if(i >= 0) donorIndex[i] = r; else donorIndex.push(r);
+            });
+
+            if(!matches.length){
+                box.innerHTML = `<div class="suggest-item"><div class="suggest-meta">No matching donor found. You can still type the details manually.</div></div>`;
+                box.classList.add("open");
+                return;
+            }
+
+            box.innerHTML = matches.map(r => {
+                const displayName = donorName(r) || "Unnamed donor";
+                const meta = [
+                    r.serialNumber ? "Serial: " + r.serialNumber : "",
+                    r.age ? "Age: " + r.age : "",
+                    r.sex ? "Sex: " + r.sex : "",
+                    r.bloodType ? "BT: " + r.bloodType : ""
+                ].filter(Boolean).join(" | ");
+
+                return `
+                    <div class="suggest-item" onclick="selectDonor('${esc(r.id)}')">
+                        <div class="suggest-name">${esc(displayName)}</div>
+                        <div class="suggest-meta">${esc(meta)}</div>
+                    </div>
+                `;
+            }).join("") + (res.truncated ? `<div class="suggest-item"><div class="suggest-meta">Many matches - type more letters to narrow the list.</div></div>` : "");
+
+            box.classList.add("open");
+        }catch(e){
+            if(seq !== donorSearchSeq) return;
+            console.error(e);
+            box.innerHTML = `<div class="suggest-item"><div class="suggest-meta">Search failed: ${esc(e.message || e)}. You can still type the details manually.</div></div>`;
+            box.classList.add("open");
+        }
+    }, 250);
 }
 
 window.selectDonor = function(id){
@@ -1504,5 +1520,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 </script>
+<script src="prc-nav.js"></script>
 </body>
 </html>
