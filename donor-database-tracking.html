@@ -1401,6 +1401,9 @@
 }
 
 </style>
+<meta name="theme-color" content="#c62828">
+<link rel="stylesheet" href="donor-theme.css">
+<script src="donor-common.js"></script>
 </head>
 <body>
 
@@ -1623,6 +1626,27 @@ const MONTHS = [
 // the entire donorDatabase collection every time.
 let currentLoadedMonthKey = "";
 let isAllMonthsSlowMode = false;
+
+/* ---- PAGED LOADING: never download an unlimited number of records at once ---- */
+const DONOR_PAGE_SIZE = 1500;      // records fetched per "page"
+let donorCursor = null;            // where the next page starts
+let donorHasMore = false;          // true while more records exist for this selection
+
+/* ---- ROW LIMIT: a month with thousands of rows is drawn in chunks so phones stay smooth ---- */
+const ROW_CAP_STEP = 400;
+const rowCaps = {};                // "year-month" -> how many rows to draw
+function capRecords(records, key){
+    const cap = rowCaps[key] || ROW_CAP_STEP;
+    if (isBulkEditingActive() || records.length <= cap + 50) return records;   // never split a tiny overflow
+    return records.slice(0, cap);
+}
+function renderMoreRowsRow(total, shown, key, colspan){
+    if (shown >= total) return "";
+    const next = Math.min(ROW_CAP_STEP, total - shown);
+    return `<tr class="more-rows-row"><td colspan="${colspan}">Showing ${shown.toLocaleString()} of ${total.toLocaleString()} rows &nbsp; <button type="button" onclick="showMoreRows('${key}')">Show next ${next.toLocaleString()}</button> &nbsp; <button type="button" onclick="showAllRows('${key}')">Show all</button></td></tr>`;
+}
+window.showMoreRows = function(key){ rowCaps[key] = (rowCaps[key] || ROW_CAP_STEP) + ROW_CAP_STEP; renderTracking(); };
+window.showAllRows  = function(key){ rowCaps[key] = 1e9; renderTracking(); };
 let monthControlsInitialized = false;
 let donorLoadRequestId = 0;
 let partnerAliasLoadPromise = null;
@@ -3044,7 +3068,9 @@ function renderTrackingFull() {
             // ── Date sub-group rendering: insert a date separator row when the date changes ──
             let _lastDateHeader = null;
             const _TOTAL_COLS = 25; // number of <td> columns in the table (including actions)
-            records.forEach(r => {
+            const _capKey = `${year}-${month}`;
+            const _shownRecords = capRecords(records, _capKey);
+            _shownRecords.forEach(r => {
                 // Insert date sub-header when date changes
                 const _rDate = r._resolvedEntryDate || "";
                 if (_rDate !== _lastDateHeader) {
@@ -3102,6 +3128,7 @@ function renderTrackingFull() {
                         </td>
                     </tr>`;
             });
+            html += renderMoreRowsRow(records.length, _shownRecords.length, _capKey, _TOTAL_COLS);
 
             html += `</tbody></table></div></div></div>`;
         });
@@ -3342,7 +3369,9 @@ function renderSimpleTracking() {
                                 <tbody>`;
 
             let lastDateHeader = null;
-            records.forEach(r => {
+            const _sCapKey = `${year}-${month}`;
+            const _sShown = capRecords(records, _sCapKey);
+            _sShown.forEach(r => {
                 const rDate = r._resolvedEntryDate || "";
                 if (rDate !== lastDateHeader) {
                     lastDateHeader = rDate;
@@ -3372,6 +3401,7 @@ function renderSimpleTracking() {
                     </tr>`;
                 if (isOpen) html += renderSimpleDetailRow(r);
             });
+            html += renderMoreRowsRow(records.length, _sShown.length, _sCapKey, simpleColspan);
 
             html += `</tbody></table></div></div></div>`;
         });
@@ -3412,7 +3442,10 @@ function renderTracking() {
 }
 
 // ─── LOAD DONORS ──────────────────────────────────────────────────────────────
-async function loadDonors() {
+// PAGED: loads at most DONOR_PAGE_SIZE records at a time. If more exist, a
+// "Load next ..." button appears under the table (see renderLoadMoreBar).
+async function loadDonors(append) {
+    const isAppend = append === true && !!donorCursor;
     try {
         const user = auth.currentUser;
         if (!user) {
@@ -3428,7 +3461,12 @@ async function loadDonors() {
         isAllMonthsSlowMode = !selectedMonth && !selectedYear;
 
         const loadLabel = selectedMonth ? getMonthLabel(selectedMonth) : (selectedYear ? `year ${selectedYear}` : "all months (slow mode)");
-        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${loadLabel} records...</div>`;
+        if (!isAppend) {
+            donorCursor = null;
+            donorHasMore = false;
+            Object.keys(rowCaps).forEach(k => delete rowCaps[k]);
+            document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading ${loadLabel} records...</div>`;
+        }
 
         let queryRef = db.collection("donorDatabase");
         if (selectedMonth) {
@@ -3436,20 +3474,34 @@ async function loadDonors() {
         } else if (selectedYear) {
             queryRef = queryRef.where("collectionYear", "==", Number(selectedYear));
         }
+        // Ordering by document id needs no extra index and gives a stable cursor for paging.
+        queryRef = queryRef.orderBy(firebase.firestore.FieldPath.documentId()).limit(DONOR_PAGE_SIZE);
+        if (isAppend) queryRef = queryRef.startAfter(donorCursor);
 
-        const snapshot = await withTimeout(queryRef.get(), 15000, null);
+        const snapshot = await withTimeout(queryRef.get(), 20000, null);
         if (requestId !== donorLoadRequestId) return;
         if (!snapshot) {
-            document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading is taking too long. Please click Load again or select a specific month.</div>`;
+            if (!isAppend) document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Loading is taking too long. Please click Load again or select a specific month.</div>`;
             showMessage("Loading took too long. Try clicking Load again or choose a specific month for faster loading.", "error");
+            renderLoadMoreBar();
             return;
         }
 
-        allDonors = snapshot.docs
+        if (snapshot.docs.length) donorCursor = snapshot.docs[snapshot.docs.length - 1];
+        donorHasMore = snapshot.docs.length >= DONOR_PAGE_SIZE;
+
+        const fresh = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
             .filter(r => r.isDeleted !== true)
             .filter(r => !(typeof r.deletedBatchId === "string" && r.deletedBatchId.trim() !== ""))
             .map(r => attachResolvedFields(r));
+
+        if (isAppend) {
+            const seen = new Set(allDonors.map(r => r.id));
+            allDonors = allDonors.concat(fresh.filter(r => !seen.has(r.id)));
+        } else {
+            allDonors = fresh;
+        }
 
         // Carry-forward is still kept for compatibility, but month queries now use collectionMonthKey.
         applyImportedDateCarryForward(allDonors);
@@ -3466,26 +3518,46 @@ async function loadDonors() {
         if (pm && selectedMonth) pm.value = selectedMonth;
 
         renderTracking();
+        renderLoadMoreBar();
 
-        const pms = document.getElementById("printMonthSelect").value;
-        if (pms) hideDuplicateBox();
-        else     hideDuplicateBox();
-
+        hideDuplicateBox();
         // Duplicate list stays hidden unless the user clicks Show Duplicate This Month.
 
+        const moreNote = donorHasMore ? " More records exist - use the Load next button under the table." : "";
         showMessage(selectedMonth
-            ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}. Select another month to load more.`
+            ? `Loaded ${allDonors.length} records for ${getMonthLabel(selectedMonth)}.${moreNote || " Select another month to load more."}`
             : (selectedYear
-                ? `Loaded ${allDonors.length} records for year ${selectedYear}. Choose a month for faster navigation.`
-                : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.`),
+                ? `Loaded ${allDonors.length} records for year ${selectedYear}.${moreNote || " Choose a month for faster navigation."}`
+                : `Loaded ${allDonors.length} records in ALL MONTHS slow mode.${moreNote}`),
             "success"
         );
 
     } catch(e) {
         console.error(e);
-        document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
+        if (!isAppend) document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Failed to load donor records.</div>`;
         showMessage("Failed to load donor records: " + e.message, "error");
+        renderLoadMoreBar();
     }
+}
+
+// "Load next ..." bar shown under the table while more records exist
+function renderLoadMoreBar() {
+    const host = document.getElementById("trackingContainer");
+    if (!host || !host.parentNode) return;
+    let bar = document.getElementById("loadMoreBar");
+    if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "loadMoreBar";
+        host.parentNode.insertBefore(bar, host.nextSibling);
+    }
+    if (!donorHasMore) { bar.style.display = "none"; bar.innerHTML = ""; return; }
+    bar.style.display = "flex";
+    bar.innerHTML = `<span>${allDonors.length.toLocaleString()} records loaded so far - more exist for this selection. Totals and duplicate checks cover loaded records only.</span><button type="button" id="loadMoreBtn">Load next ${DONOR_PAGE_SIZE.toLocaleString()}</button>`;
+    document.getElementById("loadMoreBtn").onclick = async function () {
+        this.disabled = true;
+        this.textContent = "Loading...";
+        await loadDonors(true);
+    };
 }
 
 // ─── EDIT (single record) ─────────────────────────────────────────────────────
@@ -3622,7 +3694,7 @@ window.startEdit = function(id) {
 
     const row = document.getElementById(`row-${id}`);
     if (!row) {
-        showMessage("Record is not visible in the current view. Clear filters and try again.", "error");
+        showMessage("Record is not visible in the current view. Use \"Show all\" under the month table, or clear filters, and try again.", "error");
         return;
     }
 
@@ -3829,8 +3901,9 @@ window.saveEdit = async function(id) {
     }
 
     try {
-        await db.collection("donorDatabase").doc(id).update(updatedData);
-        updateLocalDonorRecord(id, updatedData);
+        const _toSave = DonorCommon.withSearchFields(updatedData, allDonors.find(x => x.id === id) || {});
+        await db.collection("donorDatabase").doc(id).update(_toSave);
+        updateLocalDonorRecord(id, _toSave);
         expandedSimpleRows.delete(id);
         renderTracking();
         showMessage("Record updated successfully.", "success");
@@ -4775,7 +4848,7 @@ async function bulkSaveAll() {
             });
             preparedSlice.forEach(([id, preparedChanges]) => {
                 const ref = db.collection("donorDatabase").doc(id);
-                batch.update(ref, preparedChanges);
+                batch.update(ref, DonorCommon.withSearchFields(preparedChanges, allDonors.find(x => x.id === id) || {}));
             });
             try {
                 await batch.commit();
@@ -4986,5 +5059,6 @@ auth.onAuthStateChanged(async (user) => {
     else document.getElementById("trackingContainer").innerHTML = `<div class="empty-box">Please log in first.</div>`;
 });
 </script>
+<script src="prc-nav.js"></script>
 </body>
 </html>
