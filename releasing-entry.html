@@ -670,6 +670,12 @@ button{
 
     <div id="augDiscountSection" style="display:none;"></div>
 
+    <label style="margin-top:12px;">MISCELLANEOUS CHARGE <span style="font-weight:normal;color:#666;font-size:12px;">(optional &ndash; printed in the table, before freight)</span></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="augMiscLabel" placeholder="Description (e.g. Processing fee)" autocomplete="off" style="flex:2 1 220px;min-width:0;">
+      <input type="number" id="augMiscAmount" min="0" step="0.01" inputmode="decimal" placeholder="Amount (0.00)" style="flex:1 1 130px;min-width:0;">
+    </div>
+
     <label style="margin-top:12px;">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;font-size:12px;">(optional &ndash; printed on the statement when filled in)</span></label>
     <input type="number" id="augFreight" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
     <div id="augPayable" class="discSummary"></div>
@@ -935,16 +941,19 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
-  return {rows,gross,disc,freight,net};
+  const disc=Number(e.discount)||0,misc=Math.max(0,Number(e.miscAmount)||0),freight=Math.max(0,Number(e.freight)||0),net=gross-disc+misc+freight;
+  const extra=[];   /* extra charges are printed as ordinary rows of the same table, misc first, then freight */
+  if(misc>0)extra.push({d:String(e.miscLabel||"").trim()||"Miscellaneous",q:1,u:"lot",p:misc,a:misc});
+  if(freight>0)extra.push({d:"Freight (Transport Fee)",q:1,u:"lot",p:freight,a:freight});
+  return {rows,extra,gross,disc,misc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
 function build(e,prices){
-  const {rows,gross,disc,freight,net}=totals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
-  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
+  const {rows,extra,gross,disc,misc,freight,net}=totals(e,prices);
+  const items=rows.concat(extra);
+  let body=items.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=items.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB" style="text-align:right;font-size:10px;font-style:italic;color:#555">${extra.length?"Discount applies to blood components only":""}</td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -2204,6 +2213,15 @@ function validateAugmentationRequiredFields(){
 
   if(!requireDiscountBox(DISC_AUG)) return false;
 
+  const miscLabelEl = document.getElementById("augMiscLabel");
+  const miscAmountEl = document.getElementById("augMiscAmount");
+  if(miscAmountEl.value.trim() !== "" && !(Number(miscAmountEl.value) >= 0)){
+    return alertAndFocus(miscAmountEl, "Miscellaneous amount must be 0 or more.");
+  }
+  if(miscLabelEl.value.trim() !== "" && !(Number(miscAmountEl.value) > 0)){
+    return alertAndFocus(miscAmountEl, "Enter the amount for the miscellaneous charge, or clear its description.");
+  }
+
   const freightEl = document.getElementById("augFreight");
   if(freightEl.value.trim() !== "" && !(Number(freightEl.value) >= 0)){
     return alertAndFocus(freightEl, "Freight / transport fee must be 0 or more.");
@@ -2347,19 +2365,21 @@ const DISC_AUG = DiscountBox.create({
   button: document.getElementById("augDiscountBtn")
 });
 
-/* Shows: blood total - discount + freight = total payable */
+/* Shows: blood total - discount + miscellaneous + freight = total payable */
 function updateAugPayable(){
   const box = document.getElementById("augPayable");
   if(!box) return;
   const gross = Number(document.getElementById("augAmountPaid").value) || 0;
   const disc = Number(document.getElementById("augDiscount").value) || 0;
+  const misc = Math.max(0, Number(document.getElementById("augMiscAmount").value) || 0);
   const freight = Math.max(0, Number(document.getElementById("augFreight").value) || 0);
-  if(gross <= 0 && freight <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
+  if(gross <= 0 && freight <= 0 && misc <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
   const m = SOA.money;
   let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
   if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
+  if(misc > 0) parts += ` + Misc. <b>\u20B1${m(misc)}</b>`;
   if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
-  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight)}</b>`;
+  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + misc + freight)}</b>`;
   box.style.display = "block";
 }
 
@@ -2526,6 +2546,8 @@ window.saveAugmentation = async function(){
     bloodTypes: bloodTypes,
     amountPaid: document.getElementById("augAmountPaid").value,
     discount: document.getElementById("augDiscount").value || 0,
+    miscLabel: document.getElementById("augMiscLabel").value.trim(),
+    miscAmount: Math.max(0, Number(document.getElementById("augMiscAmount").value) || 0),
     freight: Math.max(0, Number(document.getElementById("augFreight").value) || 0),
     priceSnapshot: priceSnapshotToSave,
     address: SOA.remember("address", document.getElementById("augAddress").value),
@@ -2638,6 +2660,7 @@ const $ = id => document.getElementById(id);
 let lastSavedAug = null;
 let nextInvoiceNo = "";
 SOA.attach($("augAddress"), "address");
+SOA.attach($("augMiscLabel"), "miscLabel");
 SOA.mountOrgEditor($("orgEditorMount"));
 document.addEventListener("soaOrgChanged", renderSoaPreview);
 SOA.attach($("soaPrintedBy"), "printedBy");
@@ -2672,7 +2695,7 @@ function collectAugForSoa(){
   return {
     date: $("augDate").value, facility: $("augFacility").value.trim(),
     boxContainerQty: $("augBoxContainerQty").value || 0, bloodTypes,
-    discount: $("augDiscount").value || 0, freight: Math.max(0, Number($("augFreight").value) || 0), invoiceNo: nextInvoiceNo,
+    discount: $("augDiscount").value || 0, miscLabel: $("augMiscLabel").value.trim(), miscAmount: Math.max(0, Number($("augMiscAmount").value) || 0), freight: Math.max(0, Number($("augFreight").value) || 0), invoiceNo: nextInvoiceNo,
     address: $("augAddress").value.trim(), remarks: $("augRemarks").value.trim(), note: $("augNote").value.trim(),
     printedBy: $("soaPrintedBy").value.trim(), approvedBy: $("soaApprovedBy").value.trim(),
     printedBySig: sigOf($("soaPrintedBySig").value), approvedBySig: sigOf($("soaApprovedBySig").value)
@@ -2717,7 +2740,7 @@ window.newAugEntry = function(){
   lastSavedAug = null;
   currentAugmentationPriceSnapshot = null;
   $("augDate").value = getPhilippinesDateString();
-  ["augFacility","augBoxContainerQty","augAmountPaid","augDiscountPrice","augDiscountPercent","augDiscountLess","augDiscount","augFreight","augAddress","augRemarks","augNote","soaPrintedBy","soaApprovedBy"].forEach(id => $(id).value = "");
+  ["augFacility","augBoxContainerQty","augAmountPaid","augDiscountPrice","augDiscountPercent","augDiscountLess","augDiscount","augMiscLabel","augMiscAmount","augFreight","augAddress","augRemarks","augNote","soaPrintedBy","soaApprovedBy"].forEach(id => $(id).value = "");
   $("augmentationBloodTypeContainer").innerHTML = "";
   DISC_AUG.clear();
   $("augDiscountSection").style.display = "none";
