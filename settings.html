@@ -1,155 +1,270 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Galloners Club - Settings</title>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: Arial; background:#f4f4f4; margin:0; }
-        header { background:#b30000; color:white; padding:15px; text-align:center; }
-        .container {
-            max-width:400px;
-            margin:30px auto;
-            background:white;
-            padding:20px;
-            border-radius:10px;
-            box-shadow:0 3px 10px rgba(0,0,0,0.1);
-        }
-        input { width:100%; padding:8px; margin-bottom:10px; }
-        button {
-            width:100%;
-            padding:10px;
-            background:#b30000;
-            color:white;
-            border:none;
-            border-radius:5px;
-            cursor:pointer;
-        }
-        label { font-weight:bold; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b30000">
+<title>Galloners Club - Category Limits</title>
+<link rel="stylesheet" href="club-theme.css">
+<script src="club-common.js"></script>
+
+<style>
+.limits-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px;margin-top:6px;}
+.limit-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fbfcfe;}
+.limit-card .tier{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;margin-bottom:8px;}
+.limit-card .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+.limit-card .hint:empty{display:none;}
+.preview{margin-top:16px;border:1px dashed #c4cdd7;border-radius:12px;padding:12px 14px;background:#fff;}
+.preview h4{margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
+.preview ul{list-style:none;margin:0;padding:0;display:grid;gap:7px;}
+.preview li{display:flex;align-items:center;gap:10px;font-size:14px;}
+.preview li b{min-width:7.5em;}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+.actions .btn{flex:1 1 150px;}
+.meta{margin-top:14px;font-size:12.5px;color:var(--muted);}
+#gate{text-align:center;padding:28px 14px;color:var(--muted);font-weight:600;}
+@media (max-width:340px){ .limits-grid{grid-template-columns:1fr;} }
+@media (max-width:480px){ .limit-card{padding:10px;} .actions .btn{flex:1 1 100%;} }
+</style>
 </head>
 
 <body>
 
-<header>
-    <h2>Category & Login Settings</h2>
+<header class="club-header">
+  <h1>Category Limits</h1>
 </header>
 
-<div class="container">
+<main class="club-wrap" style="max-width:660px;">
 
-<label>Galloner Limit</label>
-<input type="number" id="galloner">
+  <div id="gate">Checking access...</div>
 
-<label>Bronze Limit</label>
-<input type="number" id="bronze">
+  <div id="content" hidden>
 
-<label>Silver Limit</label>
-<input type="number" id="silver">
+    <div id="legacyWarn" class="club-banner warn" hidden>
+      <b>Security notice:</b> an old admin username and password were found saved as plain text in this settings record.
+      They are not used for login anymore. Press <b>Save Settings</b> once to remove them, and change that account's password if it is still in use.
+    </div>
 
-<label>Gold Limit</label>
-<input type="number" id="gold">
+    <section class="club-card">
+      <h3>Donation categories</h3>
+      <p class="club-note">A donor reaches a category when their total number of donations reaches the number below.
+        Each number must be higher than the one before it.</p>
 
-<hr>
+      <div class="limits-grid" id="limitsGrid">
+        <div class="limit-card">
+          <div class="tier"><span class="chip chip-galloner">GALLONER</span></div>
+          <label class="club-field" style="margin-top:0;"><span>Reaches at (donations)</span>
+            <input class="club-input" type="number" id="galloner" inputmode="numeric" min="1" step="1"></label>
+          <div class="hint" id="hint-galloner"></div>
+        </div>
+        <div class="limit-card">
+          <div class="tier"><span class="chip chip-bronze">BRONZE</span></div>
+          <label class="club-field" style="margin-top:0;"><span>Reaches at (donations)</span>
+            <input class="club-input" type="number" id="bronze" inputmode="numeric" min="1" step="1"></label>
+          <div class="hint" id="hint-bronze"></div>
+        </div>
+        <div class="limit-card">
+          <div class="tier"><span class="chip chip-silver">SILVER</span></div>
+          <label class="club-field" style="margin-top:0;"><span>Reaches at (donations)</span>
+            <input class="club-input" type="number" id="silver" inputmode="numeric" min="1" step="1"></label>
+          <div class="hint" id="hint-silver"></div>
+        </div>
+        <div class="limit-card">
+          <div class="tier"><span class="chip chip-gold">GOLD</span></div>
+          <label class="club-field" style="margin-top:0;"><span>Reaches at (donations)</span>
+            <input class="club-input" type="number" id="gold" inputmode="numeric" min="1" step="1"></label>
+          <div class="hint" id="hint-gold"></div>
+        </div>
+      </div>
 
-<label>Admin Username</label>
-<input type="text" id="adminUser">
+      <div class="club-error" id="formError" role="alert"></div>
 
-<label>Admin Password</label>
-<input type="password" id="adminPass">
+      <div class="preview" aria-live="polite">
+        <h4>How donors will be grouped</h4>
+        <ul id="previewList"></ul>
+      </div>
 
-<button id="saveBtn">Save Settings</button>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveBtn" type="button">Save Settings</button>
+        <button class="btn btn-ghost" id="resetBtn" type="button">Reset to defaults</button>
+        <button class="btn btn-ghost only-standalone" id="backBtn" type="button">Back to dashboard</button>
+      </div>
 
-</div>
+      <div class="meta" id="metaLine"></div>
+      <p class="club-note" style="margin-top:10px;">Pages that are already open (Tracking, Awardees) use the new limits the next time you reload them.</p>
+    </section>
+  </div>
+</main>
 
-<!-- Firebase -->
 <script type="module">
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-    authDomain: "galloners-club.firebaseapp.com",
-    projectId: "galloners-club",
-    storageBucket: "galloners-club.firebasestorage.app",
-    messagingSenderId: "213049860421",
-    appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-    measurementId: "G-XYXJH9JNXJ"
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c"
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
+const auth = getAuth(app);
+const rtdb = getDatabase(app);
+const firestore = getFirestore(app);
+const settingsRef = doc(firestore, "settings", "categoryLimits");
 
-/* =========================
-   LOAD SETTINGS
-========================= */
+const DEFAULTS = ClubCommon.DEFAULT_LIMITS;
+const IDS = ["galloner", "bronze", "silver", "gold"];
+const NAMES = { galloner: "Galloner", bronze: "Bronze", silver: "Silver", gold: "Gold" };
+const $ = (id) => document.getElementById(id);
+
+let currentUser = null;
+let dirty = false;
+let saving = false;
+
+/* ---------- read / validate ---------- */
+function readInputs() {
+  const out = {};
+  IDS.forEach(id => { const raw = $(id).value.trim(); out[id] = raw === "" ? NaN : Number(raw); });
+  return out;
+}
+
+function validate(l) {
+  const errors = {};
+  IDS.forEach(id => {
+    const n = l[id];
+    if (!isFinite(n)) errors[id] = "Enter a number.";
+    else if (n < 1 || Math.floor(n) !== n) errors[id] = "Use a whole number, 1 or more.";
+  });
+  if (!Object.keys(errors).length) {
+    for (let i = 1; i < IDS.length; i++) {
+      if (l[IDS[i]] <= l[IDS[i - 1]]) {
+        errors[IDS[i]] = NAMES[IDS[i]] + " must be higher than " + NAMES[IDS[i - 1]] + " (" + l[IDS[i - 1]] + ").";
+      }
+    }
+  }
+  return errors;
+}
+
+function renderPreview(l, errors) {
+  const list = $("previewList");
+  if (Object.keys(errors).length) { list.innerHTML = '<li style="color:var(--muted)">Fix the highlighted numbers to see the grouping.</li>'; return; }
+  const rows = [
+    ["galloner", l.galloner + " to " + (l.bronze - 1) + " donations"],
+    ["bronze",   l.bronze + " to " + (l.silver - 1) + " donations"],
+    ["silver",   l.silver + " to " + (l.gold - 1) + " donations"],
+    ["gold",     l.gold + " donations or more"]
+  ];
+  list.innerHTML =
+    '<li style="color:var(--muted)"><b style="min-width:7.5em">No badge yet</b> 0 to ' + (l.galloner - 1) + ' donations</li>' +
+    rows.map(r => '<li><b><span class="chip chip-' + r[0] + '">' + r[0].toUpperCase() + '</span></b> ' + r[1] + '</li>').join("");
+}
+
+function refresh(markDirty) {
+  const l = readInputs();
+  const errors = validate(l);
+  IDS.forEach(id => {
+    const el = $(id);
+    el.setAttribute("aria-invalid", errors[id] ? "true" : "false");
+    $("hint-" + id).textContent = errors[id] || "";
+    $("hint-" + id).style.color = errors[id] ? "var(--danger)" : "";
+  });
+  const first = Object.keys(errors)[0];
+  $("formError").textContent = first ? errors[first] : "";
+  renderPreview(l, errors);
+  $("saveBtn").disabled = saving || !!first;
+  if (markDirty) dirty = true;
+  return { l, errors };
+}
+
+function fill(l) { IDS.forEach(id => { $(id).value = l[id]; }); }
+
+/* ---------- load ---------- */
 async function loadSettings() {
+  let data = null;
+  try {
+    const snap = await getDoc(settingsRef);
+    if (snap.exists()) data = snap.data();
+  } catch (error) {
+    console.error("Load error:", error);
+    ClubCommon.toast("Could not load the saved settings. Showing the last known values.", "error");
+  }
 
-    // Default values
-    let defaults = {
-        galloner: 8,
-        bronze: 28,
-        silver: 46,
-        gold: 70,
-        username: "admin",
-        password: "1234"
-    };
+  const fromDb = ClubCommon.sanitizeLimits(data);
+  fill(fromDb || ClubCommon.cachedLimits());
+  if (fromDb) ClubCommon.saveLimitsCache(fromDb);
 
-    try {
-        const docRef = doc(db, "settings", "categoryLimits");
-        const docSnap = await getDoc(docRef);
+  if (data && (data.password !== undefined || data.username !== undefined)) $("legacyWarn").hidden = false;
 
-        if (docSnap.exists()) {
-            defaults = { ...defaults, ...docSnap.data() };
-        }
-    } catch (error) {
-        console.error("Load error:", error);
-    }
+  let when = "";
+  try { if (data && data.updatedAt) when = (data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt)).toLocaleString(); } catch (e) {}
+  $("metaLine").textContent = data && data.updatedBy ? ("Last saved by " + data.updatedBy + (when ? " on " + when : "") + ".") : "";
 
-    document.getElementById("galloner").value = defaults.galloner;
-    document.getElementById("bronze").value = defaults.bronze;
-    document.getElementById("silver").value = defaults.silver;
-    document.getElementById("gold").value = defaults.gold;
-    document.getElementById("adminUser").value = defaults.username;
-    document.getElementById("adminPass").value = defaults.password;
+  dirty = false;
+  refresh(false);
 }
 
-/* =========================
-   SAVE SETTINGS
-========================= */
+/* ---------- save ---------- */
 async function saveSettings() {
+  const { l, errors } = refresh(false);
+  if (Object.keys(errors).length) { ClubCommon.toast("Please fix the highlighted numbers first.", "warn"); return; }
+  if (!currentUser) { ClubCommon.gotoLogin(); return; }
 
-    const settings = {
-        galloner: parseInt(document.getElementById("galloner").value),
-        bronze: parseInt(document.getElementById("bronze").value),
-        silver: parseInt(document.getElementById("silver").value),
-        gold: parseInt(document.getElementById("gold").value),
-        username: document.getElementById("adminUser").value.trim(),
-        password: document.getElementById("adminPass").value.trim()
-    };
-
-    try {
-        const docRef = doc(db, "settings", "categoryLimits");
-        await setDoc(docRef, settings);
-
-        alert("Settings saved successfully!");
-        window.location.href = "dashboard.html";
-
-    } catch (error) {
-        console.error("Save error:", error);
-        alert("Error saving settings.");
-    }
+  saving = true; $("saveBtn").disabled = true; $("saveBtn").textContent = "Saving...";
+  try {
+    // A full replace (no merge): this also removes the old plain-text username / password fields.
+    await setDoc(settingsRef, {
+      galloner: l.galloner, bronze: l.bronze, silver: l.silver, gold: l.gold,
+      updatedAt: serverTimestamp(), updatedBy: currentUser.email || currentUser.uid
+    });
+    ClubCommon.saveLimitsCache(l);
+    dirty = false;
+    $("legacyWarn").hidden = true;
+    $("metaLine").textContent = "Last saved by " + (currentUser.email || currentUser.uid) + " just now.";
+    ClubCommon.toast("Settings saved.", "success");
+  } catch (error) {
+    console.error("Save error:", error);
+    ClubCommon.toast("Could not save settings: " + (error.message || error), "error");
+  } finally {
+    saving = false; $("saveBtn").textContent = "Save Settings"; refresh(false);
+  }
 }
 
-/* =========================
-   EVENT LISTENER FIX
-========================= */
-document.getElementById("saveBtn").addEventListener("click", saveSettings);
+/* ---------- events ---------- */
+IDS.forEach(id => $(id).addEventListener("input", () => refresh(true)));
+$("saveBtn").addEventListener("click", saveSettings);
+$("resetBtn").addEventListener("click", () => {
+  if (!confirm("Reset all four limits to the standard values (8 / 28 / 46 / 70)? You still need to press Save.")) return;
+  fill(DEFAULTS); refresh(true);
+});
+$("backBtn").addEventListener("click", () => ClubCommon.goDashboard());
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
-window.addEventListener("load", loadSettings);
-
+/* ---------- access check ---------- */
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { ClubCommon.gotoLogin(); return; }
+  currentUser = user;
+  try {
+    const snap = await get(ref(rtdb, "userRoles/" + user.uid + "/role"));
+    const role = snap.exists() ? snap.val() : "full";
+    if (role === "limitedEncoder") {
+      $("gate").textContent = "You do not have access to this page.";
+      return;
+    }
+  } catch (error) {
+    console.error("Role check error:", error);
+    $("gate").textContent = "Could not verify your access right now. Please reload and try again.";
+    return;
+  }
+  $("gate").hidden = true;
+  $("content").hidden = false;
+  await loadSettings();
+});
 </script>
-
 </body>
 </html>
