@@ -1,142 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Admin Manager</title>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b30000">
+<title>Admin Manager</title>
+<link rel="stylesheet" href="club-theme.css">
+<script src="club-common.js"></script>
 
 <style>
-body{
-margin:0;
-font-family:Arial;
-background:#f4f4f4;
-}
+.pw-wrap{position:relative;}
+.pw-wrap .club-input{padding-right:74px;}
+.pw-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--brand);font:inherit;font-size:13px;font-weight:700;padding:8px 10px;cursor:pointer;border-radius:8px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+.form-grid .full{grid-column:1 / -1;}
+.admin-count{font-size:13px;color:var(--muted);font-weight:600;margin-left:6px;}
+.list-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+td.email{word-break:break-all;text-align:left;}
+td.uname{font-weight:700;text-align:left;word-break:break-word;}
+.you{margin-left:6px;}
+.empty{padding:22px 10px;text-align:center;color:var(--muted);}
+#gate{text-align:center;padding:28px 14px;color:var(--muted);font-weight:600;}
 
-header{
-background:#4a148c;
-color:white;
-padding:15px;
-text-align:center;
-}
-
-.container{
-max-width:700px;
-margin:40px auto;
-background:white;
-padding:30px;
-border-radius:10px;
-box-shadow:0 3px 10px rgba(0,0,0,0.1);
-}
-
-input{
-width:100%;
-padding:10px;
-margin-top:10px;
-border:1px solid #ccc;
-border-radius:5px;
-box-sizing:border-box;
-}
-
-button{
-width:100%;
-padding:12px;
-margin-top:10px;
-border:none;
-border-radius:5px;
-font-weight:bold;
-cursor:pointer;
-color:white;
-}
-
-.add{background:#2e7d32;}
-.delete{background:#c62828;}
-.back{background:#444;}
-
-.note{
-background:#f5f5f5;
-border:1px solid #ddd;
-padding:12px;
-border-radius:8px;
-margin-bottom:15px;
-font-size:14px;
-line-height:1.5;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-margin-top:20px;
-}
-
-th,td{
-border:1px solid #ccc;
-padding:8px;
-text-align:center;
-}
-
-th{
-background:#eee;
-}
-
-.action-btn{
-width:auto;
-padding:8px 12px;
-margin:2px;
+/* phones: each admin becomes a readable card instead of a cramped 4-column table */
+@media (max-width:640px){
+  .form-grid{grid-template-columns:1fr;}
+  table.stack,table.stack tbody{display:block;width:100%;}
+  table.stack thead{display:none;}
+  table.stack tr{display:block;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;padding:8px 10px;background:#fff;}
+  table.stack tr:nth-child(even){background:#fff;}
+  table.stack td{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;text-align:right;border:none;padding:6px 0;}
+  table.stack td::before{content:attr(data-label);font-size:12px;font-weight:700;color:var(--muted);text-align:left;flex:0 0 6.6em;white-space:nowrap;text-transform:uppercase;letter-spacing:.3px;}
+  table.stack td[data-label="#"]{display:none;}
+  table.stack td.uname,table.stack td.email{text-align:right;}
+  table.stack td.act{justify-content:flex-end;}
+  table.stack td.act::before{display:none;}
+  .club-scroll{border:none;background:transparent;}
 }
 </style>
 </head>
 
 <body>
 
-<header>
-<h2>Admin Account Manager</h2>
+<header class="club-header">
+  <h1>Admin Account Manager</h1>
 </header>
 
-<div class="container">
+<main class="club-wrap" style="max-width:760px;">
 
-<div class="note">
-Usernames can use only letters, numbers, dot, underscore, and dash.<br>
-Examples: <b>admin</b>, <b>gideon</b>, <b>lab-tech</b>, <b>admin_1</b>
-</div>
+  <div id="gate">Checking access...</div>
 
-<h3>Create New Admin</h3>
+  <div id="content" hidden>
 
-<input id="newUsername" placeholder="Username">
-<input id="newPassword" type="password" placeholder="Password">
+    <div id="roleWarn" class="club-banner err" hidden></div>
 
-<button class="add" onclick="createAdmin()">CREATE ADMIN</button>
+    <section class="club-card">
+      <h3>Create New Admin</h3>
+      <p class="club-note">Usernames can use only letters, numbers, dot, underscore, and dash.<br>
+        Examples: <b>admin</b>, <b>gideon</b>, <b>lab-tech</b>, <b>admin_1</b></p>
 
-<h3>Admin Accounts</h3>
+      <div class="form-grid">
+        <label class="club-field"><span>Username</span>
+          <input class="club-input" id="newUsername" type="text" placeholder="Username" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
 
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Username</th>
-<th>Login Email</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody id="adminList"></tbody>
-</table>
+        <label class="club-field"><span>Password (at least 6 characters)</span>
+          <div class="pw-wrap">
+            <input class="club-input" id="newPassword" type="password" placeholder="Password" autocomplete="new-password">
+            <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">Show</button>
+          </div></label>
 
-<button class="back" onclick="goBack()">BACK</button>
+        <label class="club-field full"><span>Access level</span>
+          <select class="club-select" id="newRole">
+            <option value="full">Full access (all modules)</option>
+            <option value="limitedEncoder">Limited encoder (donor data entry only)</option>
+          </select></label>
+      </div>
 
-</div>
+      <div class="club-error" id="formError" role="alert"></div>
+      <button class="btn btn-ok btn-block" id="createBtn" type="button" style="margin-top:8px;">CREATE ADMIN</button>
+    </section>
+
+    <section class="club-card">
+      <div class="list-head">
+        <h3 style="margin:0;">Admin Accounts<span class="admin-count" id="adminCount"></span></h3>
+      </div>
+      <p class="club-note" style="margin:6px 0 12px;"><b>REMOVE FROM LIST</b> only takes the name off this list. The login keeps working until the user is also deleted in
+        Firebase Console &rarr; Authentication.</p>
+
+      <div class="club-scroll">
+        <table class="club-table stack">
+          <thead>
+            <tr><th>#</th><th>Username</th><th>Login Email</th><th>Access</th><th>Action</th></tr>
+          </thead>
+          <tbody id="adminList"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="only-standalone" style="margin-top:16px;">
+      <button class="btn btn-ghost btn-block" id="backBtn" type="button">BACK</button>
+    </div>
+  </div>
+</main>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getAuth,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
-  getDatabase,
-  ref,
-  push,
-  onValue,
-  remove
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, push, set, get, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -152,132 +122,201 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
-
-const adminList = document.getElementById("adminList");
 const adminRef = ref(db, "admins");
 
-function usernameToEmail(username){
-  return `${username}@galloners.club`;
-}
+const $ = (id) => document.getElementById(id);
+let currentUser = null;
+let admins = [];          // [{key, username, email, role, uid}]
+let creating = false;
 
-function normalizeUsername(username){
-  return username.trim().toLowerCase();
-}
+const usernameToEmail = (u) => u + "@galloners.club";
+const normalizeUsername = (u) => u.trim().toLowerCase();
+const isValidUsername = (u) => /^[a-zA-Z0-9._-]+$/.test(u);
 
-function isValidUsername(username){
-  return /^[a-zA-Z0-9._-]+$/.test(username);
-}
-
-onAuthStateChanged(auth, (user) => {
-  if(!user){
-    window.location.href = "index.html";
-  }
+/* ---------- show / hide password ---------- */
+$("pwToggle").addEventListener("click", () => {
+  const input = $("newPassword");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  $("pwToggle").textContent = show ? "Hide" : "Show";
+  $("pwToggle").setAttribute("aria-label", show ? "Hide password" : "Show password");
 });
 
-window.createAdmin = async function(){
-  const usernameRaw = document.getElementById("newUsername").value;
-  const password = document.getElementById("newPassword").value.trim();
+function setFormError(msg, field) {
+  $("formError").textContent = msg || "";
+  ["newUsername", "newPassword"].forEach(id => $(id).setAttribute("aria-invalid", field === id ? "true" : "false"));
+  if (field) $(field).focus();
+}
 
-  if(usernameRaw.trim() === "" || password === ""){
-    alert("Enter username and password.");
-    return;
-  }
+/* ---------- create ---------- */
+async function createAdmin() {
+  if (creating) return;
+  setFormError("");
 
-  const username = normalizeUsername(usernameRaw);
+  const username = normalizeUsername($("newUsername").value);
+  const password = $("newPassword").value;          // NOT trimmed: it must match exactly what is typed at login
+  const role = $("newRole").value;
 
-  if(!isValidUsername(username)){
-    alert("Invalid username. Use only letters, numbers, dot, underscore, or dash.");
-    return;
-  }
-
-  if(password.length < 6){
-    alert("Password must be at least 6 characters.");
-    return;
-  }
+  if (!username || !password) { setFormError("Enter a username and a password.", username ? "newPassword" : "newUsername"); return; }
+  if (!isValidUsername(username)) { setFormError("Invalid username. Use only letters, numbers, dot, underscore, or dash.", "newUsername"); return; }
+  if (password.length < 6) { setFormError("Password must be at least 6 characters.", "newPassword"); return; }
+  if (admins.some(a => (a.username || "").toLowerCase() === username)) { setFormError("That username is already in the list.", "newUsername"); return; }
 
   const email = usernameToEmail(username);
+  creating = true;
+  $("createBtn").disabled = true;
+  $("createBtn").innerHTML = '<span class="spin"></span> Creating...';
 
-  try{
-    const secondaryName = "secondary-admin-" + Date.now();
-    const secondaryApp = initializeApp(firebaseConfig, secondaryName);
-    const secondaryAuth = getAuth(secondaryApp);
+  // A second, temporary app is used so creating a user does not sign YOU out.
+  let secondaryApp = null, secondaryAuth = null;
+  try {
+    secondaryApp = initializeApp(firebaseConfig, "secondary-admin-" + Date.now());
+    secondaryAuth = getAuth(secondaryApp);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const uid = cred.user.uid;
 
-    await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    // 1) role first - it is what limits a "limited encoder"
+    let roleSaved = true;
+    try { await set(ref(db, "userRoles/" + uid), { role: role }); }
+    catch (e) { roleSaved = false; console.error("Role save error:", e); }
 
-    await push(adminRef, {
-      username: username,
-      email: email,
-      createdAt: new Date().toISOString()
-    });
+    // 2) then the list entry
+    let listSaved = true;
+    try {
+      await push(adminRef, { username, email, uid, role, createdAt: new Date().toISOString(), createdBy: currentUser ? (currentUser.email || currentUser.uid) : "" });
+    } catch (e) { listSaved = false; console.error("List save error:", e); }
 
-    await secondaryAuth.signOut();
-    await deleteApp(secondaryApp);
+    $("newUsername").value = ""; $("newPassword").value = "";
 
-    document.getElementById("newUsername").value = "";
-    document.getElementById("newPassword").value = "";
-
-    alert("Admin created successfully.");
-  } catch(error){
-    console.error(error);
-
-    if(error.code === "auth/email-already-in-use"){
-      alert("That username already exists.");
-    } else if(error.code === "auth/invalid-email"){
-      alert("Invalid username format.");
-    } else if(error.code === "auth/weak-password"){
-      alert("Password is too weak. Use at least 6 characters.");
+    if (role === "limitedEncoder" && !roleSaved) {
+      const w = $("roleWarn");
+      w.hidden = false;
+      w.textContent = "The account \"" + username + "\" was created, but its LIMITED access level could not be saved. Until it is set, this person has FULL access. In Firebase Realtime Database set userRoles/" + uid + "/role to limitedEncoder.";
+      ClubCommon.toast("Account created, but the access level was NOT saved - see the red notice.", "error", 12000);
+    } else if (!listSaved) {
+      ClubCommon.toast("Login created, but it could not be added to the list: check your permissions.", "error", 9000);
+    } else if (!roleSaved) {
+      ClubCommon.toast("Admin created. (The access level record could not be saved; default is full access.)", "warn", 7000);
     } else {
-      alert("Firebase: " + error.message);
+      ClubCommon.toast("Admin \"" + username + "\" created successfully.", "success");
     }
+  } catch (error) {
+    console.error(error);
+    const map = {
+      "auth/email-already-in-use": "That username already exists.",
+      "auth/invalid-email": "Invalid username format.",
+      "auth/weak-password": "Password is too weak. Use at least 6 characters.",
+      "auth/network-request-failed": "No internet connection. Please try again.",
+      "auth/operation-not-allowed": "Creating accounts is not enabled in Firebase."
+    };
+    setFormError(map[error.code] || ("Could not create the admin: " + (error.message || error)));
+  } finally {
+    // always clean up the temporary app, even when creation failed
+    try { if (secondaryAuth) await signOut(secondaryAuth); } catch (e) {}
+    try { if (secondaryApp) await deleteApp(secondaryApp); } catch (e) {}
+    creating = false;
+    $("createBtn").disabled = false;
+    $("createBtn").textContent = "CREATE ADMIN";
   }
-};
+}
+$("createBtn").addEventListener("click", createAdmin);
+["newUsername", "newPassword"].forEach(id => $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") createAdmin(); }));
 
-onValue(adminRef, (snapshot) => {
-  adminList.innerHTML = "";
+/* ---------- list (built with textContent, so names can never inject HTML) ---------- */
+function td(text, cls, label) {
+  const c = document.createElement("td");
+  if (cls) c.className = cls;
+  if (label) c.setAttribute("data-label", label);
+  c.textContent = text;
+  return c;
+}
 
-  if(!snapshot.exists()){
-    adminList.innerHTML = "<tr><td colspan='4'>No admins found.</td></tr>";
-    return;
+function renderList() {
+  const body = $("adminList");
+  body.textContent = "";
+  $("adminCount").textContent = admins.length ? "(" + admins.length + ")" : "";
+
+  if (!admins.length) {
+    const tr = document.createElement("tr"), c = document.createElement("td");
+    c.colSpan = 5; c.className = "empty"; c.textContent = "No admins found.";
+    tr.appendChild(c); body.appendChild(tr); return;
   }
 
-  let i = 1;
+  admins.forEach((a, i) => {
+    const tr = document.createElement("tr");
+    tr.appendChild(td(String(i + 1), "", "#"));
 
-  snapshot.forEach((child) => {
-    const data = child.val();
-    const key = child.key;
+    const u = td(a.username || "", "uname", "Username");
+    if (currentUser && a.email && a.email === currentUser.email) {
+      const you = document.createElement("span"); you.className = "chip chip-ok you"; you.textContent = "YOU"; u.appendChild(you);
+    }
+    tr.appendChild(u);
+    tr.appendChild(td(a.email || "", "email", "Login email"));
 
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${i}</td>
-      <td>${data.username || ""}</td>
-      <td>${data.email || ""}</td>
-      <td>
-        <button class="action-btn delete" onclick="deleteAdmin('${key}')">REMOVE FROM LIST</button>
-      </td>
-    `;
-    adminList.appendChild(row);
-    i++;
+    const access = document.createElement("td"); access.setAttribute("data-label", "Access");
+    const chip = document.createElement("span");
+    chip.className = "chip " + (a.role === "limitedEncoder" ? "chip-no" : (a.role ? "chip-ok" : "chip-muted"));
+    chip.textContent = a.role === "limitedEncoder" ? "LIMITED" : (a.role ? "FULL" : "-");
+    access.appendChild(chip); tr.appendChild(access);
+
+    const act = document.createElement("td"); act.className = "act";
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn btn-danger btn-sm"; b.textContent = "REMOVE FROM LIST";
+    b.dataset.key = a.key; b.dataset.name = a.username || a.email || "";
+    act.appendChild(b); tr.appendChild(act);
+    body.appendChild(tr);
   });
+}
+
+$("adminList").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-key]");
+  if (!b) return;
+  if (!confirm("Remove \"" + b.dataset.name + "\" from the list?\n\nTheir login will still work until you delete the user in Firebase Console > Authentication.")) return;
+  try {
+    await remove(ref(db, "admins/" + b.dataset.key));
+    ClubCommon.toast("Removed from the list. Remember to delete the login in Firebase Authentication if access must stop.", "success", 7000);
+  } catch (error) {
+    console.error(error);
+    ClubCommon.toast("Failed to remove admin: " + (error.message || error), "error");
+  }
 });
 
-window.deleteAdmin = async function(key){
-  if(!confirm("Remove this admin from the list?")){
+function startListening() {
+  onValue(adminRef, (snapshot) => {
+    admins = [];
+    snapshot.forEach((child) => {
+      const d = child.val() || {};
+      admins.push({ key: child.key, username: d.username || "", email: d.email || "", role: d.role || "", uid: d.uid || "" });
+    });
+    renderList();
+  }, (error) => {
+    console.error(error);
+    $("adminList").innerHTML = "";
+    const tr = document.createElement("tr"), c = document.createElement("td");
+    c.colSpan = 5; c.className = "empty"; c.textContent = "Could not load the list: " + (error.message || error);
+    tr.appendChild(c); $("adminList").appendChild(tr);
+  });
+}
+
+$("backBtn").addEventListener("click", () => ClubCommon.goDashboard());
+
+/* ---------- access check ---------- */
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { ClubCommon.gotoLogin(); return; }
+  currentUser = user;
+  try {
+    const snap = await get(ref(db, "userRoles/" + user.uid + "/role"));
+    const role = snap.exists() ? snap.val() : "full";
+    if (role === "limitedEncoder") { $("gate").textContent = "You do not have access to this page."; return; }
+  } catch (error) {
+    console.error("Role check error:", error);
+    $("gate").textContent = "Could not verify your access right now. Please reload and try again.";
     return;
   }
-
-  try{
-    await remove(ref(db, "admins/" + key));
-    alert("Admin removed from list.");
-  } catch(error){
-    console.error(error);
-    alert("Failed to remove admin.");
-  }
-};
-
-window.goBack = function(){
-  window.location.href = "dashboard.html";
-};
+  $("gate").hidden = true;
+  $("content").hidden = false;
+  startListening();
+});
 </script>
-
 </body>
 </html>
