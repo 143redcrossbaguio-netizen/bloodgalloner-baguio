@@ -917,6 +917,9 @@ grid-template-columns:1fr;
 }
 
     </style>
+<meta name="theme-color" content="#b30000">
+<link rel="stylesheet" href="club-theme.css">
+<script src="club-common.js"></script>
 </head>
 
 <body>
@@ -1082,20 +1085,19 @@ grid-template-columns:1fr;
 <label>Surname<input id="editSurname" type="text"></label>
 <label>Birthday<input id="editBirthday" type="date"></label>
 <label>Blood Type
-<select id="editBloodType">
+<select id="editBloodCombo" onchange="syncEditBloodFromCombo()">
 <option value="">—</option>
-<option value="A">A</option>
-<option value="B">B</option>
-<option value="AB">AB</option>
-<option value="O">O</option>
+<option value="A+">A+</option>
+<option value="A-">A-</option>
+<option value="B+">B+</option>
+<option value="B-">B-</option>
+<option value="AB+">AB+</option>
+<option value="AB-">AB-</option>
+<option value="O+">O+</option>
+<option value="O-">O-</option>
 </select>
-</label>
-<label>RH Factor
-<select id="editRhFactor">
-<option value="">—</option>
-<option value="+">Positive (+)</option>
-<option value="-">Negative (-)</option>
-</select>
+<input type="hidden" id="editBloodType">
+<input type="hidden" id="editRhFactor">
 </label>
 <label>Contact<input id="editContact" type="text" inputmode="tel"></label>
 <label>Award Status
@@ -1136,19 +1138,38 @@ let donorsData = [];
 let filteredDonorsData = [];
 let isLoading = false;
 
-let categoryLimits = {
-galloner:8,
-bronze:28,
-silver:46,
-gold:70
-};
+// Category limits come from the Settings page (saved copy first, refreshed from the database on load).
+let categoryLimits = ClubCommon.cachedLimits();
 
 function currentYear(){
 return new Date().getFullYear();
 }
 
 function goDashboard(){
-window.location.href = "dashboard.html";
+ClubCommon.goDashboard();
+}
+
+/* ---- single Blood Type list in the edit window <-> the two stored fields ---- */
+function syncEditBloodFromCombo(){
+var v = document.getElementById("editBloodCombo").value;
+var m = v.match(/^(AB|A|B|O)([+-])$/);
+document.getElementById("editBloodType").value = m ? m[1] : v;
+document.getElementById("editRhFactor").value = m ? m[2] : "";
+}
+function syncEditComboFromHidden(){
+var combo = document.getElementById("editBloodCombo");
+Array.prototype.slice.call(combo.querySelectorAll("option[data-temp]")).forEach(function(o){ o.remove(); });
+var bt = String(document.getElementById("editBloodType").value || "").trim().toUpperCase();
+var rh = String(document.getElementById("editRhFactor").value || "").trim();
+var want = bt + rh;
+combo.value = "";
+if(!bt && !rh) return;
+if(Array.prototype.some.call(combo.options, function(o){ return o.value === want; })){ combo.value = want; return; }
+// group with no Rh (old record): keep it visible so saving does not erase it
+var keep = document.createElement("option");
+keep.value = want; keep.textContent = (want || "?") + " (please choose Rh)"; keep.setAttribute("data-temp", "1");
+combo.insertBefore(keep, combo.options[1] || null);
+combo.value = want;
 }
 
 function setStatus(message, type){
@@ -2628,7 +2649,7 @@ if(mergeTargetIndex !== -1){ mergeTargetIndex = -1; pendingMergeSourceIndex = -1
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -2686,7 +2707,7 @@ isLoading = false;
 let rebuildInProgress = false;
 async function rebuildAggregateCaches(){
 if(rebuildInProgress) return;
-if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+if(!auth.currentUser){ alert("You are not logged in."); ClubCommon.gotoLogin(); return; }
 if(!confirm("Rebuild aggregate cache?\n\nThis fetches the full donorDatabase, recomputes counts for every eligible donor, and writes the results back. Run this after a donorDatabase import or once a week. It can take 10–30 seconds depending on data size.")) return;
 
 rebuildInProgress = true;
@@ -3312,7 +3333,7 @@ return docRef.id;
 async function saveAwardInfo(index){
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3377,7 +3398,7 @@ let remarksValue = textarea.value.trim();
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3412,7 +3433,7 @@ if(!donor){ return; }
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3545,7 +3566,7 @@ if(!donor) return;
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3657,7 +3678,7 @@ if(!donor){ alert("Could not find that donor record."); return; }
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3704,6 +3725,7 @@ document.getElementById("editSurname").value     = donor.surname     || "";
 document.getElementById("editBirthday").value    = normalizeBirthday(donor.birthday) || "";
 document.getElementById("editBloodType").value   = (donor.bloodType  || "").toUpperCase();
 document.getElementById("editRhFactor").value    = normalizeRhFactor(donor.rhFactor);
+syncEditComboFromHidden();
 document.getElementById("editContact").value     = donor.contact     || "";
 document.getElementById("editAwardStatus").value = (donor.awardStatus || "NOT AWARDED").toUpperCase();
 document.getElementById("editYearAwarded").value = donor.yearAwarded || "";
@@ -3739,7 +3761,7 @@ return;
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -3977,7 +3999,7 @@ return;
 }
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -4100,7 +4122,7 @@ let donor = filteredDonorsData[index];
 
 if(!auth.currentUser){
 alert("You are not logged in.");
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
 
@@ -4407,10 +4429,13 @@ window.URL.revokeObjectURL(url);
 
 auth.onAuthStateChanged(function(user){
 if(!user){
-window.location.href = "index.html";
+ClubCommon.gotoLogin();
 return;
 }
+ClubCommon.loadLimits(db).then(function(limits){
+categoryLimits = limits;
 fetchEligibleDonors();
+});
 });
 </script>
 
