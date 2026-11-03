@@ -44,6 +44,7 @@
 
         .app-shell{
             height: 100vh;
+    height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -573,7 +574,11 @@
             display: none !important;
         }
 
-        .hidden-view{
+        .frame-busy{position:fixed;top:0;left:0;right:0;height:3px;z-index:99998;overflow:hidden;opacity:0;pointer-events:none;transition:opacity .2s;}
+    .frame-busy.on{opacity:1;}
+    .frame-busy::before{content:"";position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,#fff,transparent);animation:frameBusy 1s ease-in-out infinite;}
+    @keyframes frameBusy{from{transform:translateX(-100%);}to{transform:translateX(260%);}}
+    .hidden-view{
             display: none !important;
         }
 
@@ -618,6 +623,7 @@
             .app-shell {
                 height: auto;
                 min-height: 100vh;
+    min-height: 100dvh;
             }
 
             .menu-toggle {
@@ -650,6 +656,7 @@
 
             .workspace {
                 min-height: calc(100vh - 80px);
+    min-height: calc(100dvh - 80px);
             }
 
             .iframe-wrap {
@@ -745,6 +752,8 @@
             }
         }
     </style>
+<meta name="theme-color" content="#b30000">
+<script src="club-common.js"></script>
 </head>
 
 <body>
@@ -827,6 +836,7 @@
                     <button id="btn-donor-entry" class="sub-btn red" onclick="openModule('donor-entry.html','Donor Entry','')">Donor Entry</button>
                     <button id="btn-tracking" class="sub-btn red" onclick="openModule('tracking.html','Tracking','')">Tracking</button>
                     <button id="btn-awardees" class="sub-btn purple" onclick="openModule('awardees.html','Awardees','')">Awardees</button>
+                    <button id="btn-category-limits" class="sub-btn blue" onclick="openModule('settings.html','Category Limits','Galloner, Bronze, Silver and Gold levels')">Category Limits</button>
                 </div>
 
                 <div class="sidebar-title">Other Tools</div>
@@ -909,7 +919,8 @@
                     </div>
                 </div>
 
-                <iframe id="moduleFrame" class="module-frame hidden-view" src=""></iframe>
+                <div id="frameBusy" class="frame-busy" aria-hidden="true"></div>
+            <iframe id="moduleFrame" class="module-frame hidden-view" src=""></iframe>
             </div>
         </main>
 
@@ -917,10 +928,10 @@
 </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getDatabase, ref, get, set, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+    import { getFirestore, collection, getDocs, query, orderBy, limit, startAfter, documentId } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -939,6 +950,11 @@
     const firestore = getFirestore(app);
 
     const sections = ["donor-database", "releasing", "galloner", "tools"];
+    document.getElementById("moduleFrame").addEventListener("load", () => {
+        const bar = document.getElementById("frameBusy");
+        if (bar) bar.classList.remove("on");
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMobileSidebar(); });
     const frame = document.getElementById("moduleFrame");
     const welcomePanel = document.getElementById("welcomePanel");
     const workspaceTitle = document.getElementById("workspaceTitle");
@@ -953,21 +969,26 @@
             return;
         }
 
-        try {
-            const rolePath = "userRoles/" + user.uid + "/role";
-            const roleSnapshot = await get(ref(db, rolePath));
-            currentUserRole = roleSnapshot.exists() ? roleSnapshot.val() : "full";
-
-            applyRoleAccess(currentUserRole);
-            showWelcomeHome();
-        } catch (error) {
-            console.error("Role loading error:", error);
-            alert("Role loading error: " + error.message);
-
-            currentUserRole = "full";
-            applyRoleAccess(currentUserRole);
-            showWelcomeHome();
+        // Up to 3 tries (a weak phone connection often fails once). If the access level still
+        // cannot be read, show the LIMITED menu instead of silently granting full access.
+        let loaded = false;
+        for (let attempt = 1; attempt <= 3 && !loaded; attempt++) {
+            try {
+                const rolePath = "userRoles/" + user.uid + "/role";
+                const roleSnapshot = await get(ref(db, rolePath));
+                currentUserRole = roleSnapshot.exists() ? roleSnapshot.val() : "full";
+                loaded = true;
+            } catch (error) {
+                console.error("Role loading error (try " + attempt + "):", error);
+                if (attempt < 3) await new Promise(r => setTimeout(r, 900 * attempt));
+            }
         }
+        if (!loaded) {
+            currentUserRole = "limitedEncoder";
+            ClubCommon.toast("Could not verify your access level, so the limited menu is shown. Check your connection and reload the page.", "error", 12000);
+        }
+        applyRoleAccess(currentUserRole);
+        showWelcomeHome();
     });
 
     function clearActiveSubs() {
@@ -983,6 +1004,8 @@
     }
 
     function buildFreshUrl(url) {
+        const bar = document.getElementById("frameBusy");
+        if (bar) { bar.classList.add("on"); clearTimeout(window.__busyT); window.__busyT = setTimeout(() => bar.classList.remove("on"), 15000); }
         return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
     }
 
@@ -1052,6 +1075,7 @@
         showElement("btn-donor-entry");
         showElement("btn-tracking");
         showElement("btn-awardees");
+        showElement("btn-category-limits");
         showElement("btn-backup-download");
         showElement("btn-backup-save");
         showElement("btn-backup-viewer");
@@ -1072,6 +1096,7 @@
             hideElement("nav-donor-cleanup");
             hideElement("nav-admin");
             hideElement("btn-monthly-report");
+            hideElement("btn-category-limits");
             hideElement("btn-metadata-repair");
             hideElement("top-monthly-report-btn");
 
@@ -1218,120 +1243,153 @@
         frame.src = buildFreshUrl(cleanCurrent);
     };
 
-    async function getRealtimeDatabaseBackup() {
-        const paths = ["admins", "facilities", "releasing", "bloodAugmentation"];
-        const backup = {};
+    /* ---------------------------------------------------------------
+       BACKUP
+       Old version: read every collection fully into memory, pretty-printed it
+       (3x bigger) and saved everything as ONE write - that fails once the donor
+       database is large. Now records are read 500 at a time, the download file is
+       built piece by piece, and the system copy is saved in small chunks.
+       The saved structure is the same, so the Backup Viewer keeps working.
+       --------------------------------------------------------------- */
+    const BACKUP_PAGE = 500;
+    const FIRESTORE_BACKUP_COLLECTIONS = ["donors", "donorDatabase", "partnerOrganizations", "settings"];
+    let backupBusy = false;
 
+    async function getRealtimeDatabaseBackup() {
+        const paths = ["admins", "facilities", "releasing", "bloodAugmentation", "userRoles"];
+        const backup = {};
         for (const path of paths) {
             const snapshot = await get(ref(db, path));
             backup[path] = snapshot.exists() ? snapshot.val() : {};
         }
-
         return backup;
     }
 
-    async function getFirestoreCollectionBackup(collectionName) {
-        const snapshot = await getDocs(collection(firestore, collectionName));
-        const data = {};
-
-        snapshot.forEach((doc) => {
-            data[doc.id] = doc.data();
-        });
-
-        return data;
+    async function* firestorePages(name) {
+        let last = null;
+        while (true) {
+            const base = [collection(firestore, name), orderBy(documentId()), limit(BACKUP_PAGE)];
+            const snap = await getDocs(last ? query(...base, startAfter(last)) : query(...base));
+            if (snap.empty) return;
+            yield snap.docs;
+            last = snap.docs[snap.docs.length - 1];
+            if (snap.docs.length < BACKUP_PAGE) return;
+        }
     }
 
-    async function buildBackupData() {
-        const realtimeData = await getRealtimeDatabaseBackup();
-        const donorsData = await getFirestoreCollectionBackup("donors");
-        const donorDatabaseData = await getFirestoreCollectionBackup("donorDatabase");
-        const partnerOrganizationsData = await getFirestoreCollectionBackup("partnerOrganizations");
+    function backupFileDate() {
+        const now = new Date();
+        return { now, key: now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") };
+    }
 
-        return {
-            metadata: {
-                project: "galloners-club",
-                exportedAt: new Date().toISOString(),
-                exportedBy: auth.currentUser?.email || "",
-                type: "monthly-backup"
-            },
-            realtimeDatabase: realtimeData,
-            firestore: {
-                donors: donorsData,
-                donorDatabase: donorDatabaseData,
-                partnerOrganizations: partnerOrganizationsData
-            }
-        };
+    function backupGuard() {
+        if (currentUserRole === "limitedEncoder") { alert("You do not have access to backup functions."); return false; }
+        if (!auth.currentUser) { alert("You are not logged in."); window.location.href = "index.html"; return false; }
+        if (backupBusy) { ClubCommon.toast("A backup is already running. Please wait for it to finish.", "warn"); return false; }
+        return true;
     }
 
     window.downloadBackupFile = async function() {
-        if (currentUserRole === "limitedEncoder") {
-            alert("You do not have access to backup functions.");
-            return;
-        }
-
+        if (!backupGuard()) return;
+        backupBusy = true;
+        const progress = ClubCommon.toast("Preparing backup...", "info", 600000);
         try {
-            if (!auth.currentUser) {
-                alert("You are not logged in.");
-                window.location.href = "index.html";
-                return;
+            const { now, key } = backupFileDate();
+            const parts = [];
+            const counts = {};
+            parts.push('{"realtimeDatabase":' + JSON.stringify(await getRealtimeDatabaseBackup()) + ',"firestore":{');
+
+            let firstCollection = true;
+            for (const name of FIRESTORE_BACKUP_COLLECTIONS) {
+                parts.push((firstCollection ? "" : ",") + JSON.stringify(name) + ":{");
+                firstCollection = false;
+                let n = 0;
+                for await (const docs of firestorePages(name)) {
+                    let chunk = "";
+                    for (const d of docs) { chunk += (n ? "," : "") + JSON.stringify(d.id) + ":" + JSON.stringify(d.data()); n++; }
+                    parts.push(new Blob([chunk]));          // handed to the browser so memory stays small
+                    progress.textContent = "Backing up " + name + ": " + n.toLocaleString() + " records...";
+                }
+                parts.push("}");
+                counts[name] = n;
             }
+            const metadata = { project: "galloners-club", exportedAt: now.toISOString(), exportedBy: auth.currentUser?.email || "", type: "monthly-backup", counts };
+            parts.push('},"metadata":' + JSON.stringify(metadata) + "}");
 
-            const now = new Date();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-
-            const backupData = await buildBackupData();
-
-            const fileName = `bloodbank-backup-${now.getFullYear()}-${month}-${day}.json`;
-            const json = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([json], { type: "application/json" });
-
+            const blob = new Blob(parts, { type: "application/json" });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = fileName;
+            link.download = "bloodbank-backup-" + key + ".json";
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 
-            alert("Backup file downloaded successfully.");
+            const total = Object.values(counts).reduce((a, b) => a + b, 0);
+            alert("Backup file downloaded successfully (" + total.toLocaleString() + " records).");
         } catch (error) {
             console.error("Download backup error:", error);
-            alert("Backup file download failed.");
+            alert("Backup file download failed: " + (error.message || error));
+        } finally {
+            progress.remove();
+            backupBusy = false;
         }
     };
 
     window.saveBackupToSystem = async function() {
-        if (currentUserRole === "limitedEncoder") {
-            alert("You do not have access to backup functions.");
-            return;
-        }
-
+        if (!backupGuard()) return;
+        backupBusy = true;
+        const progress = ClubCommon.toast("Saving backup to the system...", "info", 600000);
         try {
-            if (!auth.currentUser) {
-                alert("You are not logged in.");
-                window.location.href = "index.html";
-                return;
+            const { now, key } = backupFileDate();
+            const root = "backups/" + key;
+            const metadata = { project: "galloners-club", exportedAt: now.toISOString(), exportedBy: auth.currentUser?.email || "", type: "monthly-backup", status: "incomplete" };
+
+            // 1) small parts first; the status stays "incomplete" until every chunk is saved
+            await set(ref(db, root), { metadata, realtimeDatabase: JSON.parse(JSON.stringify(await getRealtimeDatabaseBackup())) });
+
+            // 2) records, in chunks (never one giant write)
+            const counts = {};
+            let skipped = 0;
+            for (const name of FIRESTORE_BACKUP_COLLECTIONS) {
+                let n = 0, batch = {}, batchCount = 0, batchBytes = 0;
+                const flush = async () => {
+                    if (!batchCount) return;
+                    await update(ref(db, root + "/firestore/" + name), batch);
+                    n += batchCount; batch = {}; batchCount = 0; batchBytes = 0;
+                    progress.textContent = "Saving " + name + ": " + n.toLocaleString() + " records...";
+                };
+                for await (const docs of firestorePages(name)) {
+                    for (const d of docs) {
+                        if (/[.$#\[\]\/]/.test(d.id)) { skipped++; continue; }      // not allowed as a key in this database
+                        const data = JSON.parse(JSON.stringify(d.data()));
+                        const size = JSON.stringify(data).length;
+                        if (batchCount && (batchBytes + size > 2500000 || batchCount >= 400)) await flush();
+                        batch[d.id] = data; batchCount++; batchBytes += size;
+                    }
+                }
+                await flush();
+                counts[name] = n;
             }
 
-            const now = new Date();
-            const month = String(now.getMonth() + 1).padStart(2, "0");
-            const day = String(now.getDate()).padStart(2, "0");
-            const backupKey = `${now.getFullYear()}-${month}-${day}`;
+            // 3) only now mark the backup as complete
+            await update(ref(db, root + "/metadata"), { status: "complete", finishedAt: new Date().toISOString(), counts });
 
-            const backupData = await buildBackupData();
-            await set(ref(db, "backups/" + backupKey), backupData);
-
-            alert("Backup saved to system successfully.");
+            const total = Object.values(counts).reduce((a, b) => a + b, 0);
+            alert("Backup saved to system successfully (" + total.toLocaleString() + " records).");
+            if (skipped) ClubCommon.toast(skipped + " record(s) could not be saved to the system copy (unsupported ID characters). Use Monthly Backup (download) for a full copy.", "warn", 12000);
         } catch (error) {
             console.error("Save system backup error:", error);
-            alert("Saving backup to system failed.");
+            alert("Saving backup to system failed: " + (error.message || error) + " The saved copy is marked incomplete.");
+        } finally {
+            progress.remove();
+            backupBusy = false;
         }
     };
 
     window.logout = async function() {
         try {
             await signOut(auth);
-            alert("Logged out successfully.");
             window.location.href = "index.html";
         } catch (error) {
             console.error("Logout error:", error);
