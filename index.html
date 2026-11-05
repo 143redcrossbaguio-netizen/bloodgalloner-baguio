@@ -1,137 +1,259 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Galloners Club - Login</title>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b30000">
+<title>Galloners Club - Login</title>
 
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #b30000;
-        }
+<script>
+/* If the session expires while a page is open inside the dashboard, the login page
+   used to appear INSIDE that small frame. Break out so it takes the whole screen. */
+try { if (window.top !== window.self) { window.top.location.href = window.location.href; } } catch (e) {}
+</script>
 
-        .login-box {
-            background-color: white;
-            width: 350px;
-            padding: 30px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0px 5px 15px rgba(0,0,0,0.2);
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            box-sizing: border-box;
-        }
+<style>
+*{box-sizing:border-box;}
+html,body{margin:0;min-height:100%;}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:linear-gradient(160deg,#7f0000 0%,#b30000 55%,#d32f2f 100%);
+  background-attachment:fixed;
+  color:#1f2937;
+  -webkit-font-smoothing:antialiased;
+}
 
-        .logo {
-            width: 120px;
-            margin-bottom: 15px;
-        }
+/* flex centering: stays centred on tall screens AND scrolls normally when the phone keyboard opens */
+.page{
+  min-height:100vh;
+  min-height:100dvh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));
+}
 
-        h2 {
-            color: #b30000;
-            margin-bottom: 20px;
-        }
+.login-box{
+  width:100%;
+  max-width:400px;
+  background:#fff;
+  border-radius:18px;
+  padding:30px 26px 26px;
+  box-shadow:0 20px 50px rgba(0,0,0,.35);
+  text-align:center;
+}
 
-        input {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
+.logo{width:96px;height:96px;object-fit:contain;display:block;margin:0 auto 10px;}
+h1{margin:0 0 4px;font-size:25px;color:#b30000;letter-spacing:.3px;}
+.sub{margin:0 0 22px;font-size:14px;color:#667085;}
 
-        button {
-            width: 100%;
-            padding: 10px;
-            background-color: #b30000;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-        }
+form{text-align:left;}
+label{display:block;font-size:13px;font-weight:700;color:#344054;margin:14px 0 6px;}
 
-        button:hover {
-            background-color: #800000;
-        }
-    </style>
+.input,.pw-wrap input{
+  width:100%;
+  padding:13px 14px;
+  font:inherit;
+  font-size:16px;               /* 16px stops iPhones zooming in on tap */
+  border:1px solid #c4cdd7;
+  border-radius:10px;
+  background:#fff;
+  color:#1f2937;
+  transition:border-color .15s,box-shadow .15s;
+}
+.input:focus,.pw-wrap input:focus{outline:none;border-color:#b30000;box-shadow:0 0 0 3px rgba(179,0,0,.16);}
+
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-right:70px;}
+.pw-toggle{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:#b30000;font:inherit;font-size:13px;font-weight:700;
+  padding:8px 10px;cursor:pointer;border-radius:8px;
+}
+.pw-toggle:focus-visible{outline:3px solid rgba(15,82,186,.45);}
+
+.remember{display:flex;align-items:center;gap:9px;margin:14px 0 0;font-size:14px;font-weight:500;color:#475467;cursor:pointer;}
+.remember input{width:19px;height:19px;accent-color:#b30000;margin:0;}
+
+.error{
+  display:none;
+  margin-top:14px;
+  padding:10px 12px;
+  background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;
+  color:#991b1b;font-size:14px;font-weight:600;line-height:1.4;
+}
+.error.show{display:block;}
+
+button.go{
+  width:100%;
+  margin-top:18px;
+  min-height:48px;
+  padding:12px;
+  border:none;border-radius:10px;
+  background:#b30000;color:#fff;
+  font:inherit;font-size:16px;font-weight:700;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:background .15s,transform .06s;
+}
+button.go:hover:not(:disabled){background:#8f0000;}
+button.go:active:not(:disabled){transform:translateY(1px);}
+button.go:disabled{opacity:.75;cursor:wait;}
+button.go:focus-visible{outline:3px solid rgba(15,82,186,.45);outline-offset:2px;}
+.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;}
+button.go.busy .spinner{display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.foot{margin-top:18px;font-size:12px;color:#98a2b3;text-align:center;}
+
+@media (max-width:380px){
+  .login-box{padding:24px 18px 20px;border-radius:16px;}
+  h1{font-size:22px;}
+  .logo{width:80px;height:80px;}
+}
+@media (max-height:560px){
+  .logo{display:none;}
+  .sub{margin-bottom:12px;}
+}
+</style>
 </head>
 
 <body>
+<div class="page">
+  <main class="login-box">
+    <img src="images/logo.png" alt="Galloners Club logo" class="logo" onerror="this.style.display='none'">
+    <h1>Galloners Club</h1>
+    <p class="sub">Sign in to continue</p>
 
-<div class="login-box">
-    <img src="images/logo.png" alt="Galloners Club Logo" class="logo">
-    <h2>Galloners Club</h2>
+    <form id="loginForm" novalidate>
+      <label for="username">Username or email</label>
+      <input class="input" type="text" id="username" name="username" placeholder="e.g. admin" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required>
 
-    <input type="text" id="username" placeholder="Username or Email">
-    <input type="password" id="password" placeholder="Password">
+      <label for="password">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+        <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password" aria-pressed="false">Show</button>
+      </div>
 
-    <button onclick="login()">Login</button>
+      <label class="remember" for="remember"><input type="checkbox" id="remember"> Remember my username on this device</label>
+
+      <div class="error" id="errorBox" role="alert" aria-live="assertive"></div>
+
+      <button type="submit" class="go" id="loginBtn"><span class="spinner" aria-hidden="true"></span><span id="loginBtnText">Login</span></button>
+    </form>
+
+    <div class="foot">Philippine Red Cross &middot; Baguio City Chapter</div>
+  </main>
 </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
-        authDomain: "galloners-club.firebaseapp.com",
-        databaseURL: "https://galloners-club-default-rtdb.firebaseio.com",
-        projectId: "galloners-club",
-        storageBucket: "galloners-club.firebasestorage.app",
-        messagingSenderId: "213049860421",
-        appId: "1:213049860421:web:4156aaa52b945f48711e2c",
-        measurementId: "G-XYXJH9JNXJ"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.firebasestorage.app",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
+};
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
-    function normalizeLoginInput(value) {
-        const input = value.trim().toLowerCase();
+const $ = (id) => document.getElementById(id);
+const form = $("loginForm"), userEl = $("username"), passEl = $("password");
+const btn = $("loginBtn"), btnText = $("loginBtnText"), errBox = $("errorBox");
+const REMEMBER_KEY = "galloners.rememberedUsername";
 
-        if (!input) return "";
+let redirecting = false;
+function goToDashboard() {
+  if (redirecting) return;
+  redirecting = true;
+  window.location.replace("dashboard.html");
+}
 
-        // If user already typed a full email, use it as-is
-        if (input.includes("@")) {
-            return input;
-        }
+/* ---- remembered username (never the password) ---- */
+try {
+  const saved = localStorage.getItem(REMEMBER_KEY);
+  if (saved) { userEl.value = saved; $("remember").checked = true; passEl.focus(); }
+} catch (e) { /* private mode */ }
 
-        // Otherwise convert username to Firebase email format
-        return input + "@galloners.club";
-    }
+/* ---- show / hide password ---- */
+$("pwToggle").addEventListener("click", () => {
+  const show = passEl.type === "password";
+  passEl.type = show ? "text" : "password";
+  $("pwToggle").textContent = show ? "Hide" : "Show";
+  $("pwToggle").setAttribute("aria-pressed", String(show));
+  $("pwToggle").setAttribute("aria-label", show ? "Hide password" : "Show password");
+  passEl.focus();
+});
 
-    window.login = async function() {
-        const usernameOrEmail = document.getElementById("username").value.trim();
-        const password = document.getElementById("password").value;
+function showError(msg) { errBox.textContent = msg; errBox.classList.add("show"); }
+function clearError() { errBox.textContent = ""; errBox.classList.remove("show"); }
+function setBusy(b) {
+  btn.disabled = b; btn.classList.toggle("busy", b);
+  btnText.textContent = b ? "Signing in..." : "Login";
+}
 
-        if (!usernameOrEmail || !password) {
-            alert("Enter both username/email and password.");
-            return;
-        }
+/* username -> the email format used by Firebase */
+function normalizeLoginInput(value) {
+  const input = value.trim().toLowerCase();
+  if (!input) return "";
+  if (input.includes("@")) return input;
+  return input + "@galloners.club";
+}
 
-        const email = normalizeLoginInput(usernameOrEmail);
+function friendlyError(error) {
+  switch (error && error.code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+    case "auth/invalid-email":
+      return "Incorrect username or password. Please try again.";
+    case "auth/too-many-requests":
+      return "Too many failed attempts. Please wait a few minutes, then try again.";
+    case "auth/network-request-failed":
+      return "No internet connection. Check your connection and try again.";
+    case "auth/user-disabled":
+      return "This account has been disabled. Please contact the administrator.";
+    default:
+      return "Unable to sign in right now. Please try again.";
+  }
+}
 
-        try {
-            await signInWithEmailAndPassword(auth, email, password);
-            alert("Login successful.");
-            window.location.href = "dashboard.html";
-        } catch (error) {
-            console.error("Login error:", error);
-            alert("Invalid username/email or password.");
-        }
-    };
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  clearError();
 
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            window.location.href = "dashboard.html";
-        }
-    });
+  const usernameOrEmail = userEl.value.trim();
+  const password = passEl.value;
+  if (!usernameOrEmail || !password) {
+    showError("Enter both your username (or email) and your password.");
+    (usernameOrEmail ? passEl : userEl).focus();
+    return;
+  }
+
+  setBusy(true);
+  try {
+    await signInWithEmailAndPassword(auth, normalizeLoginInput(usernameOrEmail), password);
+    try {
+      if ($("remember").checked) localStorage.setItem(REMEMBER_KEY, usernameOrEmail);
+      else localStorage.removeItem(REMEMBER_KEY);
+    } catch (e) { /* ignore */ }
+    goToDashboard();
+  } catch (error) {
+    console.error("Login error:", error);
+    showError(friendlyError(error));
+    setBusy(false);
+    passEl.select();
+  }
+});
+
+/* already signed in? skip the login screen */
+onAuthStateChanged(auth, (user) => { if (user) goToDashboard(); });
 </script>
-
 </body>
 </html>
