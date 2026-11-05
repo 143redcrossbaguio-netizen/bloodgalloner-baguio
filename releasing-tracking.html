@@ -46,6 +46,16 @@ color:white;
 
 .releaseBtn{background:#e65100;}
 .augmentationBtn{background:#1565c0;}
+.hubbingBtn{background:#00897b;}
+.hubTable th{background:#00897b;}
+.hubTable td{background:#e8f7f4;}
+.hubRepeatInput{width:70px;padding:6px;border:1px solid #00897b;border-radius:5px;text-align:center;font-size:14px;font-weight:bold;}
+.hubSummary{background:#e0f2f1;border:1px solid #00897b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;gap:18px;flex-wrap:wrap;}
+.hubChecks{display:flex;flex-wrap:wrap;gap:8px 16px;margin:6px 0 4px;}
+.hubChecks label{font-weight:bold;font-size:14px;display:flex;align-items:center;gap:6px;cursor:pointer;}
+.hubChecks input{width:auto;margin:0;}
+.badRecBanner{background:#fff3cd;border:1px solid #f9a825;border-left:5px solid #f9a825;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#7a4f00;}
+.badRecBanner button{margin-left:6px;}
 .waivedBtn{background:#6d4c41;}
 .activeBtn{outline:3px solid #222;}
 
@@ -528,35 +538,6 @@ flex-direction:column;
     </style>
 <meta name="theme-color" content="#c62828">
 <link rel="stylesheet" href="prc-theme.css">
-<style id="trackingScrollFix">
-/* Every table sits in its own sideways-scrolling box (fixes: could not scroll tables sideways on phones) */
-.tableScrollWrap{
-  overflow-x:auto;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior-x:contain;
-  max-width:100%;
-  margin-top:10px;
-  border-radius:8px;
-  scrollbar-width:thin;
-}
-.tableScrollWrap > table{margin-top:0 !important;}
-.tableScrollWrap::-webkit-scrollbar{height:10px;}
-.tableScrollWrap::-webkit-scrollbar-thumb{background:#b8c2cf;border-radius:8px;}
-.swipeHint{display:none;}
-@media (max-width:980px){
-  /* the small table inside "Augmentation Details" was forced to 600px wide, which blew the whole row up */
-  .augMiniTable,.augDetailsWrap table{min-width:0 !important;width:100% !important;}
-  .augDetailsWrap{min-width:210px;}
-  .augDetailsWrap th,.augDetailsWrap td{padding:4px 5px !important;font-size:11px !important;}
-  /* keep the DATE column in view while swiping across the other columns */
-  .augTable th:first-child,.augTable td:first-child{position:sticky;left:0;z-index:2;box-shadow:2px 0 0 rgba(0,0,0,.14);}
-  .augTable th:first-child{z-index:3;}
-  .swipeHint.on{
-    display:block;text-align:center;font-size:12px;font-weight:700;color:#0d47a1;
-    background:#e3f2fd;border:1px dashed #90caf9;border-radius:8px;padding:6px 8px;margin:8px 0 0;
-  }
-}
-</style>
 </head>
 
 <body>
@@ -570,6 +551,7 @@ flex-direction:column;
 <div class="topSwitch">
 <button id="showReleaseBtn" class="switchBtn releaseBtn activeBtn">RELEASING RECORDS</button>
 <button id="showAugmentationBtn" class="switchBtn augmentationBtn">BLOOD AUGMENTATION</button>
+<button id="showHubbingBtn" class="switchBtn hubbingBtn">SAMPLE HUBBING</button>
 <button id="showWaivedBtn" class="switchBtn waivedBtn">WAIVED</button>
 </div>
 
@@ -603,6 +585,7 @@ flex-direction:column;
 
 <button class="duplicateBtn" id="duplicateBtn">DUPLICATES: 0</button>
 <button class="exportBtn" id="exportBtn">EXPORT CSV</button>
+<button class="loadBtn" id="hubMonthSoaBtn" style="display:none;background:#00897b;" title="Select a Year + Month and press LOAD first">SOA FOR MONTH</button>
 <button class="uncheckBtn" id="uncheckAllBtn">UNCHECK ALL</button>
 <button class="backBtn" id="backBtn">BACK</button>
 </div>
@@ -624,7 +607,7 @@ flex-direction:column;
     <button type="button" class="esigLink" onclick="ESIG.openManager()">✍ Add / manage staff e-signatures</button>
     <div class="modalActions">
       <button type="button" class="saveBtn" onclick="printSoaView()">🖨 PRINT</button>
-      <button type="button" class="editBtn" onclick="editSoaView()">✎ EDIT</button>
+      <button type="button" class="editBtn" id="soaEditBtn" onclick="editSoaView()">✎ EDIT</button>
       <button type="button" class="closeBtn" onclick="closeSoaView()">CLOSE</button>
     </div>
   </div>
@@ -652,12 +635,6 @@ flex-direction:column;
     <input type="number" id="editAugAmountPaid" class="formInput" readonly>
 
     <div id="editAugDiscountMount"></div>
-
-    <label class="formLabel">MISCELLANEOUS CHARGE <span style="font-weight:normal;color:#666;">(optional &ndash; printed in the table, before freight)</span></label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input type="text" id="editAugMiscLabel" class="formInput" placeholder="Description (e.g. Processing fee)" autocomplete="off" style="flex:2 1 220px;min-width:0;">
-      <input type="number" id="editAugMiscAmount" class="formInput" min="0" step="0.01" inputmode="decimal" placeholder="Amount (0.00)" style="flex:1 1 130px;min-width:0;">
-    </div>
 
     <label class="formLabel">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;">(optional &ndash; printed on the statement when filled in)</span></label>
     <input type="number" id="editAugFreight" class="formInput" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
@@ -689,6 +666,66 @@ flex-direction:column;
     <div class="modalActions">
       <button type="button" class="saveBtn" onclick="saveAugmentationEdit()">SAVE CHANGES</button>
       <button type="button" class="closeBtn" onclick="closeAugmentationModal()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAMPLE HUBBING EDIT MODAL -->
+<div id="hubbingModal" class="modal">
+  <div class="modalContent">
+    <h3 style="margin-top:0;">EDIT SAMPLE HUBBING</h3>
+
+    <label class="formLabel">DATE ENTERED</label>
+    <input type="date" id="editHubDate" class="formInput">
+
+    <label class="formLabel">SOURCE OF SAMPLE</label>
+    <input type="text" id="editHubSource" class="formInput">
+
+    <label class="formLabel">TESTS</label>
+    <div class="hubChecks" id="editHubTests">
+      <label><input type="checkbox" class="editHubChk" value="FULL"> FULL</label>
+      <label><input type="checkbox" class="editHubChk" value="HIV"> HIV</label>
+      <label><input type="checkbox" class="editHubChk" value="HCV"> HCV</label>
+      <label><input type="checkbox" class="editHubChk" value="HBsAg"> HBsAg</label>
+      <label><input type="checkbox" class="editHubChk" value="SYPHILIS"> SYPHILIS</label>
+      <label><input type="checkbox" class="editHubChk" value="MALARIA"> MALARIA</label>
+    </div>
+
+    <label class="formLabel">NUMBER OF SAMPLES</label>
+    <input type="number" id="editHubSamples" class="formInput" min="1" step="1">
+
+    <label class="formLabel">REPEAT TESTS DONE (number of samples repeated — each is repeated 2×, billed 2 extra times)</label>
+    <input type="number" id="editHubRepeat" class="formInput" min="0" step="1" placeholder="0">
+
+    <label class="formLabel">AMOUNT</label>
+    <input type="text" id="editHubAmount" class="formInput" readonly>
+    <button type="button" class="addBtn" style="margin-top:8px;" onclick="repriceEditHubbing()">USE CURRENT HUBBING RATE</button>
+    <div id="editHubPriceMsg" style="font-size:12px;color:#00695c;min-height:16px;margin-top:4px;"></div>
+
+    <label class="formLabel">PAYMENT STATUS</label>
+    <select id="editHubPaymentStatus" class="formInput">
+      <option value="Unpaid">Unpaid</option>
+      <option value="Paid">Paid</option>
+    </select>
+    <div id="editHubPaidFields" style="display:none;">
+      <label class="formLabel">OR NUMBER <span style="color:#c62828;">*</span></label>
+      <input type="text" id="editHubPaidOrNo" class="formInput" placeholder="Official Receipt number">
+      <label class="formLabel">DATE OF PAYMENT <span style="color:#c62828;">*</span></label>
+      <input type="date" id="editHubPaidDate" class="formInput">
+    </div>
+
+    <label class="formLabel">ADDRESS</label>
+    <input type="text" id="editHubAddress" class="formInput">
+
+    <label class="formLabel">REMARKS</label>
+    <input type="text" id="editHubRemarks" class="formInput">
+
+    <label class="formLabel">NOTE (printed just before the signatories)</label>
+    <textarea id="editHubNote" class="formInput" rows="3" placeholder="Optional note to appear on the printed statement" style="font-family:inherit;resize:vertical;"></textarea>
+
+    <div class="modalActions">
+      <button type="button" class="saveBtn" onclick="saveHubbingEdit()">SAVE CHANGES</button>
+      <button type="button" class="closeBtn" onclick="closeHubbingModal()">CLOSE</button>
     </div>
   </div>
 </div>
@@ -1026,8 +1063,8 @@ function fmtDate(s){
 }
 function totals(e,prices){
   prices=prices||{};const rows=[];let gross=0;
-  (e.bloodTypes||[]).forEach(bt=>{
-    const agg={};(bt.issued||[]).forEach(i=>{const t=String(i.type||"").toUpperCase();agg[t]=(agg[t]||0)+(Number(i.qty)||0)});
+  A(e.bloodTypes).forEach(bt=>{
+    const agg={};A(bt.issued).forEach(i=>{const t=String(i.type||"").toUpperCase();agg[t]=(agg[t]||0)+(Number(i.qty)||0)});
     Object.keys(agg).forEach(t=>{
       if(!agg[t])return;const p=Number(prices[t])||0,amt=p*agg[t];gross+=amt;
       rows.push({d:`${NAMES[t]||t} (${t}) – ${bt.bloodType||""}`,q:agg[t],u:"unit",p,a:amt});
@@ -1035,19 +1072,81 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,misc=Math.max(0,Number(e.miscAmount)||0),freight=Math.max(0,Number(e.freight)||0),net=gross-disc+misc+freight;
-  const extra=[];   /* extra charges are printed as ordinary rows of the same table, misc first, then freight */
-  if(misc>0)extra.push({d:String(e.miscLabel||"").trim()||"Miscellaneous",q:1,u:"lot",p:misc,a:misc});
-  if(freight>0)extra.push({d:"Freight (Transport Fee)",q:1,u:"lot",p:freight,a:freight});
-  return {rows,extra,gross,disc,misc,freight,net};
+  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
+  return {rows,gross,disc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
+
+/* ── array safety: Firebase returns arrays with gaps as objects / null holes ── */
+const A=v=>Array.isArray(v)?v.filter(x=>x!=null):(v&&typeof v==="object"?Object.values(v).filter(x=>x!=null):[]);
+function normAug(e){
+  const o=Object.assign({},e||{});
+  o.bloodTypes=A(o.bloodTypes).filter(b=>typeof b==="object").map(b=>Object.assign({},b,{requests:A(b.requests).filter(r=>typeof r==="object"),issued:A(b.issued).filter(r=>typeof r==="object")}));
+  return o;
+}
+/* ── Sample Hubbing statements ── */
+const HUB_TESTS=["FULL","HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
+const HUB_LABEL={FULL:"FULL",HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
+function hubTests(e){const t=A(e&&e.tests).map(String);return HUB_TESTS.filter(x=>t.includes(x))}
+function hubRate(prices){const r=Number(prices&&(prices.RATE??prices.rate));return r>0?r:60}
+function hubUnitPrice(e,prices){return hubRate(prices)}
+const HUB_REPEAT_TIMES=2;
+function hubTotals(e,prices){
+  const rate=hubRate(prices),n=Number(e&&e.sampleCount)||0,rp=Math.max(0,Number(e&&e.repeatTests)||0);
+  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
+  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:n,u:"sample",p:rate,a:rate*n}];
+  if(rp>0)rows.push({d:"Repeat tests ("+rp+" sample"+(rp>1?"s":"")+" repeated "+HUB_REPEAT_TIMES+"x each)",q:rp*HUB_REPEAT_TIMES,u:"test",p:rate,a:rate*rp*HUB_REPEAT_TIMES});
+  const gross=rows.reduce((s,r)=>s+r.a,0);
+  return{rows,gross,disc:0,freight:0,net:gross};
+}
+function hubShell(metaHtml,tableHtml,e){
+  const org=getOrg();
+  const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
+  const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
+  return `<div class="soaDoc">
+<div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
+<div class="soaTitle">BILLING STATEMENT – SAMPLE HUBBING</div>
+${metaHtml}
+${tableHtml}
+<div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
+${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
+<div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
+}
+function buildHub(e,prices){
+  e=e||{};const {rows,net}=hubTotals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(e.source)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
+  const table=`<table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
+<thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
+  return hubShell(meta,table,e);
+}
+/* One statement for a whole month: list = hubbing entries, o = {label,source,remarks,note,printedBy,...} */
+function buildHubMonth(list,o){
+  o=o||{};list=(list||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
+  const multi=!o.source;let total=0,samples=0;
+  let body=list.map(e=>{
+    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);total+=t.net;samples+=Number(e.sampleCount)||0;
+    const desc=(multi?esc(e.source)+" – ":"")+esc(hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—");
+    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${Number(e.sampleCount)||0}${Number(e.repeatTests)>0?` (+${Number(e.repeatTests)} repeated)`:""}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
+  }).join("");
+  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(o.source||"ALL SOURCES")}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(o.address||"")}</span></div></div>
+<div class="r"><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Total samples: <span class="ul">${samples}</span></div></div></div>`;
+  const table=`<table><colgroup><col style="width:15%"><col style="width:17%"><col style="width:28%"><col style="width:10%"><col style="width:13%"><col style="width:17%"></colgroup>
+<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Rate / sample</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(total)}</td></tr></tbody></table>`;
+  return hubShell(meta,table,o);
+}
+
 function build(e,prices){
-  const {rows,extra,gross,disc,misc,freight,net}=totals(e,prices);
-  const items=rows.concat(extra);
-  let body=items.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=items.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB" style="text-align:right;font-size:10px;font-style:italic;color:#555">${extra.length?"Discount applies to blood components only":""}</td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  const {rows,gross,disc,freight,net}=totals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -1070,7 +1169,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
 })();
 </script>
 
@@ -1107,12 +1206,18 @@ const exportBtn = document.getElementById("exportBtn");
 const backBtn = document.getElementById("backBtn");
 const showReleaseBtn = document.getElementById("showReleaseBtn");
 const showAugmentationBtn = document.getElementById("showAugmentationBtn");
+const showHubbingBtn = document.getElementById("showHubbingBtn");
+const hubMonthSoaBtn = document.getElementById("hubMonthSoaBtn");
 const showWaivedBtn = document.getElementById("showWaivedBtn");
 const uncheckAllBtn = document.getElementById("uncheckAllBtn");
 
 let currentView = "releasing";
 let allReleasingEntries = [];
 let allAugmentationEntries = [];
+let allHubbingEntries = [];
+let lastBadAugEntries = [];
+let currentHubEditId = null;
+let currentHubPriceSnapshot = null;
 let currentAugmentationEditId = null;
 let currentAugmentationPriceSnapshot = null;
 let currentReleasingEditId = null;
@@ -1323,14 +1428,13 @@ function computeWaivedDeduction(entry, prices){
   return { waivedLabel: labels.join(" + "), waivedValue };
 }
 
-/* final amount = computed total - discount - waived + miscellaneous + freight (misc/freight only exist on augmentation) */
+/* final amount = computed total - discount - waived + freight (freight only exists on augmentation) */
 function computeFinalTotal(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
   const discount = Number(entry.discount) || 0;
-  const misc = Math.max(0, Number(entry.miscAmount) || 0);
   const freight = Math.max(0, Number(entry.freight) || 0);
   const { waivedValue } = computeWaivedDeduction(entry, prices);
-  let total = Number(computedTotalStr) - discount - waivedValue + misc + freight;
+  let total = Number(computedTotalStr) - discount - waivedValue + freight;
   if(total < 0) total = 0;
   return total.toFixed(2);
 }
@@ -1339,15 +1443,11 @@ function buildAmountPaidCell(entry, computedTotalStr){
   const prices = getEntryPrices(entry);
   const { waivedLabel, waivedValue } = computeWaivedDeduction(entry, prices);
   const finalTotal = computeFinalTotal(entry, computedTotalStr);
-  const misc = Math.max(0, Number(entry.miscAmount) || 0);
   const freight = Math.max(0, Number(entry.freight) || 0);
 
   let html = finalTotal;
   if(waivedValue > 0){
     html += `<br><span style="font-size:11px;color:#b71c1c;">less ${waivedLabel} waived (${waivedValue.toFixed(2)})</span>`;
-  }
-  if(misc > 0){
-    html += `<br><span style="font-size:11px;color:#1b5e20;">incl. ${escapeHtml(String(entry.miscLabel || "").trim() || "misc.")} ${misc.toFixed(2)}</span>`;
   }
   if(freight > 0){
     html += `<br><span style="font-size:11px;color:#1b5e20;">incl. freight ${freight.toFixed(2)}</span>`;
@@ -1365,13 +1465,6 @@ function buildDiscountCell(entry){
     : Number(computeReleasingTotal(entry)) - computeWaivedDeduction(entry, getEntryPrices(entry)).waivedValue;
   const pct = base > 0 ? Math.round(disc / base * 10000) / 100 : 0;
   return `${entry.discount}` + (pct ? `<br><span style="font-size:11px;color:#1565c0;">${pct}% off</span>` : "");
-}
-
-function buildMiscCell(entry){
-  const m = Math.max(0, Number(entry.miscAmount) || 0);
-  if(!(m > 0)) return "";
-  const label = String(entry.miscLabel || "").trim();
-  return m.toFixed(2) + (label ? `<br><span style="font-size:11px;color:#455a64;">${escapeHtml(label)}</span>` : "");
 }
 
 function buildFreightCell(entry){
@@ -1422,13 +1515,12 @@ function getAugmentationDuplicateKey(entry){
     safeUpper(JSON.stringify(entry.bloodTypes || [])),
     safeUpper(entry.amountPaid),
     safeUpper(entry.discount),
-    safeUpper(entry.miscAmount),
-    safeUpper(entry.miscLabel),
     safeUpper(entry.freight)
   ].join("||");
 }
 
 function getDuplicateGroups(){
+  if(currentView === "hubbing") return [];
   const source = currentView === "augmentation" ? getFilteredAugmentationEntries() : (currentView === "waived" ? getFilteredWaivedEntries() : getFilteredReleasingEntries());
   const map = {};
 
@@ -1475,7 +1567,7 @@ function refreshDuplicateBox(){
 
 function renderDuplicateReleasingGroup(group){
   return `
-    <div class="tableScrollWrap"><table>
+    <table>
       <thead>
         <tr>
           <th>DATE</th>
@@ -1521,13 +1613,13 @@ function renderDuplicateReleasingGroup(group){
           </tr>
         `).join("")}
       </tbody>
-    </table></div>
+    </table>
   `;
 }
 
 function renderDuplicateAugmentationGroup(group){
   return `
-    <div class="tableScrollWrap"><table class="augTable">
+    <table class="augTable">
       <thead>
         <tr>
           <th>DATE</th>
@@ -1536,7 +1628,7 @@ function renderDuplicateAugmentationGroup(group){
           <th>AUGMENTATION DETAILS</th>
           <th>COMPUTED TOTAL</th>
           <th>AMOUNT PAID</th>
-          <th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th>
+          <th>DISCOUNT</th><th>FREIGHT</th>
           <th>PAID</th>
           <th>ACTION</th>
         </tr>
@@ -1550,7 +1642,7 @@ function renderDuplicateAugmentationGroup(group){
             <td class="augDetailsWrap">${buildAugDetails(entry)}</td>
             <td>${computeAugEntryTotal(entry)}</td>
             <td>${buildAmountPaidCell(entry, computeAugEntryTotal(entry))}</td>
-            <td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td>
+            <td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td>
             <td>${isAugPaid(entry) ? "YES" : "NO"}</td>
             <td>
               <button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
@@ -1562,9 +1654,313 @@ function renderDuplicateAugmentationGroup(group){
           </tr>
         `).join("")}
       </tbody>
-    </table></div>
+    </table>
   `;
 }
+
+/* ═════════════════════════ SAMPLE HUBBING ═════════════════════════ */
+let currentHubPrices = {RATE:60};
+
+function normalizeHubPrices(snap){
+  return { RATE: SOA.hubRate(snap) };
+}
+async function loadHubPrices(){
+  try{
+    const snap = await get(ref(db, "settings/hubbingPrices"));
+    currentHubPrices = normalizeHubPrices(snap.val() || {});
+  }catch(error){
+    console.error("Failed to load hubbing prices:", error);
+  }
+}
+function getHubPrices(entry){
+  return entry && entry.priceSnapshot ? normalizeHubPrices(entry.priceSnapshot) : currentHubPrices;
+}
+function hubAmount(entry){ return SOA.hubTotals(entry, getHubPrices(entry)).net; }
+function hubTestsText(entry){ return SOA.hubTests(entry).map(t => SOA.HUB_LABEL[t]).join(", "); }
+function normHub(e){ const o = Object.assign({}, e); o.tests = SOA.hubTests(e); return o; }
+
+function loadHubbingData(){
+  onValue(ref(db,"sampleHubbing"), snapshot => {
+    allHubbingEntries = [];
+    snapshot.forEach(child => {
+      allHubbingEntries.push(normHub({ id: child.key, ...child.val() }));
+    });
+
+    populateYearMonthFilterOptions();
+    setDefaultYearMonthFilter();
+
+    if(currentView === "hubbing"){
+      populateFacilityFilter();
+      renderCurrentView();
+    }
+  }, error => {
+    console.error("Load hubbing error:", error);
+    alert("Failed to load sample hubbing records.");
+  });
+}
+
+function getFilteredHubbingEntries(){
+  const search = searchBox.value.trim().toUpperCase();
+  const facilityValue = filterFacility.value;
+
+  const filtered = allHubbingEntries.filter(entry => {
+    const hay = [entry.source, hubTestsText(entry), entry.invoiceNo].map(v => String(v || "").toUpperCase()).join(" ");
+    const matchSearch = search === "" || hay.includes(search);
+    const matchMonth = entryMatchesAppliedMonthFilter(entry.date || "");
+    const matchFacility = facilityValue === "" || entry.source === facilityValue;
+    return matchSearch && matchMonth && matchFacility;
+  });
+
+  filtered.sort((a,b) => (b.date || "").localeCompare(a.date || "") || (b.invoiceNo || "").localeCompare(a.invoiceNo || ""));
+  return filtered;
+}
+
+function hubSummaryHtml(list){
+  const samples = list.reduce((s,e) => s + (Number(e.sampleCount) || 0), 0);
+  const repeats = list.reduce((s,e) => s + (Number(e.repeatTests) || 0), 0);
+  const amount = list.reduce((s,e) => s + hubAmount(e), 0);
+  return `<div class="hubSummary"><div>Entries: <b>${list.length}</b></div><div>Samples: <b>${samples}</b></div><div>Repeated samples: <b>${repeats}</b></div><div>Amount: <b>₱${SOA.money(amount)}</b></div></div>`;
+}
+
+const HUB_HEAD = `<thead><tr><th>DATE</th><th>SOURCE OF SAMPLE</th><th>TESTS</th><th>NO. OF SAMPLES</th><th>REPEATED SAMPLES</th><th>RATE / SAMPLE</th><th>AMOUNT</th><th>INVOICE NO.</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+
+function hubRowHtml(entry){
+  const ip = isAugPaid(entry);
+  const prices = getHubPrices(entry);
+  return `<td>${escHtml(entry.date)}</td><td>${escHtml(entry.source)}</td><td>${escHtml(hubTestsText(entry))}</td>` +
+    `<td>${Number(entry.sampleCount) || 0}</td>` +
+    `<td><input type="number" min="0" step="1" class="hubRepeatInput" data-id="${escHtml(entry.id)}" value="${Number(entry.repeatTests) || 0}" title="Number of samples that were repeated (each repeated 2x and billed). Saves automatically."></td>` +
+    `<td>${SOA.money(SOA.hubUnitPrice(entry, prices))}</td><td>${SOA.money(hubAmount(entry))}</td><td>${escHtml(entry.invoiceNo || "")}</td>` +
+    `<td><button class="actionBtn viewBtn" data-action="view-hub-soa" data-id="${escHtml(entry.id)}">VIEW SOA</button>` +
+    `<button class="actionBtn editBtn" data-action="edit-hubbing" data-id="${escHtml(entry.id)}">EDIT</button>` +
+    `<button class="actionBtn ${ip ? "paidYesBtn" : "paidNoBtn"}" data-action="toggle-hubbing-paid" data-id="${escHtml(entry.id)}" title="${augPaidTitle(entry)}">PAID ${ip ? "YES" : "NO"}</button>` +
+    `<button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${escHtml(entry.id)}">DELETE</button></td>`;
+}
+
+function hubFillTable(tb, entries){
+  entries.forEach(entry => {
+    const r = document.createElement("tr");
+    try{
+      r.innerHTML = hubRowHtml(entry);
+    }catch(err){
+      console.error("Hubbing record could not be displayed:", entry && entry.id, err);
+      r.innerHTML = `<td colspan="9">⚠ Record ${escHtml(entry && entry.id)} could not be displayed. <button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${escHtml(entry && entry.id)}">DELETE</button></td>`;
+    }
+    tb.appendChild(r);
+  });
+}
+
+function renderHubbingTable(){
+  const filtered = getFilteredHubbingEntries();
+  if(filtered.length === 0){
+    container.innerHTML = '<div class="emptyMessage">No sample hubbing records found.</div>';
+    return;
+  }
+  const groupedByMonth = {};
+  filtered.forEach(entry => {
+    const month = entry.date ? entry.date.slice(0,7) : "NO DATE";
+    if(!groupedByMonth[month]) groupedByMonth[month] = [];
+    groupedByMonth[month].push(entry);
+  });
+  container.innerHTML = "";
+  renderYearMonthDateInto(container, groupedByMonth, (dc, de) => {
+    const t = document.createElement("table");
+    t.className = "hubTable";
+    t.innerHTML = HUB_HEAD;
+    hubFillTable(t.querySelector("tbody"), de);
+    dc.appendChild(t);
+  });
+}
+
+function renderFlatHubbingResults(entries){
+  const term = searchBox.value.trim();
+  container.innerHTML = "";
+  if(!entries.length){
+    container.innerHTML = `<div class="searchResultsBanner" style="background:#c62828;">🔍 No results for "<b>${escHtml(term)}</b>" across all years.</div><div class="emptyMessage">Try a different source, test, or invoice number.</div>`;
+    return;
+  }
+  container.appendChild(renderFlatBanner(entries.length, term));
+  const t = document.createElement("table");
+  t.className = "hubTable";
+  t.innerHTML = HUB_HEAD;
+  hubFillTable(t.querySelector("tbody"), entries);
+  container.appendChild(t);
+}
+
+/* repeat tests: saved straight from the table */
+container.addEventListener("change", async (event) => {
+  const input = event.target.closest(".hubRepeatInput");
+  if(!input) return;
+  if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+  let n = parseInt(input.value, 10);
+  if(!(n >= 0)) n = 0;
+  input.value = n;
+  try{
+    await update(ref(db, "sampleHubbing/" + input.dataset.id), { repeatTests: n });
+  }catch(error){
+    console.error(error);
+    alert("Failed to save the repeat test count.");
+  }
+});
+
+/* ── edit modal ── */
+function hubEditChecks(){ return Array.from(document.querySelectorAll(".editHubChk")); }
+function hubEditSelected(){ return hubEditChecks().filter(c => c.checked).map(c => c.value); }
+function hubEditSyncFull(){
+  const full = hubEditChecks().find(c => c.value === "FULL");
+  hubEditChecks().forEach(c => { if(c !== full){ if(full.checked) c.checked = false; c.disabled = full.checked; } });
+}
+function hubEditRefreshAmount(){
+  const d = { tests: hubEditSelected(), sampleCount: parseInt(document.getElementById("editHubSamples").value, 10) || 0,
+    repeatTests: parseInt(document.getElementById("editHubRepeat").value, 10) || 0 };
+  document.getElementById("editHubAmount").value = SOA.money(SOA.hubTotals(d, currentHubPriceSnapshot || currentHubPrices).net);
+}
+function syncEditHubPaidFields(){
+  document.getElementById("editHubPaidFields").style.display = document.getElementById("editHubPaymentStatus").value === "Paid" ? "block" : "none";
+}
+
+window.openEditHubbing = async function(id){
+  if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+  try{
+    const snapshot = await get(ref(db, "sampleHubbing/" + id));
+    if(!snapshot.exists()){ alert("Record not found."); return; }
+    const data = normHub({ id, ...snapshot.val() });
+    currentHubEditId = id;
+    currentHubPriceSnapshot = data.priceSnapshot ? normalizeHubPrices(data.priceSnapshot) : currentHubPrices;
+
+    document.getElementById("editHubDate").value = data.date || "";
+    document.getElementById("editHubSource").value = data.source || "";
+    hubEditChecks().forEach(c => { c.checked = data.tests.includes(c.value); c.disabled = false; });
+    hubEditSyncFull();
+    document.getElementById("editHubSamples").value = data.sampleCount || "";
+    document.getElementById("editHubRepeat").value = data.repeatTests || "";
+    document.getElementById("editHubPaymentStatus").value = isAugPaid(data) ? "Paid" : "Unpaid";
+    document.getElementById("editHubPaidOrNo").value = data.paidOrNo || "";
+    document.getElementById("editHubPaidDate").value = data.paidDate || "";
+    document.getElementById("editHubAddress").value = data.address || "";
+    document.getElementById("editHubRemarks").value = data.remarks || "";
+    document.getElementById("editHubNote").value = data.note || "";
+    document.getElementById("editHubPriceMsg").textContent = "";
+    syncEditHubPaidFields();
+    hubEditRefreshAmount();
+    document.getElementById("hubbingModal").style.display = "block";
+  }catch(error){
+    console.error(error);
+    alert("Failed to load sample hubbing record.");
+  }
+};
+
+window.closeHubbingModal = function(){
+  document.getElementById("hubbingModal").style.display = "none";
+  currentHubEditId = null;
+  currentHubPriceSnapshot = null;
+};
+
+window.repriceEditHubbing = async function(){
+  await loadHubPrices();
+  currentHubPriceSnapshot = Object.assign({}, currentHubPrices);
+  hubEditRefreshAmount();
+  document.getElementById("editHubPriceMsg").textContent = "Amount now uses today's hubbing rate (applied when you save).";
+};
+
+window.saveHubbingEdit = async function(){
+  if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+  if(!currentHubEditId) return;
+
+  const date = document.getElementById("editHubDate").value;
+  const source = document.getElementById("editHubSource").value.trim().toUpperCase();
+  const tests = hubEditSelected();
+  const samples = parseInt(document.getElementById("editHubSamples").value, 10);
+  let repeat = parseInt(document.getElementById("editHubRepeat").value, 10);
+  if(!(repeat >= 0)) repeat = 0;
+  const status = document.getElementById("editHubPaymentStatus").value;
+  const orNo = document.getElementById("editHubPaidOrNo").value.trim();
+  const paidDate = document.getElementById("editHubPaidDate").value;
+
+  if(!date){ alert("Date entered is required."); return; }
+  if(!source){ alert("Source of sample is required."); return; }
+  if(!tests.length){ alert("Please select at least one test."); return; }
+  if(!(samples > 0)){ alert("Number of samples must be a whole number of at least 1."); return; }
+  if(status === "Paid" && (!orNo || !paidDate)){ alert("OR number and date of payment are required for a paid statement."); return; }
+
+  const payload = {
+    date, source, tests, sampleCount: samples, repeatTests: repeat,
+    priceSnapshot: currentHubPriceSnapshot || currentHubPrices,
+    address: document.getElementById("editHubAddress").value.trim(),
+    remarks: document.getElementById("editHubRemarks").value.trim(),
+    note: document.getElementById("editHubNote").value.trim(),
+    paymentStatus: status === "Paid" ? "Paid" : "Unpaid",
+    augmentationPaid: status === "Paid" ? "YES" : "NO",
+    paidOrNo: status === "Paid" ? orNo : null,
+    paidDate: status === "Paid" ? paidDate : null
+  };
+
+  try{
+    await update(ref(db, "sampleHubbing/" + currentHubEditId), payload);
+    alert("Sample hubbing updated successfully!");
+    window.closeHubbingModal();
+  }catch(error){
+    console.error(error);
+    alert("Failed to update sample hubbing record.");
+  }
+};
+
+document.addEventListener("change", (e) => {
+  if(e.target.classList && e.target.classList.contains("editHubChk")){ hubEditSyncFull(); hubEditRefreshAmount(); }
+  if(e.target.id === "editHubPaymentStatus") syncEditHubPaidFields();
+});
+document.addEventListener("input", (e) => { if(e.target.id === "editHubSamples" || e.target.id === "editHubRepeat") hubEditRefreshAmount(); });
+
+/* ── payment (OR number + date) for a hubbing entry ── */
+async function toggleHubbingPaid(id){
+  if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
+  const current = allHubbingEntries.find(item => item.id === id);
+  if(!current){ alert("Record not found."); return; }
+  const paid = isAugPaid(current);
+  paymentEditId = id;
+  paymentKind = "hub";
+  document.getElementById("payModalTitle").textContent = paid ? "EDIT PAYMENT DETAILS" : "MARK AS PAID";
+  document.getElementById("payModalInfo").innerHTML =
+    "Invoice: <b>" + SOA.esc(current.invoiceNo || "—") + "</b><br>Source: <b>" + SOA.esc(current.source || "") + "</b>";
+  document.getElementById("payOrNo").value = current.paidOrNo || "";
+  document.getElementById("payDate").value = current.paidDate || phToday();
+  document.getElementById("payModalError").textContent = "";
+  document.getElementById("paySaveBtn").textContent = paid ? "UPDATE PAYMENT" : "SAVE PAYMENT";
+  document.getElementById("payUnpaidBtn").style.display = paid ? "inline-block" : "none";
+  document.getElementById("paymentModal").style.display = "block";
+  document.getElementById("payOrNo").focus();
+}
+
+/* ── monthly statement (whole month, optionally one source) ── */
+window.openHubMonthSoa = function(){
+  if(!appliedYearFilter || !appliedMonthFilter){
+    alert("Please choose a Year and a Month, then press LOAD, before generating the statement for the month.");
+    return;
+  }
+  const list = getFilteredHubbingEntries();
+  if(!list.length){ alert("No sample hubbing entries for the selected month."); return; }
+  const mo = MONTH_FILTER_OPTIONS.find(m => m.value === appliedMonthFilter);
+  const source = filterFacility.value || "";
+  const withAddress = list.find(e => e.address);
+  soaViewKind = "hubMonth";
+  soaViewId = null;
+  soaMonthMeta = {
+    label: (mo ? mo.label : appliedMonthFilter) + " " + appliedYearFilter,
+    source,
+    address: source && withAddress ? withAddress.address : "",
+    ids: list.map(e => e.id)
+  };
+  document.getElementById("soaViewPrintedBy").value = "";
+  document.getElementById("soaViewApprovedBy").value = "";
+  if(window.ESIG){
+    ESIG.setValue(document.getElementById("soaViewPrintedBySig"), "");
+    ESIG.setValue(document.getElementById("soaViewApprovedBySig"), "");
+  }
+  document.getElementById("soaEditBtn").style.display = "none";
+  renderSoaView();
+  document.getElementById("soaModal").style.display = "block";
+};
+/* ═══════════════════════ end SAMPLE HUBBING ═══════════════════════ */
 
 /* LOAD RELEASING */
 function loadReleasingData(){
@@ -1599,10 +1995,10 @@ function loadAugmentationData(){
     allAugmentationEntries = [];
 
     snapshot.forEach(child => {
-      allAugmentationEntries.push({
+      allAugmentationEntries.push(SOA.normAug({
         id: child.key,
         ...child.val()
-      });
+      }));
     });
 
     populateYearMonthFilterOptions();
@@ -1629,6 +2025,8 @@ function setView(view){
   showReleaseBtn.classList.remove("activeBtn");
   showAugmentationBtn.classList.remove("activeBtn");
   showWaivedBtn.classList.remove("activeBtn");
+  showHubbingBtn.classList.remove("activeBtn");
+  hubMonthSoaBtn.style.display = "none";
 
   if(view === "releasing"){
     showReleaseBtn.classList.add("activeBtn");
@@ -1654,6 +2052,27 @@ function setView(view){
     filterMonth.value = "";
     filterDate.value = "";
     appliedMonthFilter = "";
+  }else if(view === "hubbing"){
+    showHubbingBtn.classList.add("activeBtn");
+    searchBox.placeholder = "Search all records — Source, Tests, Invoice...";
+    uncheckAllBtn.style.display = "none";
+    hubMonthSoaBtn.style.display = "inline-block";
+
+    const hubYear = filterYear.value || appliedYearFilter || String(new Date().getFullYear());
+    if(hubYear){
+      const yearExists = [...filterYear.options].some(option => option.value === hubYear);
+      if(!yearExists){
+        const option = document.createElement("option");
+        option.value = hubYear;
+        option.textContent = hubYear;
+        filterYear.appendChild(option);
+      }
+      filterYear.value = hubYear;
+    }
+    appliedYearFilter = filterYear.value;
+    filterMonth.value = "";
+    filterDate.value = "";
+    appliedMonthFilter = "";
   }else{
     showWaivedBtn.classList.add("activeBtn");
     searchBox.placeholder = "Search all records — Name, Facility, Waived Component...";
@@ -1670,7 +2089,7 @@ function populateYearMonthFilterOptions(){
   const currentMonthValue = filterMonth.value;
 
   const yearSet = new Set();
-  [...allReleasingEntries, ...allAugmentationEntries].forEach(entry => {
+  [...allReleasingEntries, ...allAugmentationEntries, ...allHubbingEntries].forEach(entry => {
     const year = String(entry.date || "").slice(0,4);
     if(/^\d{4}$/.test(year)) yearSet.add(year);
   });
@@ -1780,6 +2199,10 @@ function populateFacilityFilter(){
     facilities = [...new Set(
       allAugmentationEntries.map(e => (e.facility || "").trim()).filter(Boolean)
     )].sort();
+  }else if(currentView === "hubbing"){
+    facilities = [...new Set(
+      allHubbingEntries.map(e => (e.source || "").trim()).filter(Boolean)
+    )].sort();
   }else if(currentView === "waived"){
     facilities = [...new Set(
       getFilteredWaivedEntries(true).map(e => (e.facility || "").trim()).filter(Boolean)
@@ -1871,7 +2294,32 @@ function getFilteredAugmentationEntries(){
   });
 
   filtered.sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+
+  /* safety net: one broken record must never blank the whole view */
+  lastBadAugEntries = [];
+  filtered = filtered.filter(entry => {
+    try{
+      computeAugEntryTotal(entry);
+      buildAugDetails(entry);
+      buildAmountPaidCell(entry, "0");
+      buildDiscountCell(entry);
+      augPaidTitle(entry);
+      return true;
+    }catch(err){
+      console.error("Augmentation record could not be displayed:", entry && entry.id, err);
+      lastBadAugEntries.push(entry);
+      return false;
+    }
+  });
   return filtered;
+}
+
+function badAugBannerHtml(){
+  if(!lastBadAugEntries.length) return "";
+  return `<div class="badRecBanner">⚠ ${lastBadAugEntries.length} blood augmentation record(s) could not be displayed because their data is damaged. You can still remove them:` +
+    lastBadAugEntries.map(e => `<div style="margin-top:6px;">${escHtml(e.date || "no date")} — ${escHtml(e.facility || "no facility")} <span style="opacity:.7">(${escHtml(e.id)})</span>` +
+      `<button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${escHtml(e.id)}">DELETE</button></div>`).join("") +
+    `</div>`;
 }
 
 function getFilteredWaivedEntries(ignoreFilters = false){
@@ -2020,30 +2468,6 @@ function isSearchActive(){ return searchBox.value.trim().length>0; }
 
 function clearSearch(){ searchBox.value=""; renderCurrentView(); }
 
-/* Puts a table inside a sideways-scrolling box and shows a one-time "swipe" hint on phones */
-function appendScrollable(parent, table){
-  const wrap = document.createElement("div");
-  wrap.className = "tableScrollWrap";
-  wrap.appendChild(table);
-  const wide = table.querySelectorAll("thead th").length > 6;
-  let hint = null;
-  if(wide){
-    hint = document.createElement("div");
-    hint.className = "swipeHint";
-    hint.textContent = "\u2194 Swipe sideways to see all columns";
-    parent.appendChild(hint);
-  }
-  parent.appendChild(wrap);
-  if(hint){
-    requestAnimationFrame(() => {
-      if(wrap.scrollWidth > wrap.clientWidth + 4){
-        hint.classList.add("on");
-        wrap.addEventListener("scroll", () => hint.classList.remove("on"), { once:true, passive:true });
-      }
-    });
-  }
-}
-
 function renderFlatBanner(count,term){
   const b=document.createElement("div");
   b.className="searchResultsBanner";
@@ -2071,7 +2495,7 @@ function renderFlatReleasingResults(entries){
     r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  appendScrollable(container, t);
+  container.appendChild(t);
 }
 
 function renderFlatAugmentationResults(entries){
@@ -2084,16 +2508,16 @@ function renderFlatAugmentationResults(entries){
   container.appendChild(renderFlatBanner(entries.length,term));
   const t=document.createElement("table");
   t.className="augTable";
-  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+  t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
   const tb=t.querySelector("tbody");
   entries.forEach(entry=>{
     const ct=computeAugEntryTotal(entry);
     const ip=isAugPaid(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  appendScrollable(container, t);
+  container.appendChild(t);
 }
 
 function renderFlatWaivedResults(entries){
@@ -2113,7 +2537,7 @@ function renderFlatWaivedResults(entries){
     r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
-  appendScrollable(container, t);
+  container.appendChild(t);
 }
 // ── end flat search ───────────────────────────────────────────────────────────
 
@@ -2124,12 +2548,16 @@ function renderCurrentView(){
   if(isSearchActive()){
     if(currentView==="releasing")       renderFlatReleasingResults(getFilteredReleasingEntries());
     else if(currentView==="augmentation") renderFlatAugmentationResults(getFilteredAugmentationEntries());
+    else if(currentView==="hubbing")      renderFlatHubbingResults(getFilteredHubbingEntries());
     else                                 renderFlatWaivedResults(getFilteredWaivedEntries());
   } else {
     if(currentView==="releasing")       renderReleasingTable();
     else if(currentView==="augmentation") renderAugmentationTable();
+    else if(currentView==="hubbing")      renderHubbingTable();
     else                                 renderWaivedTable();
   }
+  if(currentView==="augmentation" && lastBadAugEntries.length) container.insertAdjacentHTML("afterbegin", badAugBannerHtml());
+  if(currentView==="hubbing") container.insertAdjacentHTML("afterbegin", hubSummaryHtml(getFilteredHubbingEntries()));
   refreshDuplicateBox();
 
   window.scrollTo(scrollX, scrollY);
@@ -2185,7 +2613,7 @@ function renderReleasingTable(){
       r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.boxContainerQty||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td><div class="discountWrap"><span>${buildDiscountCell(entry)}</span><input type="checkbox" class="discountCheck" data-action="toggle-highlight" data-id="${entry.id}" ${ck?"checked":""}></div></td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    appendScrollable(dc, t);
+    dc.appendChild(t);
   });
 }
 
@@ -2209,16 +2637,16 @@ function renderAugmentationTable(){
   renderYearMonthDateInto(container, groupedByMonth, (dc, de) => {
     const t=document.createElement("table");
     t.className="augTable";
-    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>MISC</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+    t.innerHTML=`<thead><tr><th>DATE</th><th>FACILITY</th><th>BOX CONTAINER</th><th>AUGMENTATION DETAILS</th><th>COMPUTED TOTAL</th><th>AMOUNT PAID</th><th>DISCOUNT</th><th>FREIGHT</th><th>ACTION</th></tr></thead><tbody></tbody>`;
     const tb=t.querySelector("tbody");
     de.forEach(entry=>{
       const ct=computeAugEntryTotal(entry);
       const ip=isAugPaid(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    appendScrollable(dc, t);
+    dc.appendChild(t);
   });
 }
 
@@ -2250,7 +2678,7 @@ function renderWaivedTable(){
       r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.surname||""}</td><td>${entry.firstname||""}</td><td>${entry.age||""}</td><td>${entry.sex||""}</td><td>${entry.bloodtype||""}</td><td>${entry.or||""}</td><td>${entry.waivedComponent||""}</td><td>${entry.waivedUnit||0}</td><td class="componentBox">${formatComponents(entry.requests)}</td><td class="componentBox">${formatComponents(entry.issued)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td><button class="actionBtn editBtn" data-action="edit-release" data-id="${entry.id}">EDIT</button><button class="actionBtn deleteBtn" data-action="delete-release" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
-    appendScrollable(dc, t);
+    dc.appendChild(t);
   });
 }
 
@@ -2268,8 +2696,6 @@ window.closeAugmentationModal = function(){
   document.getElementById("editAugBoxContainerQty").value = "";
   document.getElementById("editAugAmountPaid").value = "";
   DISC_EDIT_AUG.clear();
-  document.getElementById("editAugMiscLabel").value = "";
-  document.getElementById("editAugMiscAmount").value = "";
   document.getElementById("editAugFreight").value = "";
   updateEditAugPayable();
   document.getElementById("editAugPaymentStatus").value = "Unpaid";
@@ -2293,15 +2719,13 @@ function updateEditAugPayable(){
   const box = document.getElementById("editAugPayable");
   const gross = Number(document.getElementById("editAugAmountPaid").value) || 0;
   const disc = Number(document.getElementById("editAugDiscount").value) || 0;
-  const misc = Math.max(0, Number(document.getElementById("editAugMiscAmount").value) || 0);
   const freight = Math.max(0, Number(document.getElementById("editAugFreight").value) || 0);
-  if(gross <= 0 && freight <= 0 && misc <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
+  if(gross <= 0 && freight <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
   const m = SOA.money;
   let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
   if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
-  if(misc > 0) parts += ` + Misc. <b>\u20B1${m(misc)}</b>`;
   if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
-  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + misc + freight)}</b>`;
+  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight)}</b>`;
   box.style.display = "block";
 }
 
@@ -2442,7 +2866,7 @@ async function openEditAugmentation(id){
       return;
     }
 
-    const data = snapshot.val();
+    const data = SOA.normAug(snapshot.val());
     currentAugmentationEditId = id;
     currentAugmentationPriceSnapshot = data.priceSnapshot ? normalizePriceSnapshot(data.priceSnapshot) : currentPrices;
 
@@ -2450,8 +2874,6 @@ async function openEditAugmentation(id){
     document.getElementById("editAugFacility").value = data.facility || "";
     document.getElementById("editAugBoxContainerQty").value = data.boxContainerQty || "";
     DISC_EDIT_AUG.set(data.discount);
-    document.getElementById("editAugMiscLabel").value = data.miscLabel || "";
-    document.getElementById("editAugMiscAmount").value = data.miscAmount || "";
     document.getElementById("editAugFreight").value = data.freight || "";
     document.getElementById("editAugAddress").value = data.address || "";
     document.getElementById("editAugRemarks").value = data.remarks || "";
@@ -2541,18 +2963,6 @@ window.saveAugmentationEdit = async function(){
     DISC_EDIT_AUG.focus();
     return;
   }
-  const miscLabelRaw = document.getElementById("editAugMiscLabel").value.trim();
-  const miscRaw = document.getElementById("editAugMiscAmount").value.trim();
-  if(miscRaw !== "" && !(Number(miscRaw) >= 0)){
-    alert("Miscellaneous amount must be 0 or more.");
-    document.getElementById("editAugMiscAmount").focus();
-    return;
-  }
-  if(miscLabelRaw !== "" && !(Number(miscRaw) > 0)){
-    alert("Enter the amount for the miscellaneous charge, or clear its description.");
-    document.getElementById("editAugMiscAmount").focus();
-    return;
-  }
   const freightRaw = document.getElementById("editAugFreight").value.trim();
   if(freightRaw !== "" && !(Number(freightRaw) >= 0)){
     alert("Freight / transport fee must be 0 or more.");
@@ -2567,8 +2977,6 @@ window.saveAugmentationEdit = async function(){
     bloodTypes,
     amountPaid: document.getElementById("editAugAmountPaid").value,
     discount: document.getElementById("editAugDiscount").value,
-    miscLabel: miscLabelRaw,
-    miscAmount: Math.max(0, Number(miscRaw) || 0),
     freight: Math.max(0, Number(freightRaw) || 0),
     address: SOA.remember("address", document.getElementById("editAugAddress").value),
     remarks: document.getElementById("editAugRemarks").value.trim(),
@@ -2811,6 +3219,7 @@ function phToday(){
 }
 
 let paymentEditId = null;
+let paymentKind = "aug";
 
 function syncEditAugPaidFields(){
   const paid = document.getElementById("editAugPaymentStatus").value === "Paid";
@@ -2838,6 +3247,7 @@ async function toggleAugmentationPaid(id){
 
   const paid = isAugPaid(current);
   paymentEditId = id;
+  paymentKind = "aug";
 
   document.getElementById("payModalTitle").textContent = paid ? "EDIT PAYMENT DETAILS" : "MARK AS PAID";
   document.getElementById("payModalInfo").innerHTML =
@@ -2880,7 +3290,7 @@ window.savePayment = async function(){
   }
 
   try{
-    await update(ref(db, "bloodAugmentation/" + paymentEditId), {
+    await update(ref(db, (paymentKind === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
       augmentationPaid: "YES",
       paymentStatus: "Paid",
       paidOrNo: orNo,
@@ -2898,7 +3308,7 @@ window.markAugmentationUnpaid = async function(){
   if(!confirm("Mark this statement as UNPAID?\n\nThe OR number and date of payment will be removed.")) return;
 
   try{
-    await update(ref(db, "bloodAugmentation/" + paymentEditId), {
+    await update(ref(db, (paymentKind === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
       augmentationPaid: "NO",
       paymentStatus: "Unpaid",
       paidOrNo: null,
@@ -2924,6 +3334,34 @@ container.addEventListener("click", async (event) => {
   if(!auth.currentUser){
     alert("You are not logged in.");
     window.location.href = "index.html";
+    return;
+  }
+
+  if(action === "view-hub-soa"){
+    window.openHubSoaView(id);
+    return;
+  }
+
+  if(action === "edit-hubbing"){
+    await window.openEditHubbing(id);
+    return;
+  }
+
+  if(action === "toggle-hubbing-paid"){
+    await toggleHubbingPaid(id);
+    return;
+  }
+
+  if(action === "delete-hubbing"){
+    const confirmed = confirm("Delete this sample hubbing record?");
+    if(!confirmed) return;
+    try{
+      await remove(ref(db, "sampleHubbing/" + id));
+      alert("Deleted successfully!");
+    }catch(error){
+      console.error(error);
+      alert("Failed to delete sample hubbing record");
+    }
     return;
   }
 
@@ -3108,7 +3546,7 @@ function exportAugmentationCSV(){
   const filtered = getFilteredAugmentationEntries();
 
   const rows = [
-    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","MISC_DESCRIPTION","MISC_AMOUNT","FREIGHT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
+    ["DATE","FACILITY","BOX_CONTAINER","AUGMENTATION_DETAILS","COMPUTED_TOTAL","AMOUNT_PAID","DISCOUNT","FREIGHT","PAID","OR_NUMBER","DATE_OF_PAYMENT"]
   ];
 
   filtered.forEach(e => {
@@ -3134,8 +3572,6 @@ function exportAugmentationCSV(){
       computeAugEntryTotal(e),
       computeFinalTotal(e, computeAugEntryTotal(e)),
       e.discount || "",
-      e.miscLabel || "",
-      e.miscAmount || "",
       e.freight || "",
       isAugPaid(e) ? "YES" : "NO",
       e.paidOrNo || "",
@@ -3205,6 +3641,23 @@ function exportWaivedCSV(){
   document.body.removeChild(link);
 }
 
+function exportHubbingCSV(){
+  const rows = [["DATE","SOURCE_OF_SAMPLE","TESTS","NO_OF_SAMPLES","REPEAT_TESTS","RATE_PER_SAMPLE","AMOUNT","INVOICE_NO","PAID","OR_NUMBER","DATE_OF_PAYMENT"]];
+  getFilteredHubbingEntries().forEach(e => {
+    rows.push([e.date || "", e.source || "", hubTestsText(e), Number(e.sampleCount) || 0, Number(e.repeatTests) || 0,
+      SOA.hubUnitPrice(e, getHubPrices(e)).toFixed(2), hubAmount(e).toFixed(2), e.invoiceNo || "",
+      isAugPaid(e) ? "YES" : "NO", e.paidOrNo || "", e.paidDate || ""]);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], {type:"text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "sample_hubbing_records.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function exportCurrentCSV(){
   if(!auth.currentUser){
     alert("You are not logged in.");
@@ -3216,6 +3669,8 @@ function exportCurrentCSV(){
     exportReleasingCSV();
   }else if(currentView === "augmentation"){
     exportAugmentationCSV();
+  }else if(currentView === "hubbing"){
+    exportHubbingCSV();
   }else{
     exportWaivedCSV();
   }
@@ -3231,6 +3686,8 @@ filterFacility.addEventListener("change", renderCurrentView);
 
 showReleaseBtn.addEventListener("click", () => setView("releasing"));
 showAugmentationBtn.addEventListener("click", () => setView("augmentation"));
+showHubbingBtn.addEventListener("click", () => setView("hubbing"));
+hubMonthSoaBtn.addEventListener("click", () => window.openHubMonthSoa());
 showWaivedBtn.addEventListener("click", () => setView("waived"));
 
 exportBtn.addEventListener("click", exportCurrentCSV);
@@ -3258,7 +3715,7 @@ document.addEventListener("input", function(e){
     recomputeEditAugmentationAmountPaid();
   }
 
-  if(e.target.id === "editAugFreight" || e.target.id === "editAugMiscAmount" || e.target.id === "editAugMiscLabel"){
+  if(e.target.id === "editAugFreight"){
     updateEditAugPayable();
   }
 
@@ -3285,6 +3742,11 @@ window.onclick = function(event){
     window.closeAugmentationModal();
   }
 
+  const hubbingModal = document.getElementById("hubbingModal");
+  if(event.target === hubbingModal){
+    window.closeHubbingModal();
+  }
+
   const releasingModal = document.getElementById("releasingModal");
   if(event.target === releasingModal){
     window.closeReleasingModal();
@@ -3308,15 +3770,17 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   await loadPrices();
+  await loadHubPrices();
   loadReleasingData();
   loadAugmentationData();
+  loadHubbingData();
   setView("releasing");
 });
 
 /* ───────── SOA view / print / edit ───────── */
 SOA.attach(document.getElementById("editAugAddress"), "address");
 SOA.mountOrgEditor(document.getElementById("orgEditorMount"));
-document.addEventListener("soaOrgChanged", () => { if(soaViewId) renderSoaView(); });
+document.addEventListener("soaOrgChanged", () => { if(soaViewId || soaMonthMeta) renderSoaView(); });
 SOA.attach(document.getElementById("soaViewPrintedBy"), "printedBy");
 SOA.attach(document.getElementById("soaViewApprovedBy"), "approvedBy");
 const sigOf = id => (window.ESIG ? window.ESIG.imageFor(id) : "");
@@ -3325,22 +3789,38 @@ window.addEventListener("load", () => {
   ESIG.attachSelect(document.getElementById("soaViewApprovedBySig"), document.getElementById("soaViewApprovedBy"), () => renderSoaView());
 });
 let soaViewId = null;
-const soaEntry = () => allAugmentationEntries.find(e => e.id === soaViewId);
+let soaViewKind = "aug";      // "aug" | "hub" | "hubMonth"
+let soaMonthMeta = null;
+const soaEntry = () => soaViewKind === "hub"
+  ? allHubbingEntries.find(e => e.id === soaViewId)
+  : allAugmentationEntries.find(e => e.id === soaViewId);
+const soaMonthEntries = () => soaMonthMeta ? allHubbingEntries.filter(e => soaMonthMeta.ids.includes(e.id)) : [];
 
 function soaCurrent(){
-  const e = soaEntry(); if(!e) return null;
-  return { ...e,
+  const sig = {
     printedBy: document.getElementById("soaViewPrintedBy").value.trim(),
     approvedBy: document.getElementById("soaViewApprovedBy").value.trim(),
     printedBySig: sigOf(document.getElementById("soaViewPrintedBySig").value),
-    approvedBySig: sigOf(document.getElementById("soaViewApprovedBySig").value) };
+    approvedBySig: sigOf(document.getElementById("soaViewApprovedBySig").value)
+  };
+  if(soaViewKind === "hubMonth"){
+    if(!soaMonthMeta) return null;
+    return Object.assign({}, soaMonthMeta, sig);
+  }
+  const e = soaEntry(); if(!e) return null;
+  return Object.assign({}, e, sig);
+}
+function soaHtml(d){
+  if(soaViewKind === "hubMonth") return SOA.buildHubMonth(soaMonthEntries(), d);
+  if(soaViewKind === "hub") return SOA.buildHub(d, getHubPrices(d));
+  return SOA.build(d, getEntryPrices(d));
 }
 function renderSoaView(){
   const d = soaCurrent(); if(!d) return;
-  document.getElementById("soaViewBody").innerHTML = SOA.build(d, getEntryPrices(d));
+  document.getElementById("soaViewBody").innerHTML = soaHtml(d);
 }
-window.openSoaView = function(id){
-  soaViewId = id;
+function openSoaModalFor(kind, id){
+  soaViewKind = kind; soaViewId = id; soaMonthMeta = null;
   const e = soaEntry(); if(!e) return;
   document.getElementById("soaViewPrintedBy").value = e.printedBy || "";
   document.getElementById("soaViewApprovedBy").value = e.approvedBy || "";
@@ -3348,16 +3828,23 @@ window.openSoaView = function(id){
     ESIG.setValue(document.getElementById("soaViewPrintedBySig"), e.printedBySigId || "");
     ESIG.setValue(document.getElementById("soaViewApprovedBySig"), e.approvedBySigId || "");
   }
+  document.getElementById("soaEditBtn").style.display = "";
   renderSoaView();
   document.getElementById("soaModal").style.display = "block";
-};
+}
+window.openSoaView = function(id){ openSoaModalFor("aug", id); };
+window.openHubSoaView = function(id){ openSoaModalFor("hub", id); };
 window.closeSoaView = function(){
   document.getElementById("soaModal").style.display = "none";
   soaViewId = null;
+  soaMonthMeta = null;
+  soaViewKind = "aug";
 };
 window.editSoaView = async function(){
-  const id = soaViewId; window.closeSoaView();
-  if(id) await openEditAugmentation(id);
+  const id = soaViewId, kind = soaViewKind; window.closeSoaView();
+  if(!id) return;
+  if(kind === "hub") await window.openEditHubbing(id);
+  else await openEditAugmentation(id);
 };
 ["soaViewPrintedBy","soaViewApprovedBy"].forEach(id => document.getElementById(id).addEventListener("input", renderSoaView));
 
@@ -3366,22 +3853,29 @@ window.printSoaView = async function(){
   d.printedBy = SOA.remember("printedBy", d.printedBy);
   d.approvedBy = SOA.remember("approvedBy", d.approvedBy);
   if(!d.printedBy){ alert("Please type the name of the person printing."); document.getElementById("soaViewPrintedBy").focus(); return; }
-  const patch = { printedBy: d.printedBy, approvedBy: d.approvedBy,
-    printedBySig: d.printedBySig || null, approvedBySig: d.approvedBySig || null,
-    printedBySigId: document.getElementById("soaViewPrintedBySig").value || null,
-    approvedBySigId: document.getElementById("soaViewApprovedBySig").value || null };
-  try{
-    if(!d.invoiceNo){ // older records saved before invoice numbering
-      const y = (d.date || "").slice(0,4) || String(new Date().getFullYear());
-      const tx = await runTransaction(ref(db, "settings/soaCounter/" + y), c => (Number(c) || 0) + 1);
-      d.invoiceNo = patch.invoiceNo = `INV-${y}-${String(tx.snapshot.val()).padStart(5,"0")}`;
-    }
-    const tx2 = await runTransaction(ref(db, "bloodAugmentation/" + d.id + "/printCount"), c => (Number(c) || 0) + 1);
-    d.printCount = tx2.snapshot.val();
-    await update(ref(db, "bloodAugmentation/" + d.id), patch);
-  }catch(err){ console.error(err); alert("Could not store the invoice/print details, but printing will continue."); }
+
+  if(soaViewKind !== "hubMonth"){
+    const isHub = soaViewKind === "hub";
+    const base = isHub ? "sampleHubbing/" : "bloodAugmentation/";
+    const counter = isHub ? "settings/hubbingSoaCounter/" : "settings/soaCounter/";
+    const prefix = isHub ? "HUB" : "INV";
+    const patch = { printedBy: d.printedBy, approvedBy: d.approvedBy,
+      printedBySig: d.printedBySig || null, approvedBySig: d.approvedBySig || null,
+      printedBySigId: document.getElementById("soaViewPrintedBySig").value || null,
+      approvedBySigId: document.getElementById("soaViewApprovedBySig").value || null };
+    try{
+      if(!d.invoiceNo){ // older records saved before invoice numbering
+        const y = (d.date || "").slice(0,4) || String(new Date().getFullYear());
+        const tx = await runTransaction(ref(db, counter + y), c => (Number(c) || 0) + 1);
+        d.invoiceNo = patch.invoiceNo = `${prefix}-${y}-${String(tx.snapshot.val()).padStart(5,"0")}`;
+      }
+      const tx2 = await runTransaction(ref(db, base + d.id + "/printCount"), c => (Number(c) || 0) + 1);
+      d.printCount = tx2.snapshot.val();
+      await update(ref(db, base + d.id), patch);
+    }catch(err){ console.error(err); alert("Could not store the invoice/print details, but printing will continue."); }
+  }
   renderSoaView();
-  SOA.print(SOA.build(d, getEntryPrices(d)));
+  SOA.print(soaHtml(d));
 };
 </script>
 
