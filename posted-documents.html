@@ -117,8 +117,8 @@ function fmtDate(s){
 }
 function totals(e,prices){
   prices=prices||{};const rows=[];let gross=0;
-  (e.bloodTypes||[]).forEach(bt=>{
-    const agg={};(bt.issued||[]).forEach(i=>{const t=String(i.type||"").toUpperCase();agg[t]=(agg[t]||0)+(Number(i.qty)||0)});
+  A(e.bloodTypes).forEach(bt=>{
+    const agg={};A(bt.issued).forEach(i=>{const t=String(i.type||"").toUpperCase();agg[t]=(agg[t]||0)+(Number(i.qty)||0)});
     Object.keys(agg).forEach(t=>{
       if(!agg[t])return;const p=Number(prices[t])||0,amt=p*agg[t];gross+=amt;
       rows.push({d:`${NAMES[t]||t} (${t}) – ${bt.bloodType||""}`,q:agg[t],u:"unit",p,a:amt});
@@ -126,19 +126,81 @@ function totals(e,prices){
   });
   const box=Number(e.boxContainerQty)||0;
   if(box){const p=Number(prices.BOX)||0;gross+=p*box;rows.push({d:"Box Container",q:box,u:"pc",p,a:p*box})}
-  const disc=Number(e.discount)||0,misc=Math.max(0,Number(e.miscAmount)||0),freight=Math.max(0,Number(e.freight)||0),net=gross-disc+misc+freight;
-  const extra=[];   /* extra charges are printed as ordinary rows of the same table, misc first, then freight */
-  if(misc>0)extra.push({d:String(e.miscLabel||"").trim()||"Miscellaneous",q:1,u:"lot",p:misc,a:misc});
-  if(freight>0)extra.push({d:"Freight (Transport Fee)",q:1,u:"lot",p:freight,a:freight});
-  return {rows,extra,gross,disc,misc,freight,net};
+  const disc=Number(e.discount)||0,freight=Math.max(0,Number(e.freight)||0),net=gross-disc+freight;
+  return {rows,gross,disc,freight,net};
 }
 const sigImg=u=>/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u||"")?`<img class="sigImg" src="${u}" alt="">`:"";
+
+/* ── array safety: Firebase returns arrays with gaps as objects / null holes ── */
+const A=v=>Array.isArray(v)?v.filter(x=>x!=null):(v&&typeof v==="object"?Object.values(v).filter(x=>x!=null):[]);
+function normAug(e){
+  const o=Object.assign({},e||{});
+  o.bloodTypes=A(o.bloodTypes).filter(b=>typeof b==="object").map(b=>Object.assign({},b,{requests:A(b.requests).filter(r=>typeof r==="object"),issued:A(b.issued).filter(r=>typeof r==="object")}));
+  return o;
+}
+/* ── Sample Hubbing statements ── */
+const HUB_TESTS=["FULL","HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
+const HUB_LABEL={FULL:"FULL",HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
+function hubTests(e){const t=A(e&&e.tests).map(String);return HUB_TESTS.filter(x=>t.includes(x))}
+function hubRate(prices){const r=Number(prices&&(prices.RATE??prices.rate));return r>0?r:60}
+function hubUnitPrice(e,prices){return hubRate(prices)}
+const HUB_REPEAT_TIMES=2;
+function hubTotals(e,prices){
+  const rate=hubRate(prices),n=Number(e&&e.sampleCount)||0,rp=Math.max(0,Number(e&&e.repeatTests)||0);
+  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
+  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:n,u:"sample",p:rate,a:rate*n}];
+  if(rp>0)rows.push({d:"Repeat tests ("+rp+" sample"+(rp>1?"s":"")+" repeated "+HUB_REPEAT_TIMES+"x each)",q:rp*HUB_REPEAT_TIMES,u:"test",p:rate,a:rate*rp*HUB_REPEAT_TIMES});
+  const gross=rows.reduce((s,r)=>s+r.a,0);
+  return{rows,gross,disc:0,freight:0,net:gross};
+}
+function hubShell(metaHtml,tableHtml,e){
+  const org=getOrg();
+  const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
+  const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
+  return `<div class="soaDoc">
+<div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
+<div class="soaTitle">BILLING STATEMENT – SAMPLE HUBBING</div>
+${metaHtml}
+${tableHtml}
+<div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
+${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
+<div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
+}
+function buildHub(e,prices){
+  e=e||{};const {rows,net}=hubTotals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(e.source)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
+  const table=`<table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
+<thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
+  return hubShell(meta,table,e);
+}
+/* One statement for a whole month: list = hubbing entries, o = {label,source,remarks,note,printedBy,...} */
+function buildHubMonth(list,o){
+  o=o||{};list=(list||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
+  const multi=!o.source;let total=0,samples=0;
+  let body=list.map(e=>{
+    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);total+=t.net;samples+=Number(e.sampleCount)||0;
+    const desc=(multi?esc(e.source)+" – ":"")+esc(hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—");
+    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${Number(e.sampleCount)||0}${Number(e.repeatTests)>0?` (+${Number(e.repeatTests)} repeated)`:""}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
+  }).join("");
+  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(o.source||"ALL SOURCES")}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(o.address||"")}</span></div></div>
+<div class="r"><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Total samples: <span class="ul">${samples}</span></div></div></div>`;
+  const table=`<table><colgroup><col style="width:15%"><col style="width:17%"><col style="width:28%"><col style="width:10%"><col style="width:13%"><col style="width:17%"></colgroup>
+<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Rate / sample</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(total)}</td></tr></tbody></table>`;
+  return hubShell(meta,table,o);
+}
+
 function build(e,prices){
-  const {rows,extra,gross,disc,misc,freight,net}=totals(e,prices);
-  const items=rows.concat(extra);
-  let body=items.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=items.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
-  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB" style="text-align:right;font-size:10px;font-style:italic;color:#555">${extra.length?"Discount applies to blood components only":""}</td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  const {rows,gross,disc,freight,net}=totals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  if(disc>0){const pct=gross>0?Math.round(disc/gross*10000)/100:0;body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Discount${pct?` (${pct}%)`:""}</b></td><td class="n">(${money(disc)})</td></tr>`;}
+  if(freight>0)body+=`<tr><td colspan="4" class="noB"></td><td class="n"><b>Freight (Transport Fee)</b></td><td class="n">${money(freight)}</td></tr>`;
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
@@ -163,7 +225,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
 })();
 </script>
 
@@ -239,7 +301,7 @@ tr.expanded .caret{transform:rotate(90deg);}
 
 <header>
   <h1>📄 POSTED DOCUMENTS</h1>
-  <p>Blood Augmentation Billing Statements (SOAs)</p>
+  <p>Blood Augmentation &amp; Sample Hubbing Billing Statements (SOAs)</p>
 </header>
 
 <div class="container">
@@ -253,6 +315,7 @@ tr.expanded .caret{transform:rotate(90deg);}
         <button type="button" data-period="year" class="active" onclick="setPeriod('year')">Annual</button>
       </div>
     </div>
+    <div class="fld"><label>TYPE</label><select id="fType"><option value="">All documents</option><option value="aug">Blood Augmentation</option><option value="hub">Sample Hubbing</option></select></div>
     <div class="fld"><label>YEAR</label><select id="fYear"></select></div>
     <div class="fld" id="fQuarterWrap" style="display:none;"><label>QUARTER</label>
       <select id="fQuarter"><option value="1">Q1 (Jan–Mar)</option><option value="2">Q2 (Apr–Jun)</option><option value="3">Q3 (Jul–Sep)</option><option value="4">Q4 (Oct–Dec)</option></select>
@@ -261,7 +324,7 @@ tr.expanded .caret{transform:rotate(90deg);}
       <select id="fHalf"><option value="1">1st Half (Jan–Jun)</option><option value="2">2nd Half (Jul–Dec)</option></select>
     </div>
     <div class="fld grow"><label>SEARCH</label>
-      <input type="text" id="fSearch" placeholder="Invoice no., customer, printed by, approved by...">
+      <input type="text" id="fSearch" placeholder="Invoice no., customer / source, printed by, approved by...">
     </div>
     <button class="btn clear" onclick="clearFilters()">CLEAR</button>
     <button class="btn printF" onclick="printList(false)">🖨 PRINT FILTERED</button>
@@ -281,7 +344,6 @@ tr.expanded .caret{transform:rotate(90deg);}
           <th>Customer Name</th>
           <th class="n">Amount</th>
           <th class="n">Discount</th>
-          <th class="n">Misc</th>
           <th class="n">Freight</th>
           <th class="n">Total Payable</th>
           <th class="c">Status</th>
@@ -362,6 +424,19 @@ let expandedId = null;
 let period = "year";
 
 function getEntryPrices(e){ return e.priceSnapshot || {}; }
+let augEntries = [], hubEntries = [];
+const custOf = e => e._type === "hub" ? (e.source || "") : (e.facility || "");
+const totalsOf = e => e._type === "hub" ? SOA.hubTotals(e, getEntryPrices(e)) : SOA.totals(e, getEntryPrices(e));
+const buildOf = e => e._type === "hub" ? SOA.buildHub(e, getEntryPrices(e)) : SOA.build(e, getEntryPrices(e));
+const pathFor = id => { const e = allEntries.find(x => x.id === id); return (e && e._type === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + id; };
+function rebuildEntries(){
+  allEntries = [
+    ...augEntries.map(e => Object.assign(SOA.normAug(e), { _type: "aug" })),
+    ...hubEntries.map(e => Object.assign({}, e, { tests: SOA.hubTests(e), _type: "hub" }))
+  ];
+  populateYearOptions();
+  render();
+}
 
 function quarterOf(monthIdx){ return Math.floor(monthIdx/3)+1; } // monthIdx 0-11
 function halfOf(monthIdx){ return monthIdx < 6 ? 1 : 2; }
@@ -385,6 +460,7 @@ window.setPeriod = function(p){
 };
 
 window.clearFilters = function(){
+  $("fType").value = "";
   $("fSearch").value = "";
   $("fYear").value = currentPhYear();
   $("fQuarter").value = String(quarterOf(new Date().getMonth()));
@@ -413,14 +489,14 @@ function inPeriod(e){
 function matchesSearch(e, q){
   if(!q) return true;
   q = q.toLowerCase();
-  return [e.invoiceNo, e.facility, e.printedBy, e.approvedBy, e.address, statusOf(e), e.paidOrNo, e.paidDate]
+  return [e.invoiceNo, custOf(e), (e._type==="hub"?"sample hubbing":"blood augmentation"), (e.tests||[]).join(" "), e.printedBy, e.approvedBy, e.address, statusOf(e), e.paidOrNo, e.paidDate]
     .some(v => String(v||"").toLowerCase().includes(q));
 }
 
 function filteredEntries(){
   const q = $("fSearch").value.trim();
   return allEntries
-    .filter(e => inPeriod(e) && matchesSearch(e, q))
+    .filter(e => inPeriod(e) && (!$("fType").value || e._type === $("fType").value) && matchesSearch(e, q))
     .sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.invoiceNo||"").localeCompare(a.invoiceNo||""));
 }
 
@@ -429,7 +505,7 @@ function statusOf(e){
 }
 
 function rowHtml(e){
-  const t = SOA.totals(e, getEntryPrices(e));
+  const t = totalsOf(e);
   const isOpen = e.id === expandedId;
   const st = statusOf(e);
   return `
@@ -437,10 +513,9 @@ function rowHtml(e){
       <td class="caret">▶</td>
       <td>${SOA.esc(SOA.fmtDate(e.date))}</td>
       <td>${SOA.esc(e.invoiceNo || "—")}</td>
-      <td>${SOA.esc(e.facility || "")}</td>
+      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? ' <span style="background:#00897b;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:bold;">HUBBING</span>' : ""}</td>
       <td class="n">${money(t.gross)}</td>
       <td class="n">${money(t.disc)}</td>
-      <td class="n">${t.misc > 0 ? money(t.misc) : ""}</td>
       <td class="n">${t.freight > 0 ? money(t.freight) : ""}</td>
       <td class="n"><b>${money(t.net)}</b></td>
       <td class="c"><button type="button" class="statusBadge ${st==="Paid"?"paid":"unpaid"}" onclick="event.stopPropagation();openPayModal('${e.id}')">${st}</button></td>
@@ -450,13 +525,13 @@ function rowHtml(e){
       <td>${SOA.esc(e.printedBy || "")}</td>
     </tr>
     <tr class="detailRow" style="display:${isOpen?"table-row":"none"};">
-      <td colspan="14">
+      <td colspan="13">
         <div class="detailWrap">
           <div class="detailActions">
             <button type="button" class="btn printF" onclick="event.stopPropagation();printOne('${e.id}')">🖨 Print This Statement</button>
             <button type="button" class="btn note" onclick="event.stopPropagation();openNoteModal('${e.id}')">📝 ${e.note ? "Edit Note" : "Add Note"}</button>
           </div>
-          <div style="border:1px dashed #99a;border-radius:6px;overflow-x:auto;">${SOA.build(e, getEntryPrices(e))}</div>
+          <div style="border:1px dashed #99a;border-radius:6px;overflow-x:auto;">${buildOf(e)}</div>
         </div>
       </td>
     </tr>`;
@@ -482,7 +557,7 @@ window.openPayModal = function(id){
   const paid = statusOf(e) === "Paid";
   payEditId = id;
   $("payTitle").textContent = paid ? "EDIT PAYMENT DETAILS" : "MARK AS PAID";
-  $("payInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(e.facility || "") + "</b>";
+  $("payInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(custOf(e)) + "</b>";
   $("payOrNo").value = e.paidOrNo || "";
   $("payDate").value = e.paidDate || phToday();
   $("payErr").textContent = "";
@@ -507,7 +582,7 @@ window.savePay = async function(){
   const id = payEditId;
   const patch = { paymentStatus: "Paid", augmentationPaid: "YES", paidOrNo: orNo, paidDate: paidDate };
   try{
-    await update(ref(db, "bloodAugmentation/" + id), patch);
+    await update(ref(db, pathFor(id)), patch);
     const e = allEntries.find(x => x.id === id);
     if(e) Object.assign(e, patch);
     closePayModal();
@@ -524,7 +599,7 @@ window.markUnpaid = async function(){
 
   const id = payEditId;
   try{
-    await update(ref(db, "bloodAugmentation/" + id), { paymentStatus: "Unpaid", augmentationPaid: "NO", paidOrNo: null, paidDate: null });
+    await update(ref(db, pathFor(id)), { paymentStatus: "Unpaid", augmentationPaid: "NO", paidOrNo: null, paidDate: null });
     const e = allEntries.find(x => x.id === id);
     if(e){ e.paymentStatus = "Unpaid"; e.augmentationPaid = "NO"; delete e.paidOrNo; delete e.paidDate; }
     closePayModal();
@@ -541,7 +616,7 @@ window.openNoteModal = function(id){
   const e = allEntries.find(x => x.id === id); if(!e) return;
   noteEditId = id;
   $("noteTitle").textContent = e.note ? "EDIT NOTE" : "ADD NOTE";
-  $("noteInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(e.facility || "") + "</b>";
+  $("noteInfo").innerHTML = "Invoice: <b>" + SOA.esc(e.invoiceNo || "—") + "</b><br>Customer: <b>" + SOA.esc(custOf(e)) + "</b>";
   $("noteText").value = e.note || "";
   $("noteErr").textContent = "";
   $("noteClearBtn").style.display = e.note ? "inline-block" : "none";
@@ -558,7 +633,7 @@ async function writeNote(value){
   if(!noteEditId) return;
   const id = noteEditId;
   try{
-    await update(ref(db, "bloodAugmentation/" + id), { note: value || null });
+    await update(ref(db, pathFor(id)), { note: value || null });
     const e = allEntries.find(x => x.id === id);
     if(e){ if(value) e.note = value; else delete e.note; }
     closeNoteModal();
@@ -578,21 +653,19 @@ window.clearNote = function(){
 
 window.printOne = function(id){
   const e = allEntries.find(x => x.id === id); if(!e) return;
-  SOA.print(SOA.build(e, getEntryPrices(e)));
+  SOA.print(buildOf(e));
 };
 
 function renderSummary(rows){
-  const totGross = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).gross,0);
-  const totDisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).disc,0);
-  const totMisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).misc,0);
-  const totFreight = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).freight,0);
-  const totNet = totGross - totDisc + totMisc + totFreight;
+  const totGross = rows.reduce((s,e)=>s+totalsOf(e).gross,0);
+  const totDisc = rows.reduce((s,e)=>s+totalsOf(e).disc,0);
+  const totFreight = rows.reduce((s,e)=>s+totalsOf(e).freight,0);
+  const totNet = totGross - totDisc + totFreight;
   $("summaryBar").innerHTML =
     `<div>Period: <b>${SOA.esc(periodLabel())}</b></div>
      <div>Statements: <b>${rows.length}</b></div>
      <div>Total Amount: <b>₱${money(totGross)}</b></div>
      <div>Total Discount: <b>₱${money(totDisc)}</b></div>
-     <div>Total Misc: <b>₱${money(totMisc)}</b></div>
      <div>Total Freight: <b>₱${money(totFreight)}</b></div>
      <div>Total Net: <b>₱${money(totNet)}</b></div>`;
 }
@@ -602,25 +675,23 @@ function render(){
   renderSummary(rows);
   $("tblBody").innerHTML = rows.length
     ? rows.map(rowHtml).join("")
-    : `<tr><td colspan="14" class="empty">No posted documents found for this period.</td></tr>`;
+    : `<tr><td colspan="13" class="empty">No posted documents found for this period.</td></tr>`;
 }
 
 function buildPrintTable(rows, label){
   const org = SOA.getOrg();
-  const totGross = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).gross,0);
-  const totDisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).disc,0);
-  const totMisc = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).misc,0);
-  const totFreight = rows.reduce((s,e)=>s+SOA.totals(e,getEntryPrices(e)).freight,0);
-  const totNet = totGross - totDisc + totMisc + totFreight;
+  const totGross = rows.reduce((s,e)=>s+totalsOf(e).gross,0);
+  const totDisc = rows.reduce((s,e)=>s+totalsOf(e).disc,0);
+  const totFreight = rows.reduce((s,e)=>s+totalsOf(e).freight,0);
+  const totNet = totGross - totDisc + totFreight;
   const body = rows.map(e => {
-    const t = SOA.totals(e, getEntryPrices(e));
+    const t = totalsOf(e);
     return `<tr>
       <td>${SOA.esc(SOA.fmtDate(e.date))}</td>
       <td>${SOA.esc(e.invoiceNo||"—")}</td>
-      <td>${SOA.esc(e.facility||"")}</td>
+      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? " (Hubbing)" : ""}</td>
       <td style="text-align:right;">${money(t.gross)}</td>
       <td style="text-align:right;">${money(t.disc)}</td>
-      <td style="text-align:right;">${t.misc > 0 ? money(t.misc) : ""}</td>
       <td style="text-align:right;">${t.freight > 0 ? money(t.freight) : ""}</td>
       <td style="text-align:right;font-weight:700;">${money(t.net)}</td>
       <td style="text-align:center;">${statusOf(e)}</td>
@@ -644,7 +715,6 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">Customer Name</th>
         <th style="border:1px solid #000;padding:4px;">Amount</th>
         <th style="border:1px solid #000;padding:4px;">Discount</th>
-        <th style="border:1px solid #000;padding:4px;">Misc</th>
         <th style="border:1px solid #000;padding:4px;">Freight</th>
         <th style="border:1px solid #000;padding:4px;">Total Payable</th>
         <th style="border:1px solid #000;padding:4px;">Status</th>
@@ -653,12 +723,11 @@ function buildPrintTable(rows, label){
         <th style="border:1px solid #000;padding:4px;">No. of Print</th>
         <th style="border:1px solid #000;padding:4px;">Name of Person Printed</th>
       </tr></thead>
-      <tbody>${body || '<tr><td colspan="13" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
+      <tbody>${body || '<tr><td colspan="12" style="border:1px solid #000;padding:8px;text-align:center;">No records</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:700;">
         <td colspan="3" style="border:1px solid #000;padding:4px;text-align:right;">TOTAL</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totGross)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totDisc)}</td>
-        <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totMisc)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totFreight)}</td>
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totNet)}</td>
         <td colspan="5" style="border:1px solid #000;"></td>
@@ -682,11 +751,11 @@ window.printList = function(all){
 
 window.exportCsv = function(){
   const rows = filteredEntries();
-  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Misc","Freight","Total Payable","Status","OR No.","Date of Payment","No. of Print","Name of Person Printed"];
+  const head = ["Posting Date","Invoice Number","Customer Name","Amount","Discount","Freight","Total Payable","Status","OR No.","Date of Payment","No. of Print","Name of Person Printed"];
   const lines = [head.join(",")];
   rows.forEach(e => {
-    const t = SOA.totals(e, getEntryPrices(e));
-    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", e.facility||"", t.gross.toFixed(2), t.disc.toFixed(2), t.misc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
+    const t = totalsOf(e);
+    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", custOf(e)+(e._type==="hub"?" (Hubbing)":""), t.gross.toFixed(2), t.disc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
     lines.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","));
   });
   const blob = new Blob(["\ufeff"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
@@ -696,7 +765,7 @@ window.exportCsv = function(){
   document.body.appendChild(a); a.click(); a.remove();
 };
 
-["fYear","fQuarter","fHalf"].forEach(id => $(id).addEventListener("change", render));
+["fType","fYear","fQuarter","fHalf"].forEach(id => $(id).addEventListener("change", render));
 $("fSearch").addEventListener("input", render);
 document.addEventListener("soaOrgChanged", render);
 
@@ -704,9 +773,13 @@ onAuthStateChanged(auth, user => {
   if(!user){ return; }
   onValue(ref(db, "bloodAugmentation"), snap => {
     const val = snap.val() || {};
-    allEntries = Object.keys(val).map(id => ({ id, ...val[id] }));
-    populateYearOptions();
-    render();
+    augEntries = Object.keys(val).map(id => ({ id, ...val[id] }));
+    rebuildEntries();
+  });
+  onValue(ref(db, "sampleHubbing"), snap => {
+    const val = snap.val() || {};
+    hubEntries = Object.keys(val).map(id => ({ id, ...val[id] }));
+    rebuildEntries();
   });
 });
 
