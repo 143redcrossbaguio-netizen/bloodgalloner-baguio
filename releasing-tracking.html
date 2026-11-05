@@ -670,6 +670,22 @@ flex-direction:column;
   </div>
 </div>
 
+<!-- REPEATED SAMPLES MODAL -->
+<div id="hubRepeatModal" class="modal">
+  <div class="modalContent" style="max-width:430px;">
+    <h3 style="margin-top:0;">REPEATED SAMPLES</h3>
+    <div id="hubRepeatInfo" style="font-size:14px;line-height:1.6;margin-bottom:8px;"></div>
+    <label class="formLabel">HOW MANY SAMPLES WERE REPEATED?</label>
+    <input type="number" id="hubRepeatInput" class="formInput" min="0" step="1" placeholder="0">
+    <div id="hubRepeatCalc" style="margin-top:10px;padding:10px;background:#e0f2f1;border:1px solid #00897b;border-radius:6px;font-size:14px;"></div>
+    <div id="hubRepeatMsg" style="color:#c62828;font-size:13px;font-weight:bold;min-height:18px;margin-top:6px;"></div>
+    <div class="modalActions">
+      <button type="button" class="saveBtn" onclick="saveHubRepeat()">SAVE</button>
+      <button type="button" class="closeBtn" onclick="closeHubRepeat()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
 <!-- SAMPLE HUBBING EDIT MODAL -->
 <div id="hubbingModal" class="modal">
   <div class="modalContent">
@@ -683,7 +699,7 @@ flex-direction:column;
 
     <label class="formLabel">TESTS</label>
     <div class="hubChecks" id="editHubTests">
-      <label><input type="checkbox" class="editHubChk" value="FULL"> FULL</label>
+      <label><input type="checkbox" class="editHubChk" value="FULL"> FULL (ticks all)</label>
       <label><input type="checkbox" class="editHubChk" value="HIV"> HIV</label>
       <label><input type="checkbox" class="editHubChk" value="HCV"> HCV</label>
       <label><input type="checkbox" class="editHubChk" value="HBsAg"> HBsAg</label>
@@ -694,7 +710,7 @@ flex-direction:column;
     <label class="formLabel">NUMBER OF SAMPLES</label>
     <input type="number" id="editHubSamples" class="formInput" min="1" step="1">
 
-    <label class="formLabel">REPEAT TESTS DONE (number of samples repeated — each is repeated 2×, billed 2 extra times)</label>
+    <label class="formLabel">SAMPLES REPEATED (each repeated sample is tested 2 more times)</label>
     <input type="number" id="editHubRepeat" class="formInput" min="0" step="1" placeholder="0">
 
     <label class="formLabel">AMOUNT</label>
@@ -1085,27 +1101,37 @@ function normAug(e){
   return o;
 }
 /* ── Sample Hubbing statements ── */
-const HUB_TESTS=["FULL","HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
-const HUB_LABEL={FULL:"FULL",HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
-function hubTests(e){const t=A(e&&e.tests).map(String);return HUB_TESTS.filter(x=>t.includes(x))}
+const HUB_TESTS=["HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
+const HUB_LABEL={HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
+const HUB_REPEAT_TIMES=2;
+function hubTests(e){const t=A(e&&e.tests).map(String);if(t.includes("FULL"))return HUB_TESTS.slice();return HUB_TESTS.filter(x=>t.includes(x))}
 function hubRate(prices){const r=Number(prices&&(prices.RATE??prices.rate));return r>0?r:60}
 function hubUnitPrice(e,prices){return hubRate(prices)}
-const HUB_REPEAT_TIMES=2;
-function hubTotals(e,prices){
-  const rate=hubRate(prices),n=Number(e&&e.sampleCount)||0,rp=Math.max(0,Number(e&&e.repeatTests)||0);
-  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
-  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:n,u:"sample",p:rate,a:rate*n}];
-  if(rp>0)rows.push({d:"Repeat tests ("+rp+" sample"+(rp>1?"s":"")+" repeated "+HUB_REPEAT_TIMES+"x each)",q:rp*HUB_REPEAT_TIMES,u:"test",p:rate,a:rate*rp*HUB_REPEAT_TIMES});
-  const gross=rows.reduce((s,r)=>s+r.a,0);
-  return{rows,gross,disc:0,freight:0,net:gross};
+function hubCounts(e){
+  const n=Math.max(0,parseInt(e&&e.sampleCount,10)||0);
+  let rp=Math.max(0,parseInt(e&&e.repeatTests,10)||0);if(rp>n)rp=n;
+  return{n,rp,extra:rp*HUB_REPEAT_TIMES,total:n+rp*HUB_REPEAT_TIMES};
 }
-function hubShell(metaHtml,tableHtml,e){
+function hubTotals(e,prices){
+  const rate=hubRate(prices),c=hubCounts(e);
+  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
+  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:c.n,p:rate,a:rate*c.n}];
+  if(c.rp>0)rows.push({d:"Repeat tests – "+c.rp+" sample"+(c.rp>1?"s":"")+" repeated ("+HUB_REPEAT_TIMES+"x each)",q:c.extra,p:rate,a:rate*c.extra});
+  const gross=rows.reduce((s,r)=>s+r.a,0);
+  return{rows,gross,disc:0,freight:0,net:gross,counts:c};
+}
+function hubMonthTotals(list){
+  const o={net:0,samples:0,repeated:0,tests:0};
+  A(list).forEach(e=>{const t=hubTotals(e,e.priceSnapshot||{});o.net+=t.net;o.samples+=t.counts.n;o.repeated+=t.counts.rp;o.tests+=t.counts.total});
+  return o;
+}
+function hubShell(title,metaHtml,tableHtml,e){
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
   return `<div class="soaDoc">
 <div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
-<div class="soaTitle">BILLING STATEMENT – SAMPLE HUBBING</div>
+<div class="soaTitle">${esc(title)}</div>
 ${metaHtml}
 ${tableHtml}
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
@@ -1113,34 +1139,34 @@ ${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
 <div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
 }
 function buildHub(e,prices){
-  e=e||{};const {rows,net}=hubTotals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  e=e||{};const {rows,net,counts:c}=hubTotals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(e.source)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
-<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
-  const table=`<table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
-<thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,e);
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div><div>Samples received: <span class="ul">${c.n}</span></div><div>Samples repeated: <span class="ul">${c.rp}</span></div><div>Total tests: <span class="ul">${c.total}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
+  const table=`<table><colgroup><col style="width:46%"><col style="width:12%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup>
+<thead><tr><th>Description</th><th>Quantity</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="3" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
+  return hubShell("BILLING STATEMENT – SAMPLE HUBBING",meta,table,e);
 }
-/* One statement for a whole month: list = hubbing entries, o = {label,source,remarks,note,printedBy,...} */
+/* One statement for a whole month: list = hubbing entries, o = {label,source,address,invoiceNo,date,remarks,note,printedBy,...} */
 function buildHubMonth(list,o){
-  o=o||{};list=(list||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
-  const multi=!o.source;let total=0,samples=0;
+  o=o||{};list=A(list).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
+  const multi=!o.source;const T=hubMonthTotals(list);
   let body=list.map(e=>{
-    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);total+=t.net;samples+=Number(e.sampleCount)||0;
-    const desc=(multi?esc(e.source)+" – ":"")+esc(hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—");
-    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${Number(e.sampleCount)||0}${Number(e.repeatTests)>0?` (+${Number(e.repeatTests)} repeated)`:""}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
+    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);const c=t.counts;
+    const tx=hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—";
+    const desc=(multi?esc(e.source)+" – ":"")+esc(tx);
+    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${c.n}</td><td class="c">${c.rp}</td><td class="c">${c.total}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
   }).join("");
-  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(o.source||"ALL SOURCES")}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(o.address||"")}</span></div></div>
-<div class="r"><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Total samples: <span class="ul">${samples}</span></div></div></div>`;
-  const table=`<table><colgroup><col style="width:15%"><col style="width:17%"><col style="width:28%"><col style="width:10%"><col style="width:13%"><col style="width:17%"></colgroup>
-<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Rate / sample</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(total)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,o);
+<div class="r"><div>Monthly SOA no.: <span class="ul">${esc(o.invoiceNo||"assigned on print")}</span></div><div>Date printed: <span class="ul">${esc(o.date?fmtDate(o.date):"—")}</span></div><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Samples received: <span class="ul">${T.samples}</span></div><div>Samples repeated: <span class="ul">${T.repeated}</span></div><div>Total tests: <span class="ul">${T.tests}</span></div></div></div>`;
+  const table=`<table><colgroup><col style="width:13%"><col style="width:15%"><col style="width:24%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"></colgroup>
+<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Repeated</th><th>Total tests</th><th>Rate</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="6" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(T.net)}</td></tr></tbody></table>`;
+  return hubShell("MONTHLY BILLING STATEMENT – SAMPLE HUBBING",meta,table,o);
 }
-
 function build(e,prices){
   const {rows,gross,disc,freight,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
@@ -1169,7 +1195,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubCounts,hubMonthTotals,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
 })();
 </script>
 
@@ -1215,6 +1241,8 @@ let currentView = "releasing";
 let allReleasingEntries = [];
 let allAugmentationEntries = [];
 let allHubbingEntries = [];
+let allHubbingMonthly = [];
+let hubRepeatId = null;
 let lastBadAugEntries = [];
 let currentHubEditId = null;
 let currentHubPriceSnapshot = null;
@@ -1680,7 +1708,13 @@ function hubTestsText(entry){ return SOA.hubTests(entry).map(t => SOA.HUB_LABEL[
 function normHub(e){ const o = Object.assign({}, e); o.tests = SOA.hubTests(e); return o; }
 
 function loadHubbingData(){
-  onValue(ref(db,"sampleHubbing"), snapshot => {
+  onValue(ref(db,"settings/sampleHubbingMonthly"), snapshot => {
+    allHubbingMonthly = [];
+    snapshot.forEach(child => { allHubbingMonthly.push({ id: child.key, ...child.val() }); });
+    if(soaMonthMeta) renderSoaView();
+  }, error => console.error("Load monthly hubbing statements error:", error));
+
+  onValue(ref(db,"settings/sampleHubbing"), snapshot => {
     allHubbingEntries = [];
     snapshot.forEach(child => {
       allHubbingEntries.push(normHub({ id: child.key, ...child.val() }));
@@ -1716,25 +1750,25 @@ function getFilteredHubbingEntries(){
 }
 
 function hubSummaryHtml(list){
-  const samples = list.reduce((s,e) => s + (Number(e.sampleCount) || 0), 0);
-  const repeats = list.reduce((s,e) => s + (Number(e.repeatTests) || 0), 0);
-  const amount = list.reduce((s,e) => s + hubAmount(e), 0);
-  return `<div class="hubSummary"><div>Entries: <b>${list.length}</b></div><div>Samples: <b>${samples}</b></div><div>Repeated samples: <b>${repeats}</b></div><div>Amount: <b>₱${SOA.money(amount)}</b></div></div>`;
+  const T = SOA.hubMonthTotals(list.map(e => Object.assign({}, e, { priceSnapshot: getHubPrices(e) })));
+  return `<div class="hubSummary"><div>Entries: <b>${list.length}</b></div><div>Samples received: <b>${T.samples}</b></div><div>Samples repeated: <b>${T.repeated}</b></div><div>Total tests: <b>${T.tests}</b></div><div>Amount: <b>₱${SOA.money(T.net)}</b></div></div>`;
 }
 
-const HUB_HEAD = `<thead><tr><th>DATE</th><th>SOURCE OF SAMPLE</th><th>TESTS</th><th>NO. OF SAMPLES</th><th>REPEATED SAMPLES</th><th>RATE / SAMPLE</th><th>AMOUNT</th><th>INVOICE NO.</th><th>ACTION</th></tr></thead><tbody></tbody>`;
+const HUB_HEAD = `<thead><tr><th>DATE</th><th>SOURCE OF SAMPLE</th><th>TESTS</th><th>SAMPLES RECEIVED</th><th>SAMPLES REPEATED</th><th>TOTAL TESTS</th><th>RATE / SAMPLE</th><th>AMOUNT</th><th>INVOICE NO.</th><th>ACTION</th></tr></thead><tbody></tbody>`;
 
 function hubRowHtml(entry){
   const ip = isAugPaid(entry);
   const prices = getHubPrices(entry);
+  const c = SOA.hubCounts(entry);
+  const id = escHtml(entry.id);
   return `<td>${escHtml(entry.date)}</td><td>${escHtml(entry.source)}</td><td>${escHtml(hubTestsText(entry))}</td>` +
-    `<td>${Number(entry.sampleCount) || 0}</td>` +
-    `<td><input type="number" min="0" step="1" class="hubRepeatInput" data-id="${escHtml(entry.id)}" value="${Number(entry.repeatTests) || 0}" title="Number of samples that were repeated (each repeated 2x and billed). Saves automatically."></td>` +
+    `<td>${c.n}</td><td>${c.rp}</td><td>${c.total}</td>` +
     `<td>${SOA.money(SOA.hubUnitPrice(entry, prices))}</td><td>${SOA.money(hubAmount(entry))}</td><td>${escHtml(entry.invoiceNo || "")}</td>` +
-    `<td><button class="actionBtn viewBtn" data-action="view-hub-soa" data-id="${escHtml(entry.id)}">VIEW SOA</button>` +
-    `<button class="actionBtn editBtn" data-action="edit-hubbing" data-id="${escHtml(entry.id)}">EDIT</button>` +
-    `<button class="actionBtn ${ip ? "paidYesBtn" : "paidNoBtn"}" data-action="toggle-hubbing-paid" data-id="${escHtml(entry.id)}" title="${augPaidTitle(entry)}">PAID ${ip ? "YES" : "NO"}</button>` +
-    `<button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${escHtml(entry.id)}">DELETE</button></td>`;
+    `<td><button class="actionBtn viewBtn" data-action="view-hub-soa" data-id="${id}">VIEW SOA</button>` +
+    `<button class="actionBtn" style="background:#00897b;color:#fff;" data-action="hub-repeat" data-id="${id}">REPEAT</button>` +
+    `<button class="actionBtn editBtn" data-action="edit-hubbing" data-id="${id}">EDIT</button>` +
+    `<button class="actionBtn ${ip ? "paidYesBtn" : "paidNoBtn"}" data-action="toggle-hubbing-paid" data-id="${id}" title="${augPaidTitle(entry)}">PAID ${ip ? "YES" : "NO"}</button>` +
+    `<button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${id}">DELETE</button></td>`;
 }
 
 function hubFillTable(tb, entries){
@@ -1744,7 +1778,7 @@ function hubFillTable(tb, entries){
       r.innerHTML = hubRowHtml(entry);
     }catch(err){
       console.error("Hubbing record could not be displayed:", entry && entry.id, err);
-      r.innerHTML = `<td colspan="9">⚠ Record ${escHtml(entry && entry.id)} could not be displayed. <button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${escHtml(entry && entry.id)}">DELETE</button></td>`;
+      r.innerHTML = `<td colspan="10">⚠ Record ${escHtml(entry && entry.id)} could not be displayed. <button class="actionBtn deleteBtn" data-action="delete-hubbing" data-id="${escHtml(entry && entry.id)}">DELETE</button></td>`;
     }
     tb.appendChild(r);
   });
@@ -1787,28 +1821,58 @@ function renderFlatHubbingResults(entries){
   container.appendChild(t);
 }
 
-/* repeat tests: saved straight from the table */
-container.addEventListener("change", async (event) => {
-  const input = event.target.closest(".hubRepeatInput");
-  if(!input) return;
+/* ── repeated samples (opened with the REPEAT button) ── */
+function hubRepeatRefresh(){
+  const e = allHubbingEntries.find(x => x.id === hubRepeatId); if(!e) return;
+  const n = SOA.hubCounts(e).n;
+  let r = parseInt(document.getElementById("hubRepeatInput").value, 10);
+  if(!(r >= 0)) r = 0;
+  const tooMany = r > n;
+  const t = SOA.hubTotals(Object.assign({}, e, { repeatTests: tooMany ? n : r }), getHubPrices(e));
+  document.getElementById("hubRepeatCalc").innerHTML =
+    `${n} received + (${t.counts.rp} repeated × 2) = <b>${t.counts.total} tests</b><br>Amount: <b>₱${SOA.money(t.net)}</b>`;
+  document.getElementById("hubRepeatMsg").textContent = tooMany ? `Repeated samples cannot be more than the ${n} received.` : "";
+}
+window.openHubRepeat = function(id){
+  const e = allHubbingEntries.find(x => x.id === id); if(!e) return;
+  hubRepeatId = id;
+  const c = SOA.hubCounts(e);
+  document.getElementById("hubRepeatInfo").innerHTML =
+    `Source: <b>${escHtml(e.source)}</b><br>Date: <b>${escHtml(e.date)}</b><br>Samples received: <b>${c.n}</b>`;
+  document.getElementById("hubRepeatInput").value = c.rp || "";
+  hubRepeatRefresh();
+  document.getElementById("hubRepeatModal").style.display = "block";
+  document.getElementById("hubRepeatInput").focus();
+};
+window.closeHubRepeat = function(){
+  document.getElementById("hubRepeatModal").style.display = "none";
+  hubRepeatId = null;
+};
+window.saveHubRepeat = async function(){
   if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
-  let n = parseInt(input.value, 10);
-  if(!(n >= 0)) n = 0;
-  input.value = n;
+  const e = allHubbingEntries.find(x => x.id === hubRepeatId); if(!e) return;
+  const n = SOA.hubCounts(e).n;
+  let r = parseInt(document.getElementById("hubRepeatInput").value, 10);
+  if(!(r >= 0)) r = 0;
+  if(r > n){ hubRepeatRefresh(); return; }
   try{
-    await update(ref(db, "sampleHubbing/" + input.dataset.id), { repeatTests: n });
+    await update(ref(db, "settings/sampleHubbing/" + hubRepeatId), { repeatTests: r });
+    window.closeHubRepeat();
   }catch(error){
     console.error(error);
-    alert("Failed to save the repeat test count.");
+    document.getElementById("hubRepeatMsg").textContent = "Could not save: " + (error.code || error.message);
   }
-});
+};
+document.getElementById("hubRepeatInput").addEventListener("keydown", (ev) => { if(ev.key === "Enter"){ ev.preventDefault(); window.saveHubRepeat(); } });
 
 /* ── edit modal ── */
 function hubEditChecks(){ return Array.from(document.querySelectorAll(".editHubChk")); }
-function hubEditSelected(){ return hubEditChecks().filter(c => c.checked).map(c => c.value); }
-function hubEditSyncFull(){
+function hubEditSelected(){ return hubEditChecks().filter(c => c.checked && c.value !== "FULL").map(c => c.value); }
+function hubEditSyncFull(src){
   const full = hubEditChecks().find(c => c.value === "FULL");
-  hubEditChecks().forEach(c => { if(c !== full){ if(full.checked) c.checked = false; c.disabled = full.checked; } });
+  const others = hubEditChecks().filter(c => c !== full);
+  if(src && src === full) others.forEach(c => { c.checked = full.checked; });
+  else full.checked = others.every(c => c.checked);
 }
 function hubEditRefreshAmount(){
   const d = { tests: hubEditSelected(), sampleCount: parseInt(document.getElementById("editHubSamples").value, 10) || 0,
@@ -1822,7 +1886,7 @@ function syncEditHubPaidFields(){
 window.openEditHubbing = async function(id){
   if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
   try{
-    const snapshot = await get(ref(db, "sampleHubbing/" + id));
+    const snapshot = await get(ref(db, "settings/sampleHubbing/" + id));
     if(!snapshot.exists()){ alert("Record not found."); return; }
     const data = normHub({ id, ...snapshot.val() });
     currentHubEditId = id;
@@ -1830,8 +1894,8 @@ window.openEditHubbing = async function(id){
 
     document.getElementById("editHubDate").value = data.date || "";
     document.getElementById("editHubSource").value = data.source || "";
-    hubEditChecks().forEach(c => { c.checked = data.tests.includes(c.value); c.disabled = false; });
-    hubEditSyncFull();
+    hubEditChecks().forEach(c => { c.checked = c.value === "FULL" ? false : data.tests.includes(c.value); c.disabled = false; });
+    hubEditSyncFull(null);
     document.getElementById("editHubSamples").value = data.sampleCount || "";
     document.getElementById("editHubRepeat").value = data.repeatTests || "";
     document.getElementById("editHubPaymentStatus").value = isAugPaid(data) ? "Paid" : "Unpaid";
@@ -1860,12 +1924,15 @@ window.repriceEditHubbing = async function(){
   await loadHubPrices();
   currentHubPriceSnapshot = Object.assign({}, currentHubPrices);
   hubEditRefreshAmount();
+  document.getElementById("editHubPriceMsg").style.color = "#00695c";
   document.getElementById("editHubPriceMsg").textContent = "Amount now uses today's hubbing rate (applied when you save).";
 };
 
 window.saveHubbingEdit = async function(){
   if(!auth.currentUser){ alert("You are not logged in."); window.location.href = "index.html"; return; }
   if(!currentHubEditId) return;
+  const msg = document.getElementById("editHubPriceMsg");
+  const err = (t) => { msg.style.color = "#c62828"; msg.textContent = t; };
 
   const date = document.getElementById("editHubDate").value;
   const source = document.getElementById("editHubSource").value.trim().toUpperCase();
@@ -1877,11 +1944,12 @@ window.saveHubbingEdit = async function(){
   const orNo = document.getElementById("editHubPaidOrNo").value.trim();
   const paidDate = document.getElementById("editHubPaidDate").value;
 
-  if(!date){ alert("Date entered is required."); return; }
-  if(!source){ alert("Source of sample is required."); return; }
-  if(!tests.length){ alert("Please select at least one test."); return; }
-  if(!(samples > 0)){ alert("Number of samples must be a whole number of at least 1."); return; }
-  if(status === "Paid" && (!orNo || !paidDate)){ alert("OR number and date of payment are required for a paid statement."); return; }
+  if(!date) return err("Date entered is required.");
+  if(!source) return err("Source of sample is required.");
+  if(!tests.length) return err("Please tick at least one test.");
+  if(!(samples > 0)) return err("Number of samples must be a whole number of at least 1.");
+  if(repeat > samples) return err("Samples repeated cannot be more than the samples received.");
+  if(status === "Paid" && (!orNo || !paidDate)) return err("OR number and date of payment are required for a paid statement.");
 
   const payload = {
     date, source, tests, sampleCount: samples, repeatTests: repeat,
@@ -1896,20 +1964,22 @@ window.saveHubbingEdit = async function(){
   };
 
   try{
-    await update(ref(db, "sampleHubbing/" + currentHubEditId), payload);
-    alert("Sample hubbing updated successfully!");
+    await update(ref(db, "settings/sampleHubbing/" + currentHubEditId), payload);
     window.closeHubbingModal();
   }catch(error){
     console.error(error);
-    alert("Failed to update sample hubbing record.");
+    err("Could not save: " + (error.code || error.message));
   }
 };
 
 document.addEventListener("change", (e) => {
-  if(e.target.classList && e.target.classList.contains("editHubChk")){ hubEditSyncFull(); hubEditRefreshAmount(); }
+  if(e.target.classList && e.target.classList.contains("editHubChk")){ hubEditSyncFull(e.target); hubEditRefreshAmount(); }
   if(e.target.id === "editHubPaymentStatus") syncEditHubPaidFields();
 });
-document.addEventListener("input", (e) => { if(e.target.id === "editHubSamples" || e.target.id === "editHubRepeat") hubEditRefreshAmount(); });
+document.addEventListener("input", (e) => {
+  if(e.target.id === "editHubSamples" || e.target.id === "editHubRepeat") hubEditRefreshAmount();
+  if(e.target.id === "hubRepeatInput") hubRepeatRefresh();
+});
 
 /* ── payment (OR number + date) for a hubbing entry ── */
 async function toggleHubbingPaid(id){
@@ -1942,19 +2012,23 @@ window.openHubMonthSoa = function(){
   const mo = MONTH_FILTER_OPTIONS.find(m => m.value === appliedMonthFilter);
   const source = filterFacility.value || "";
   const withAddress = list.find(e => e.address);
+  const periodKey = appliedYearFilter + "-" + appliedMonthFilter;
+  const key = periodKey + "__" + (source || "ALL").replace(/[.#$\[\]\/]/g, "_");
+  const ex = allHubbingMonthly.find(r => r.id === key) || {};
   soaViewKind = "hubMonth";
   soaViewId = null;
   soaMonthMeta = {
+    key, periodKey,
     label: (mo ? mo.label : appliedMonthFilter) + " " + appliedYearFilter,
     source,
-    address: source && withAddress ? withAddress.address : "",
+    address: ex.address || (source && withAddress ? withAddress.address : ""),
     ids: list.map(e => e.id)
   };
-  document.getElementById("soaViewPrintedBy").value = "";
-  document.getElementById("soaViewApprovedBy").value = "";
+  document.getElementById("soaViewPrintedBy").value = ex.printedBy || "";
+  document.getElementById("soaViewApprovedBy").value = ex.approvedBy || "";
   if(window.ESIG){
-    ESIG.setValue(document.getElementById("soaViewPrintedBySig"), "");
-    ESIG.setValue(document.getElementById("soaViewApprovedBySig"), "");
+    ESIG.setValue(document.getElementById("soaViewPrintedBySig"), ex.printedBySigId || "");
+    ESIG.setValue(document.getElementById("soaViewApprovedBySig"), ex.approvedBySigId || "");
   }
   document.getElementById("soaEditBtn").style.display = "none";
   renderSoaView();
@@ -3290,7 +3364,7 @@ window.savePayment = async function(){
   }
 
   try{
-    await update(ref(db, (paymentKind === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
+    await update(ref(db, (paymentKind === "hub" ? "settings/sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
       augmentationPaid: "YES",
       paymentStatus: "Paid",
       paidOrNo: orNo,
@@ -3308,7 +3382,7 @@ window.markAugmentationUnpaid = async function(){
   if(!confirm("Mark this statement as UNPAID?\n\nThe OR number and date of payment will be removed.")) return;
 
   try{
-    await update(ref(db, (paymentKind === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
+    await update(ref(db, (paymentKind === "hub" ? "settings/sampleHubbing/" : "bloodAugmentation/") + paymentEditId), {
       augmentationPaid: "NO",
       paymentStatus: "Unpaid",
       paidOrNo: null,
@@ -3337,6 +3411,11 @@ container.addEventListener("click", async (event) => {
     return;
   }
 
+  if(action === "hub-repeat"){
+    window.openHubRepeat(id);
+    return;
+  }
+
   if(action === "view-hub-soa"){
     window.openHubSoaView(id);
     return;
@@ -3356,8 +3435,7 @@ container.addEventListener("click", async (event) => {
     const confirmed = confirm("Delete this sample hubbing record?");
     if(!confirmed) return;
     try{
-      await remove(ref(db, "sampleHubbing/" + id));
-      alert("Deleted successfully!");
+      await remove(ref(db, "settings/sampleHubbing/" + id));
     }catch(error){
       console.error(error);
       alert("Failed to delete sample hubbing record");
@@ -3642,9 +3720,9 @@ function exportWaivedCSV(){
 }
 
 function exportHubbingCSV(){
-  const rows = [["DATE","SOURCE_OF_SAMPLE","TESTS","NO_OF_SAMPLES","REPEAT_TESTS","RATE_PER_SAMPLE","AMOUNT","INVOICE_NO","PAID","OR_NUMBER","DATE_OF_PAYMENT"]];
+  const rows = [["DATE","SOURCE_OF_SAMPLE","TESTS","SAMPLES_RECEIVED","SAMPLES_REPEATED","TOTAL_TESTS","RATE_PER_SAMPLE","AMOUNT","INVOICE_NO","PAID","OR_NUMBER","DATE_OF_PAYMENT"]];
   getFilteredHubbingEntries().forEach(e => {
-    rows.push([e.date || "", e.source || "", hubTestsText(e), Number(e.sampleCount) || 0, Number(e.repeatTests) || 0,
+    rows.push([e.date || "", e.source || "", hubTestsText(e), SOA.hubCounts(e).n, SOA.hubCounts(e).rp, SOA.hubCounts(e).total,
       SOA.hubUnitPrice(e, getHubPrices(e)).toFixed(2), hubAmount(e).toFixed(2), e.invoiceNo || "",
       isAugPaid(e) ? "YES" : "NO", e.paidOrNo || "", e.paidDate || ""]);
   });
@@ -3742,6 +3820,11 @@ window.onclick = function(event){
     window.closeAugmentationModal();
   }
 
+  const hubRepeatModalEl = document.getElementById("hubRepeatModal");
+  if(event.target === hubRepeatModalEl){
+    window.closeHubRepeat();
+  }
+
   const hubbingModal = document.getElementById("hubbingModal");
   if(event.target === hubbingModal){
     window.closeHubbingModal();
@@ -3805,7 +3888,8 @@ function soaCurrent(){
   };
   if(soaViewKind === "hubMonth"){
     if(!soaMonthMeta) return null;
-    return Object.assign({}, soaMonthMeta, sig);
+    const ex = allHubbingMonthly.find(r => r.id === soaMonthMeta.key) || {};
+    return Object.assign({}, soaMonthMeta, { invoiceNo: ex.invoiceNo || "", date: ex.date || "" }, sig);
   }
   const e = soaEntry(); if(!e) return null;
   return Object.assign({}, e, sig);
@@ -3854,9 +3938,41 @@ window.printSoaView = async function(){
   d.approvedBy = SOA.remember("approvedBy", d.approvedBy);
   if(!d.printedBy){ alert("Please type the name of the person printing."); document.getElementById("soaViewPrintedBy").focus(); return; }
 
+  if(soaViewKind === "hubMonth"){
+    const m = soaMonthMeta;
+    const ex = allHubbingMonthly.find(r => r.id === m.key) || null;
+    const path = "settings/sampleHubbingMonthly/" + m.key;
+    const patch = {
+      kind: "month", periodKey: m.periodKey, periodLabel: m.label, source: m.source || "", address: m.address || "",
+      entryIds: soaMonthEntries().map(e => e.id),
+      printedBy: d.printedBy, approvedBy: d.approvedBy,
+      printedBySig: d.printedBySig || null, approvedBySig: d.approvedBySig || null,
+      printedBySigId: document.getElementById("soaViewPrintedBySig").value || null,
+      approvedBySigId: document.getElementById("soaViewApprovedBySig").value || null
+    };
+    try{
+      if(!ex || !ex.invoiceNo){
+        const y = m.periodKey.slice(0,4);
+        const tx = await runTransaction(ref(db, "settings/hubbingSoaCounter/M" + y), c => (Number(c) || 0) + 1);
+        patch.invoiceNo = d.invoiceNo = `HUBM-${y}-${String(tx.snapshot.val()).padStart(5,"0")}`;
+        patch.date = d.date = phToday();
+      }else{
+        d.invoiceNo = ex.invoiceNo; d.date = ex.date || "";
+      }
+      await update(ref(db, path), patch);
+      await runTransaction(ref(db, path + "/printCount"), c => (Number(c) || 0) + 1);
+    }catch(err){
+      console.error(err);
+      alert("The monthly statement number could not be saved (" + (err.code || err.message) + "). Printing will continue.");
+    }
+    document.getElementById("soaViewBody").innerHTML = soaHtml(d);
+    SOA.print(soaHtml(d));
+    return;
+  }
+
   if(soaViewKind !== "hubMonth"){
     const isHub = soaViewKind === "hub";
-    const base = isHub ? "sampleHubbing/" : "bloodAugmentation/";
+    const base = isHub ? "settings/sampleHubbing/" : "bloodAugmentation/";
     const counter = isHub ? "settings/hubbingSoaCounter/" : "settings/soaCounter/";
     const prefix = isHub ? "HUB" : "INV";
     const patch = { printedBy: d.printedBy, approvedBy: d.approvedBy,
