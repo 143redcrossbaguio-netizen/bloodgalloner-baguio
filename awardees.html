@@ -6,97 +6,185 @@
 <meta name="theme-color" content="#b30000">
 <title>Galloners Club - Awardees</title>
 
+<script>
+/* inside the dashboard the dashboard already shows the page title, so the page header is hidden there */
+try { if (window.top !== window.self) document.documentElement.classList.add("in-frame"); } catch (e) { document.documentElement.classList.add("in-frame"); }
+</script>
+
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
-<link rel="stylesheet" href="club-theme.css">
-<script src="club-common.js"></script>
-
 <style>
-.toolbar{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:10px;}
-.toolbar .club-input,.toolbar .club-select{padding:10px 12px;}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
-.summary{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 10px;font-size:13px;color:var(--muted);font-weight:600;}
-.summary .count{display:inline-flex;align-items:center;gap:6px;background:#f4f6f9;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--ink);}
-.summary .grow{flex:1;}
-.blood-icon{width:20px;height:20px;vertical-align:middle;}
-.nm{font-weight:700;text-align:left;}
-.nm small{display:block;font-weight:500;color:var(--muted);margin-top:2px;}
-.cell-stack{display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:132px;}
-.cell-stack select,.cell-stack input{width:100%;padding:8px 8px;font:inherit;font-size:14px;border:1px solid #c4cdd7;border-radius:8px;background:#fff;color:var(--ink);min-height:38px;}
-.cell-stack select:focus,.cell-stack input:focus{outline:none;border-color:var(--action);box-shadow:0 0 0 3px rgba(15,82,186,.16);}
-.cell-stack select:disabled,.cell-stack input:disabled{background:#f1f3f6;color:#98a2b3;}
-.st{display:inline-block;min-width:78px;font-size:12px;font-weight:700;color:var(--muted);}
-.st.saving{color:var(--action);} .st.saved{color:var(--ok);} .st.err{color:var(--danger);}
-.state{padding:34px 12px;text-align:center;color:var(--muted);font-weight:600;}
-.more{display:flex;justify-content:center;margin-top:14px;}
+/* This page carries all of its own styling, so it looks right even if other files are missing or old. */
+:root{
+  --brand:#b30000; --brand-dark:#7f0000; --brand-soft:#fdf1f1;
+  --ink:#1f2937; --muted:#667085; --line:#dfe5ec; --bg:#eef2f6; --card:#fff;
+  --action:#0f52ba; --ok:#166534; --danger:#b71c1c;
+}
+*{box-sizing:border-box;}
+[hidden]{display:none !important;}
+html{-webkit-text-size-adjust:100%;}
+html,body{overflow-x:clip;}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.4;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+/* ---------- header: slim, logo is capped so it can never take over the screen ---------- */
+.top{display:flex;align-items:center;gap:12px;padding:10px 16px;color:#fff;background:linear-gradient(135deg,var(--brand-dark),var(--brand));box-shadow:0 2px 10px rgba(0,0,0,.2);}
+.top .logo{height:40px;width:40px;max-width:40px;object-fit:contain;flex:none;border-radius:8px;background:#fff;padding:3px;}
+.top h1{margin:0;font-size:18px;line-height:1.15;letter-spacing:.2px;color:#fff;}
+.top p{margin:2px 0 0;font-size:12px;opacity:.85;color:#fff;}
+.top .grow{flex:1;}
+.top .back{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:9px;padding:8px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.top .back:hover{background:rgba(255,255,255,.26);}
+html.in-frame .top{display:none;}
+
+.wrap{max-width:1180px;margin:14px auto 28px;padding:0 12px;}
+
+/* ---------- summary tiles (tap one to filter) ---------- */
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:12px;}
+.tile{appearance:none;text-align:left;font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-top-width:4px;border-radius:12px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:transform .06s,box-shadow .15s;min-width:0;}
+.tile:hover{box-shadow:0 4px 12px rgba(15,23,42,.1);}
+.tile:active{transform:translateY(1px);}
+.tile b{font-size:24px;line-height:1;font-weight:800;}
+.tile span{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tile small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tile.t-galloner{border-top-color:#1e88e5;} .tile.t-bronze{border-top-color:#b4691f;} .tile.t-silver{border-top-color:#8a949e;} .tile.t-gold{border-top-color:#d4af37;}
+.tile.t-awarded{border-top-color:#2e7d32;} .tile.t-claim{border-top-color:#ef6c00;}
+.tile.active{box-shadow:0 0 0 2px var(--brand);}
+
+/* ---------- panel ---------- */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 24px rgba(15,23,42,.06);overflow:hidden;}
+.filters{display:grid;grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr));gap:10px;padding:14px;border-bottom:1px solid var(--line);}
+.ctl-in,.ctl-sel{width:100%;height:42px;padding:0 12px;border:1px solid #c4cdd7;border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:15px;transition:border-color .15s,box-shadow .15s;}
+.ctl-in:focus,.ctl-sel:focus,.cell select:focus,.cell input:focus{outline:none;border-color:var(--action);box-shadow:0 0 0 3px rgba(15,82,186,.16);}
+.ctl-in::placeholder{color:#98a2b3;}
+.barline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#fafbfd;border-bottom:1px solid var(--line);}
+.barline .count{font-size:13px;font-weight:700;color:var(--muted);flex:1;min-width:140px;}
+.btn{appearance:none;border:none;border-radius:9px;min-height:38px;padding:0 14px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;color:#fff;background:#475467;transition:filter .15s;}
+.btn:hover{filter:brightness(1.08);} .btn:disabled{opacity:.55;cursor:not-allowed;}
+.btn.brand{background:var(--brand);} .btn.blue{background:var(--action);} .btn.ghost{background:#eef2f6;color:#344054;border:1px solid var(--line);}
+
+/* ---------- table (computers) ---------- */
+table{width:100%;border-collapse:collapse;}
+thead th{background:#f8fafc;color:#475467;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
+tbody td{padding:10px 12px;border-bottom:1px solid #edf0f4;vertical-align:middle;}
+tbody tr:hover td{background:#fff8f8;}
+td.nm{font-weight:700;min-width:170px;}
+td.nm small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:1px;}
+td.nm .st{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-top:2px;}
+td.nm .st:empty{display:none;}
+.st.saving{color:var(--action) !important;} .st.saved{color:var(--ok) !important;} .st.err{color:var(--danger) !important;}
+td.ct b{font-size:16px;}
+td.ct small{display:none;}
+.blood-icon{width:18px;height:18px;vertical-align:-3px;margin-right:4px;}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.4px;color:#fff;white-space:nowrap;}
+.chip-galloner{background:#1e88e5;} .chip-bronze{background:#b4691f;} .chip-silver{background:#8a949e;} .chip-gold{background:#d4af37;color:#2b2100;} .chip-none{background:#eef2f6;color:#667085;}
+.cell{display:flex;gap:6px;align-items:center;}
+.cell select,.cell input{height:36px;padding:0 8px;border:1px solid #c4cdd7;border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-size:14px;min-width:0;}
+.cell select{flex:1 1 118px;} .cell input{flex:1 1 128px;}
+.cell select:disabled,.cell input:disabled{background:#f1f3f6;color:#98a2b3;}
+td .cap{display:none;}
+
+.state{padding:36px 14px;text-align:center;color:var(--muted);font-weight:600;}
+.more{display:flex;justify-content:center;padding:14px;}
 #printArea{display:none;}
 
-/* tablets: keep the table, let it slide sideways if needed */
-@media (max-width:980px){ .toolbar{grid-template-columns:1fr 1fr;} .toolbar .search{grid-column:1 / -1;} }
+/* ---------- narrower laptops / tablets held sideways: stack the date under each dropdown so the table always fits ---------- */
+@media (max-width:1200px){
+  .cell{flex-direction:column;align-items:stretch;}
+  .cell select,.cell input{flex:none;width:100%;min-width:130px;}
+}
 
-/* phones + portrait tablets: every donor becomes a card, nothing is cut off or hidden off-screen */
+/* ---------- laptops/tablets landscape: slightly tighter ---------- */
+@media (max-width:1100px){
+  .stats{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .filters{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .filters .search{grid-column:1 / -1;}
+}
+
+/* ---------- phones + portrait tablets: each donor is a short card ---------- */
 @media (max-width:900px){
-  .club-scroll{border:none;background:transparent;overflow:visible;}
-  table.stack,table.stack tbody{display:block;width:100%;}
-  table.stack thead{display:none;}
-  table.stack tr{display:block;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;padding:8px 12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05);}
-  table.stack tr:nth-child(even),table.stack tr:hover{background:#fff;}
-  table.stack td{display:flex;gap:12px;align-items:center;justify-content:space-between;text-align:right;border:none;padding:7px 0;}
-  table.stack td::before{content:attr(data-label);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;text-align:left;flex:0 0 5.4em;}
-  table.stack td.nm{display:block;text-align:left;font-size:16px;padding-top:4px;border-bottom:1px solid var(--line);margin-bottom:4px;padding-bottom:8px;}
-  table.stack td.nm::before{display:none;}
-  table.stack td.nm small{display:inline;margin-left:8px;}
-  table.stack td.numcell{display:none;}
-  table.stack tr{position:relative;}
-  table.stack td[data-label="Saved?"]{position:absolute;top:8px;right:12px;padding:0;display:block;}
-  table.stack td[data-label="Saved?"]::before{display:none;}
-  table.stack td.nm{padding-right:84px;}
-  table.stack td.cellwrap{align-items:flex-start;}
-  .cell-stack{flex:1;min-width:0;max-width:62%;}
-  .toolbar{grid-template-columns:1fr 1fr;gap:8px;}
-  .toolbar .search,.toolbar #statusFilter{grid-column:1 / -1;}
-  .actions .btn{flex:1 1 46%;}
+  .panel{border:none;background:transparent;box-shadow:none;overflow:visible;}
+  .filters,.barline{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;}
+  .filters{padding:10px;gap:8px;}
+  .barline{padding:8px 10px;}
+  .ctl-in,.ctl-sel{font-size:16px;}                    /* 16px stops iPhones zooming in when you tap */
+  table,tbody{display:block;width:100%;}
+  thead{display:none;}
+  tbody{display:grid;gap:10px;grid-template-columns:1fr;}
+  tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nm bd" "bl ct" "aw cl";gap:6px 12px;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05);}
+  tbody tr:hover td{background:transparent;}
+  tbody td{display:block;padding:0;border:0;}
+  td.nm{grid-area:nm;font-size:16px;} td.bd{grid-area:bd;justify-self:end;align-self:start;}
+  td.bl{grid-area:bl;color:var(--muted);font-size:14px;align-self:center;}
+  td.ct{grid-area:ct;justify-self:end;align-self:center;color:var(--muted);font-size:13px;} td.ct b{font-size:18px;color:var(--ink);} td.ct small{display:inline;}
+  td.aw{grid-area:aw;margin-top:4px;} td.cl{grid-area:cl;margin-top:4px;}
+  td.aw,td.cl{min-width:0;}
+  td .cap{display:block;font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+  .cell{flex-direction:column;align-items:stretch;gap:6px;}
+  .cell select,.cell input{height:42px;font-size:16px;width:100%;flex:none;}
+  .more{padding:4px 0 8px;}
 }
+@media (min-width:640px) and (max-width:900px){ tbody{grid-template-columns:1fr 1fr;} }
+/* slim header on phones: the subtitle goes, the title stays */
+@media (max-width:600px){
+  .top{padding:8px 12px;gap:10px;}
+  .top p{display:none;}
+  .top h1{font-size:16px;}
+  .top .logo{height:34px;width:34px;max-width:34px;}
+  .top .back{padding:7px 12px;}
+}
+@media (max-width:420px){
+  .wrap{padding:0 8px;margin-top:8px;}
+  .stats{gap:8px;} .tile{padding:8px 10px;} .tile b{font-size:21px;}
+}
+@media (max-width:340px){ .stats{grid-template-columns:repeat(2,minmax(0,1fr));} tbody tr{grid-template-areas:"nm bd" "bl ct" "aw aw" "cl cl";} }
 
-@media (min-width:721px) and (max-width:900px){
-  table.stack tbody{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  table.stack tr{margin:0 !important;}
-}
+/* ---------- toasts ---------- */
+.clubToasts{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom));z-index:100000;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 12px;pointer-events:none;}
+.clubToast{pointer-events:auto;max-width:min(520px,100%);background:#1f2937;color:#fff;border-radius:12px;padding:11px 16px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.28);border-left:6px solid #64748b;cursor:pointer;}
+.clubToast.success{border-left-color:#22c55e;} .clubToast.error{border-left-color:#ef4444;background:#7f1d1d;} .clubToast.warn{border-left-color:#f59e0b;}
 
 @media print{
   body > *:not(#printArea){display:none !important;}
   #printArea{display:block !important;color:#000;font-family:Arial,sans-serif;}
   #printArea h1{font-size:20px;margin:0 0 4px;} #printArea h2{font-size:15px;margin:18px 0 6px;} #printArea p{margin:0 0 8px;font-size:12px;}
-  #printArea table{width:100%;border-collapse:collapse;font-size:12px;page-break-inside:auto;}
-  #printArea th,#printArea td{border:1px solid #777;padding:4px 6px;text-align:left;}
+  #printArea table{width:100%;border-collapse:collapse;font-size:12px;display:table;}
+  #printArea thead{display:table-header-group;} #printArea tbody{display:table-row-group;}
+  #printArea tr{display:table-row;page-break-inside:avoid;}
+  #printArea th,#printArea td{display:table-cell;border:1px solid #777;padding:4px 6px;text-align:left;background:#fff;color:#000;}
   #printArea th{background:#eee;}
-  #printArea tr{page-break-inside:avoid;}
 }
 </style>
 </head>
 
 <body>
 
-<header class="club-header">
+<header class="top">
   <img src="images/logo.png" class="logo" alt="" onerror="this.style.display='none'">
-  <h1>Awardees Monitoring</h1>
+  <div>
+    <h1>Awardees Monitoring</h1>
+    <p>Award and claim tracking for Galloners Club donors</p>
+  </div>
+  <div class="grow"></div>
+  <button class="back" id="dashBtn" type="button">Dashboard</button>
 </header>
 
-<main class="club-wrap" style="max-width:1200px;">
-  <section class="club-card">
+<main class="wrap">
 
-    <div class="toolbar">
-      <input class="club-input search" type="search" id="searchInput" placeholder="Search name or contact..." autocomplete="off" aria-label="Search donor">
-      <select class="club-select" id="bloodFilter" aria-label="Blood type">
-        <option value="">All Blood Types</option>
-        <option value="A+">A+</option><option value="A-">A-</option>
-        <option value="B+">B+</option><option value="B-">B-</option>
-        <option value="AB+">AB+</option><option value="AB-">AB-</option>
-        <option value="O+">O+</option><option value="O-">O-</option>
-      </select>
-      <select class="club-select" id="levelFilter" aria-label="Category">
+  <section class="stats" id="stats" aria-label="Summary - tap a box to filter">
+    <button class="tile t-galloner" type="button" data-tier="galloner"><span>Galloner</span><b id="nGalloner">-</b><small id="sGalloner">&nbsp;</small></button>
+    <button class="tile t-bronze" type="button" data-tier="bronze"><span>Bronze</span><b id="nBronze">-</b><small id="sBronze">&nbsp;</small></button>
+    <button class="tile t-silver" type="button" data-tier="silver"><span>Silver</span><b id="nSilver">-</b><small id="sSilver">&nbsp;</small></button>
+    <button class="tile t-gold" type="button" data-tier="gold"><span>Gold</span><b id="nGold">-</b><small id="sGold">&nbsp;</small></button>
+    <button class="tile t-awarded" type="button" data-status="awarded"><span>Awarded</span><b id="nAwarded">-</b><small id="sAwarded">&nbsp;</small></button>
+    <button class="tile t-claim" type="button" data-status="unclaimed"><span>To claim</span><b id="nToClaim">-</b><small>not yet claimed</small></button>
+  </section>
+
+  <section class="panel">
+    <div class="filters">
+      <input class="ctl-in search" type="search" id="searchInput" placeholder="Search name or contact..." autocomplete="off" aria-label="Search donor">
+      <select class="ctl-sel" id="levelFilter" aria-label="Category">
         <option value="eligible">Eligible only</option>
         <option value="galloner">Galloner</option>
         <option value="bronze">Bronze</option>
@@ -105,41 +193,46 @@
         <option value="none">No badge yet</option>
         <option value="all">All donors</option>
       </select>
-      <select class="club-select" id="statusFilter" aria-label="Status">
+      <select class="ctl-sel" id="bloodFilter" aria-label="Blood type">
+        <option value="">All Blood Types</option>
+        <option value="A+">A+</option><option value="A-">A-</option>
+        <option value="B+">B+</option><option value="B-">B-</option>
+        <option value="AB+">AB+</option><option value="AB-">AB-</option>
+        <option value="O+">O+</option><option value="O-">O-</option>
+      </select>
+      <select class="ctl-sel" id="statusFilter" aria-label="Status">
         <option value="">All Status</option>
         <option value="awarded">Awarded</option>
         <option value="notawarded">Not Awarded</option>
         <option value="claimed">Claimed</option>
         <option value="unclaimed">Awarded, not yet claimed</option>
       </select>
+      <select class="ctl-sel" id="sortSelect" aria-label="Sort">
+        <option value="count">Most donations</option>
+        <option value="name">Name A-Z</option>
+      </select>
     </div>
 
-    <div class="actions">
-      <button class="btn btn-primary btn-sm" id="exportBtn" type="button">Export CSV</button>
-      <button class="btn btn-action btn-sm" id="printBtn" type="button">Print All Categories</button>
-      <button class="btn btn-ghost btn-sm" id="reloadBtn" type="button">Reload</button>
-      <button class="btn btn-ghost btn-sm only-standalone" id="dashBtn" type="button">Return to Dashboard</button>
+    <div class="barline">
+      <div class="count" id="countLine" aria-live="polite">Loading...</div>
+      <button class="btn brand" id="exportBtn" type="button">Export CSV</button>
+      <button class="btn blue" id="printBtn" type="button">Print All Categories</button>
+      <button class="btn ghost" id="reloadBtn" type="button">Reload</button>
     </div>
 
-    <div class="summary" id="summary" aria-live="polite"></div>
+    <table>
+      <thead>
+        <tr><th>Donor</th><th>Badge</th><th>Blood</th><th>Donations</th><th>Awarded</th><th>Claimed</th></tr>
+      </thead>
+      <tbody id="donorTable"><tr><td colspan="6" class="state">Loading donors...</td></tr></tbody>
+    </table>
 
-    <div class="club-scroll">
-      <table class="club-table stack">
-        <thead>
-          <tr>
-            <th>#</th><th>Name</th><th>Badge</th><th>Blood Type</th><th>Donations</th>
-            <th>Awarded</th><th>Claimed</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="donorTable"><tr><td colspan="8" class="state">Loading donors...</td></tr></tbody>
-      </table>
-    </div>
-
-    <div class="more"><button class="btn btn-ghost" id="moreBtn" type="button" hidden>Show more</button></div>
+    <div class="more"><button class="btn ghost" id="moreBtn" type="button" hidden>Show more</button></div>
   </section>
 </main>
 
 <div id="printArea"></div>
+<div id="clubToasts" class="clubToasts" role="status" aria-live="polite"></div>
 
 <script>
 var firebaseConfig = {
@@ -154,29 +247,71 @@ if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 var auth = firebase.auth();
 var db = firebase.firestore();
 
-var esc = ClubCommon.esc;
 var PAGE = 50;
-
-var limits = ClubCommon.cachedLimits();
-var items = [];        // every donor, normalised
-var byId = {};
-var filtered = [];     // after search + filters
-var shown = PAGE;      // how many rows are drawn right now
-
+var inFrame = document.documentElement.classList.contains("in-frame");
 function $(id) { return document.getElementById(id); }
+
+/* ------------------------------------------------------------------ */
+/* small helpers (this page does not depend on any other file)         */
+/* ------------------------------------------------------------------ */
+function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function str(v) { return String(v == null ? "" : v).trim(); }
+function todayYMD() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function debounce(fn, ms) { var t; return function () { clearTimeout(t); t = setTimeout(fn, ms); }; }
+
+function toast(msg, type, ms) {
+  var box = $("clubToasts"); while (box.children.length >= 3) box.removeChild(box.firstChild);
+  var t = document.createElement("div"); t.className = "clubToast " + (type || ""); t.textContent = msg;
+  t.onclick = function () { if (t.parentNode) t.parentNode.removeChild(t); };
+  box.appendChild(t); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, ms || (type === "error" ? 8000 : 3500));
+}
+function gotoLogin() { try { window.top.location.href = "index.html"; } catch (e) { window.location.href = "index.html"; } }
+function goDashboard() {
+  if (inFrame) { try { if (window.top && typeof window.top.goDashboardHome === "function") { window.top.goDashboardHome(); return; } } catch (e) {} try { window.top.location.href = "dashboard.html"; return; } catch (e2) {} }
+  window.location.href = "dashboard.html";
+}
+
+/* category limits: same saved copy the Settings page writes */
+function sanitizeLimits(o) {
+  if (!o) return null;
+  var g = +o.galloner, b = +o.bronze, s = +o.silver, gd = +o.gold;
+  var ok = [g, b, s, gd].every(function (n) { return isFinite(n) && n >= 1 && Math.floor(n) === n; });
+  return (ok && g < b && b < s && s < gd) ? { galloner: g, bronze: b, silver: s, gold: gd } : null;
+}
+function cachedLimits() { try { var l = sanitizeLimits(JSON.parse(localStorage.getItem("categoryLimits"))); if (l) return l; } catch (e) {} return { galloner: 8, bronze: 28, silver: 46, gold: 70 }; }
+var limits = cachedLimits();
+async function loadLimits() {
+  try {
+    var snap = await db.collection("settings").doc("categoryLimits").get();
+    if (snap.exists) { var l = sanitizeLimits(snap.data()); if (l) { try { localStorage.setItem("categoryLimits", JSON.stringify(l)); } catch (e) {} return l; } }
+  } catch (e) { console.warn("Could not read category limits, using saved copy:", e && e.message); }
+  return cachedLimits();
+}
+function levelFor(n) { return n >= limits.gold ? "gold" : n >= limits.silver ? "silver" : n >= limits.bronze ? "bronze" : n >= limits.galloner ? "galloner" : "none"; }
+
+function csvCell(v) {
+  v = String(v == null ? "" : v);
+  if (/^[=@]/.test(v) || /^[+\-][^0-9.\s]/.test(v)) v = "'" + v;      // stops spreadsheets from running text as a formula
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function downloadText(name, text) {
+  var blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
+  var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+}
 
 /* ------------------------------------------------------------------ */
 /* data                                                                */
 /* ------------------------------------------------------------------ */
-function str(v) { return String(v == null ? "" : v).trim(); }
+var items = [], byId = {}, filtered = [], shown = PAGE;
 
 function normalizeDonor(id, d) {
   var serialsLen = Array.isArray(d.serials) ? d.serials.length : 0;
-  var count = typeof d.cachedSmartCount === "number" ? d.cachedSmartCount : serialsLen;   // same count Tracking uses
+  var count = typeof d.cachedSmartCount === "number" ? d.cachedSmartCount : serialsLen;      // the same count Tracking uses
   if (serialsLen > count) count = serialsLen;
 
-  // Award fields. Older versions of this page saved awardStatus as an object
-  // ({awarded, awardDate, claimed, claimDate}); newer pages save it as text. Understand both.
+  // Older versions of this page saved awardStatus as an object; newer pages save text. Understand both.
   var awardStatus = "NOT AWARDED", awardDate = str(d.awardDate), claimStatus = str(d.claimStatus).toUpperCase(), claimDate = str(d.claimDate);
   if (d.awardStatus && typeof d.awardStatus === "object") {
     var o = d.awardStatus;
@@ -194,227 +329,200 @@ function normalizeDonor(id, d) {
   var bt = str(d.bloodType).toUpperCase(), rh = str(d.rhFactor);
   var first = str(d.firstName || d.firstname), middle = str(d.middleName || d.middlename), sur = str(d.surname || d.lastName || d.lastname);
   var name = [first, middle, sur].filter(Boolean).join(" ");
-
   return {
-    id: id, name: name, surname: sur, first: first, middle: middle,
-    bt: bt, rh: rh, blood: bt + rh, contact: str(d.contact || d.contactNumber),
-    count: count, level: ClubCommon.levelFor(count, limits),
-    awardStatus: awardStatus, awardDate: awardDate, yearAwarded: str(d.yearAwarded),
-    claimStatus: claimStatus, claimDate: claimDate,
-    legacy: !!(d.awardStatus && typeof d.awardStatus === "object"),
+    id: id, name: name, surname: sur, first: first, middle: middle, bt: bt, rh: rh, blood: bt + rh,
+    contact: str(d.contact || d.contactNumber), count: count, level: levelFor(count),
+    awardStatus: awardStatus, awardDate: awardDate, yearAwarded: str(d.yearAwarded), claimStatus: claimStatus, claimDate: claimDate,
     _search: (name + " " + str(d.contact || d.contactNumber) + " " + bt + rh).toLowerCase()
   };
 }
 
-function relevel() { items.forEach(function (it) { it.level = ClubCommon.levelFor(it.count, limits); }); }
-
 async function loadAll() {
-  $("donorTable").innerHTML = '<tr><td colspan="8" class="state">Loading donors...</td></tr>';
-  $("summary").textContent = "";
+  $("donorTable").innerHTML = '<tr><td colspan="6" class="state">Loading donors...</td></tr>';
+  $("countLine").textContent = "Loading...";
   $("moreBtn").hidden = true;
   try {
-    limits = await ClubCommon.loadLimits(db);
+    limits = await loadLimits();
     var snap = await db.collection("donors").get();
     items = []; byId = {};
-    snap.forEach(function (doc) {
-      var it = normalizeDonor(doc.id, doc.data() || {});
-      items.push(it); byId[it.id] = it;
-    });
+    snap.forEach(function (doc) { var it = normalizeDonor(doc.id, doc.data() || {}); items.push(it); byId[it.id] = it; });
+    renderStats();
     applyFilters(true);
   } catch (err) {
     console.error("Fetch donors error:", err);
-    $("donorTable").innerHTML = '<tr><td colspan="8" class="state" style="color:var(--danger)">Failed to load donors: ' + esc(err.message || err) +
-      '<br><br><button class="btn btn-primary btn-sm" type="button" onclick="loadAll()">Try again</button></td></tr>';
+    $("countLine").textContent = "";
+    $("donorTable").innerHTML = '<tr><td colspan="6" class="state" style="color:var(--danger)">Failed to load donors: ' + esc(err.message || err) +
+      '<br><br><button class="btn brand" type="button" onclick="loadAll()">Try again</button></td></tr>';
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* summary tiles                                                       */
+/* ------------------------------------------------------------------ */
+function renderStats() {
+  var c = { galloner: 0, bronze: 0, silver: 0, gold: 0 }, awarded = 0, claimed = 0, toClaim = 0;
+  items.forEach(function (it) {
+    if (c[it.level] !== undefined) c[it.level]++;
+    if (it.awardStatus === "AWARDED") { awarded++; if (it.claimStatus === "CLAIMED") claimed++; else toClaim++; }
+  });
+  $("nGalloner").textContent = c.galloner; $("nBronze").textContent = c.bronze; $("nSilver").textContent = c.silver; $("nGold").textContent = c.gold;
+  $("sGalloner").textContent = limits.galloner + "-" + (limits.bronze - 1) + " donations";
+  $("sBronze").textContent = limits.bronze + "-" + (limits.silver - 1) + " donations";
+  $("sSilver").textContent = limits.silver + "-" + (limits.gold - 1) + " donations";
+  $("sGold").textContent = limits.gold + "+ donations";
+  $("nAwarded").textContent = awarded; $("sAwarded").textContent = claimed + " claimed";
+  $("nToClaim").textContent = toClaim;
+  syncTiles();
+}
+function syncTiles() {
+  var lv = $("levelFilter").value, sf = $("statusFilter").value;
+  document.querySelectorAll(".tile").forEach(function (t) {
+    var on = (t.dataset.tier && t.dataset.tier === lv) || (t.dataset.status && t.dataset.status === sf);
+    t.classList.toggle("active", !!on);
+  });
+}
+$("stats").addEventListener("click", function (e) {
+  var t = e.target.closest(".tile"); if (!t) return;
+  if (t.dataset.tier) { $("levelFilter").value = (t.classList.contains("active") ? "eligible" : t.dataset.tier); }
+  if (t.dataset.status) { $("statusFilter").value = (t.classList.contains("active") ? "" : t.dataset.status); }
+  applyFilters(true);
+});
 
 /* ------------------------------------------------------------------ */
 /* filtering + drawing                                                 */
 /* ------------------------------------------------------------------ */
 function matches(it) {
   var level = $("levelFilter").value;
-  if (level === "eligible" && it.level === "none" && it.awardStatus !== "AWARDED") return false;   // an awarded donor never disappears
+  if (level === "eligible" && it.level === "none" && it.awardStatus !== "AWARDED") return false;     // an awarded donor never disappears
   if (["galloner", "bronze", "silver", "gold", "none"].indexOf(level) > -1 && it.level !== level) return false;
-
-  var bf = $("bloodFilter").value;
-  if (bf && it.blood !== bf) return false;
-
+  var bf = $("bloodFilter").value; if (bf && it.blood !== bf) return false;
   var sf = $("statusFilter").value;
   if (sf === "awarded" && it.awardStatus !== "AWARDED") return false;
   if (sf === "notawarded" && it.awardStatus === "AWARDED") return false;
   if (sf === "claimed" && it.claimStatus !== "CLAIMED") return false;
   if (sf === "unclaimed" && !(it.awardStatus === "AWARDED" && it.claimStatus !== "CLAIMED")) return false;
-
   var q = $("searchInput").value.toLowerCase().trim();
-  if (q) {
-    var words = q.split(/\s+/);
-    for (var i = 0; i < words.length; i++) if (it._search.indexOf(words[i]) < 0) return false;
-  }
+  if (q) { var w = q.split(/\s+/); for (var i = 0; i < w.length; i++) if (it._search.indexOf(w[i]) < 0) return false; }
   return true;
 }
 
 function applyFilters(resetPaging) {
   if (resetPaging) shown = PAGE;
+  var byName = $("sortSelect").value === "name";
   filtered = items.filter(matches).sort(function (a, b) {
+    if (byName) return a.surname.localeCompare(b.surname) || a.first.localeCompare(b.first);
     return (b.count - a.count) || a.surname.localeCompare(b.surname) || a.first.localeCompare(b.first);
   });
+  syncTiles();
   renderTable();
-  renderSummary();
 }
 
 function bloodDrop(color, stroke) {
-  return '<svg class="blood-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="' + color + '" stroke="' + (stroke || "none") +
-    '" stroke-width="1.5" d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/></svg>';
+  return '<svg class="blood-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="' + color + '" stroke="' + (stroke || "none") + '" stroke-width="1.5" d="M12 2C12 2 5 10 5 14a7 7 0 0014 0C19 10 12 2 12 2z"/></svg>';
 }
 function bloodIcon(bt, rh) {
   if (rh === "-") return bloodDrop("#a5d6a7");
-  if (bt === "A") return bloodDrop("#1e88e5");
-  if (bt === "B") return bloodDrop("#ffd600");
-  if (bt === "AB") return bloodDrop("#ff80ab");
+  if (bt === "A") return bloodDrop("#1e88e5"); if (bt === "B") return bloodDrop("#ffd600"); if (bt === "AB") return bloodDrop("#ff80ab");
   if (bt === "O") return bloodDrop("#ffffff", "#000");
   return bloodDrop("#ccc");
 }
-function badgeHtml(level) {
-  return level === "none" ? '<span class="chip chip-muted">NONE YET</span>' : '<span class="chip chip-' + level + '">' + level.toUpperCase() + '</span>';
-}
+function badgeHtml(level) { return level === "none" ? '<span class="chip chip-none">NO BADGE</span>' : '<span class="chip chip-' + level + '">' + level.toUpperCase() + '</span>'; }
 
-function rowHtml(it, index) {
+function rowHtml(it) {
   var awarded = it.awardStatus === "AWARDED";
   return '<tr data-id="' + esc(it.id) + '">' +
-    '<td class="numcell" data-label="#">' + (index + 1) + '</td>' +
-    '<td class="nm" data-label="Name">' + esc(it.name || "(no name)") + (it.contact ? '<small>' + esc(it.contact) + '</small>' : '') + '</td>' +
-    '<td data-label="Badge">' + badgeHtml(it.level) + '</td>' +
-    '<td data-label="Blood">' + bloodIcon(it.bt, it.rh) + ' ' + esc(it.blood) + '</td>' +
-    '<td data-label="Donations"><b>' + it.count + '</b></td>' +
-    '<td class="cellwrap" data-label="Awarded"><div class="cell-stack">' +
+    '<td class="nm" data-label="Donor">' + esc(it.name || "(no name)") + (it.contact ? '<small>' + esc(it.contact) + '</small>' : '') + '<span class="st" data-st></span></td>' +
+    '<td class="bd" data-label="Badge">' + badgeHtml(it.level) + '</td>' +
+    '<td class="bl" data-label="Blood">' + bloodIcon(it.bt, it.rh) + esc(it.blood || "-") + '</td>' +
+    '<td class="ct" data-label="Donations"><b>' + it.count + '</b><small> donations</small></td>' +
+    '<td class="aw" data-label="Awarded"><span class="cap">Awarded</span><div class="cell">' +
       '<select data-f="award" aria-label="Award status for ' + esc(it.name) + '">' +
         '<option value="NOT AWARDED"' + (awarded ? '' : ' selected') + '>Not Awarded</option>' +
         '<option value="AWARDED"' + (awarded ? ' selected' : '') + '>Awarded</option></select>' +
       '<input type="date" data-f="awardDate" value="' + esc(it.awardDate) + '" aria-label="Date awarded"' + (awarded ? '' : ' disabled') + '>' +
     '</div></td>' +
-    '<td class="cellwrap" data-label="Claimed"><div class="cell-stack">' +
+    '<td class="cl" data-label="Claimed"><span class="cap">Claimed</span><div class="cell">' +
       '<select data-f="claim" aria-label="Claim status for ' + esc(it.name) + '"' + (awarded ? '' : ' disabled') + '>' +
         '<option value="">Select</option>' +
         '<option value="CLAIMED"' + (it.claimStatus === "CLAIMED" ? ' selected' : '') + '>Claimed</option>' +
         '<option value="UNCLAIMED"' + (it.claimStatus === "UNCLAIMED" ? ' selected' : '') + '>Unclaimed</option></select>' +
       '<input type="date" data-f="claimDate" value="' + esc(it.claimDate) + '" aria-label="Date claimed"' + (it.claimStatus === "CLAIMED" ? '' : ' disabled') + '>' +
     '</div></td>' +
-    '<td data-label="Saved?"><span class="st" data-st></span></td>' +
   '</tr>';
 }
 
 function renderTable() {
   var body = $("donorTable");
-  if (!filtered.length) {
-    body.innerHTML = '<tr><td colspan="8" class="state">No donors match these filters.</td></tr>';
-    $("moreBtn").hidden = true;
-    return;
+  var total = filtered.length, upto = Math.min(shown, total);
+  $("countLine").textContent = total ? ("Showing " + upto + " of " + total + " donor" + (total === 1 ? "" : "s")) : "No donors";
+  if (!total) {
+    body.innerHTML = '<tr><td colspan="6" class="state">No donors match these filters.</td></tr>';
+    $("moreBtn").hidden = true; return;
   }
-  var upto = Math.min(shown, filtered.length), parts = new Array(upto);
-  for (var i = 0; i < upto; i++) parts[i] = rowHtml(filtered[i], i);
+  var parts = new Array(upto);
+  for (var i = 0; i < upto; i++) parts[i] = rowHtml(filtered[i]);
   body.innerHTML = parts.join("");
-  var left = filtered.length - upto;
+  var left = total - upto;
   $("moreBtn").hidden = left <= 0;
   if (left > 0) $("moreBtn").textContent = "Show more (" + Math.min(PAGE, left) + " of " + left + " remaining)";
 }
 
-function renderSummary() {
-  var c = { galloner: 0, bronze: 0, silver: 0, gold: 0 }, awarded = 0, claimed = 0;
-  items.forEach(function (it) {
-    if (c[it.level] !== undefined) c[it.level]++;
-    if (it.awardStatus === "AWARDED") awarded++;
-    if (it.claimStatus === "CLAIMED") claimed++;
-  });
-  $("summary").innerHTML =
-    '<span class="count">Showing <b>' + Math.min(shown, filtered.length) + '</b> of <b>' + filtered.length + '</b></span>' +
-    '<span class="grow"></span>' +
-    '<span class="count"><span class="chip chip-galloner">G</span> ' + c.galloner + '</span>' +
-    '<span class="count"><span class="chip chip-bronze">B</span> ' + c.bronze + '</span>' +
-    '<span class="count"><span class="chip chip-silver">S</span> ' + c.silver + '</span>' +
-    '<span class="count"><span class="chip chip-gold">Au</span> ' + c.gold + '</span>' +
-    '<span class="count">Awarded <b>' + awarded + '</b></span>' +
-    '<span class="count">Claimed <b>' + claimed + '</b></span>';
-}
-
 /* ------------------------------------------------------------------ */
-/* saving - only the changed fields are written (the old page rewrote  */
-/* the whole record, which could wipe out other pages' changes)         */
+/* saving - only the changed fields are written                        */
 /* ------------------------------------------------------------------ */
+function rowFor(id) { return document.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'); }
 function setState(tr, cls, text) {
-  var el = tr && tr.querySelector("[data-st]");
-  if (!el) return;
+  var el = tr && tr.querySelector("[data-st]"); if (!el) return;
   el.className = "st " + (cls || ""); el.textContent = text || "";
-  if (cls === "saved") setTimeout(function () { if (el.textContent === text) { el.textContent = ""; } }, 2500);
+  if (cls === "saved") setTimeout(function () { if (el.textContent === text) el.textContent = ""; }, 2500);
 }
-
 function redrawRow(tr, it) {
-  var idx = filtered.indexOf(it);
-  var tmp = document.createElement("tbody");
-  tmp.innerHTML = rowHtml(it, idx < 0 ? 0 : idx);
-  var fresh = tmp.firstChild;
-  tr.parentNode.replaceChild(fresh, tr);
-  return fresh;
+  var tmp = document.createElement("tbody"); tmp.innerHTML = rowHtml(it);
+  var fresh = tmp.firstChild; tr.parentNode.replaceChild(fresh, tr); return fresh;
 }
 
 function planChange(it, field, value) {
   var next = { awardStatus: it.awardStatus, awardDate: it.awardDate, yearAwarded: it.yearAwarded, claimStatus: it.claimStatus, claimDate: it.claimDate };
-  var today = ClubCommon.todayYMD();
+  var today = todayYMD();
   if (field === "award") {
     next.awardStatus = value === "AWARDED" ? "AWARDED" : "NOT AWARDED";
-    if (next.awardStatus === "AWARDED") {
-      next.awardDate = next.awardDate || today;
-      next.yearAwarded = next.awardDate.slice(0, 4);
-    } else {
-      next.awardDate = ""; next.yearAwarded = ""; next.claimStatus = ""; next.claimDate = "";   // cannot be claimed if not awarded
-    }
+    if (next.awardStatus === "AWARDED") { next.awardDate = next.awardDate || today; next.yearAwarded = next.awardDate.slice(0, 4); }
+    else { next.awardDate = ""; next.yearAwarded = ""; next.claimStatus = ""; next.claimDate = ""; }
   } else if (field === "awardDate") {
-    next.awardDate = value;
-    next.yearAwarded = value ? value.slice(0, 4) : "";
-    if (value) next.awardStatus = "AWARDED";
+    next.awardDate = value; next.yearAwarded = value ? value.slice(0, 4) : ""; if (value) next.awardStatus = "AWARDED";
   } else if (field === "claim") {
-    next.claimStatus = value;
-    next.claimDate = value === "CLAIMED" ? (next.claimDate || today) : "";
+    next.claimStatus = value; next.claimDate = value === "CLAIMED" ? (next.claimDate || today) : "";
   } else if (field === "claimDate") {
-    next.claimDate = value;
-    if (value) next.claimStatus = "CLAIMED";
+    next.claimDate = value; if (value) next.claimStatus = "CLAIMED";
   }
   return next;
 }
 
 function saveChange(tr, it, field, value) {
+  if (!auth.currentUser) { gotoLogin(); return; }
   var prev = { awardStatus: it.awardStatus, awardDate: it.awardDate, yearAwarded: it.yearAwarded, claimStatus: it.claimStatus, claimDate: it.claimDate };
   var next = planChange(it, field, value);
-  if (!auth.currentUser) { ClubCommon.gotoLogin(); return; }
-
-  Object.assign(it, next);                       // show the change immediately
-  tr = redrawRow(tr, it);
-  setState(tr, "saving", "Saving...");
+  Object.assign(it, next);
+  tr = redrawRow(tr, it); setState(tr, "saving", "Saving...");
 
   it._q = (it._q || Promise.resolve()).then(function () {
     return db.collection("donors").doc(it.id).update({
-      awardStatus: next.awardStatus,             // always text, which also converts old object-style records
-      awardDate: next.awardDate, yearAwarded: next.yearAwarded,
-      claimStatus: next.claimStatus, claimDate: next.claimDate
+      awardStatus: next.awardStatus,                // always text (this also converts old object-style records)
+      awardDate: next.awardDate, yearAwarded: next.yearAwarded, claimStatus: next.claimStatus, claimDate: next.claimDate
     });
   }).then(function () {
-    it.legacy = false;
-    var row = document.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
-    setState(row, "saved", "\u2713 Saved");
-    renderSummary();
+    setState(rowFor(it.id), "saved", "\u2713 Saved"); renderStats();
   }).catch(function (err) {
     console.error("Save status error:", err);
-    Object.assign(it, prev);                     // put the old values back
-    var row = document.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(it.id) : it.id) + '"]');
-    if (row) { row = redrawRow(row, it); setState(row, "err", "\u2715 Not saved"); }
-    ClubCommon.toast("Could not save the change for " + (it.name || "this donor") + ": " + (err.message || err), "error");
+    Object.assign(it, prev);                        // put the old values back
+    var row = rowFor(it.id); if (row) { row = redrawRow(row, it); setState(row, "err", "\u2715 Not saved"); }
+    toast("Could not save the change for " + (it.name || "this donor") + ": " + (err.message || err), "error");
   });
 }
 
 $("donorTable").addEventListener("change", function (e) {
-  var el = e.target, f = el.getAttribute && el.getAttribute("data-f");
-  if (!f) return;
-  var tr = el.closest("tr"), it = tr && byId[tr.getAttribute("data-id")];
-  if (!it) return;
+  var el = e.target, f = el.getAttribute && el.getAttribute("data-f"); if (!f) return;
+  var tr = el.closest("tr"), it = tr && byId[tr.getAttribute("data-id")]; if (!it) return;
   saveChange(tr, it, f, el.value);
 });
 
@@ -422,54 +530,46 @@ $("donorTable").addEventListener("change", function (e) {
 /* export + print                                                      */
 /* ------------------------------------------------------------------ */
 function exportCsv() {
-  if (!auth.currentUser) { ClubCommon.gotoLogin(); return; }
-  if (!filtered.length) { ClubCommon.toast("There is nothing to export with the current filters.", "warn"); return; }
+  if (!auth.currentUser) { gotoLogin(); return; }
+  if (!filtered.length) { toast("There is nothing to export with the current filters.", "warn"); return; }
   var rows = [["Surname", "First Name", "Middle Name", "Blood Type", "Donations", "Badge", "Award Status", "Award Date", "Year Awarded", "Claim Status", "Claim Date", "Contact"]];
-  filtered.forEach(function (it) {
-    rows.push([it.surname, it.first, it.middle, it.blood, it.count, it.level === "none" ? "" : it.level.toUpperCase(), it.awardStatus, it.awardDate, it.yearAwarded, it.claimStatus, it.claimDate, it.contact]);
-  });
-  ClubCommon.download("awardees-" + ClubCommon.todayYMD() + ".csv", ClubCommon.csvFrom(rows), "text/csv");
-  ClubCommon.toast("Exported " + filtered.length + " donor" + (filtered.length === 1 ? "" : "s") + ".", "success");
+  filtered.forEach(function (it) { rows.push([it.surname, it.first, it.middle, it.blood, it.count, it.level === "none" ? "" : it.level.toUpperCase(), it.awardStatus, it.awardDate, it.yearAwarded, it.claimStatus, it.claimDate, it.contact]); });
+  downloadText("awardees-" + todayYMD() + ".csv", rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n"));
+  toast("Exported " + filtered.length + " donor" + (filtered.length === 1 ? "" : "s") + ".", "success");
 }
 
 function printAllCategories() {
-  if (!auth.currentUser) { ClubCommon.gotoLogin(); return; }
-  var tiers = [["galloner", "Galloner", limits.galloner, limits.bronze - 1], ["bronze", "Bronze", limits.bronze, limits.silver - 1],
-               ["silver", "Silver", limits.silver, limits.gold - 1], ["gold", "Gold", limits.gold, null]];
+  if (!auth.currentUser) { gotoLogin(); return; }
+  var tiers = [["galloner", "Galloner", limits.galloner, limits.bronze - 1], ["bronze", "Bronze", limits.bronze, limits.silver - 1], ["silver", "Silver", limits.silver, limits.gold - 1], ["gold", "Gold", limits.gold, null]];
   var html = "<h1>Awardees Monitoring</h1><p>Printed " + esc(new Date().toLocaleString()) + " &middot; each donor is listed once, under the highest category reached.</p>";
   tiers.forEach(function (t) {
-    var list = items.filter(function (it) { return it.level === t[0]; })
-      .sort(function (a, b) { return a.surname.localeCompare(b.surname) || a.first.localeCompare(b.first); });
+    var list = items.filter(function (it) { return it.level === t[0]; }).sort(function (a, b) { return a.surname.localeCompare(b.surname) || a.first.localeCompare(b.first); });
     html += "<h2>" + t[1].toUpperCase() + " (" + t[2] + (t[3] ? "-" + t[3] : "+") + " donations) &mdash; " + list.length + "</h2>";
     if (!list.length) { html += "<p>No donors in this category.</p>"; return; }
-    html += "<table><tr><th>#</th><th>Name</th><th>Blood</th><th>Donations</th><th>Awarded</th><th>Claimed</th></tr>";
+    html += "<table><thead><tr><th>#</th><th>Name</th><th>Blood</th><th>Donations</th><th>Awarded</th><th>Claimed</th></tr></thead><tbody>";
     list.forEach(function (it, i) {
       html += "<tr><td>" + (i + 1) + "</td><td>" + esc(it.name) + "</td><td>" + esc(it.blood) + "</td><td>" + it.count + "</td><td>" +
         (it.awardStatus === "AWARDED" ? "Yes" + (it.awardDate ? " (" + esc(it.awardDate) + ")" : (it.yearAwarded ? " (" + esc(it.yearAwarded) + ")" : "")) : "No") + "</td><td>" +
         (it.claimStatus === "CLAIMED" ? "Yes" + (it.claimDate ? " (" + esc(it.claimDate) + ")" : "") : (it.claimStatus === "UNCLAIMED" ? "No" : "")) + "</td></tr>";
     });
-    html += "</table>";
+    html += "</tbody></table>";
   });
   $("printArea").innerHTML = html;
-  window.print();          // prints this page only (no pop-up window, so phones do not block it)
+  window.print();
 }
 
 /* ------------------------------------------------------------------ */
 /* events                                                              */
 /* ------------------------------------------------------------------ */
-var onSearch = ClubCommon.debounce(function () { applyFilters(true); }, 160);
-$("searchInput").addEventListener("input", onSearch);
-["bloodFilter", "levelFilter", "statusFilter"].forEach(function (id) { $(id).addEventListener("change", function () { applyFilters(true); }); });
-$("moreBtn").addEventListener("click", function () { shown += PAGE; renderTable(); renderSummary(); });
+$("searchInput").addEventListener("input", debounce(function () { applyFilters(true); }, 160));
+["bloodFilter", "levelFilter", "statusFilter", "sortSelect"].forEach(function (id) { $(id).addEventListener("change", function () { applyFilters(true); }); });
+$("moreBtn").addEventListener("click", function () { shown += PAGE; renderTable(); });
 $("exportBtn").addEventListener("click", exportCsv);
 $("printBtn").addEventListener("click", printAllCategories);
 $("reloadBtn").addEventListener("click", loadAll);
-$("dashBtn").addEventListener("click", function () { ClubCommon.goDashboard(); });
+$("dashBtn").addEventListener("click", goDashboard);
 
-auth.onAuthStateChanged(function (user) {
-  if (!user) { ClubCommon.gotoLogin(); return; }
-  loadAll();
-});
+auth.onAuthStateChanged(function (user) { if (!user) { gotoLogin(); return; } loadAll(); });
 </script>
 </body>
 </html>
