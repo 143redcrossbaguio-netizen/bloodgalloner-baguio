@@ -733,7 +733,7 @@ button{
       <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" class="hubTestChk" value="SYPHILIS" style="width:auto;margin:0;"> SYPHILIS</label>
       <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" class="hubTestChk" value="MALARIA" style="width:auto;margin:0;"> MALARIA</label>
     </div>
-    <div style="font-size:11.5px;color:#607d8b;">Choosing FULL covers all the tests, so the others are switched off.</div>
+    <div style="font-size:11.5px;color:#607d8b;">FULL ticks every test (HIV, HCV, HBsAg, Syphilis, Malaria).</div>
 
     <label style="margin-top:12px;">NUMBER OF SAMPLES</label>
     <input type="number" id="hubSamples" min="1" step="1" placeholder="0">
@@ -763,6 +763,7 @@ button{
     <textarea id="hubNote" rows="3" placeholder="Optional note to appear on the printed statement" style="width:100%;padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
 
     <button class="facilityBtn" id="hubSaveBtn" type="button" style="background:#00897b;" onclick="saveHubbing()">SAVE SAMPLE HUBBING</button>
+    <div id="hubSaveMsg" style="font-size:13px;font-weight:bold;min-height:18px;margin-top:6px;"></div>
 
     <div id="hubPostSave" class="soaBox" style="display:none;">
       <b>✔ Saved to Releasing Tracking</b> — Invoice <b id="hubSavedInv"></b>
@@ -1023,27 +1024,37 @@ function normAug(e){
   return o;
 }
 /* ── Sample Hubbing statements ── */
-const HUB_TESTS=["FULL","HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
-const HUB_LABEL={FULL:"FULL",HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
-function hubTests(e){const t=A(e&&e.tests).map(String);return HUB_TESTS.filter(x=>t.includes(x))}
+const HUB_TESTS=["HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
+const HUB_LABEL={HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
+const HUB_REPEAT_TIMES=2;
+function hubTests(e){const t=A(e&&e.tests).map(String);if(t.includes("FULL"))return HUB_TESTS.slice();return HUB_TESTS.filter(x=>t.includes(x))}
 function hubRate(prices){const r=Number(prices&&(prices.RATE??prices.rate));return r>0?r:60}
 function hubUnitPrice(e,prices){return hubRate(prices)}
-const HUB_REPEAT_TIMES=2;
-function hubTotals(e,prices){
-  const rate=hubRate(prices),n=Number(e&&e.sampleCount)||0,rp=Math.max(0,Number(e&&e.repeatTests)||0);
-  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
-  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:n,u:"sample",p:rate,a:rate*n}];
-  if(rp>0)rows.push({d:"Repeat tests ("+rp+" sample"+(rp>1?"s":"")+" repeated "+HUB_REPEAT_TIMES+"x each)",q:rp*HUB_REPEAT_TIMES,u:"test",p:rate,a:rate*rp*HUB_REPEAT_TIMES});
-  const gross=rows.reduce((s,r)=>s+r.a,0);
-  return{rows,gross,disc:0,freight:0,net:gross};
+function hubCounts(e){
+  const n=Math.max(0,parseInt(e&&e.sampleCount,10)||0);
+  let rp=Math.max(0,parseInt(e&&e.repeatTests,10)||0);if(rp>n)rp=n;
+  return{n,rp,extra:rp*HUB_REPEAT_TIMES,total:n+rp*HUB_REPEAT_TIMES};
 }
-function hubShell(metaHtml,tableHtml,e){
+function hubTotals(e,prices){
+  const rate=hubRate(prices),c=hubCounts(e);
+  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
+  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:c.n,p:rate,a:rate*c.n}];
+  if(c.rp>0)rows.push({d:"Repeat tests – "+c.rp+" sample"+(c.rp>1?"s":"")+" repeated ("+HUB_REPEAT_TIMES+"x each)",q:c.extra,p:rate,a:rate*c.extra});
+  const gross=rows.reduce((s,r)=>s+r.a,0);
+  return{rows,gross,disc:0,freight:0,net:gross,counts:c};
+}
+function hubMonthTotals(list){
+  const o={net:0,samples:0,repeated:0,tests:0};
+  A(list).forEach(e=>{const t=hubTotals(e,e.priceSnapshot||{});o.net+=t.net;o.samples+=t.counts.n;o.repeated+=t.counts.rp;o.tests+=t.counts.total});
+  return o;
+}
+function hubShell(title,metaHtml,tableHtml,e){
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
   return `<div class="soaDoc">
 <div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
-<div class="soaTitle">BILLING STATEMENT – SAMPLE HUBBING</div>
+<div class="soaTitle">${esc(title)}</div>
 ${metaHtml}
 ${tableHtml}
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
@@ -1051,34 +1062,34 @@ ${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
 <div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
 }
 function buildHub(e,prices){
-  e=e||{};const {rows,net}=hubTotals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  e=e||{};const {rows,net,counts:c}=hubTotals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(e.source)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
-<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
-  const table=`<table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
-<thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,e);
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div><div>Samples received: <span class="ul">${c.n}</span></div><div>Samples repeated: <span class="ul">${c.rp}</span></div><div>Total tests: <span class="ul">${c.total}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
+  const table=`<table><colgroup><col style="width:46%"><col style="width:12%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup>
+<thead><tr><th>Description</th><th>Quantity</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="3" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
+  return hubShell("BILLING STATEMENT – SAMPLE HUBBING",meta,table,e);
 }
-/* One statement for a whole month: list = hubbing entries, o = {label,source,remarks,note,printedBy,...} */
+/* One statement for a whole month: list = hubbing entries, o = {label,source,address,invoiceNo,date,remarks,note,printedBy,...} */
 function buildHubMonth(list,o){
-  o=o||{};list=(list||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
-  const multi=!o.source;let total=0,samples=0;
+  o=o||{};list=A(list).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
+  const multi=!o.source;const T=hubMonthTotals(list);
   let body=list.map(e=>{
-    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);total+=t.net;samples+=Number(e.sampleCount)||0;
-    const desc=(multi?esc(e.source)+" – ":"")+esc(hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—");
-    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${Number(e.sampleCount)||0}${Number(e.repeatTests)>0?` (+${Number(e.repeatTests)} repeated)`:""}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
+    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);const c=t.counts;
+    const tx=hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—";
+    const desc=(multi?esc(e.source)+" – ":"")+esc(tx);
+    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${c.n}</td><td class="c">${c.rp}</td><td class="c">${c.total}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
   }).join("");
-  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(o.source||"ALL SOURCES")}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(o.address||"")}</span></div></div>
-<div class="r"><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Total samples: <span class="ul">${samples}</span></div></div></div>`;
-  const table=`<table><colgroup><col style="width:15%"><col style="width:17%"><col style="width:28%"><col style="width:10%"><col style="width:13%"><col style="width:17%"></colgroup>
-<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Rate / sample</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(total)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,o);
+<div class="r"><div>Monthly SOA no.: <span class="ul">${esc(o.invoiceNo||"assigned on print")}</span></div><div>Date printed: <span class="ul">${esc(o.date?fmtDate(o.date):"—")}</span></div><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Samples received: <span class="ul">${T.samples}</span></div><div>Samples repeated: <span class="ul">${T.repeated}</span></div><div>Total tests: <span class="ul">${T.tests}</span></div></div></div>`;
+  const table=`<table><colgroup><col style="width:13%"><col style="width:15%"><col style="width:24%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"></colgroup>
+<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Repeated</th><th>Total tests</th><th>Rate</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="6" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(T.net)}</td></tr></tbody></table>`;
+  return hubShell("MONTHLY BILLING STATEMENT – SAMPLE HUBBING",meta,table,o);
 }
-
 function build(e,prices){
   const {rows,gross,disc,freight,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
@@ -1107,7 +1118,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubCounts,hubMonthTotals,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
 })();
 </script>
 
@@ -2908,10 +2919,13 @@ window.saveHubRate = async function(){
 };
 
 const hubChecks = () => Array.from(document.querySelectorAll(".hubTestChk"));
-const hubSelectedTests = () => hubChecks().filter(c => c.checked).map(c => c.value);
-function hubSyncFull(){
+const hubSelectedTests = () => hubChecks().filter(c => c.checked && c.value !== "FULL").map(c => c.value);
+function hubMsg(t, ok){ const m = $("hubSaveMsg"); m.textContent = t || ""; m.style.color = ok ? "#00695c" : "#c62828"; }
+function hubSyncFull(src){
   const full = hubChecks().find(c => c.value === "FULL");
-  hubChecks().forEach(c => { if(c !== full){ if(full.checked) c.checked = false; c.disabled = full.checked; } });
+  const others = hubChecks().filter(c => c !== full);
+  if(src === full) others.forEach(c => { c.checked = full.checked; });
+  else full.checked = others.every(c => c.checked);
 }
 function hubYear(){ return ($("hubDate").value || getPhilippinesDateString()).slice(0,4); }
 function hubPricesNow(){ return (lastSavedHub && lastSavedHub.priceSnapshot) || { RATE: hubRate }; }
@@ -2950,7 +2964,7 @@ async function refreshHubInvoiceNo(){
 
 hubPanel.addEventListener("input", renderHubPreview);
 hubPanel.addEventListener("change", (e) => {
-  if(e.target.classList && e.target.classList.contains("hubTestChk")) hubSyncFull();
+  if(e.target.classList && e.target.classList.contains("hubTestChk")) hubSyncFull(e.target);
   renderHubPreview();
 });
 $("hubDate").addEventListener("change", refreshHubInvoiceNo);
@@ -2973,39 +2987,45 @@ window.toggleAugmentation = function(){
 };
 
 window.saveHubbing = async function(){
-  if(lastSavedHub) return;
-  if(!$("hubDate").value){ alert("Date entered is required."); $("hubDate").focus(); return; }
+  if(lastSavedHub){ hubMsg("Already saved. Print it or click NEW ENTRY.", false); return; }
+  hubMsg("");
+  if(!$("hubDate").value){ hubMsg("Date entered is required.", false); $("hubDate").focus(); return; }
   const srcRaw = $("hubSource").value.trim();
-  if(!srcRaw){ alert("Source of sample is required."); $("hubSource").focus(); return; }
+  if(!srcRaw){ hubMsg("Source of sample is required.", false); $("hubSource").focus(); return; }
   const tests = hubSelectedTests();
-  if(!tests.length){ alert("Please select at least one test."); return; }
+  if(!tests.length){ hubMsg("Please tick at least one test.", false); return; }
   const n = parseInt($("hubSamples").value, 10);
-  if(!(n > 0)){ alert("Number of samples must be a whole number of at least 1."); $("hubSamples").focus(); return; }
+  if(!(n > 0)){ hubMsg("Number of samples must be a whole number of at least 1.", false); $("hubSamples").focus(); return; }
 
   $("hubSaveBtn").disabled = true;
+  let step = "";
   try{
-    await loadHubRate();
+    step = "reading the rate"; await loadHubRate();
     const data = {
       date: $("hubDate").value,
-      source: normalizeFacility(srcRaw),
+      source: normalizeFacility(srcRaw) || srcRaw.toUpperCase(),
       tests, sampleCount: n,
       priceSnapshot: { RATE: hubRate },
-      address: SOA.remember("address", $("hubAddress").value),
+      address: SOA.remember("address", $("hubAddress").value) || "",
       remarks: $("hubRemarks").value.trim(),
       note: $("hubNote").value.trim()
     };
     const y = data.date.slice(0,4);
+    step = "getting the invoice number";
     const tx = await runTransaction(ref(db, "settings/hubbingSoaCounter/" + y), c => (Number(c) || 0) + 1);
     data.invoiceNo = `HUB-${y}-${String(tx.snapshot.val()).padStart(5,"0")}`;
-    const newRef = await push(ref(db, "sampleHubbing"), data);
+    step = "saving the entry";
+    const newRef = await push(ref(db, "settings/sampleHubbing"), data);
     lastSavedHub = Object.assign({ id: newRef.key }, data);
     nextHubInvoiceNo = data.invoiceNo;
     $("hubSavedInv").textContent = data.invoiceNo;
     $("hubPostSave").style.display = "block";
     renderHubPreview();
+    hubMsg("Saved — invoice " + data.invoiceNo, true);
+    $("hubPostSave").scrollIntoView({behavior:"smooth"});
   }catch(e){
-    console.error(e);
-    alert("Failed to save sample hubbing. Please try again.");
+    console.error("Hubbing save error:", e);
+    hubMsg("Could not save (" + step + "): " + ((e && (e.code || e.message)) || e), false);
     $("hubSaveBtn").disabled = false;
   }
 };
@@ -3014,19 +3034,19 @@ window.printSavedHub = async function(){
   if(!lastSavedHub) return;
   const by = SOA.remember("printedBy", $("hubPrintedBy").value);
   const ap = SOA.remember("approvedBy", $("hubApprovedBy").value);
-  if(!by){ alert("Please type the name of the person printing."); $("hubPrintedBy").focus(); return; }
+  if(!by){ hubMsg("Please type the name of the person printing.", false); $("hubPrintedBy").focus(); return; }
   lastSavedHub.printedBy = by; lastSavedHub.approvedBy = ap;
   const pSigId = $("hubPrintedBySig").value, aSigId = $("hubApprovedBySig").value;
   lastSavedHub.printedBySig = sigOf(pSigId); lastSavedHub.approvedBySig = sigOf(aSigId);
   try{
-    const tx = await runTransaction(ref(db, "sampleHubbing/" + lastSavedHub.id + "/printCount"), c => (Number(c) || 0) + 1);
+    const tx = await runTransaction(ref(db, "settings/sampleHubbing/" + lastSavedHub.id + "/printCount"), c => (Number(c) || 0) + 1);
     lastSavedHub.printCount = tx.snapshot.val();
-    await update(ref(db, "sampleHubbing/" + lastSavedHub.id), {
+    await update(ref(db, "settings/sampleHubbing/" + lastSavedHub.id), {
       printedBy: by, approvedBy: ap,
       printedBySig: lastSavedHub.printedBySig || null, approvedBySig: lastSavedHub.approvedBySig || null,
       printedBySigId: pSigId || null, approvedBySigId: aSigId || null
     });
-  }catch(e){ console.error(e); alert("Could not store the print details, but printing will continue."); }
+  }catch(e){ console.error(e); hubMsg("Print details were not stored (" + ((e && (e.code || e.message)) || e) + ") but printing continues.", false); }
   SOA.print(SOA.buildHub(lastSavedHub, lastSavedHub.priceSnapshot));
 };
 
@@ -3039,6 +3059,7 @@ window.newHubEntry = function(){
   $("hubRemarks").value = "";
   $("hubNote").value = "";
   $("hubPostSave").style.display = "none";
+  hubMsg("");
   ESIG.setValue($("hubPrintedBySig"), ""); ESIG.setValue($("hubApprovedBySig"), "");
   $("hubSaveBtn").disabled = false;
   refreshHubInvoiceNo();
