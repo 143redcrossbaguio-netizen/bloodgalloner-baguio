@@ -139,27 +139,37 @@ function normAug(e){
   return o;
 }
 /* ── Sample Hubbing statements ── */
-const HUB_TESTS=["FULL","HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
-const HUB_LABEL={FULL:"FULL",HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
-function hubTests(e){const t=A(e&&e.tests).map(String);return HUB_TESTS.filter(x=>t.includes(x))}
+const HUB_TESTS=["HIV","HCV","HBsAg","SYPHILIS","MALARIA"];
+const HUB_LABEL={HIV:"HIV",HCV:"HCV",HBsAg:"HBsAg",SYPHILIS:"Syphilis",MALARIA:"Malaria"};
+const HUB_REPEAT_TIMES=2;
+function hubTests(e){const t=A(e&&e.tests).map(String);if(t.includes("FULL"))return HUB_TESTS.slice();return HUB_TESTS.filter(x=>t.includes(x))}
 function hubRate(prices){const r=Number(prices&&(prices.RATE??prices.rate));return r>0?r:60}
 function hubUnitPrice(e,prices){return hubRate(prices)}
-const HUB_REPEAT_TIMES=2;
-function hubTotals(e,prices){
-  const rate=hubRate(prices),n=Number(e&&e.sampleCount)||0,rp=Math.max(0,Number(e&&e.repeatTests)||0);
-  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
-  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:n,u:"sample",p:rate,a:rate*n}];
-  if(rp>0)rows.push({d:"Repeat tests ("+rp+" sample"+(rp>1?"s":"")+" repeated "+HUB_REPEAT_TIMES+"x each)",q:rp*HUB_REPEAT_TIMES,u:"test",p:rate,a:rate*rp*HUB_REPEAT_TIMES});
-  const gross=rows.reduce((s,r)=>s+r.a,0);
-  return{rows,gross,disc:0,freight:0,net:gross};
+function hubCounts(e){
+  const n=Math.max(0,parseInt(e&&e.sampleCount,10)||0);
+  let rp=Math.max(0,parseInt(e&&e.repeatTests,10)||0);if(rp>n)rp=n;
+  return{n,rp,extra:rp*HUB_REPEAT_TIMES,total:n+rp*HUB_REPEAT_TIMES};
 }
-function hubShell(metaHtml,tableHtml,e){
+function hubTotals(e,prices){
+  const rate=hubRate(prices),c=hubCounts(e);
+  const tests=hubTests(e).map(x=>HUB_LABEL[x]).join(", ");
+  const rows=[{d:"Sample hubbing"+(tests?" – "+tests:""),q:c.n,p:rate,a:rate*c.n}];
+  if(c.rp>0)rows.push({d:"Repeat tests – "+c.rp+" sample"+(c.rp>1?"s":"")+" repeated ("+HUB_REPEAT_TIMES+"x each)",q:c.extra,p:rate,a:rate*c.extra});
+  const gross=rows.reduce((s,r)=>s+r.a,0);
+  return{rows,gross,disc:0,freight:0,net:gross,counts:c};
+}
+function hubMonthTotals(list){
+  const o={net:0,samples:0,repeated:0,tests:0};
+  A(list).forEach(e=>{const t=hubTotals(e,e.priceSnapshot||{});o.net+=t.net;o.samples+=t.counts.n;o.repeated+=t.counts.rp;o.tests+=t.counts.total});
+  return o;
+}
+function hubShell(title,metaHtml,tableHtml,e){
   const org=getOrg();
   const contactBits=[org.email1,org.email2].filter(Boolean).join("  •  ");
   const phoneBits=[org.mobile?("Mobile: "+org.mobile):"",org.telephone?("Tel: "+org.telephone):""].filter(Boolean).join("  •  ");
   return `<div class="soaDoc">
 <div class="soaHead"><img src="${LOGO}" alt="logo"><div class="soaOrg"><b>${esc(org.name)}</b><br>${esc(org.address)}<br>${esc(org.tin)}<div class="soaContact">${esc(contactBits)}${contactBits&&phoneBits?"<br>":""}${esc(phoneBits)}</div></div></div>
-<div class="soaTitle">BILLING STATEMENT – SAMPLE HUBBING</div>
+<div class="soaTitle">${esc(title)}</div>
 ${metaHtml}
 ${tableHtml}
 <div class="rem"><b>Remarks:</b> ${esc(e.remarks)}</div>
@@ -167,34 +177,34 @@ ${e.note?`<div class="soaNote"><b>Note:</b> ${esc(e.note)}</div>`:""}
 <div class="soaSign"><div>${sigImg(e.printedBySig)}<div class="nm">${esc(e.printedBy)}</div><div class="line">Prepared By</div></div><div>${sigImg(e.approvedBySig)}<div class="nm">${esc(e.approvedBy)}</div><div class="line">Approved By</div></div></div></div>`;
 }
 function buildHub(e,prices){
-  e=e||{};const {rows,net}=hubTotals(e,prices);
-  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
-  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  e=e||{};const {rows,net,counts:c}=hubTotals(e,prices);
+  let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="n">${money(r.p)}</td><td class="n"></td><td class="n">${money(r.a)}</td></tr>`).join("");
+  for(let i=rows.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(e.source)}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(e.address)}</span></div></div>
-<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
-  const table=`<table><colgroup><col style="width:38%"><col style="width:10%"><col style="width:9%"><col style="width:14%"><col style="width:12%"><col style="width:17%"></colgroup>
-<thead><tr><th>Description</th><th>Quantity</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,e);
+<div class="r"><div>Invoice no.: <span class="ul">${esc(e.invoiceNo||"—")}</span></div><div>Date: <span class="ul">${esc(fmtDate(e.date))}</span></div><div>Samples received: <span class="ul">${c.n}</span></div><div>Samples repeated: <span class="ul">${c.rp}</span></div><div>Total tests: <span class="ul">${c.total}</span></div>${(e.paidOrNo||e.paidDate)?`<div>OR no.: <span class="ul">${esc(e.paidOrNo||"—")}</span></div><div>Date of payment: <span class="ul">${esc(e.paidDate?fmtDate(e.paidDate):"—")}</span></div>`:""}</div></div>`;
+  const table=`<table><colgroup><col style="width:46%"><col style="width:12%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup>
+<thead><tr><th>Description</th><th>Quantity</th><th>Unit Price</th><th>Discount</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="3" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(net)}</td></tr></tbody></table>`;
+  return hubShell("BILLING STATEMENT – SAMPLE HUBBING",meta,table,e);
 }
-/* One statement for a whole month: list = hubbing entries, o = {label,source,remarks,note,printedBy,...} */
+/* One statement for a whole month: list = hubbing entries, o = {label,source,address,invoiceNo,date,remarks,note,printedBy,...} */
 function buildHubMonth(list,o){
-  o=o||{};list=(list||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
-  const multi=!o.source;let total=0,samples=0;
+  o=o||{};list=A(list).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.invoiceNo||"").localeCompare(String(b.invoiceNo||"")));
+  const multi=!o.source;const T=hubMonthTotals(list);
   let body=list.map(e=>{
-    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);total+=t.net;samples+=Number(e.sampleCount)||0;
-    const desc=(multi?esc(e.source)+" – ":"")+esc(hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—");
-    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${Number(e.sampleCount)||0}${Number(e.repeatTests)>0?` (+${Number(e.repeatTests)} repeated)`:""}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
+    const pr=e.priceSnapshot||{};const t=hubTotals(e,pr);const c=t.counts;
+    const tx=hubTests(e).map(x=>HUB_LABEL[x]).join(", ")||"—";
+    const desc=(multi?esc(e.source)+" – ":"")+esc(tx);
+    return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.invoiceNo||"—")}</td><td>${desc}</td><td class="c">${c.n}</td><td class="c">${c.rp}</td><td class="c">${c.total}</td><td class="n">${money(hubUnitPrice(e,pr))}</td><td class="n">${money(t.net)}</td></tr>`;
   }).join("");
-  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+  for(let i=list.length;i<4;i++)body+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
   const meta=`<div class="soaMeta"><div><div>CUSTOMER / SOURCE: <span class="ul" style="min-width:200px">${esc(o.source||"ALL SOURCES")}</span></div><div>ADDRESS: <span class="ul" style="min-width:230px">${esc(o.address||"")}</span></div></div>
-<div class="r"><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Total samples: <span class="ul">${samples}</span></div></div></div>`;
-  const table=`<table><colgroup><col style="width:15%"><col style="width:17%"><col style="width:28%"><col style="width:10%"><col style="width:13%"><col style="width:17%"></colgroup>
-<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Rate / sample</th><th>Amount</th></tr></thead>
-<tbody>${body}<tr class="tot"><td colspan="4" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(total)}</td></tr></tbody></table>`;
-  return hubShell(meta,table,o);
+<div class="r"><div>Monthly SOA no.: <span class="ul">${esc(o.invoiceNo||"assigned on print")}</span></div><div>Date printed: <span class="ul">${esc(o.date?fmtDate(o.date):"—")}</span></div><div>Statement for: <span class="ul">${esc(o.label||"")}</span></div><div>Entries: <span class="ul">${list.length}</span></div><div>Samples received: <span class="ul">${T.samples}</span></div><div>Samples repeated: <span class="ul">${T.repeated}</span></div><div>Total tests: <span class="ul">${T.tests}</span></div></div></div>`;
+  const table=`<table><colgroup><col style="width:13%"><col style="width:15%"><col style="width:24%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:11%"></colgroup>
+<thead><tr><th>Date</th><th>Invoice no.</th><th>Tests</th><th>Samples</th><th>Repeated</th><th>Total tests</th><th>Rate</th><th>Amount</th></tr></thead>
+<tbody>${body}<tr class="tot"><td colspan="6" class="noB"></td><td class="n">Total PHP</td><td class="n">${money(T.net)}</td></tr></tbody></table>`;
+  return hubShell("MONTHLY BILLING STATEMENT – SAMPLE HUBBING",meta,table,o);
 }
-
 function build(e,prices){
   const {rows,gross,disc,freight,net}=totals(e,prices);
   let body=rows.map(r=>`<tr><td>${esc(r.d)}</td><td class="c">${r.q}</td><td class="c">${r.u}</td><td class="n">${money(r.p)}</td><td class="n">${""}</td><td class="n">${money(r.a)}</td></tr>`).join("");
@@ -225,7 +235,7 @@ function print(html){
   const img=d.querySelector("img"),go=()=>{f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),2000)};
   if(img&&!img.complete)img.onload=go;else setTimeout(go,150);
 }
-return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
+return{build,print,attach,remember,list,fmtDate,LOGO,getOrg,setOrg,mountOrgEditor,totals,money,esc,A,normAug,HUB_TESTS,HUB_LABEL,HUB_REPEAT_TIMES,hubRate,hubTests,hubCounts,hubMonthTotals,hubUnitPrice,hubTotals,buildHub,buildHubMonth};
 })();
 </script>
 
@@ -315,7 +325,7 @@ tr.expanded .caret{transform:rotate(90deg);}
         <button type="button" data-period="year" class="active" onclick="setPeriod('year')">Annual</button>
       </div>
     </div>
-    <div class="fld"><label>TYPE</label><select id="fType"><option value="">All documents</option><option value="aug">Blood Augmentation</option><option value="hub">Sample Hubbing</option></select></div>
+    <div class="fld"><label>TYPE</label><select id="fType"><option value="">All documents</option><option value="aug">Blood Augmentation</option><option value="hub">Sample Hubbing – individual</option><option value="hubm">Sample Hubbing – monthly statements</option></select></div>
     <div class="fld"><label>YEAR</label><select id="fYear"></select></div>
     <div class="fld" id="fQuarterWrap" style="display:none;"><label>QUARTER</label>
       <select id="fQuarter"><option value="1">Q1 (Jan–Mar)</option><option value="2">Q2 (Apr–Jun)</option><option value="3">Q3 (Jul–Sep)</option><option value="4">Q4 (Oct–Dec)</option></select>
@@ -424,15 +434,31 @@ let expandedId = null;
 let period = "year";
 
 function getEntryPrices(e){ return e.priceSnapshot || {}; }
-let augEntries = [], hubEntries = [];
-const custOf = e => e._type === "hub" ? (e.source || "") : (e.facility || "");
-const totalsOf = e => e._type === "hub" ? SOA.hubTotals(e, getEntryPrices(e)) : SOA.totals(e, getEntryPrices(e));
-const buildOf = e => e._type === "hub" ? SOA.buildHub(e, getEntryPrices(e)) : SOA.build(e, getEntryPrices(e));
-const pathFor = id => { const e = allEntries.find(x => x.id === id); return (e && e._type === "hub" ? "sampleHubbing/" : "bloodAugmentation/") + id; };
+let augEntries = [], hubEntries = [], monthRecs = [];
+const hubListFor = e => SOA.A(e.entryIds).map(id => hubEntries.find(h => h.id === id)).filter(Boolean);
+const custOf = e => e._type === "hub" ? (e.source || "") : e._type === "hubm" ? (e.source || "ALL SOURCES") : (e.facility || "");
+const monthMeta = e => ({ label: e.periodLabel, source: e.source || "", address: e.address, invoiceNo: e.invoiceNo, date: e.date,
+  remarks: e.remarks, note: e.note, printedBy: e.printedBy, approvedBy: e.approvedBy, printedBySig: e.printedBySig, approvedBySig: e.approvedBySig });
+const totalsOf = e => {
+  if(e._type === "hub") return SOA.hubTotals(e, getEntryPrices(e));
+  if(e._type === "hubm"){ const n = SOA.hubMonthTotals(hubListFor(e)).net; return { gross:n, disc:0, freight:0, net:n }; }
+  return SOA.totals(e, getEntryPrices(e));
+};
+const buildOf = e => {
+  if(e._type === "hub") return SOA.buildHub(e, getEntryPrices(e));
+  if(e._type === "hubm") return SOA.buildHubMonth(hubListFor(e), monthMeta(e));
+  return SOA.build(e, getEntryPrices(e));
+};
+const pathFor = id => {
+  const e = allEntries.find(x => x.id === id);
+  return (e && e._type === "hub" ? "settings/sampleHubbing/" : e && e._type === "hubm" ? "settings/sampleHubbingMonthly/" : "bloodAugmentation/") + id;
+};
+const sumRows = rows => $("fType").value === "hubm" ? rows : rows.filter(e => e._type !== "hubm");
 function rebuildEntries(){
   allEntries = [
     ...augEntries.map(e => Object.assign(SOA.normAug(e), { _type: "aug" })),
-    ...hubEntries.map(e => Object.assign({}, e, { tests: SOA.hubTests(e), _type: "hub" }))
+    ...hubEntries.map(e => Object.assign({}, e, { tests: SOA.hubTests(e), _type: "hub" })),
+    ...monthRecs.map(e => Object.assign({}, e, { _type: "hubm" }))
   ];
   populateYearOptions();
   render();
@@ -489,7 +515,7 @@ function inPeriod(e){
 function matchesSearch(e, q){
   if(!q) return true;
   q = q.toLowerCase();
-  return [e.invoiceNo, custOf(e), (e._type==="hub"?"sample hubbing":"blood augmentation"), (e.tests||[]).join(" "), e.printedBy, e.approvedBy, e.address, statusOf(e), e.paidOrNo, e.paidDate]
+  return [e.invoiceNo, custOf(e), (e._type==="hub"?"sample hubbing":e._type==="hubm"?"sample hubbing monthly "+(e.periodLabel||""):"blood augmentation"), (e.tests||[]).join(" "), e.printedBy, e.approvedBy, e.address, statusOf(e), e.paidOrNo, e.paidDate]
     .some(v => String(v||"").toLowerCase().includes(q));
 }
 
@@ -513,7 +539,7 @@ function rowHtml(e){
       <td class="caret">▶</td>
       <td>${SOA.esc(SOA.fmtDate(e.date))}</td>
       <td>${SOA.esc(e.invoiceNo || "—")}</td>
-      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? ' <span style="background:#00897b;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:bold;">HUBBING</span>' : ""}</td>
+      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? ' <span style="background:#00897b;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:bold;">HUBBING</span>' : e._type === "hubm" ? ' <span style="background:#6a1b9a;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:bold;">MONTHLY · ' + SOA.esc(e.periodLabel || "") + '</span>' : ""}</td>
       <td class="n">${money(t.gross)}</td>
       <td class="n">${money(t.disc)}</td>
       <td class="n">${t.freight > 0 ? money(t.freight) : ""}</td>
@@ -657,13 +683,13 @@ window.printOne = function(id){
 };
 
 function renderSummary(rows){
-  const totGross = rows.reduce((s,e)=>s+totalsOf(e).gross,0);
-  const totDisc = rows.reduce((s,e)=>s+totalsOf(e).disc,0);
-  const totFreight = rows.reduce((s,e)=>s+totalsOf(e).freight,0);
+  const totGross = sumRows(rows).reduce((s,e)=>s+totalsOf(e).gross,0);
+  const totDisc = sumRows(rows).reduce((s,e)=>s+totalsOf(e).disc,0);
+  const totFreight = sumRows(rows).reduce((s,e)=>s+totalsOf(e).freight,0);
   const totNet = totGross - totDisc + totFreight;
   $("summaryBar").innerHTML =
     `<div>Period: <b>${SOA.esc(periodLabel())}</b></div>
-     <div>Statements: <b>${rows.length}</b></div>
+     <div>Statements: <b>${sumRows(rows).length}</b></div>
      <div>Total Amount: <b>₱${money(totGross)}</b></div>
      <div>Total Discount: <b>₱${money(totDisc)}</b></div>
      <div>Total Freight: <b>₱${money(totFreight)}</b></div>
@@ -680,16 +706,16 @@ function render(){
 
 function buildPrintTable(rows, label){
   const org = SOA.getOrg();
-  const totGross = rows.reduce((s,e)=>s+totalsOf(e).gross,0);
-  const totDisc = rows.reduce((s,e)=>s+totalsOf(e).disc,0);
-  const totFreight = rows.reduce((s,e)=>s+totalsOf(e).freight,0);
+  const totGross = sumRows(rows).reduce((s,e)=>s+totalsOf(e).gross,0);
+  const totDisc = sumRows(rows).reduce((s,e)=>s+totalsOf(e).disc,0);
+  const totFreight = sumRows(rows).reduce((s,e)=>s+totalsOf(e).freight,0);
   const totNet = totGross - totDisc + totFreight;
   const body = rows.map(e => {
     const t = totalsOf(e);
     return `<tr>
       <td>${SOA.esc(SOA.fmtDate(e.date))}</td>
       <td>${SOA.esc(e.invoiceNo||"—")}</td>
-      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? " (Hubbing)" : ""}</td>
+      <td>${SOA.esc(custOf(e))}${e._type === "hub" ? " (Hubbing)" : e._type === "hubm" ? " (Monthly – " + SOA.esc(e.periodLabel || "") + ")" : ""}</td>
       <td style="text-align:right;">${money(t.gross)}</td>
       <td style="text-align:right;">${money(t.disc)}</td>
       <td style="text-align:right;">${t.freight > 0 ? money(t.freight) : ""}</td>
@@ -732,7 +758,7 @@ function buildPrintTable(rows, label){
         <td style="border:1px solid #000;padding:4px;text-align:right;">${money(totNet)}</td>
         <td colspan="5" style="border:1px solid #000;"></td>
       </tr></tfoot>
-    </table>
+    </table>${rows.some(e=>e._type==="hubm") && $("fType").value!=="hubm" ? '<p style="font-size:11px;font-style:italic;">Monthly hubbing statements consolidate the individual statements and are not included in the totals above.</p>' : ""}
   </div>`;
 }
 
@@ -755,7 +781,7 @@ window.exportCsv = function(){
   const lines = [head.join(",")];
   rows.forEach(e => {
     const t = totalsOf(e);
-    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", custOf(e)+(e._type==="hub"?" (Hubbing)":""), t.gross.toFixed(2), t.disc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
+    const cells = [SOA.fmtDate(e.date), e.invoiceNo||"", custOf(e)+(e._type==="hub"?" (Hubbing)":e._type==="hubm"?" (Monthly – "+(e.periodLabel||"")+")":""), t.gross.toFixed(2), t.disc.toFixed(2), t.freight.toFixed(2), t.net.toFixed(2), statusOf(e), statusOf(e)==="Paid" ? (e.paidOrNo||"") : "", statusOf(e)==="Paid" && e.paidDate ? e.paidDate : "", Number(e.printCount)||0, e.printedBy||""];
     lines.push(cells.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","));
   });
   const blob = new Blob(["\ufeff"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
@@ -776,9 +802,14 @@ onAuthStateChanged(auth, user => {
     augEntries = Object.keys(val).map(id => ({ id, ...val[id] }));
     rebuildEntries();
   });
-  onValue(ref(db, "sampleHubbing"), snap => {
+  onValue(ref(db, "settings/sampleHubbing"), snap => {
     const val = snap.val() || {};
     hubEntries = Object.keys(val).map(id => ({ id, ...val[id] }));
+    rebuildEntries();
+  });
+  onValue(ref(db, "settings/sampleHubbingMonthly"), snap => {
+    const val = snap.val() || {};
+    monthRecs = Object.keys(val).map(id => ({ id, ...val[id] }));
     rebuildEntries();
   });
 });
