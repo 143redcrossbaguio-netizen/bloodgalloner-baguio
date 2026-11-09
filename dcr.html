@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Daily Collection Report (DCR)</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;font-family:Arial;background:#f4f4f4;color:#222}
+header{background:#2e7d32;color:white;text-align:center;padding:15px}
+header h2{margin:0}
+.container{max-width:1450px;margin:20px auto;padding:0 12px}
+.card{background:white;padding:18px 20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.1);margin-bottom:16px}
+.card h3{margin:0 0 12px 0;font-size:16px;color:#1b5e20}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+label.fl{display:block;font-size:12px;font-weight:bold;color:#555;margin-bottom:4px}
+input,select,textarea{font-family:Arial;font-size:14px;padding:8px;border:1px solid #bbb;border-radius:6px;box-sizing:border-box}
+.grid input{width:100%}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{border:0;border-radius:6px;padding:10px 16px;font-weight:bold;font-size:13px;cursor:pointer;color:white}
+button:disabled{opacity:.5;cursor:not-allowed}
+.b-green{background:#2e7d32}.b-blue{background:#1565c0}.b-orange{background:#e65100}.b-purple{background:#6a1b9a}.b-gray{background:#607d8b}.b-red{background:#c62828}
+.status{margin-top:12px;font-size:13px;padding:8px 12px;border-radius:6px;background:#e8f5e9;color:#1b5e20}
+.status.warn{background:#fff3e0;color:#bf360c}.status.err{background:#ffebee;color:#b71c1c}
+.tblWrap{overflow-x:auto}
+table.rows{border-collapse:collapse;width:100%;min-width:1100px}
+table.rows th{background:#2e7d32;color:#fff;font-size:12px;padding:8px 6px;text-align:left;white-space:nowrap}
+table.rows td{border-bottom:1px solid #e0e0e0;padding:4px;vertical-align:middle}
+table.rows td input{width:100%;padding:6px}
+table.rows td.n{width:34px;text-align:center;color:#777;font-size:12px}
+.amt{font-weight:bold;text-align:right;padding-right:8px;white-space:nowrap}
+.noor input.or{background:#fff8e1;border-color:#ffb300}
+.x{background:#c62828;padding:6px 10px}
+.totalBar{display:flex;justify-content:flex-end;gap:24px;margin-top:12px;font-size:15px}
+.totalBar b{font-size:18px;color:#1b5e20}
+.empty{text-align:center;color:#888;padding:24px}
+.sigGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.sigBox{border:1px solid #cfd8dc;border-radius:8px;padding:12px;background:#fafafa}
+.sigBox h4{margin:0 0 8px 0;font-size:13px;color:#37474f}
+.sigBox input[type=text],.sigBox input[type=date]{width:100%;margin-bottom:8px}
+.sigPrev{height:84px;border:1px dashed #b0bec5;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:8px;color:#90a4ae;font-size:12px}
+.sigPrev img{max-height:78px;max-width:95%}
+.sigBtns{display:flex;gap:6px;flex-wrap:wrap}
+.sigBtns button{padding:7px 10px;font-size:12px}
+.chk{font-size:12px;margin-top:8px;display:flex;align-items:center;gap:6px}
+textarea#remarks{width:100%;min-height:54px}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.mbox{background:#fff;border-radius:10px;padding:18px;width:min(680px,94vw)}
+#padCanvas{width:100%;height:230px;border:1px solid #90a4ae;border-radius:6px;touch-action:none;background:#fff;cursor:crosshair}
+</style>
+</head>
+<body>
+<header><h2>Daily Collection Report (DCR)</h2></header>
+
+<div class="container">
+
+  <div class="card">
+    <h3>DCR Details</h3>
+    <div class="grid">
+      <div><label class="fl">DATE</label><input type="date" id="dcrDate"></div>
+      <div><label class="fl">CONTROL NUMBER</label><input type="text" id="control" placeholder="BAGUIO-2026"></div>
+      <div><label class="fl">CHAPTER</label><input type="text" id="chapter" value="BAGUIO CITY CHAPTER"></div>
+    </div>
+    <div class="btns">
+      <button class="b-orange" id="pullBtn">PULL FROM RELEASING</button>
+      <button class="b-blue" id="addRowBtn">+ ADD ROW</button>
+      <button class="b-green" id="saveBtn">SAVE DCR</button>
+      <button class="b-purple" id="printBtn">PREVIEW / PRINT</button>
+      <button class="b-gray" id="xlsBtn">DOWNLOAD EXCEL</button>
+    </div>
+    <div class="status" id="status">Loading…</div>
+  </div>
+
+  <div class="card">
+    <h3>Collections</h3>
+    <div class="tblWrap">
+      <table class="rows">
+        <thead>
+          <tr>
+            <th>#</th><th style="width:120px">OR NUMBER</th><th>NAME</th><th>DESCRIPTION</th>
+            <th style="width:110px">AMOUNT</th><th style="width:80px">DISCOUNT %</th><th style="width:110px">DISCOUNT ₱</th>
+            <th style="width:120px">NET AMOUNT</th><th style="width:100px">MODE</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="rowsBody"></tbody>
+      </table>
+    </div>
+    <div class="totalBar"><span>Entries: <b id="cnt">0</b></span><span>Total discount: <b id="totDisc">0.00</b></span><span>TOTAL: <b id="tot">0.00</b></span></div>
+    <datalist id="modes"><option value="CASH"><option value="CHECK"><option value="GCASH"><option value="BANK TRANSFER"></datalist>
+  </div>
+
+  <div class="card">
+    <h3>Remarks &amp; Signatories</h3>
+    <label class="fl">REMARKS</label>
+    <textarea id="remarks"></textarea>
+    <div class="sigGrid" style="margin-top:14px" id="sigGrid"></div>
+  </div>
+
+</div>
+
+<!-- DRAW SIGNATURE -->
+<div class="modal" id="padModal">
+  <div class="mbox">
+    <h3 style="margin:0 0 10px 0">Draw e-signature</h3>
+    <canvas id="padCanvas" width="1200" height="460"></canvas>
+    <div class="btns">
+      <button class="b-green" id="padUse">USE SIGNATURE</button>
+      <button class="b-gray" id="padClear">CLEAR</button>
+      <button class="b-red" id="padCancel">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script src="dcr-common.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get, set, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const D = window.DCR;
+const $ = id => document.getElementById(id);
+const SIGKEYS = [
+  { k:"prepared", label:"PREPARED BY",           hasDate:false },
+  { k:"checked",  label:"CHECKED AND REVIEWED BY", hasDate:true  },
+  { k:"approved", label:"CHAPTER BOOKKEEPER",    hasDate:true  }
+];
+
+let rows = [];                 /* the collection lines */
+let signers = JSON.parse(JSON.stringify(D.DEFAULT_SIGNERS));
+let createdAt = null;
+let dirty = false;
+let loadedDate = "";
+let prices = { WB:0, PRBC:0, PC:0, FFP:0, CRYO:0, BOX:0 };
+let pricesLoaded = false;
+
+function setStatus(msg, kind){ const s=$("status"); s.textContent = msg; s.className = "status" + (kind ? " " + kind : ""); }
+function markDirty(){ dirty = true; }
+const amountOf = r => Math.max(0, D.r2(D.num(r.gross) - D.num(r.discount)));
+const defaultControl = date => "BAGUIO-" + ((date||"").slice(0,4) || new Date().getFullYear());
+
+/* ───────────── rows table ───────────── */
+function pctOf(r){ const g = D.num(r.gross); return g > 0 && D.num(r.discount) > 0 ? String(D.r2(D.num(r.discount) / g * 100)) : ""; }
+
+function renderRows(){
+  const body = $("rowsBody");
+  if(!rows.length){ body.innerHTML = '<tr><td colspan="10" class="empty">No entries yet. Click <b>PULL FROM RELEASING</b> or <b>+ ADD ROW</b>.</td></tr>'; updateTotals(); return; }
+  body.innerHTML = rows.map((r,i) => `
+    <tr data-i="${i}" class="${r.or ? "" : "noor"}">
+      <td class="n">${i+1}</td>
+      <td><input class="or" data-f="or" value="${D.esc(r.or)}" placeholder="OR no."></td>
+      <td><input data-f="name" value="${D.esc(r.name)}" style="text-transform:uppercase"></td>
+      <td><input data-f="desc" value="${D.esc(r.desc)}" style="text-transform:uppercase"></td>
+      <td><input type="number" step="0.01" min="0" data-f="gross" value="${r.gross || ""}"></td>
+      <td><input type="number" step="any" min="0" max="100" data-f="pct" value="${pctOf(r)}"></td>
+      <td><input type="number" step="0.01" min="0" data-f="discount" value="${D.num(r.discount) || ""}"></td>
+      <td class="amt" data-f="net">${D.money(amountOf(r))}</td>
+      <td><input data-f="mode" list="modes" value="${D.esc(r.mode)}"></td>
+      <td><button class="x" data-del="${i}" title="Remove this line">✕</button></td>
+    </tr>`).join("");
+  updateTotals();
+}
+
+function updateTotals(){
+  const total = rows.reduce((a,r) => a + amountOf(r), 0);
+  const disc = rows.reduce((a,r) => a + (D.num(r.discount) > 0 ? Math.min(D.num(r.discount), D.num(r.gross)) : 0), 0);
+  $("cnt").textContent = rows.filter(r => r.or || r.name || r.desc || D.num(r.gross)).length;
+  $("tot").textContent = D.money(total);
+  $("totDisc").textContent = D.money(disc);
+}
+
+$("rowsBody").addEventListener("input", e => {
+  const tr = e.target.closest("tr"); if(!tr || tr.dataset.i === undefined) return;
+  const r = rows[+tr.dataset.i], f = e.target.dataset.f; if(!r || !f) return;
+  markDirty();
+  if(f === "or" || f === "name" || f === "desc" || f === "mode"){
+    r[f] = e.target.value;
+    if(f === "or") tr.classList.toggle("noor", !e.target.value.trim());
+  } else if(f === "gross"){
+    r.gross = D.num(e.target.value);
+    tr.querySelector('[data-f="pct"]').value = pctOf(r);
+  } else if(f === "discount"){
+    r.discount = D.num(e.target.value);
+    tr.querySelector('[data-f="pct"]').value = pctOf(r);
+  } else if(f === "pct"){
+    const p = Math.min(100, Math.max(0, D.num(e.target.value)));
+    r.discount = D.r2(D.num(r.gross) * p / 100);
+    tr.querySelector('[data-f="discount"]').value = r.discount || "";
+  }
+  tr.querySelector('[data-f="net"]').textContent = D.money(amountOf(r));
+  updateTotals();
+});
+$("rowsBody").addEventListener("click", e => {
+  const b = e.target.closest("[data-del]"); if(!b) return;
+  rows.splice(+b.dataset.del, 1); markDirty(); renderRows();
+});
+$("addRowBtn").addEventListener("click", () => {
+  rows.push({ sourceId:null, or:"", name:"", desc:"", gross:0, discount:0, mode:"CASH" });
+  markDirty(); renderRows();
+  const inputs = $("rowsBody").querySelectorAll("tr:last-child input.or"); if(inputs.length) inputs[0].focus();
+});
+
+/* ───────────── pull from Releasing (blood releases only, NOT augmentation) ───────────── */
+function normPrices(s){
+  return { WB:Number(s?.WB ?? s?.wb)||0, PRBC:Number(s?.PRBC ?? s?.prbc)||0, PC:Number(s?.PC ?? s?.pc)||0,
+           FFP:Number(s?.FFP ?? s?.ffp)||0, CRYO:Number(s?.CRYO ?? s?.cryo)||0, BOX:Number(s?.BOX ?? s?.boxContainer ?? s?.box)||0 };
+}
+async function ensurePrices(){
+  if(pricesLoaded) return;
+  try{ const snap = await get(ref(db,"settings/releasingPrices")); prices = normPrices(snap.val() || {}); pricesLoaded = true; }
+  catch(err){ console.error("Prices:", err); }
+}
+/* same computation the Releasing Tracking page uses for AMOUNT PAID */
+function releaseAmounts(e){
+  const p = e.priceSnapshot ? normPrices(e.priceSnapshot) : prices;
+  let total = 0;
+  D.arr(e.issued).forEach(i => { const t = String(i.type||"").toUpperCase(), q = Number(i.qty||0); if(p[t] !== undefined) total += q * p[t]; });
+  total += (Number(e.boxContainerQty)||0) * (p.BOX||0);
+  let waivedItems = D.arr(e.waivedItems);
+  if(!waivedItems.length && e.waivedComponent) waivedItems = [{ component:e.waivedComponent, unit:e.waivedUnit }];
+  let waived = 0;
+  waivedItems.forEach(it => {
+    const t = String(it.component||"").trim().toUpperCase(), q = Number(it.unit)||0, key = (t==="BOX CONTAINER"||t==="BOX") ? "BOX" : t;
+    if(t && q > 0 && p[key] !== undefined) waived += p[key] * q;
+  });
+  const freight = Math.max(0, Number(e.freight)||0), misc = Math.max(0, Number(e.misc)||0);
+  const gross = Math.max(0, D.r2(total - waived + freight + misc));
+  const discount = Math.min(gross, Math.max(0, Number(e.discount)||0));
+  return { gross, discount, net: Math.max(0, D.r2(gross - discount)) };
+}
+function releaseDescription(e){
+  const agg = {}, order = [];
+  D.arr(e.issued).forEach(i => { const t = String(i.type||"").toUpperCase().trim(), q = Number(i.qty||0); if(!t || q <= 0) return; if(!(t in agg)){ agg[t] = 0; order.push(t); } agg[t] += q; });
+  const out = order.map(t => "BPF " + agg[t] + " " + t);
+  const box = Number(e.boxContainerQty)||0; if(box > 0) out.push(box + " BOX CONTAINER");
+  return out.join(", ");
+}
+function orSortKey(v){ const s = String(v||"").trim(); const n = parseInt(s.replace(/\D/g,""),10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; }
+
+$("pullBtn").addEventListener("click", async () => {
+  const date = $("dcrDate").value;
+  if(!date){ setStatus("Choose the DCR date first.", "warn"); return; }
+  if(!auth.currentUser){ alert("You are not logged in."); location.href = "index.html"; return; }
+  $("pullBtn").disabled = true; setStatus("Pulling blood releases for " + D.longDate(date) + "…");
+  try{
+    await ensurePrices();
+    const snap = await get(query(ref(db,"releasing"), orderByChild("date"), equalTo(date)));
+    const found = []; snap.forEach(c => { found.push({ id:c.key, ...c.val() }); });
+    const have = new Set(rows.map(r => r.sourceId).filter(Boolean));
+    let added = 0, dup = 0, zero = 0;
+    found.sort((a,b) => orSortKey(a.or) - orSortKey(b.or));
+    found.forEach(e => {
+      if(have.has(e.id)){ dup++; return; }
+      const a = releaseAmounts(e);
+      if(a.net <= 0){ zero++; return; }          /* fully waived / free release: nothing was collected */
+      const name = ((e.surname||"").trim() + ((e.surname && e.firstname) ? ", " : "") + (e.firstname||"").trim()).trim() || (e.facility||"").trim();
+      rows.push({ sourceId:e.id, or:String(e.or||"").trim(), name:name.toUpperCase(), desc:releaseDescription(e).toUpperCase(),
+                  gross:a.gross, discount:a.discount, mode:"CASH" });
+      added++;
+    });
+    if(added) markDirty();
+    renderRows();
+    let msg = found.length ? "Added " + added + " blood release" + (added===1?"":"s") + " from Releasing." : "No blood releases found in Releasing for " + D.longDate(date) + ".";
+    if(dup)  msg += " " + dup + " already in this DCR.";
+    if(zero) msg += " " + zero + " skipped (fully waived / ₱0.00).";
+    if(rows.some(r => !r.or)) msg += " Some lines have no OR number (highlighted) – please fill them in.";
+    setStatus(msg, added ? "" : "warn");
+  }catch(err){
+    console.error(err); setStatus("Could not pull from Releasing: " + (err.message || err), "err");
+  }finally{ $("pullBtn").disabled = false; }
+});
+
+/* ───────────── signatories ───────────── */
+function renderSigners(){
+  $("sigGrid").innerHTML = SIGKEYS.map(s => {
+    const v = signers[s.k];
+    return `<div class="sigBox" data-k="${s.k}">
+      <h4>${s.label}</h4>
+      <input type="text" data-s="name" value="${D.esc(v.name)}" placeholder="Full name" style="text-transform:uppercase">
+      <input type="text" data-s="title" value="${D.esc(v.title)}" placeholder="Position" style="text-transform:uppercase">
+      ${s.hasDate ? `<label class="fl">DATE</label><input type="date" data-s="date" value="${D.esc(v.date||"")}">` : ""}
+      <div class="sigPrev">${v.sig ? `<img src="${D.esc(v.sig)}" alt="signature">` : "No e-signature"}</div>
+      <div class="sigBtns">
+        <button class="b-blue" data-act="upload">UPLOAD</button>
+        <button class="b-purple" data-act="draw">DRAW</button>
+        <button class="b-red" data-act="remove">REMOVE</button>
+        <input type="file" accept="image/*" data-file style="display:none">
+      </div>
+      <label class="chk"><input type="checkbox" data-s="showSig" ${v.showSig !== false ? "checked" : ""}> Show signature on printout / Excel</label>
+    </div>`;
+  }).join("");
+}
+$("sigGrid").addEventListener("input", e => {
+  const box = e.target.closest(".sigBox"); if(!box) return;
+  const f = e.target.dataset.s; if(!f) return;
+  signers[box.dataset.k][f] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  markDirty();
+});
+$("sigGrid").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if(!b) return;
+  const box = b.closest(".sigBox"), k = box.dataset.k;
+  if(b.dataset.act === "upload") box.querySelector("[data-file]").click();
+  if(b.dataset.act === "draw") openPad(k);
+  if(b.dataset.act === "remove"){ signers[k].sig = ""; markDirty(); renderSigners(); }
+});
+$("sigGrid").addEventListener("change", async e => {
+  if(!e.target.matches("[data-file]")) return;
+  const f = e.target.files[0]; if(!f) return;
+  const k = e.target.closest(".sigBox").dataset.k;
+  try{ signers[k].sig = await processSignature(f); signers[k].showSig = true; markDirty(); renderSigners(); }
+  catch(err){ alert("Could not read that image. Please use a PNG or JPG picture of the signature."); }
+});
+
+/* turn a picture of a signature into a small transparent PNG (white paper becomes transparent, edges trimmed) */
+function trimAndExport(c){
+  const x = c.getContext("2d"), w = c.width, h = c.height, d = x.getImageData(0,0,w,h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for(let y=0;y<h;y++) for(let xx=0;xx<w;xx++){ if(d[(y*w+xx)*4+3] > 20){ if(xx<x0)x0=xx; if(xx>x1)x1=xx; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1 < 0) return "";
+  const pad = 4; x0 = Math.max(0,x0-pad); y0 = Math.max(0,y0-pad); x1 = Math.min(w-1,x1+pad); y1 = Math.min(h-1,y1+pad);
+  const o = document.createElement("canvas"); o.width = x1-x0+1; o.height = y1-y0+1;
+  o.getContext("2d").drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+  return o.toDataURL("image/png");
+}
+function processSignature(file){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = rej;
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = rej;
+      img.onload = () => {
+        const k = Math.min(1, 700/img.width, 260/img.height);
+        const w = Math.max(1,Math.round(img.width*k)), h = Math.max(1,Math.round(img.height*k));
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        const x = c.getContext("2d"); x.drawImage(img,0,0,w,h);
+        const id = x.getImageData(0,0,w,h), p = id.data;
+        for(let i=0;i<p.length;i+=4){
+          const lum = .299*p[i] + .587*p[i+1] + .114*p[i+2];
+          if(lum > 205) p[i+3] = 0;
+          else if(lum > 150) p[i+3] = Math.round(p[i+3] * (205-lum) / 55);
+        }
+        x.putImageData(id,0,0);
+        const out = trimAndExport(c); out ? res(out) : rej(new Error("empty"));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* draw pad */
+let padKey = null, drawing = false;
+const pad = $("padCanvas"), pctx = pad.getContext("2d");
+function padReset(){ pctx.clearRect(0,0,pad.width,pad.height); pctx.lineWidth = 5; pctx.lineCap = "round"; pctx.lineJoin = "round"; pctx.strokeStyle = "#111"; }
+function openPad(k){ padKey = k; padReset(); $("padModal").classList.add("on"); }
+function padPos(e){ const r = pad.getBoundingClientRect(); return { x:(e.clientX-r.left)*pad.width/r.width, y:(e.clientY-r.top)*pad.height/r.height }; }
+pad.addEventListener("pointerdown", e => { drawing = true; pad.setPointerCapture(e.pointerId); const p = padPos(e); pctx.beginPath(); pctx.moveTo(p.x,p.y); pctx.lineTo(p.x+.1,p.y+.1); pctx.stroke(); });
+pad.addEventListener("pointermove", e => { if(!drawing) return; const p = padPos(e); pctx.lineTo(p.x,p.y); pctx.stroke(); });
+["pointerup","pointercancel"].forEach(t => pad.addEventListener(t, () => { drawing = false; }));
+$("padClear").addEventListener("click", padReset);
+$("padCancel").addEventListener("click", () => $("padModal").classList.remove("on"));
+$("padUse").addEventListener("click", () => {
+  const out = trimAndExport(pad);
+  if(!out){ alert("Please draw the signature first."); return; }
+  signers[padKey].sig = out; signers[padKey].showSig = true; markDirty(); renderSigners();
+  $("padModal").classList.remove("on");
+});
+
+/* ───────────── build / save / print / excel ───────────── */
+function buildRecord(){
+  const date = $("dcrDate").value;
+  const lines = rows.filter(r => r.or || r.name || r.desc || D.num(r.gross) > 0).map(r => ({
+    sourceId: r.sourceId || null,
+    or: String(r.or||"").trim(), name: String(r.name||"").trim().toUpperCase(), desc: String(r.desc||"").trim().toUpperCase(),
+    gross: D.r2(D.num(r.gross)), discount: D.r2(Math.min(D.num(r.gross), D.num(r.discount))), amount: amountOf(r),
+    mode: String(r.mode||"CASH").trim().toUpperCase()
+  }));
+  const sg = {};
+  SIGKEYS.forEach(s => { const v = signers[s.k]; sg[s.k] = { name:(v.name||"").trim().toUpperCase(), title:(v.title||"").trim().toUpperCase(), date:v.date||"", sig:v.sig||"", showSig:v.showSig !== false }; });
+  return {
+    date, control: $("control").value.trim() || defaultControl(date), chapter: $("chapter").value.trim() || "BAGUIO CITY CHAPTER",
+    remarks: $("remarks").value.trim(), rows: lines, total: D.r2(lines.reduce((a,r) => a + r.amount, 0)),
+    signers: sg
+  };
+}
+
+$("saveBtn").addEventListener("click", async () => {
+  const user = auth.currentUser;
+  if(!user){ alert("You are not logged in."); location.href = "index.html"; return; }
+  const rec = buildRecord();
+  if(!rec.date){ setStatus("Choose the DCR date first.", "warn"); return; }
+  if(!rec.rows.length){ setStatus("Add at least one entry before saving.", "warn"); return; }
+  $("saveBtn").disabled = true;
+  try{
+    rec.createdAt = createdAt || Date.now();
+    rec.updatedAt = Date.now();
+    rec.updatedBy = user.email || user.uid;
+    await set(ref(db, "dcr/" + rec.date), rec);
+    createdAt = rec.createdAt; dirty = false; loadedDate = rec.date;
+    /* remember the signers (names + e-signatures) for the next DCR */
+    try{
+      const def = {}; SIGKEYS.forEach(s => def[s.k] = { name:rec.signers[s.k].name, title:rec.signers[s.k].title, sig:rec.signers[s.k].sig });
+      await set(ref(db, "settings/dcrSigners"), def);
+    }catch(err){ console.warn("Could not save default signers:", err); }
+    setStatus("DCR for " + D.longDate(rec.date) + " saved — " + rec.rows.length + " entries, total ₱" + D.money(rec.total) + ". You can print or download it from DCR Tracking.");
+  }catch(err){
+    console.error(err);
+    setStatus("Save failed: " + (err.message || err) + (/permission/i.test(String(err.message)) ? " (the database rules need to allow the \"dcr\" path)." : ""), "err");
+  }finally{ $("saveBtn").disabled = false; }
+});
+
+$("printBtn").addEventListener("click", () => {
+  const rec = buildRecord();
+  if(!rec.date){ setStatus("Choose the DCR date first.", "warn"); return; }
+  D.openPrint(rec, false);
+});
+$("xlsBtn").addEventListener("click", async () => {
+  const rec = buildRecord();
+  if(!rec.date){ setStatus("Choose the DCR date first.", "warn"); return; }
+  if(!rec.rows.length){ setStatus("Add at least one entry first.", "warn"); return; }
+  $("xlsBtn").disabled = true;
+  try{ await D.downloadExcel(rec); setStatus("Downloaded DCR-" + rec.date + ".xlsx"); }
+  catch(err){ console.error(err); setStatus(err.message || String(err), "err"); }
+  finally{ $("xlsBtn").disabled = false; }
+});
+
+/* ───────────── load a date ───────────── */
+async function loadDefaultSigners(){
+  try{
+    const snap = await get(ref(db, "settings/dcrSigners")); const v = snap.val();
+    if(v) SIGKEYS.forEach(s => { if(v[s.k]) signers[s.k] = { ...signers[s.k], name:v[s.k].name || signers[s.k].name, title:v[s.k].title || signers[s.k].title, sig:v[s.k].sig || "", showSig:true }; });
+  }catch(err){ console.warn("Default signers:", err); }
+}
+async function loadDate(date){
+  loadedDate = date; dirty = false; createdAt = null;
+  if(!date){ rows = []; renderRows(); return; }
+  setStatus("Loading…");
+  try{
+    const snap = await get(ref(db, "dcr/" + date));
+    if(snap.exists()){
+      const rec = D.normalize(snap.val());
+      createdAt = snap.val().createdAt || null;
+      rows = rec.rows.map(r => ({ ...r }));
+      $("control").value = rec.control || defaultControl(date); $("chapter").value = rec.chapter; $("remarks").value = rec.remarks;
+      signers = rec.signers;
+      setStatus("Saved DCR for " + D.longDate(date) + " loaded" + (rec.updatedBy ? " (last saved by " + rec.updatedBy + ")" : "") + ". Use PULL FROM RELEASING to add new releases.");
+    } else {
+      rows = []; $("control").value = defaultControl(date); $("remarks").value = "";
+      signers = JSON.parse(JSON.stringify(D.DEFAULT_SIGNERS)); await loadDefaultSigners();
+      SIGKEYS.forEach(s => { if(s.hasDate) signers[s.k].date = date; });
+      setStatus("New DCR for " + D.longDate(date) + ". Click PULL FROM RELEASING to bring in the blood releases of that day.");
+    }
+  }catch(err){
+    console.error(err); setStatus("Could not load: " + (err.message || err), "err"); rows = [];
+  }
+  renderRows(); renderSigners();
+}
+$("dcrDate").addEventListener("change", () => {
+  const nd = $("dcrDate").value;
+  if(dirty && !confirm("You have unsaved changes. Switch date and discard them?")){ $("dcrDate").value = loadedDate; return; }
+  loadDate(nd);
+});
+window.addEventListener("beforeunload", e => { if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+["control","chapter","remarks"].forEach(id => $(id).addEventListener("input", markDirty));
+
+onAuthStateChanged(auth, async user => {
+  if(!user){ location.href = "index.html"; return; }
+  const qd = new URLSearchParams(location.search).get("date");
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(qd || "") ? qd : D.todayISO();
+  $("dcrDate").value = date;
+  await loadDate(date);
+});
+</script>
+</body>
+</html>
