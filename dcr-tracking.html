@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>DCR Tracking</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;font-family:Arial;background:#f4f4f4;color:#222}
+header{background:#2e7d32;color:white;text-align:center;padding:15px}
+header h2{margin:0}
+.container{max-width:1450px;margin:20px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.1)}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+.filters label{display:block;font-size:12px;font-weight:bold;color:#555;margin-bottom:4px}
+input,select{font-family:Arial;font-size:14px;padding:8px;border:1px solid #bbb;border-radius:6px}
+button{border:0;border-radius:6px;padding:8px 12px;font-weight:bold;font-size:12px;cursor:pointer;color:white}
+button:disabled{opacity:.5;cursor:not-allowed}
+.b-green{background:#2e7d32}.b-blue{background:#1565c0}.b-orange{background:#e65100}.b-purple{background:#6a1b9a}.b-red{background:#c62828}
+.sum{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:12px;font-size:14px}
+.sum b{font-size:18px;color:#1b5e20}
+.tblWrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th{background:#2e7d32;color:#fff;font-size:12px;padding:10px 8px;text-align:left;white-space:nowrap}
+td{border-bottom:1px solid #e0e0e0;padding:9px 8px;font-size:14px;vertical-align:middle}
+tr:hover td{background:#f1f8e9}
+td.r{text-align:right;font-weight:bold}
+td.act{white-space:nowrap}
+td.act button{margin-right:4px}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:#e8f5e9;color:#1b5e20}
+.pill.no{background:#fff3e0;color:#bf360c}
+.empty{text-align:center;color:#888;padding:34px}
+.note{font-size:12px;color:#777;margin-top:10px}
+</style>
+</head>
+<body>
+<header><h2>DCR Tracking</h2></header>
+
+<div class="container">
+  <div class="filters">
+    <div><label>YEAR</label><select id="fYear"></select></div>
+    <div><label>MONTH</label><select id="fMonth"></select></div>
+    <div><label>SEARCH (OR no., name, description)</label><input type="text" id="fSearch" placeholder="Search…" style="width:260px"></div>
+    <button class="b-blue" id="newBtn">+ NEW / OPEN DCR</button>
+  </div>
+  <div class="sum"><span>DCRs: <b id="sCount">0</b></span><span>Entries: <b id="sEntries">0</b></span><span>Total collected: <b id="sTotal">0.00</b></span></div>
+  <div class="tblWrap">
+    <table>
+      <thead><tr><th>DATE</th><th>CONTROL NO.</th><th>ENTRIES</th><th style="text-align:right">TOTAL</th><th>PREPARED BY</th><th>E-SIGNATURES</th><th>ACTIONS</th></tr></thead>
+      <tbody id="body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="note">Excel files are named <b>DCR-YYYY-MM-DD.xlsx</b>. Use <b>EDIT</b> to change a saved DCR (add e-signatures, pull new releases, change discounts).</div>
+</div>
+
+<script src="dcr-common.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const D = window.DCR;
+const $ = id => document.getElementById(id);
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+let all = [];   /* normalized records */
+
+function fillFilters(){
+  const years = [...new Set(all.map(r => r.date.slice(0,4)).filter(Boolean))].sort().reverse();
+  const cy = $("fYear").value, cm = $("fMonth").value;
+  $("fYear").innerHTML = '<option value="">All years</option>' + years.map(y => `<option>${y}</option>`).join("");
+  $("fMonth").innerHTML = '<option value="">All months</option>' + MONTHS.map((m,i) => `<option value="${String(i+1).padStart(2,"0")}">${m}</option>`).join("");
+  $("fYear").value = years.includes(cy) ? cy : ""; $("fMonth").value = cm;
+}
+function filtered(){
+  const y = $("fYear").value, m = $("fMonth").value, q = $("fSearch").value.trim().toUpperCase();
+  return all.filter(r => {
+    if(y && r.date.slice(0,4) !== y) return false;
+    if(m && r.date.slice(5,7) !== m) return false;
+    if(q && !(r.control.toUpperCase().includes(q) || r.rows.some(x => (x.or + " " + x.name + " " + x.desc).toUpperCase().includes(q)))) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+}
+function render(){
+  const list = filtered();
+  $("sCount").textContent = list.length;
+  $("sEntries").textContent = list.reduce((a,r) => a + r.rows.length, 0);
+  $("sTotal").textContent = D.money(list.reduce((a,r) => a + r.total, 0));
+  if(!list.length){ $("body").innerHTML = '<tr><td colspan="7" class="empty">No saved DCR found.</td></tr>'; return; }
+  $("body").innerHTML = list.map(r => {
+    const s = r.signers, n = [s.prepared, s.checked, s.approved].filter(x => x.sig && x.showSig).length;
+    return `<tr>
+      <td><b>${D.esc(D.longDate(r.date))}</b></td>
+      <td>${D.esc(r.control)}</td>
+      <td>${r.rows.length}</td>
+      <td class="r">${D.money(r.total)}</td>
+      <td>${D.esc(s.prepared.name)}</td>
+      <td><span class="pill ${n === 3 ? "" : "no"}">${n} / 3 signed</span></td>
+      <td class="act">
+        <button class="b-purple" data-a="print" data-d="${r.date}">VIEW / PRINT</button>
+        <button class="b-green" data-a="xls" data-d="${r.date}">EXCEL</button>
+        <button class="b-blue" data-a="edit" data-d="${r.date}">EDIT</button>
+        <button class="b-red" data-a="del" data-d="${r.date}">DELETE</button>
+      </td></tr>`;
+  }).join("");
+}
+["fYear","fMonth"].forEach(id => $(id).addEventListener("change", render));
+$("fSearch").addEventListener("input", render);
+$("newBtn").addEventListener("click", () => { location.href = "dcr.html"; });
+
+$("body").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-a]"); if(!b) return;
+  const date = b.dataset.d, rec = all.find(r => r.date === date); if(!rec) return;
+  if(b.dataset.a === "print") D.openPrint(rec, true);
+  if(b.dataset.a === "edit") location.href = "dcr.html?date=" + encodeURIComponent(date);
+  if(b.dataset.a === "xls"){
+    b.disabled = true;
+    try{ await D.downloadExcel(rec); }catch(err){ console.error(err); alert(err.message || err); }
+    b.disabled = false;
+  }
+  if(b.dataset.a === "del"){
+    if(!confirm("Delete the DCR of " + D.longDate(date) + " (" + rec.rows.length + " entries, ₱" + D.money(rec.total) + ")?\nThis cannot be undone.")) return;
+    try{ await remove(ref(db, "dcr/" + date)); }catch(err){ console.error(err); alert("Delete failed: " + (err.message || err)); }
+  }
+});
+
+onAuthStateChanged(auth, user => {
+  if(!user){ location.href = "index.html"; return; }
+  onValue(ref(db, "dcr"), snap => {
+    all = [];
+    snap.forEach(c => { const v = c.val() || {}; all.push(D.normalize({ ...v, date: v.date || c.key })); });
+    fillFilters(); render();
+  }, err => {
+    console.error(err);
+    $("body").innerHTML = '<tr><td colspan="7" class="empty">Could not load DCRs: ' + D.esc(err.message || err) + '</td></tr>';
+  });
+});
+</script>
+</body>
+</html>
