@@ -9,6 +9,8 @@ window.DCR = (function () {
 
   var MON = ["JAN.","FEB.","MAR.","APR.","MAY","JUN.","JUL.","AUG.","SEP.","OCT.","NOV.","DEC."];
   var MIN_ROWS = 24; /* the paper form has 24 lines */
+  var MODES = ["CASH","BANK TO BANK","CHEQUE","E-WALLET (G-CASH)","OTHERS"];
+  function orKey(v) { var n = parseInt(String(v == null ? "" : v).replace(/\D/g, ""), 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; }
 
   var DEFAULT_SIGNERS = {
     prepared: { name: "GLYCEL BALANGGI",          title: "CHAPTER CASHIER" },
@@ -38,7 +40,7 @@ window.DCR = (function () {
   }
 
   /* make a saved record safe to use (Firebase turns arrays/empty values into odd shapes) */
-  function normalize(rec) {
+  function normalize(rec, defs) {
     rec = rec || {};
     var rows = arr(rec.rows).map(function (r) {
       var gross = num(r.gross), disc = num(r.discount);
@@ -47,22 +49,24 @@ window.DCR = (function () {
         or: r.or || "", name: r.name || "", desc: r.desc || "",
         gross: gross, discount: disc,
         amount: r.amount != null ? num(r.amount) : Math.max(0, r2(gross - disc)),
-        mode: r.mode || "CASH"
+        mode: r.mode || "CASH", _i: 0
       };
     });
+    rows.forEach(function (r, i) { r._i = i; });
+    rows.sort(function (a, b) { return (orKey(a.or) - orKey(b.or)) || (a._i - b._i); });   /* ascending OR number */
     var s = rec.signers || {};
     function sg(k) {
       var d = DEFAULT_SIGNERS[k], o = s[k] || {};
       return {
         name: o.name != null ? o.name : d.name,
         title: o.title != null ? o.title : d.title,
-        date: o.date || "", sig: o.sig || "",
+        sig: o.sig || ((defs && defs[k] && defs[k].sig) || ""),
         showSig: o.showSig !== false
       };
     }
     return {
       date: rec.date || "", control: rec.control || "", chapter: rec.chapter || "BAGUIO CITY CHAPTER",
-      remarks: rec.remarks || "", rows: rows,
+      remarks: rec.remarks || "", note: rec.note || "", rows: rows,
       total: rows.reduce(function (a, r) { return a + r.amount; }, 0),
       signers: { prepared: sg("prepared"), checked: sg("checked"), approved: sg("approved") },
       updatedAt: rec.updatedAt || null, updatedBy: rec.updatedBy || ""
@@ -70,13 +74,13 @@ window.DCR = (function () {
   }
 
   /* ───────────────────────── PRINTABLE FORM ───────────────────────── */
-  var W = [13, 9, 20, 21, 10, 13, 14];                 /* column widths, % (same proportions as the paper form) */
-  var W6 = W.slice(0, 6).map(function (w) { return (w / 86 * 100).toFixed(2); });
+  var W = [12, 9, 23, 26, 11, 12, 7];                  /* column widths, % */
+  var W6 = W.slice(0, 6).map(function (w) { return (w / 93 * 100).toFixed(2); });
 
   function cg(widths) { return "<colgroup>" + widths.map(function (w) { return '<col style="width:' + w + '%">'; }).join("") + "</colgroup>"; }
 
   var CSS = "" +
-    "@page{size:A4 landscape;margin:8mm}" +
+    "@page{size:A4 portrait;margin:8mm}" +
     "*{box-sizing:border-box}" +
     "html,body{margin:0;background:#fff}" +
     "body{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;color:#000}" +
@@ -84,23 +88,25 @@ window.DCR = (function () {
     ".bar b{flex:1}.bar button{border:0;border-radius:5px;padding:8px 16px;font-weight:bold;cursor:pointer}" +
     ".bar .p{background:#2e7d32;color:#fff}.bar .c{background:#cfd8dc}" +
     ".wrap{padding:10px}" +
-    ".sheet{width:281mm;margin:0 auto;background:#fff}" +
+    ".sheet{width:194mm;margin:0 auto;background:#fff}" +
     "table{border-collapse:collapse;width:100%;table-layout:fixed}" +
-    "td{border:1.4px solid #000;padding:0 1.5mm;height:4.9mm;font-size:9.5pt;line-height:4.3mm;overflow:hidden;white-space:nowrap;vertical-align:middle}" +
+    "td{border:1.4px solid #000;padding:0 1.4mm;height:6.2mm;font-size:9pt;line-height:5.6mm;overflow:hidden;white-space:nowrap;vertical-align:middle}" +
     ".c{text-align:center}.r{text-align:right}.b{font-weight:bold}" +
-    ".dt{font-size:8pt;text-align:center}.or{font-size:8.5pt;text-align:center}" +
-    ".nm,.ds{font-size:10.5pt}.sm{font-size:8.5pt}" +
-    ".am{font-size:10.5pt;text-align:right;padding-right:2mm}.md{font-size:8.5pt}" +
-    ".hd{position:relative;height:9.8mm;padding:0;line-height:1}" +
-    ".hd img{position:absolute;left:1.5mm;top:.8mm;height:6.2mm}" +
-    ".hd span{position:absolute;left:0;right:0;bottom:1mm;text-align:center;font-weight:bold;font-size:9pt}" +
+    ".dt{font-size:7.5pt;text-align:center}.or{font-size:8.5pt;text-align:center}" +
+    ".nm,.ds{font-size:10pt}.sm{font-size:8pt}" +
+    ".am{font-size:10pt;text-align:right;padding-right:1.6mm}.md{font-size:8pt}.md.xs{font-size:6.3pt}" +
+    ".hd{position:relative;height:12.4mm;padding:0;line-height:1}" +
+    ".hd img{position:absolute;left:1.5mm;top:1mm;height:8mm}" +
+    ".hd span{position:absolute;left:0;right:0;bottom:1.2mm;text-align:center;font-weight:bold;font-size:10pt}" +
     ".tot td{font-weight:bold}" +
-    ".rm{font-size:8pt;font-weight:bold;padding:.6mm 0 .6mm 0;min-height:4mm;width:86%}" +
-    ".rm span{font-weight:normal;font-size:9pt;margin-left:2mm}" +
-    ".sg{height:15mm;padding:0;text-align:center;vertical-align:middle;line-height:1}" +
-    ".sg img{max-height:14mm;max-width:92%;display:inline-block}" +
+    ".rmbox{width:93%;border:1.4px solid #000;margin-top:1.4mm;min-height:17mm;padding:1mm 2mm;font-size:9.5pt;line-height:1.25;white-space:pre-wrap;break-inside:avoid}" +
+    ".rmbox b{font-size:8.5pt;margin-right:2mm}" +
+    ".sg{height:17mm;padding:0;text-align:center;vertical-align:middle;line-height:1}" +
+    ".sg img{max-height:16mm;max-width:92%;display:inline-block}" +
     ".sgn td{font-size:8pt}" +
-    ".sigtbl{width:86%;page-break-inside:avoid;break-inside:avoid}" +
+    ".sigtbl{width:93%;margin-top:1.4mm;page-break-inside:avoid;break-inside:avoid}" +
+    ".note{width:100%;margin-top:5mm;font-size:10pt;white-space:pre-wrap;line-height:1.3;break-inside:avoid}" +
+    ".note b{margin-right:2mm}" +
     "@media print{.bar{display:none}.wrap{padding:0}tr{page-break-inside:avoid}}";
 
   function sigCell(s, colspan) {
@@ -108,9 +114,10 @@ window.DCR = (function () {
     return '<td class="sg"' + (colspan ? ' colspan="' + colspan + '"' : "") + ">" + img + "</td>";
   }
 
-  /* the form only (no page chrome) */
-  function formHtml(rec, logoUrl) {
+  /* the form only (no page chrome); printDate = date it is printed / downloaded */
+  function formHtml(rec, logoUrl, printDate) {
     rec = normalize(rec);
+    var pd = shortDate(printDate || todayISO());
     var n = Math.max(MIN_ROWS, rec.rows.length);
     var h = '<div class="sheet"><table>' + cg(W) +
       '<tr><td colspan="3" rowspan="2" class="hd">' + (logoUrl ? '<img src="' + esc(logoUrl) + '" alt="">' : "") + '<span>PHILIPPINE RED CROSS</span></td>' +
@@ -121,46 +128,48 @@ window.DCR = (function () {
       '<tr><td colspan="2" class="c b">CHAPTER</td><td colspan="4" class="c b">' + esc(rec.chapter) + '</td><td></td></tr>';
     for (var i = 0; i < n; i++) {
       var r = rec.rows[i];
+      var d0 = '<td class="dt">' + (i === 0 ? esc(longDate(rec.date)) : "") + '</td>';
       if (r) {
-        var nmC = r.name.length > 26 ? " sm" : "", dsC = r.desc.length > 26 ? " sm" : "";
-        h += '<tr><td class="dt">' + (i === 0 ? esc(longDate(rec.date)) : "") + '</td><td class="or">' + esc(r.or) + '</td>' +
+        var nmC = r.name.length > 23 ? " sm" : "", dsC = r.desc.length > 27 ? " sm" : "", mdC = r.mode.length > 9 ? " xs" : "";
+        h += '<tr>' + d0 + '<td class="or">' + esc(r.or) + '</td>' +
           '<td class="nm' + nmC + '">' + esc(r.name) + '</td><td class="ds' + dsC + '">' + esc(r.desc) + '</td>' +
-          '<td class="am">' + (r.amount ? money(r.amount) : "") + '</td><td class="md">' + esc(r.mode) + '</td><td></td></tr>';
+          '<td class="am">' + (r.amount ? money(r.amount) : "") + '</td><td class="md' + mdC + '">' + esc(r.mode) + '</td><td></td></tr>';
       } else {
-        h += '<tr><td class="dt">' + (i === 0 ? esc(longDate(rec.date)) : "") + '</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+        h += '<tr>' + d0 + '<td></td><td></td><td></td><td></td><td></td><td></td></tr>';
       }
     }
     h += '<tr class="tot"><td class="c" style="font-size:8.5pt">TOTAL</td><td></td><td></td><td></td><td class="am">' + money(rec.total) + '</td><td></td><td></td></tr></table>' +
-      '<div class="rm">REMARKS:<span>' + esc(rec.remarks) + '</span></div>';
+      '<div class="rmbox"><b>REMARKS:</b>' + esc(rec.remarks) + '</div>';
     var s = rec.signers;
     h += '<table class="sigtbl">' + cg(W6) +
       '<tr><td></td><td></td><td></td><td class="b" style="font-size:8pt">CHECKED AND REVIEWED BY</td><td colspan="2"></td></tr>' +
       '<tr><td class="b" style="font-size:8pt">PREPARED BY :</td><td></td><td></td>' +
-      '<td class="b" style="font-size:8pt">' + (s.checked.date ? "Date: " + esc(shortDate(s.checked.date)) : "") + '</td>' +
-      '<td colspan="2" class="b" style="font-size:8pt">' + (s.approved.date ? "Date: " + esc(shortDate(s.approved.date)) : "") + '</td></tr>' +
+      '<td class="b" style="font-size:8pt">Date: ' + esc(pd) + '</td>' +
+      '<td colspan="2" class="b" style="font-size:8pt">Date: ' + esc(pd) + '</td></tr>' +
       '<tr>' + sigCell(s.prepared, 2) + '<td class="sg"></td>' + sigCell(s.checked) + sigCell(s.approved, 2) + '</tr>' +
       '<tr class="sgn"><td colspan="2" class="c b">' + esc(s.prepared.name) + '</td><td></td><td class="c b">' + esc(s.checked.name) + '</td><td colspan="2" class="c b">' + esc(s.approved.name) + '</td></tr>' +
       '<tr class="sgn"><td colspan="2" class="c b">' + esc(s.prepared.title) + '</td><td></td><td class="c b">' + esc(s.checked.title) + '</td><td colspan="2" class="c b">' + esc(s.approved.title) + '</td></tr>' +
-      '<tr><td colspan="6"></td></tr></table></div>';
-    return h;
+      '<tr><td colspan="6"></td></tr></table>';
+    if (String(rec.note).trim()) h += '<div class="note"><b>NOTE:</b>' + esc(rec.note) + '</div>';
+    return h + '</div>';
   }
 
   function logoAbs() { try { return new URL("images/logo.png", location.href).href; } catch (e) { return "images/logo.png"; } }
 
-  function pageHtml(rec, autoPrint) {
+  function pageHtml(rec, autoPrint) {   /* rec is already normalized */
     var name = "DCR-" + (rec.date || "");
     return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + esc(name) + "</title><style>" + CSS + "</style></head><body>" +
       "<div class='bar'><b>" + esc(name) + "</b><button class='p' onclick='window.print()'>PRINT</button><button class='c' onclick='window.close()'>CLOSE</button></div>" +
-      "<div class='wrap'>" + formHtml(rec, logoAbs()) + "</div>" +
+      "<div class='wrap'>" + formHtml(rec, logoAbs(), todayISO()) + "</div>" +
       (autoPrint ? "<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})<\/script>" : "") +
       "</body></html>";
   }
 
   /* opens the printable DCR in a new tab (Print dialog opens by itself when autoPrint is true) */
-  function openPrint(rec, autoPrint) {
+  function openPrint(rec, autoPrint, defs) {
     var w = window.open("", "_blank");
     if (!w) { alert("The browser blocked the print window. Please allow pop-ups for this site and try again."); return; }
-    w.document.open(); w.document.write(pageHtml(normalize(rec), autoPrint !== false)); w.document.close();
+    w.document.open(); w.document.write(pageHtml(normalize(rec, defs), autoPrint !== false)); w.document.close();
   }
 
   /* ───────────────────────── EXCEL ───────────────────────── */
@@ -185,16 +194,17 @@ window.DCR = (function () {
     } catch (e) { return null; }
   }
 
-  async function buildExcel(recIn) {
+  async function buildExcel(recIn, defs) {
     await loadExcelJS();
-    var rec = normalize(recIn);
+    var rec = normalize(recIn, defs);
+    var pd = shortDate(todayISO());
     var wb = new ExcelJS.Workbook();
     var ws = wb.addWorksheet("DCR", {
       views: [{ showGridLines: false }],
-      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
         margins: { left: 0.3, right: 0.3, top: 0.3, bottom: 0.3, header: 0, footer: 0 } }
     });
-    ws.columns = [{ width: 17 }, { width: 12 }, { width: 34 }, { width: 34 }, { width: 15 }, { width: 13 }, { width: 18 }];
+    ws.columns = [{ width: 17 }, { width: 12 }, { width: 34 }, { width: 34 }, { width: 15 }, { width: 19 }, { width: 8 }];
     var thin = { style: "thin", color: { argb: "FF000000" } };
     var B = { top: thin, left: thin, bottom: thin, right: thin };
     var LET = "ABCDEFG";
@@ -244,18 +254,21 @@ window.DCR = (function () {
     var tc = put(tr, 5, { formula: "SUM(E" + first + ":E" + last + ")", result: r2(rec.total) }, { bold: true, h: "right", nf: "#,##0.00" });
     box(tr, 1, tr, 7);
 
-    /* remarks */
-    var rr = tr + 1; ws.getRow(rr).height = 16;
-    merge(rr, 1, rr, 6);
-    put(rr, 1, "REMARKS: " + rec.remarks, { bold: true, size: 9 });
+    /* remarks (bordered box, filled in or left blank) */
+    var rr = tr + 1;
+    for (var q = 0; q < 3; q++) ws.getRow(rr + q).height = 18;
+    merge(rr, 1, rr + 2, 6);
+    var rc = put(rr, 1, "REMARKS: " + rec.remarks, { bold: false, size: 10, v: "top" });
+    rc.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    box(rr, 1, rr + 2, 6);
 
     /* signatures */
-    var s = rec.signers, a = rr + 1;
+    var s = rec.signers, a = rr + 3;
     ws.getRow(a).height = 16; ws.getRow(a + 1).height = 16; ws.getRow(a + 2).height = 62; ws.getRow(a + 3).height = 16; ws.getRow(a + 4).height = 16; ws.getRow(a + 5).height = 16;
     put(a, 4, "CHECKED AND REVIEWED BY", { bold: true, size: 9 }); merge(a, 5, a, 6);
     put(a + 1, 1, "PREPARED BY :", { bold: true, size: 9 });
-    put(a + 1, 4, s.checked.date ? "Date: " + shortDate(s.checked.date) : "", { bold: true, size: 9 });
-    merge(a + 1, 5, a + 1, 6); put(a + 1, 5, s.approved.date ? "Date: " + shortDate(s.approved.date) : "", { bold: true, size: 9 });
+    put(a + 1, 4, "Date: " + pd, { bold: true, size: 9 });
+    merge(a + 1, 5, a + 1, 6); put(a + 1, 5, "Date: " + pd, { bold: true, size: 9 });
     merge(a + 2, 1, a + 2, 2); merge(a + 2, 5, a + 2, 6);
     merge(a + 3, 1, a + 3, 2); put(a + 3, 1, s.prepared.name, { bold: true, h: "center", size: 9 });
     put(a + 3, 4, s.checked.name, { bold: true, h: "center", size: 9 });
@@ -265,6 +278,13 @@ window.DCR = (function () {
     merge(a + 4, 5, a + 4, 6); put(a + 4, 5, s.approved.title, { bold: true, h: "center", size: 9 });
     merge(a + 5, 1, a + 5, 6);
     box(a, 1, a + 5, 6);
+
+    /* note: only when there is one */
+    if (String(rec.note).trim()) {
+      ws.getRow(a + 7).height = 48; merge(a + 7, 1, a + 7, 6);
+      var nc = put(a + 7, 1, "NOTE: " + rec.note, { size: 10 });
+      nc.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    }
 
     /* images: logo + e-signatures */
     var logo = await getLogo();
@@ -291,13 +311,13 @@ window.DCR = (function () {
     a.href = url; a.download = name; document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1500);
   }
-  async function downloadExcel(rec) {
-    var buf = await buildExcel(rec);
+  async function downloadExcel(rec, defs) {
+    var buf = await buildExcel(rec, defs);
     download(buf, "DCR-" + (rec.date || todayISO()) + ".xlsx");
   }
 
   return {
-    DEFAULT_SIGNERS: DEFAULT_SIGNERS, MIN_ROWS: MIN_ROWS,
+    DEFAULT_SIGNERS: DEFAULT_SIGNERS, MIN_ROWS: MIN_ROWS, MODES: MODES, orKey: orKey,
     esc: esc, num: num, r2: r2, money: money, arr: arr, longDate: longDate, shortDate: shortDate, todayISO: todayISO,
     normalize: normalize, formHtml: formHtml, pageHtml: pageHtml, openPrint: openPrint,
     buildExcel: buildExcel, downloadExcel: downloadExcel, CSS: CSS
