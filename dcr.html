@@ -34,6 +34,8 @@ table.rows td input,table.rows td select{width:100%;padding:6px}
 table.rows td.n{width:44px;text-align:center;color:#777;font-size:12px}
 .amt{font-weight:bold;text-align:right;padding-right:8px;white-space:nowrap}
 .noor input.or{background:#fff8e1;border-color:#ffb300}
+tr.dupRow td{background:#ffebee}
+tr.dupRow input.or{border-color:#c62828;background:#ffebee;font-weight:bold}
 tr.lkrow input[readonly]{background:#eef3ee;color:#333;border-color:#d5ddd5}
 .x{background:#c62828;padding:6px 10px}
 .totalBar{display:flex;justify-content:flex-end;gap:24px;margin-top:12px;font-size:15px}
@@ -173,6 +175,7 @@ let prices = {};
 let unsub = null, saveTimer = null, touched = false, sigDirty = false, pendingRender = false, items = [];
 const openSig = new Set();
 
+let lastToday = D.todayISO();   /* Philippine date the page last worked from */
 function setStatus(msg, kind){ const s=$("status"); s.textContent = msg; s.className = "status" + (kind ? " " + kind : ""); }
 const lkey = d => String(d||"").trim().toUpperCase().replace(/[.#$\[\]\/]/g, "_");
 const netOf = x => Math.max(0, D.r2(D.num(x.gross) - Math.min(D.num(x.gross), D.num(x.discount))));
@@ -189,6 +192,20 @@ function buildItems(){
   extras.forEach(x => out.push({ kind:"x", v:x }));
   items = out.map((it,i) => ({it,i})).sort((a,b) => (D.orKey(a.it.v.or) - D.orKey(b.it.v.or)) || (a.i - b.i)).map(z => z.it);
 }
+/* OR numbers that appear on more than one line of this day (3852 and 003852 count as the same) */
+function orOf(it){ return D.padOr(it.v.or); }
+function sameOr(a, b){ return a !== "" && b !== "" && (D.orKey(a) === D.orKey(b) && /^\d+$/.test(a) && /^\d+$/.test(b) ? true : a === b); }
+function duplicateOrs(){
+  const seen = {}, out = new Set();
+  items.forEach((it, i) => { const o = orOf(it); if(!o) return; (seen[D.orKey(o)] = seen[D.orKey(o)] || []).push(i); });
+  Object.keys(seen).forEach(k => { if(seen[k].length > 1) seen[k].forEach(i => out.add(i)); });
+  return out;
+}
+/* the first OR on another line of this day that matches, or null */
+function findOtherLineWithOr(self){
+  const o = orOf(self); if(!o) return null;
+  return items.find(it => it !== self && sameOr(orOf(it), o)) || null;
+}
 function modeSelect(v){
   const list = D.MODES.includes(v) ? D.MODES : [v, ...D.MODES];
   return `<select data-f="mode">${list.map(m => `<option${m===v?" selected":""}>${D.esc(m)}</option>`).join("")}</select>`;
@@ -197,9 +214,10 @@ function renderRows(){
   buildItems();
   const body = $("rowsBody");
   if(!items.length){ body.innerHTML = '<tr><td colspan="11" class="empty">No blood releases for this date yet. They appear here automatically as they are encoded in Releasing, or use <b>+ ADD ROW</b>.</td></tr>'; updateTotals(); return; }
+  const dups = duplicateOrs();
   body.innerHTML = items.map((it,i) => {
     const v = it.v, lk = it.kind === "r" ? " readonly" : "";
-    return `<tr data-i="${i}" class="${v.or ? "" : "noor"}${it.kind === "r" ? " lkrow" : ""}">
+    return `<tr data-i="${i}" class="${v.or ? "" : "noor"}${it.kind === "r" ? " lkrow" : ""}${dups.has(i) ? " dupRow" : ""}">
       <td class="n">${it.kind === "r" ? '<span title="From Releasing Tracking">🔗</span> ' : ""}${i+1}</td>
       <td><input class="or" data-f="or" value="${D.esc(v.or)}" placeholder="OR no."${lk}></td>
       <td><input data-f="name" value="${D.esc(v.name)}" style="text-transform:uppercase"${lk}></td>
@@ -214,6 +232,11 @@ function renderRows(){
     </tr>`;
   }).join("");
   updateTotals();
+}
+function dupWarning(){
+  const d = duplicateOrs(); if(!d.size) return "";
+  const nums = [...new Set([...d].map(i => orOf(items[i])))];
+  return " ⚠ Duplicate OR number" + (nums.length > 1 ? "s" : "") + " for this day: " + nums.join(", ") + " (highlighted red). Please correct them in Releasing.";
 }
 function updateTotals(){
   let total = 0, disc = 0;
@@ -243,7 +266,17 @@ $("rowsBody").addEventListener("input", e => {
 $("rowsBody").addEventListener("change", e => {
   const tr = e.target.closest("tr"); if(!tr || tr.dataset.i === undefined) return;
   const it = items[+tr.dataset.i], f = e.target.dataset.f; if(!it || it.kind === "r") return;
-  if(f === "or"){ it.v.or = D.padOr(e.target.value); e.target.value = it.v.or; scheduleSave(); }     /* 3456 -> 003456 */
+  if(f === "or"){
+    it.v.or = D.padOr(e.target.value);                                  /* 3456 -> 003456 */
+    const hit = findOtherLineWithOr(it);
+    if(hit){
+      const who = hit.kind === "r" ? "Releasing Tracking" : "this DCR";
+      alert("OR " + it.v.or + " is already encoded for this date in " + who + " (" + (hit.v.name || "no name") + ").\n\nIt was not added again.");
+      it.v.or = ""; renderRows(); scheduleSave(); setStatus("OR " + it.v.or + " was already encoded and was cleared from this line.", "warn");
+      return;
+    }
+    e.target.value = it.v.or; renderRows(); scheduleSave();
+  }
   if(f === "desc"){
     const l = learned[lkey(it.v.desc)];
     if(l && !D.num(it.v.gross) && D.num(l.a) > 0){
@@ -433,9 +466,10 @@ $("xlsBtn").addEventListener("click", async () => {
 /* ───────────── load a day + live link to Releasing ───────────── */
 function relsChanged(){
   const n = Object.keys(rels).filter(id => rels[id] && rels[id].date === date).length;
-  setStatus(n + " blood release" + (n === 1 ? "" : "s") + " from Releasing Tracking for " + D.longDate(date) + " (live). Everything you add or change here is saved automatically.");
-  if($("rowsBody").contains(document.activeElement)){ pendingRender = true; return; }
-  renderRows();
+  if($("rowsBody").contains(document.activeElement)){ pendingRender = true; }
+  else { renderRows(); }                                   /* rebuild the lines first, so the duplicate check sees them */
+  const warn = dupWarning();
+  setStatus(n + " blood release" + (n === 1 ? "" : "s") + " from Releasing Tracking for " + D.longDate(date) + " (live). Everything you add or change here is saved automatically." + warn, warn ? "warn" : "");
 }
 async function loadDate(d){
   if(saveTimer) await doSave();
@@ -458,12 +492,22 @@ async function loadDate(d){
     err => { console.error(err); setStatus("Could not read Releasing records: " + (err.message || err), "err"); });
 }
 $("dcrDate").addEventListener("change", () => { if($("dcrDate").value) loadDate($("dcrDate").value); });
+/* when the Philippine date changes (midnight), move to the new day if the page was showing "today" */
+function rollOver(){
+  const t = D.todayISO();
+  if(t === lastToday) return;
+  const wasToday = $("dcrDate").value === lastToday;
+  lastToday = t;
+  if(wasToday){ $("dcrDate").value = t; loadDate(t); }
+}
+setInterval(rollOver, 30000);
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") rollOver(); });
 
 onAuthStateChanged(auth, async user => {
   if(!user){ location.href = "index.html"; return; }
   const qd = new URLSearchParams(location.search).get("date");
   const d = /^\d{4}-\d{2}-\d{2}$/.test(qd || "") ? qd : D.todayISO();
-  $("dcrDate").value = d;
+  $("dcrDate").value = d; lastToday = D.todayISO();
   try{ prices = D.normPrices((await get(ref(db, "settings/releasingPrices"))).val() || {}); }catch(err){ console.warn("prices:", err); }
   try{ sigDefaults = (await get(ref(db, "dcrSettings/signers"))).val() || {}; }catch(err){ console.warn("signers:", err); }
   try{ learned = (await get(ref(db, "dcrSettings/learned"))).val() || {}; }catch(err){ console.warn("learned:", err); }
