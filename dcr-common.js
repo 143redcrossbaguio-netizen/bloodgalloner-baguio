@@ -27,7 +27,8 @@ window.DCR = (function () {
   function parts(d) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ""); return m ? { y: +m[1], m: +m[2], d: +m[3] } : null; }
   function longDate(d)  { var p = parts(d); return p ? MON[p.m - 1] + " " + p.d + ", " + p.y : (d || ""); }
   function shortDate(d) { var p = parts(d); return p ? p.m + "/" + p.d + "/" + p.y : (d || ""); }
-  function todayISO() { var n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0"); }
+  /* today in Philippine time (Asia/Manila), not the browser or UTC date */
+  function todayISO() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
   /* OR numbers that are only digits get leading zeros up to 6 digits: 3456 -> 003456 */
   function padOr(v) { var s = String(v == null ? "" : v).trim(); return (/^\d+$/.test(s) && s.length < 6) ? s.padStart(6, "0") : s; }
   function orKey(v) { var n = parseInt(String(v == null ? "" : v).replace(/\D/g, ""), 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; }
