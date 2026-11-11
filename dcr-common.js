@@ -75,6 +75,16 @@ window.DCR = (function () {
     Object.keys(rels || {}).forEach(function (id) {
       var e = rels[id]; if (!e || e.date !== date) return;
       var l = releaseLine(e, prices), m = meta[id] || {};
+      if (m.ov) {                                  /* edits made in DCR Entry win over Releasing for this day */
+        var o = m.ov;
+        if (o.or !== undefined) l.or = padOr(o.or);
+        if (o.name !== undefined) l.name = String(o.name);
+        if (o.desc !== undefined) l.desc = String(o.desc);
+        if (o.gross !== undefined) l.gross = num(o.gross);
+        if (o.discount !== undefined) l.discount = num(o.discount);
+        l.gross = r2(l.gross); l.discount = Math.min(l.gross, r2(l.discount));
+        l.amount = Math.max(0, r2(l.gross - l.discount));
+      }
       l.sourceId = id; l.mode = m.mode || "CASH"; l.remarks = m.remarks || ""; lines.push(l);
     });
     arr(saved.extras).forEach(function (x) {
@@ -103,8 +113,8 @@ window.DCR = (function () {
   }
 
   /* ───────────── PRINTABLE FORM ───────────── */
-  var W = [11, 8, 21, 24, 10, 12, 14];
-  var W6 = W.slice(0, 6).map(function (w) { return (w / 86 * 100).toFixed(2); });
+  var W = [10, 8, 25, 23, 10, 12, 12];
+  var W6 = W.slice(0, 6).map(function (w) { return (w / 81 * 100).toFixed(2); });
   function cg(w) { return "<colgroup>" + w.map(function (x) { return '<col style="width:' + x + '%">'; }).join("") + "</colgroup>"; }
 
   var CSS = "" +
@@ -115,7 +125,7 @@ window.DCR = (function () {
     ".bar .p{background:#2e7d32;color:#fff}.bar .c{background:#cfd8dc}.bar small{width:100%;color:#b0bec5}" +
     ".wrap{padding:10px}.sheet{width:var(--cw,184.6mm);margin:0 auto;background:#fff}" +
     "table{border-collapse:collapse;width:100%;table-layout:fixed}" +
-    "td{border:1.4px solid #000;padding:0 1.3mm;height:6.2mm;font-size:9pt;line-height:5.6mm;overflow:hidden;white-space:nowrap;vertical-align:middle}" +
+    "td{border:1.4px solid #000;padding:0 1.3mm;height:6.6mm;font-size:9pt;line-height:6mm;overflow:hidden;white-space:nowrap;vertical-align:middle}" +
     ".c{text-align:center}.b{font-weight:bold}" +
     ".dt{font-size:7.5pt;text-align:center}.or{font-size:8.5pt;text-align:center}" +
     ".nm,.ds{font-size:10pt}.sm{font-size:8pt}.xs{font-size:6.5pt}" +
@@ -144,9 +154,9 @@ window.DCR = (function () {
     for (var i = 0; i < n; i++) {
       var r = rec.rows[i], d0 = '<td class="dt">' + (i === 0 ? esc(longDate(rec.date)) : "") + '</td>';
       if (r) {
-        h += '<tr>' + d0 + '<td class="or">' + esc(r.or) + '</td><td class="nm' + (r.name.length > 23 ? " sm" : "") + '">' + esc(r.name) + '</td>' +
-          '<td class="ds' + (r.desc.length > 27 ? " sm" : "") + '">' + esc(r.desc) + '</td><td class="am">' + ((r.amount || r.waived) ? money(r.amount) : "") + '</td>' +
-          '<td class="md' + (r.mode.length > 9 ? " xs" : "") + '">' + esc(r.mode) + '</td><td class="rk' + (r.remarks.length > 22 ? " xs" : "") + '">' + esc(r.remarks) + '</td></tr>';
+        h += '<tr>' + d0 + '<td class="or">' + esc(r.or) + '</td><td class="nm fit" data-base="10">' + esc(r.name) + '</td>' +
+          '<td class="ds fit" data-base="10">' + esc(r.desc) + '</td><td class="am">' + ((r.amount || r.waived) ? money(r.amount) : "") + '</td>' +
+          '<td class="md fit" data-base="8">' + esc(r.mode) + '</td><td class="rk fit" data-base="8">' + esc(r.remarks) + '</td></tr>';
       } else h += '<tr>' + d0 + '<td></td><td></td><td></td><td></td><td></td><td></td></tr>';
     }
     h += '<tr class="tot"><td class="c" style="font-size:8.5pt">TOTAL</td><td></td><td></td><td></td><td class="am">' + money(rec.total) + '</td><td></td><td></td></tr></table>';
@@ -166,9 +176,10 @@ window.DCR = (function () {
   function pageHtml(rec, autoPrint) {
     var name = "DCR-" + (rec.date || "");
     var js = "(function(){var P={A4:[210,297],LETTER:[215.9,279.4],LONG:[215.9,330.2]};" +
-      "function ap(k){var p=P[k]||P.A4;document.getElementById('pg').textContent='@page{size:'+p[0]+'mm '+p[1]+'mm;margin:12.7mm}';document.documentElement.style.setProperty('--cw',(p[0]-25.4)+'mm');try{localStorage.setItem('dcrPaper',k)}catch(e){}}" +
+      "function fit(){document.querySelectorAll('td.fit').forEach(function(td){var b=parseFloat(td.getAttribute('data-base'))||9;var cur=b;td.style.fontSize=cur+'pt';while(td.scrollWidth>td.clientWidth+1&&cur>5.5){cur=Math.round((cur-0.25)*100)/100;td.style.fontSize=cur+'pt';}});}" +
+      "function ap(k){var p=P[k]||P.A4;document.getElementById('pg').textContent='@page{size:'+p[0]+'mm '+p[1]+'mm;margin:12.7mm}';document.documentElement.style.setProperty('--cw',(p[0]-25.4)+'mm');try{localStorage.setItem('dcrPaper',k)}catch(e){}requestAnimationFrame(fit);}" +
       "var s=document.getElementById('paper'),k='A4';try{k=localStorage.getItem('dcrPaper')||'A4'}catch(e){}if(!P[k])k='A4';s.value=k;ap(k);s.onchange=function(){ap(s.value)};" +
-      (autoPrint ? "window.addEventListener('load',function(){setTimeout(function(){window.print()},500)});" : "") + "})();";
+      "window.addEventListener('load',function(){fit();" + (autoPrint ? "setTimeout(function(){window.print()},500);" : "") + "});if(document.fonts)document.fonts.ready.then(fit);})();";
     return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + esc(name) + "</title><style>" + CSS + "</style><style id='pg'>@page{size:210mm 297mm;margin:12.7mm}</style></head><body>" +
       "<div class='bar'><b>" + esc(name) + "</b><label>Paper: <select id='paper'><option value='A4'>A4 (8.27×11.7)</option><option value='LETTER'>Letter (8.5×11)</option><option value='LONG'>Long bond (8.5×13)</option></select></label>" +
       "<button class='p' onclick='window.print()'>PRINT</button><button class='c' onclick='window.close()'>CLOSE</button>" +
@@ -214,7 +225,7 @@ window.DCR = (function () {
       o = o || {}; var cell = ws.getCell(r, c);
       if (v !== undefined && v !== null && v !== "") cell.value = v;
       cell.font = { name: "Calibri", size: o.size || 11, bold: !!o.bold };
-      cell.alignment = { horizontal: o.h || "left", vertical: o.v || "middle", wrapText: false };
+      cell.alignment = { horizontal: o.h || "left", vertical: o.v || "middle", wrapText: false, shrinkToFit: !!o.shrink };
       if (o.nf) cell.numFmt = o.nf; return cell;
     }
     function box(r1, c1, r2, c2) { for (var r = r1; r <= r2; r++) for (var c = c1; c <= c2; c++) ws.getCell(r, c).border = B; }
@@ -235,9 +246,9 @@ window.DCR = (function () {
       var r = first + i, d = rec.rows[i]; ws.getRow(r).height = 18;
       put(r, 1, i === 0 ? longDate(rec.date) : "", { h: "center", size: 9 });
       if (d) {
-        put(r, 2, d.or, { h: "center", size: 10 }); put(r, 3, d.name); put(r, 4, d.desc);
+        put(r, 2, d.or, { h: "center", size: 10 }); put(r, 3, d.name, { shrink: true }); put(r, 4, d.desc, { shrink: true });
         if (d.amount || d.waived) put(r, 5, r2(d.amount), { h: "right", nf: "#,##0.00" });
-        put(r, 6, d.mode, { size: 10 }); put(r, 7, d.remarks, { size: 9 });
+        put(r, 6, d.mode, { size: 10, shrink: true }); put(r, 7, d.remarks, { size: 9, shrink: true });
       }
     }
     box(first, 1, last, 7);
