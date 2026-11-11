@@ -176,7 +176,7 @@ window.DCR = (function () {
   function pageHtml(rec, autoPrint) {
     var name = "DCR-" + (rec.date || "");
     var js = "(function(){var P={A4:[210,297],LETTER:[215.9,279.4],LONG:[215.9,330.2]};" +
-      "function fit(){document.querySelectorAll('td.fit').forEach(function(td){var b=parseFloat(td.getAttribute('data-base'))||9;var cur=b;td.style.fontSize=cur+'pt';while(td.scrollWidth>td.clientWidth+1&&cur>5.5){cur=Math.round((cur-0.25)*100)/100;td.style.fontSize=cur+'pt';}});}" +
+      "function fit(){document.querySelectorAll('td.fit').forEach(function(td){var b=parseFloat(td.getAttribute('data-base'))||9;var cur=b;td.style.whiteSpace='nowrap';td.style.lineHeight='';td.style.fontSize=cur+'pt';while(td.scrollWidth>td.clientWidth+1&&cur>5.5){cur=Math.round((cur-0.25)*100)/100;td.style.fontSize=cur+'pt';}if(td.scrollWidth>td.clientWidth+1){td.style.whiteSpace='normal';td.style.lineHeight='2.4mm';td.style.fontSize='5.5pt';}});}" +
       "function ap(k){var p=P[k]||P.A4;document.getElementById('pg').textContent='@page{size:'+p[0]+'mm '+p[1]+'mm;margin:12.7mm}';document.documentElement.style.setProperty('--cw',(p[0]-25.4)+'mm');try{localStorage.setItem('dcrPaper',k)}catch(e){}requestAnimationFrame(fit);}" +
       "var s=document.getElementById('paper'),k='A4';try{k=localStorage.getItem('dcrPaper')||'A4'}catch(e){}if(!P[k])k='A4';s.value=k;ap(k);s.onchange=function(){ap(s.value)};" +
       "window.addEventListener('load',function(){fit();" + (autoPrint ? "setTimeout(function(){window.print()},500);" : "") + "});if(document.fonts)document.fonts.ready.then(fit);})();";
