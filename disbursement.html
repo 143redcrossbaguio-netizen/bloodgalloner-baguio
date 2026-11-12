@@ -72,6 +72,11 @@ tr.hide{display:none}
 .sigPrev img{max-height:84px;max-width:95%}
 .sigBtns{display:flex;gap:6px;flex-wrap:wrap}
 .hidden{display:none !important}
+tr.editing td{background:#fffaf0}
+td.cc{white-space:normal;overflow:visible;text-align:center}
+td.cc .btn{margin:2px;font-size:10px;padding:4px 6px}
+tr.editing input{padding:4px;font-size:12px}
+.btn.sm.blue{background:var(--blue);color:#fff;border:0}
 #padModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:50}
 #padModal.on{display:flex}
 .mbox{background:var(--white);border-radius:10px;padding:18px;width:min(640px,94vw)}
@@ -102,7 +107,7 @@ tr.hide{display:none}
       </div>
 
       <div id="nhqBox" class="card">
-        <h3><span>NHQ remittance</span><span class="hi" id="editNoteN"></span></h3>
+        <h3><span>NHQ remittance</span></h3>
         <div class="segs">
           <button class="seg on" data-cat="MHI">MHI</button>
           <button class="seg" data-cat="BPF">BPF</button>
@@ -116,6 +121,7 @@ tr.hide{display:none}
           <div class="fld"><label>Date remitted</label><input type="date" id="nRemDate"></div>
           <div class="fld"><label>Check #</label><input type="text" id="nCheck"></div>
           <div class="fld"><label>OR #</label><input type="text" id="nOr"></div>
+          <div class="fld"><label>Remarks</label><input type="text" id="nRemarks"></div>
         </div>
         <div class="bar">
           <button class="btn" id="nhqSave">SAVE</button>
@@ -125,7 +131,7 @@ tr.hide{display:none}
       </div>
 
       <div id="cashBox" class="card hidden">
-        <h3><span id="cashTitle">Disbursement</span><span class="hi" id="editNoteC"></span></h3>
+        <h3><span>Disbursement</span></h3>
         <div class="grid">
           <div class="fld"><label>Date</label><input type="date" id="cDate"></div>
           <div class="fld"><label>Check #</label><input type="text" id="cCheck"></div>
@@ -160,7 +166,9 @@ tr.hide{display:none}
       <div class="bar">
         <div class="fld grow"><label>Live search</label><input type="text" id="search" placeholder="Type a name, check #, OR #, amount, date…"></div>
         <div class="fld"><label>Month</label><select id="trkMonth"></select></div>
-        <div class="fld" id="catWrap"><label>Category</label><select id="catSel"></select></div>
+        <div class="fld" id="catWrap"><label>Category</label>
+          <div><button class="seg on" data-cf="ALL">ALL</button> <button class="seg" data-cf="MHI">MHI</button> <button class="seg" data-cf="BPF">BPF</button> <button class="seg" data-cf="FC">FC</button> <button class="seg" data-cf="AMBULANCE">AMBULANCE/PICK UP</button></div>
+        </div>
         <button class="btn blue" id="dlSel" disabled>DOWNLOAD SELECTED</button>
         <button class="btn" id="dlAll">DOWNLOAD ALL</button>
       </div>
@@ -253,13 +261,14 @@ const pad2 = n => String(n).padStart(2, "0");
 const phToday = () => new Intl.DateTimeFormat("en-CA", { timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date());
 const fmtDate = s => isDate(s) ? s.slice(5,7) + "/" + s.slice(8,10) + "/" + s.slice(0,4) : "";
 const matchQ = (text, q) => !q || String(text).toUpperCase().includes(q);
+const remarksOf = r => [r.remarks, r.cancelled ? CXL : ""].filter(x => x && String(x).trim()).join(" ");
 function say(id, msg, bad){ const el = $(id); el.textContent = msg; el.className = "status" + (bad ? " err" : ""); }
 const entrySay = (m, bad) => say("entryStatus", m, bad);
 const trkSay = (m, bad) => { say("trkStatus", m, bad); $("trkStatus").classList.remove("hidden"); };
 
 /* ── state ── */
 const thisYear = Number(phToday().slice(0,4));
-let year = thisYear, type = "nhq", cat = "MHI", sheet = "nhq", editRef = null, catFilter = "ALL";
+let year = thisYear, type = "nhq", cat = "MHI", sheet = "nhq", catFilter = "ALL", editing = null;
 let data = { nhq:{}, cash:{} }, loaded = {}, signers = { prepared:{}, approved:{} }, signersLoaded = false;
 const sel = new Set();
 
@@ -276,8 +285,8 @@ async function loadYear(y){
       Object.keys(v).forEach(c => {
         const x = v[c]; if(!x || typeof x !== "object") return;
         const rk = `m${k}_${c}`;
-        out[rk] = fresh[rk] = { cat:c, date:x.dateRemitted || `${y}-${k}-01`, amountToRemit:x.amountToRemit ?? null, amountRemitted:x.amountRemitted ?? null,
-          dateRemitted:x.dateRemitted || "", check:x.check || "", or:x.or || "", cancelled:false, updatedAt:Date.now() };
+        out[rk] = fresh[rk] = { kind:"nhq", cat:c, date:x.dateRemitted || `${y}-${k}-01`, amountToRemit:x.amountToRemit ?? null, amountRemitted:x.amountRemitted ?? null,
+          dateRemitted:x.dateRemitted || "", check:x.check || "", or:x.or || "", remarks:"", cancelled:false, updatedAt:Date.now() };
       });
     } else out[k] = v;
   });
@@ -292,14 +301,13 @@ async function loadSigners(){
   signers = (await get(ref(db, "disbursement/signers"))).val() || { prepared:{}, approved:{} };
   signersLoaded = true;
 }
-/* writes a record; if it was being edited and its date moved to another year, the old copy is removed */
+/* writes a record; if its date moved to another year, the old copy is removed */
 async function writeRec(kind, y, rec, old){
   let key = old ? old.key : null;
   if(old && old.year !== y){ await remove(ref(db, `disbursement/${kind}/${old.year}/${old.key}`)); delete data[kind][old.year][old.key]; key = null; }
   if(!key){ const p = push(ref(db, `disbursement/${kind}/${y}`)); key = p.key; await set(p, rec); }
   else await set(ref(db, `disbursement/${kind}/${y}/${key}`), rec);
   (data[kind][y] = data[kind][y] || {})[key] = rec;
-  editRef = null;
 }
 
 /* ── layout ── */
@@ -316,10 +324,9 @@ $("navTrack").onclick = () => showPage("track");
   const ys = []; for(let y = thisYear + 1; y >= 2024; y--) ys.push(y);
   $("year").innerHTML = ys.map(y => `<option${y===thisYear?" selected":""}>${y}</option>`).join("");
   $("trkMonth").innerHTML = '<option value="">All months</option>' + MONTHS.map((m,i) => `<option value="${i+1}">${m}</option>`).join("");
-  $("catSel").innerHTML = '<option value="ALL">All categories</option>' + CATS.map(([c,l]) => `<option value="${c}">${esc(l)}</option>`).join("");
   $("nDate").value = phToday();
 })();
-$("year").onchange = async () => { year = Number($("year").value); sel.clear(); await loadYear(year); renderTracking(); };
+$("year").onchange = async () => { year = Number($("year").value); sel.clear(); editing = null; await loadYear(year); renderTracking(); };
 
 /* ── entry: type ── */
 document.querySelectorAll("[data-type]").forEach(b => b.onclick = () => { type = b.dataset.type; setType(); });
@@ -335,8 +342,8 @@ function setCat(c){
 }
 document.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => setCat(b.dataset.cat));
 function clearNhq(){
-  ["nToRemit","nRemitted","nRemDate","nCheck","nOr"].forEach(i => $(i).value = "");
-  $("nDate").value = phToday(); editRef = null; $("editNoteN").textContent = ""; setCat("MHI");
+  ["nToRemit","nRemitted","nRemDate","nCheck","nOr","nRemarks"].forEach(i => $(i).value = "");
+  $("nDate").value = phToday(); setCat("MHI");
 }
 $("nhqClear").onclick = clearNhq;
 $("nhqSave").onclick = async () => {
@@ -344,67 +351,48 @@ $("nhqSave").onclick = async () => {
   if(!isDate(date)) return entrySay("Enter the date of the record.", true);
   if(!$("nToRemit").value && !$("nRemitted").value) return entrySay("Enter the amount to be remitted or the amount remitted.", true);
   if($("nRemDate").value && !isDate($("nRemDate").value)) return entrySay("Check the date remitted.", true);
-  const old = editRef && editRef.kind === "nhq" ? editRef : null;
-  const prev = old ? ((data.nhq[old.year] || {})[old.key] || {}) : {};
-  const rec = { cat, date, amountToRemit:r2(num($("nToRemit").value)), amountRemitted:r2(num($("nRemitted").value)), dateRemitted:$("nRemDate").value || "",
-    check:$("nCheck").value.trim(), or:$("nOr").value.trim(), cancelled:!!prev.cancelled, updatedAt:Date.now() };
+  const rec = { kind:"nhq", cat, date, amountToRemit:r2(num($("nToRemit").value)), amountRemitted:r2(num($("nRemitted").value)), dateRemitted:$("nRemDate").value || "",
+    check:$("nCheck").value.trim(), or:$("nOr").value.trim(), remarks:$("nRemarks").value.trim(), cancelled:false, updatedAt:Date.now() };
   try{
-    await writeRec("nhq", Number(date.slice(0,4)), rec, old);
-    clearNhq(); entrySay(old ? "Entry updated." : "Saved. You can see it in TRACKING → NHQ REMITTANCE.");
+    await writeRec("nhq", Number(date.slice(0,4)), rec, null);
+    clearNhq(); entrySay("Saved to NHQ REMITTANCE. Open TRACKING → NHQ REMITTANCE to see it.");
   }catch(err){ console.error(err); entrySay("Save failed: " + (err.message || err), true); }
 };
 $("nhqGoTrack").onclick = () => { sheet = "nhq"; showPage("track"); };
-function openNhqEdit(y, key){
-  const r = (data.nhq[y] || {})[key]; if(!r) return;
-  type = "nhq"; setType(); showPage("entry");
-  $("nDate").value = r.date || ""; $("nToRemit").value = r.amountToRemit ?? ""; $("nRemitted").value = r.amountRemitted ?? "";
-  $("nRemDate").value = r.dateRemitted || ""; $("nCheck").value = r.check || ""; $("nOr").value = r.or || ""; setCat(r.cat || "MHI");
-  editRef = { kind:"nhq", year:y, key }; $("editNoteN").textContent = "Editing an existing record";
-}
 
 /* ── entry: disbursement ── */
 const CASH_IDS = ["cDate","cCheck","cName","cDesc","cAmount","cReleased","cLiq","cLiqDate","cRefund","cRemarks"];
-function cashValues(){
-  return { date:$("cDate").value, check:$("cCheck").value.trim(), name:$("cName").value.trim().toUpperCase(), description:$("cDesc").value.trim().toUpperCase(),
-    amount:r2(num($("cAmount").value)), dateReleased:$("cReleased").value, amountLiquidated:r2(num($("cLiq").value)), dateLiquidated:$("cLiqDate").value,
-    refund:r2(num($("cRefund").value)), remarks:$("cRemarks").value.trim().toUpperCase(), updatedAt:Date.now() };
-}
-function clearCash(){ CASH_IDS.forEach(i => $(i).value = ""); editRef = null; $("editNoteC").textContent = ""; $("cashTitle").textContent = "Disbursement"; }
+function clearCash(){ CASH_IDS.forEach(i => $(i).value = ""); }
 $("cashClear").onclick = clearCash;
 $("cashSave").onclick = async () => {
-  const v = cashValues();
-  if(!isDate(v.date)) return entrySay("Enter the date.", true);
-  if(!v.name) return entrySay("Enter the name.", true);
+  const date = $("cDate").value, name = $("cName").value.trim().toUpperCase();
+  if(!isDate(date)) return entrySay("Enter the date.", true);
+  if(!name) return entrySay("Enter the name.", true);
   if(!$("cAmount").value) return entrySay("Enter the amount.", true);
-  if([v.date, v.dateReleased, v.dateLiquidated].some(d => d && !isDate(d))) return entrySay("Check the dates (use the date picker).", true);
-  const old = editRef && editRef.kind === "cash" ? editRef : null;
-  const prev = old ? ((data.cash[old.year] || {})[old.key] || {}) : {};
+  const rel = $("cReleased").value, liq = $("cLiqDate").value;
+  if([date, rel, liq].some(d => d && !isDate(d))) return entrySay("Check the dates (use the date picker).", true);
+  const rec = { kind:"cash", date, check:$("cCheck").value.trim(), name, description:$("cDesc").value.trim().toUpperCase(),
+    amount:r2(num($("cAmount").value)), dateReleased:rel, amountLiquidated:r2(num($("cLiq").value)), dateLiquidated:liq,
+    refund:r2(num($("cRefund").value)), remarks:$("cRemarks").value.trim().toUpperCase(), cancelled:false, updatedAt:Date.now() };
   try{
-    await writeRec("cash", Number(v.date.slice(0,4)), { ...v, cancelled:!!prev.cancelled }, old);
-    clearCash(); entrySay(old ? "Entry updated." : "Saved. You can see it in TRACKING → DISBURSEMENT.");
+    await writeRec("cash", Number(date.slice(0,4)), rec, null);
+    clearCash(); entrySay("Saved to DISBURSEMENT. Open TRACKING → DISBURSEMENT to see it.");
   }catch(err){ console.error(err); entrySay("Save failed: " + (err.message || err), true); }
 };
 $("cashGoTrack").onclick = () => { sheet = "cash"; showPage("track"); };
-function openCashEdit(y, key){
-  const v = (data.cash[y] || {})[key]; if(!v) return;
-  type = "cash"; setType(); showPage("entry");
-  $("cDate").value = v.date || ""; $("cCheck").value = v.check || ""; $("cName").value = v.name || ""; $("cDesc").value = v.description || "";
-  $("cAmount").value = v.amount ?? ""; $("cReleased").value = v.dateReleased || ""; $("cLiq").value = v.amountLiquidated ?? "";
-  $("cLiqDate").value = v.dateLiquidated || ""; $("cRefund").value = v.refund ?? ""; $("cRemarks").value = v.remarks || "";
-  editRef = { kind:"cash", year:y, key }; $("editNoteC").textContent = "Editing an existing record";
-}
 
-/* ── tracking: lists ── */
+/* ── tracking: lists (each tab reads only its own type) ── */
 function listOf(kind, q){
   const m = Number($("trkMonth").value), src = data[kind][year] || {};
   return Object.keys(src).map(k => ({ key:k, ...src[k] }))
-    .filter(r => (!m || monthOf(r.date || r.dateRemitted) === m) && (kind !== "nhq" || catFilter === "ALL" || r.cat === catFilter) && matchQ(textOf(kind, r), q))
+    .filter(r => (r.kind || kind) === kind && (!m || monthOf(r.date || r.dateRemitted) === m)
+      && (kind !== "nhq" || catFilter === "ALL" || r.cat === catFilter) && matchQ(textOf(kind, r), q))
     .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key)));
 }
 function textOf(kind, r){
   return kind === "nhq"
-    ? [r.cat, r.check, r.or, fmtAmt(r.amountToRemit), fmtAmt(r.amountRemitted), fmtDate(r.dateRemitted), fmtDate(r.date)].join(" ")
-    : [r.name, r.check, r.description, r.remarks, fmtAmt(r.amount), fmtDate(r.date)].join(" ");
+    ? [r.cat, r.check, r.or, fmtAmt(r.amountToRemit), fmtAmt(r.amountRemitted), fmtDate(r.dateRemitted), fmtDate(r.date), remarksOf(r)].join(" ")
+    : [r.name, r.check, r.description, fmtAmt(r.amount), fmtDate(r.date), remarksOf(r)].join(" ");
 }
 function groupRows(list){
   const g = {};
@@ -422,31 +410,66 @@ function actions(kind, r){
 function renderTracking(){
   const q = $("search").value.trim().toUpperCase();
   document.querySelectorAll("[data-sheet]").forEach(b => b.classList.toggle("on", b.dataset.sheet === sheet));
+  document.querySelectorAll("[data-cf]").forEach(b => b.classList.toggle("on", b.dataset.cf === catFilter));
   $("catWrap").classList.toggle("hidden", sheet !== "nhq");
   $("search").placeholder = sheet === "nhq" ? "Type a category, check #, OR #, amount, date…" : "Type a name, check #, description, amount, date…";
   if(sheet === "nhq") renderNhq(q); else renderCash(q);
   $("dlSel").disabled = sel.size === 0;
 }
+
+/* inline edit rows */
+function nhqEditRow(r){
+  const cats = CATS.map(([c,l]) => `<button type="button" class="btn sm ${r.cat===c?"blue":"line"}" data-act="ecat" data-c="${c}">${esc(l)}</button>`).join(" ");
+  return `<tr class="editing" data-row="${r.key}" data-kind="nhq">
+    <td></td>
+    <td><input type="date" data-f="date" value="${r.date||""}"></td>
+    <td class="cc" data-f="catcell" data-cat="${r.cat}">${cats}</td>
+    <td><input type="number" step="0.01" data-f="toRemit" value="${r.amountToRemit ?? ""}"></td>
+    <td><input type="number" step="0.01" data-f="remitted" value="${r.amountRemitted ?? ""}"></td>
+    <td></td>
+    <td><input type="date" data-f="remDate" value="${r.dateRemitted||""}"></td>
+    <td><input data-f="check" value="${esc(r.check)}"></td>
+    <td><input data-f="or" value="${esc(r.or)}"></td>
+    <td><input data-f="remarks" value="${esc(r.remarks)}"></td>
+    <td class="act"><button class="btn sm" data-act="save">SAVE ROW</button> <button class="btn sm line" data-act="stop">CANCEL</button></td></tr>`;
+}
+function cashEditRow(r){
+  return `<tr class="editing" data-row="${r.key}" data-kind="cash">
+    <td></td>
+    <td><input type="date" data-f="date" value="${r.date||""}"></td>
+    <td><input data-f="check" value="${esc(r.check)}"></td>
+    <td><input data-f="name" value="${esc(r.name)}"></td>
+    <td><input data-f="desc" value="${esc(r.description)}"></td>
+    <td><input type="number" step="0.01" data-f="amount" value="${r.amount ?? ""}"></td>
+    <td><input type="date" data-f="released" value="${r.dateReleased||""}"></td>
+    <td><input type="number" step="0.01" data-f="liq" value="${r.amountLiquidated ?? ""}"></td>
+    <td><input type="date" data-f="liqDate" value="${r.dateLiquidated||""}"></td>
+    <td><input type="number" step="0.01" data-f="refund" value="${r.refund ?? ""}"></td>
+    <td><input data-f="remarks" value="${esc(r.remarks)}"></td>
+    <td class="act"><button class="btn sm" data-act="save">SAVE ROW</button> <button class="btn sm line" data-act="stop">CANCEL</button></td></tr>`;
+}
+
 function renderNhq(q){
   const list = listOf("nhq", q);
   let body = "", T = { to:0, rem:0 };
   groupRows(list).forEach(([m, rows]) => {
-    body += `<tr class="month"><td colspan="10">${MONTHS[m-1] || "NO DATE"}</td></tr>`;
+    body += `<tr class="month"><td colspan="11">${MONTHS[m-1] || "NO DATE"}</td></tr>`;
     let g = { to:0, rem:0 };
     rows.forEach(r => {
+      if(editing && editing.kind === "nhq" && editing.key === r.key){ body += nhqEditRow(r); return; }
       const cx = !!r.cancelled;
       if(!cx){ g.to += num(r.amountToRemit); g.rem += num(r.amountRemitted); }
       body += `<tr class="${cx ? "cxl" : ""}"><td class="c">${selBox("nhq", r.key)}</td><td class="c">${fmtDate(r.date)}</td><td class="c">${esc(r.cat)}</td>
-        <td class="a">${fmtAmt(r.amountToRemit)}</td><td class="a">${fmtAmt(r.amountRemitted)}</td><td class="a">${cx ? "CANCELLED" : money(num(r.amountToRemit) - num(r.amountRemitted))}</td>
-        <td class="c">${fmtDate(r.dateRemitted)}</td><td class="c">${esc(r.check)}</td><td class="c">${esc(r.or)}</td><td class="act">${actions("nhq", r)}</td></tr>`;
+        <td class="a">${fmtAmt(r.amountToRemit)}</td><td class="a">${fmtAmt(r.amountRemitted)}</td><td class="a">${money(num(r.amountToRemit) - num(r.amountRemitted))}</td>
+        <td class="c">${fmtDate(r.dateRemitted)}</td><td class="c">${esc(r.check)}</td><td class="c">${esc(r.or)}</td><td>${esc(remarksOf(r))}</td><td class="act">${actions("nhq", r)}</td></tr>`;
     });
-    body += `<tr class="total"><td></td><td>TOTAL</td><td></td><td class="a">${money(g.to)}</td><td class="a">${money(g.rem)}</td><td class="a">${money(g.to - g.rem)}</td><td></td><td></td><td></td><td></td></tr>`;
+    body += `<tr class="total"><td></td><td>TOTAL</td><td></td><td class="a">${money(g.to)}</td><td class="a">${money(g.rem)}</td><td class="a">${money(g.to - g.rem)}</td><td></td><td></td><td></td><td></td><td></td></tr>`;
     T.to += g.to; T.rem += g.rem;
   });
-  if(!list.length) body = '<tr><td colspan="10" class="empty">No NHQ records match. Add them in ENTRY → NHQ REMITTANCE.</td></tr>';
+  if(!list.length) body = '<tr><td colspan="11" class="empty">No NHQ records match. Add them in ENTRY → NHQ REMITTANCE.</td></tr>';
   $("view").innerHTML = `<div class="wrap"><table>
-    <colgroup><col style="width:3%"><col style="width:9%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:11%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:16%"></colgroup>
-    <thead><tr><th><input type="checkbox" data-selall="nhq"></th><th>Date</th><th>Category</th><th>Amount to be remitted</th><th>Amount remitted</th><th>Balance</th><th>Date remitted</th><th>Check #</th><th>OR #</th><th>Actions</th></tr></thead>
+    <colgroup><col style="width:3%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:10%"></colgroup>
+    <thead><tr><th><input type="checkbox" data-selall="nhq"></th><th>Date</th><th>Category</th><th>Amount to be remitted</th><th>Amount remitted</th><th>Balance</th><th>Date remitted</th><th>Check #</th><th>OR #</th><th>Remarks</th><th>Actions</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
   $("chips").innerHTML = `<div class="chip">Total to remit<b>${money(T.to)}</b></div><div class="chip">Total remitted<b>${money(T.rem)}</b></div><div class="chip blue">Balance<b>${money(T.to - T.rem)}</b></div><div class="chip">Records<b>${list.length}</b></div>`;
 }
@@ -457,19 +480,20 @@ function renderCash(q){
     body += `<tr class="month"><td colspan="12">${MONTHS[m-1] || "NO DATE"}</td></tr>`;
     let g = { a:0, l:0, f:0 };
     rows.forEach(r => {
+      if(editing && editing.kind === "cash" && editing.key === r.key){ body += cashEditRow(r); return; }
       const cx = !!r.cancelled;
       if(!cx){ g.a += num(r.amount); g.l += num(r.amountLiquidated); g.f += num(r.refund); }
       body += `<tr class="${cx ? "cxl" : ""}"><td class="c">${selBox("cash", r.key)}</td><td class="c">${fmtDate(r.date)}</td><td class="c">${esc(r.check)}</td>
         <td title="${esc(r.name)}">${esc(r.name)}</td><td title="${esc(r.description)}">${esc(r.description)}</td><td class="a">${fmtAmt(r.amount)}</td>
         <td class="c">${fmtDate(r.dateReleased)}</td><td class="a">${fmtAmt(r.amountLiquidated)}</td><td class="c">${fmtDate(r.dateLiquidated)}</td>
-        <td class="a">${fmtAmt(r.refund)}</td><td title="${esc(r.remarks)}">${esc(r.remarks)}</td><td class="act">${actions("cash", r)}</td></tr>`;
+        <td class="a">${fmtAmt(r.refund)}</td><td title="${esc(remarksOf(r))}">${esc(remarksOf(r))}</td><td class="act">${actions("cash", r)}</td></tr>`;
     });
     body += `<tr class="total"><td></td><td>TOTAL</td><td></td><td></td><td></td><td class="a">${money(g.a)}</td><td></td><td class="a">${money(g.l)}</td><td></td><td class="a">${money(g.f)}</td><td></td><td></td></tr>`;
     G.a += g.a; G.l += g.l; G.f += g.f;
   });
   if(!list.length) body = '<tr><td colspan="12" class="empty">No disbursement records match. Add them in ENTRY → DISBURSEMENT.</td></tr>';
   $("view").innerHTML = `<div class="wrap"><table>
-    <colgroup><col style="width:3%"><col style="width:7%"><col style="width:6%"><col style="width:11%"><col style="width:13%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:15%"></colgroup>
+    <colgroup><col style="width:3%"><col style="width:7%"><col style="width:6%"><col style="width:11%"><col style="width:13%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:9%"><col style="width:12%"></colgroup>
     <thead><tr><th><input type="checkbox" data-selall="cash"></th><th>Date</th><th>Check #</th><th>Name</th><th>Description</th><th>Amount</th><th>Date released</th><th>Amount liquidated</th><th>Date liquidated</th><th>Refund</th><th>Remarks / OR</th><th>Actions</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
   $("chips").innerHTML = `<div class="chip">Records<b>${list.length}</b></div><div class="chip">Total amount<b>${money(G.a)}</b></div><div class="chip">Liquidated<b>${money(G.l)}</b></div><div class="chip blue">Refunds<b>${money(G.f)}</b></div>`;
@@ -487,12 +511,44 @@ async function deleteRec(kind, key){
   try{ await remove(ref(db, `disbursement/${kind}/${year}/${key}`)); delete data[kind][year][key]; sel.delete(kind + "|" + key); renderTracking(); }
   catch(err){ trkSay("Could not delete: " + (err.message || err), true); }
 }
+async function saveRow(tr){
+  const kind = tr.dataset.kind, key = tr.dataset.row, base = (data[kind][year] || {})[key]; if(!base) return;
+  const f = name => tr.querySelector(`[data-f="${name}"]`).value;
+  let rec;
+  if(kind === "nhq"){
+    const date = f("date");
+    if(!isDate(date)) return trkSay("Enter the date.", true);
+    if(f("remDate") && !isDate(f("remDate"))) return trkSay("Check the date remitted.", true);
+    rec = { ...base, kind, cat:tr.querySelector('[data-f="catcell"]').dataset.cat, date, amountToRemit:r2(num(f("toRemit"))), amountRemitted:r2(num(f("remitted"))),
+      dateRemitted:f("remDate"), check:f("check").trim(), or:f("or").trim(), remarks:f("remarks").trim(), updatedAt:Date.now() };
+  } else {
+    const date = f("date");
+    if(!isDate(date)) return trkSay("Enter the date.", true);
+    if([f("released"), f("liqDate")].some(d => d && !isDate(d))) return trkSay("Check the dates.", true);
+    rec = { ...base, kind, date, check:f("check").trim(), name:f("name").trim().toUpperCase(), description:f("desc").trim().toUpperCase(),
+      amount:r2(num(f("amount"))), dateReleased:f("released"), amountLiquidated:r2(num(f("liq"))), dateLiquidated:f("liqDate"),
+      refund:r2(num(f("refund"))), remarks:f("remarks").trim().toUpperCase(), updatedAt:Date.now() };
+  }
+  try{
+    await writeRec(kind, Number(rec.date.slice(0,4)), rec, { key, year });
+    editing = null; renderTracking(); trkSay("Row saved.");
+  }catch(err){ trkSay("Could not save: " + (err.message || err), true); }
+}
 $("view").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if(!b) return;
-  const { act, kind, key } = b.dataset;
-  if(act === "edit") kind === "nhq" ? openNhqEdit(year, key) : openCashEdit(year, key);
-  if(act === "cancel") toggleCancel(kind, key);
-  if(act === "del") deleteRec(kind, key);
+  const act = b.dataset.act;
+  if(act === "ecat"){
+    const tr = b.closest("tr"), cell = tr.querySelector('[data-f="catcell"]');
+    cell.dataset.cat = b.dataset.c;
+    tr.querySelectorAll('[data-act="ecat"]').forEach(x => { const on = x === b; x.classList.toggle("blue", on); x.classList.toggle("line", !on); });
+    return;
+  }
+  if(act === "save") return saveRow(b.closest("tr"));
+  if(act === "stop"){ editing = null; return renderTracking(); }
+  const { kind, key } = b.dataset;
+  if(act === "edit"){ editing = { kind, key }; return renderTracking(); }
+  if(act === "cancel") return toggleCancel(kind, key);
+  if(act === "del") return deleteRec(kind, key);
 });
 $("view").addEventListener("change", e => {
   const t = e.target;
@@ -503,10 +559,10 @@ $("view").addEventListener("change", e => {
     renderTracking();
   }
 });
-document.querySelectorAll("[data-sheet]").forEach(b => b.onclick = () => { sheet = b.dataset.sheet; renderTracking(); });
+document.querySelectorAll("[data-sheet]").forEach(b => b.onclick = () => { sheet = b.dataset.sheet; editing = null; renderTracking(); });
+document.querySelectorAll("[data-cf]").forEach(b => b.onclick = () => { catFilter = b.dataset.cf; renderTracking(); });
 $("search").oninput = renderTracking;
 $("trkMonth").onchange = renderTracking;
-$("catSel").onchange = () => { catFilter = $("catSel").value; renderTracking(); };
 
 /* ── signatories ── */
 function renderSigners(){
@@ -590,7 +646,7 @@ $("padUse").onclick = () => {
   readSignerInputs(); signers[padRole].sig = out; renderSigners(); $("padModal").classList.remove("on");
 };
 
-/* ── Excel: same look as DISBURSEMENT_SCHEDULE.xlsx (logo, chapter block, title, signatories) ── */
+/* ── Excel: same layout as the original DISBURSEMENT_SCHEDULE.xlsx ── */
 function loadExcelJS(){
   if(window.ExcelJS) return Promise.resolve();
   return new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"; s.onload = res; s.onerror = () => rej(new Error("Could not load the Excel library. Check your internet connection.")); document.head.appendChild(s); });
@@ -653,57 +709,80 @@ function groupForSheet(rows){
   rows.forEach(r => { const m = monthOf(r.date || r.dateRemitted) || 0; (g[m] = g[m] || []).push(r); });
   return Object.keys(g).map(Number).sort((a,b) => a - b).map(m => [m, g[m]]);
 }
+/* NHQ sheet: DATE, then one 5-column block per remittance (amount to be remitted, amount remitted, date remitted, check #, OR #), then REMARKS */
 function nhqSheet(wb, rows, logo){
   const ws = wb.addWorksheet("NHQ REMITTANCE", { views:[{ state:"frozen", ySplit:8 }] });
-  ws.columns = [{ width:14 },{ width:14 },{ width:18 },{ width:18 },{ width:16 },{ width:14 },{ width:14 },{ width:20 }];
-  let row = writeHeader(wb, ws, 8, `NHQ REMITTANCES ${year}`, logo);
-  ["DATE","CATEGORY","AMOUNT TO BE REMITTED","AMOUNT REMITTED","DATE REMITTED","CHECK #","OR #","STATUS"].forEach((h, i) => { const c = ws.getCell(row, i+1); c.value = h; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
-  ws.getRow(row).height = 30; row++;
+  const LAST = 2 + CATS.length * 5;               /* REMARKS column */
+  const widths = [{ width:13 }];
+  CATS.forEach(() => widths.push({ width:15 },{ width:15 },{ width:13 },{ width:12 },{ width:12 }));
+  widths.push({ width:28 });
+  ws.columns = widths;
+  writeHeader(wb, ws, LAST, `NHQ REMITTANCES ${year}`, logo);
+  ws.mergeCells(7, 1, 8, 1); ws.getCell(7,1).value = "DATE"; style(ws.getCell(7,1), { bold:true, color:WHITE, fill:RED, h:"center" });
+  CATS.forEach(([k,l], i) => {
+    const c0 = 2 + i*5;
+    ws.mergeCells(7, c0, 7, c0+4); const h = ws.getCell(7, c0); h.value = l; style(h, { bold:true, color:WHITE, fill:RED, h:"center" });
+    ["Amount to be remitted","Amount Remitted","Date Remitted","Check #","OR #"].forEach((s, j) => { const c = ws.getCell(8, c0 + j); c.value = s; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
+  });
+  ws.mergeCells(7, LAST, 8, LAST); ws.getCell(7, LAST).value = "REMARKS"; style(ws.getCell(7, LAST), { bold:true, color:WHITE, fill:RED, h:"center" });
+  ws.getRow(8).height = 30;
+  let row = 9;
+  const first = row;
   groupForSheet(rows).forEach(([m, list]) => {
-    ws.mergeCells(row, 1, row, 8); const h = ws.getCell(row, 1); h.value = MONTHS[m-1] || "NO DATE"; style(h, { bold:true, color:RED }); row++;
-    const first = row;
+    ws.mergeCells(row, 1, row, LAST); const h = ws.getCell(row, 1); h.value = MONTHS[m-1] || "NO DATE"; style(h, { bold:true, color:RED }); row++;
     list.forEach(r => {
-      [dateCell(r.date), r.cat, numOrNull(r.amountToRemit), numOrNull(r.amountRemitted), dateCell(r.dateRemitted), r.check || "", r.or || "", r.cancelled ? CXL : "ACTIVE"].forEach((v, i) => {
-        const c = ws.getCell(row, i+1); c.value = v;
-        style(c, { nf:[2,3].includes(i) ? money2 : ([0,4].includes(i) ? dateF : undefined), h:[2,3].includes(i) ? "right" : "center" });
-      });
+      const c0 = 2 + CATS.findIndex(([c]) => c === r.cat) * 5;
+      style(ws.getCell(row,1), { nf:dateF, h:"center" }); ws.getCell(row,1).value = dateCell(r.date);
+      if(c0 >= 2){
+        [numOrNull(r.amountToRemit), numOrNull(r.amountRemitted), dateCell(r.dateRemitted), r.check || "", r.or || ""].forEach((v, j) => {
+          const c = ws.getCell(row, c0 + j); c.value = v;
+          style(c, { nf:j < 2 ? money2 : (j === 2 ? dateF : undefined), h:j < 2 ? "right" : "center" });
+        });
+      }
+      style(ws.getCell(row, LAST), { wrap:true }); ws.getCell(row, LAST).value = remarksOf(r) || "";
       row++;
     });
-    const last = row - 1;
-    style(ws.getCell(row,1), { bold:true, color:BLUE }); ws.getCell(row,1).value = "TOTAL";
-    [3,4].forEach(col => { const L = String.fromCharCode(64 + col), c = ws.getCell(row, col);
-      c.value = { formula:`SUMIF(H${first}:H${last},"<>${CXL}",${L}${first}:${L}${last})`, result:0 }; style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
-    row += 2;
   });
-  return { ws, row };
+  const last = row - 1;
+  style(ws.getCell(row,1), { bold:true, color:BLUE }); ws.getCell(row,1).value = "TOTAL";
+  CATS.forEach((_, i) => {
+    const c0 = 2 + i*5;
+    [0,1].forEach(j => { const L = String.fromCharCode(64 + c0 + j), c = ws.getCell(row, c0 + j);
+      c.value = { formula:`SUMIF($${String.fromCharCode(64+LAST)}$${first}:$${String.fromCharCode(64+LAST)}$${last},"<>*${CXL}*",${L}${first}:${L}${last})`, result:0 };
+      style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
+  });
+  return { ws, row: row + 2, lastCol: LAST };
 }
+/* DISBURSEMENT sheet: same columns as the original (no status column), grouped by month with a total for each month */
 function cashSheet(wb, rows, logo){
   const cs = wb.addWorksheet("DISBURSEMENT", { views:[{ state:"frozen", ySplit:7 }] });
-  cs.columns = [{ width:12 },{ width:12 },{ width:26 },{ width:36 },{ width:14 },{ width:14 },{ width:16 },{ width:14 },{ width:18 },{ width:22 },{ width:20 }];
-  let row = writeHeader(wb, cs, 11, `DISBURSEMENT SCHEDULE ${year}`, logo);
-  ["DATE","CHECK #","NAME","DESCRIPTION","AMOUNT","DATE RELEASED","AMOUNT LIQUIDATED","DATE LIQUIDATED","REFUND (REIMBURSEMENT)","REMARKS / OR","STATUS"].forEach((h, i) => { const c = cs.getCell(row, i+1); c.value = h; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
+  cs.columns = [{ width:12 },{ width:12 },{ width:26 },{ width:36 },{ width:14 },{ width:14 },{ width:16 },{ width:14 },{ width:18 },{ width:30 }];
+  let row = writeHeader(wb, cs, 10, `DISBURSEMENT SCHEDULE ${year}`, logo);
+  ["DATE","CHECK #","NAME","DESCRIPTION","AMOUNT","DATE RELEASED","AMOUNT LIQUIDATED","DATE LIQUIDATED","REFUND (REIMBURSEMENT)","REMARKS / OR"].forEach((h, i) => { const c = cs.getCell(row, i+1); c.value = h; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
   cs.getRow(row).height = 30; row++;
   groupForSheet(rows).forEach(([m, list]) => {
-    cs.mergeCells(row, 1, row, 11); const h = cs.getCell(row, 1); h.value = MONTHS[m-1] || "NO DATE"; style(h, { bold:true, color:RED }); row++;
-    const first = row;
+    cs.mergeCells(row, 1, row, 10); const h = cs.getCell(row, 1); h.value = MONTHS[m-1] || "NO DATE"; style(h, { bold:true, color:RED }); row++;
+    const firstRow = row;
     list.forEach(r => {
-      [dateCell(r.date), r.check || "", r.name || "", r.description || "", num(r.amount), dateCell(r.dateReleased), num(r.amountLiquidated), dateCell(r.dateLiquidated), num(r.refund), r.remarks || "", r.cancelled ? CXL : "ACTIVE"].forEach((v, i) => {
+      [dateCell(r.date), r.check || "", r.name || "", r.description || "", num(r.amount), dateCell(r.dateReleased), num(r.amountLiquidated), dateCell(r.dateLiquidated), num(r.refund), remarksOf(r)].forEach((v, i) => {
         const c = cs.getCell(row, i+1); c.value = v;
-        style(c, { nf:[0,5,7].includes(i) ? dateF : ([4,6,8].includes(i) ? money2 : undefined), h:[4,6,8].includes(i) ? "right" : "left" });
+        style(c, { nf:[0,5,7].includes(i) ? dateF : ([4,6,8].includes(i) ? money2 : undefined), h:[4,6,8].includes(i) ? "right" : "left", wrap:i===9 });
       });
       row++;
     });
-    const last = row - 1;
+    const lastRow = row - 1;
     style(cs.getCell(row,1), { bold:true, color:BLUE }); cs.getCell(row,1).value = "TOTAL";
     [5,7,9].forEach(col => { const L = String.fromCharCode(64 + col), c = cs.getCell(row, col);
-      c.value = { formula:`SUMIF(K${first}:K${last},"<>${CXL}",${L}${first}:${L}${last})`, result:0 }; style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
+      c.value = { formula:`SUMIF($J$${firstRow}:$J$${lastRow},"<>*${CXL}*",${L}${firstRow}:${L}${lastRow})`, result:0 };
+      style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
     row += 2;
   });
-  return { cs, row };
+  return { cs, row: row + 1, lastCol: 10 };
 }
 async function downloadExcel(mode){
   const pick = kind => { const src = data[kind][year] || {};
     return Object.keys(src).filter(k => mode === "all" || sel.has(kind + "|" + k)).map(k => ({ key:k, ...src[k] }))
+      .filter(r => (r.kind || kind) === kind)
       .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key))); };
   const nRows = pick("nhq"), cRows = pick("cash");
   if(!nRows.length && !cRows.length) return trkSay("No records selected. Tick the records you want first.", true);
@@ -711,8 +790,8 @@ async function downloadExcel(mode){
   await loadSigners(); await loadExcelJS();
   const logo = await getLogo();
   const wb = new ExcelJS.Workbook();
-  if(nRows.length){ const { ws, row } = nhqSheet(wb, nRows, logo); await addSignatoryBlock(wb, ws, row, 8); }
-  if(cRows.length){ const { cs, row } = cashSheet(wb, cRows, logo); await addSignatoryBlock(wb, cs, row, 11); }
+  if(nRows.length){ const { ws, row, lastCol } = nhqSheet(wb, nRows, logo); await addSignatoryBlock(wb, ws, row, lastCol); }
+  if(cRows.length){ const { cs, row, lastCol } = cashSheet(wb, cRows, logo); await addSignatoryBlock(wb, cs, row, lastCol); }
   const buf = await wb.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   const a = document.createElement("a"); a.href = url; a.download = `DISBURSEMENT-${year}.xlsx`; document.body.appendChild(a); a.click();
