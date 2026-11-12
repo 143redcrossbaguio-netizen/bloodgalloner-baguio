@@ -6,26 +6,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>if(window.self!==window.top)document.documentElement.classList.add("embedded");</script>
 <style>
-body{margin:0;font-family:Arial;background:#f4f4f4;color:#222}
-header{background:#e65100;color:white;text-align:center;padding:15px}
-header h2{margin:0}
+:root{--red:#b71c1c;--blue:#1565c0;--white:#ffffff;--ink:#222;--line:#d9d9d9}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--white);color:var(--ink)}
+header{background:var(--red);color:var(--white);padding:14px 18px;text-align:center}
+header h2{margin:0;font-size:20px}
 .embedded header{display:none}
-.card{max-width:760px;margin:30px auto;background:white;padding:28px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.1);line-height:1.5}
-.embedded .card{margin-top:12px}
-.msg{padding:14px;border-radius:8px;background:#fff3e0;color:#bf360c}
-.ok{background:#e8f5e9;color:#1b5e20}
+.wrap{max-width:1400px;margin:16px auto;padding:0 12px}
+.tabs{display:flex;gap:0;margin-bottom:14px}
+.tabs button,.seg{background:var(--white);color:var(--red);border:2px solid var(--red);padding:9px 18px;font-weight:bold;font-size:13px;cursor:pointer}
+.tabs button:first-child{border-radius:6px 0 0 6px}.tabs button:last-child{border-radius:0 6px 6px 0;border-left:0}
+.tabs button.on,.seg.on{background:var(--red);color:var(--white)}
+.seg{border-radius:6px}
+.card{border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px}
+label{display:block;font-size:12px;font-weight:bold;margin-bottom:4px;color:var(--ink)}
+input,select{font-family:Arial;font-size:14px;padding:8px;border:1px solid #bbb;border-radius:6px;background:var(--white)}
+input[type=number]{width:170px}
+.fld{display:flex;flex-direction:column}
+.btn{background:var(--red);color:var(--white);border:0;border-radius:6px;padding:10px 16px;font-weight:bold;font-size:13px;cursor:pointer}
+.btn.blue{background:var(--blue)}
+.btn.line{background:var(--white);color:var(--red);border:1px solid var(--red)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.status{font-size:13px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);margin-top:10px}
+.status.err{border-color:var(--red);color:var(--red)}
+.hi{color:var(--blue);font-weight:bold}
+.sum{display:flex;gap:26px;flex-wrap:wrap;margin:6px 0 12px;font-size:14px}
+.sum b{font-size:17px}
+.tblWrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:13px}
+th,td{border:1px solid var(--line);padding:6px 7px;vertical-align:middle;white-space:nowrap}
+th{background:var(--red);color:var(--white);font-weight:bold;text-align:center}
+td.n,td.a{text-align:right}
+tr.month td{background:var(--white);font-weight:bold;color:var(--red)}
+tr.total td{font-weight:bold;color:var(--blue)}
+.empty{text-align:center;color:#777;padding:22px}
+.act button{margin-right:4px;padding:5px 9px;font-size:12px}
+.hidden{display:none}
 </style>
 </head>
 <body>
 <header><h2>Disbursement</h2></header>
-<div class="card">
-  <div id="msg" class="msg">Checking your access…</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <button id="tabEntry" class="on">ENTRY</button>
+    <button id="tabTrack">TRACKING</button>
+  </div>
+
+  <!-- ───────── ENTRY ───────── -->
+  <section id="panelEntry">
+    <div class="card">
+      <div class="row">
+        <div class="fld"><label>TYPE</label>
+          <div><button class="seg on" data-type="nhq">NHQ REMITTANCE</button> <button class="seg" data-type="cash">CASH ADVANCE</button></div>
+        </div>
+        <div class="fld"><label>YEAR</label><select id="entryYear"></select></div>
+      </div>
+
+      <!-- NHQ -->
+      <div id="nhqBox">
+        <div class="row">
+          <div class="fld"><label>MONTH</label><select id="nhqMonth"></select></div>
+          <div class="fld"><label>REMITTANCE</label>
+            <div>
+              <button class="seg on" data-cat="MHI">MHI</button>
+              <button class="seg" data-cat="BPF">BPF</button>
+              <button class="seg" data-cat="FC">FC</button>
+              <button class="seg" data-cat="AMBULANCE">AMBULANCE/PICK UP</button>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="fld"><label>Amount to be remitted</label><input type="number" step="0.01" min="0" id="nToRemit"></div>
+          <div class="fld"><label>Amount Remitted</label><input type="number" step="0.01" min="0" id="nRemitted"></div>
+          <div class="fld"><label>Date Remitted</label><input type="date" id="nDate"></div>
+          <div class="fld"><label>Check #</label><input type="text" id="nCheck"></div>
+          <div class="fld"><label>OR #</label><input type="text" id="nOr"></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="nhqSave">SAVE</button>
+          <button class="btn line" id="nhqClear">CLEAR THIS ENTRY</button>
+        </div>
+      </div>
+
+      <!-- CASH ADVANCE -->
+      <div id="cashBox" class="hidden">
+        <div class="row">
+          <div class="fld"><label>Date</label><input type="date" id="cDate"></div>
+          <div class="fld"><label>CHECK #</label><input type="text" id="cCheck"></div>
+          <div class="fld"><label>Name</label><input type="text" id="cName" style="width:220px"></div>
+          <div class="fld"><label>Description</label><input type="text" id="cDesc" style="width:260px"></div>
+          <div class="fld"><label>Amount</label><input type="number" step="0.01" min="0" id="cAmount"></div>
+        </div>
+        <div class="row">
+          <div class="fld"><label>Date Released</label><input type="date" id="cReleased"></div>
+          <div class="fld"><label>Amount Liquidated</label><input type="number" step="0.01" min="0" id="cLiq"></div>
+          <div class="fld"><label>Date Liquidated</label><input type="date" id="cLiqDate"></div>
+          <div class="fld"><label>Refund (Reimbursement)</label><input type="number" step="0.01" min="0" id="cRefund"></div>
+          <div class="fld"><label>Remarks / OR</label><input type="text" id="cRemarks" style="width:200px"></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="cashSave">SAVE</button>
+          <button class="btn line" id="cashClear">CLEAR FORM</button>
+          <span id="editNote" class="hi"></span>
+        </div>
+      </div>
+      <div id="entryStatus" class="status hidden"></div>
+    </div>
+  </section>
+
+  <!-- ───────── TRACKING ───────── -->
+  <section id="panelTrack" class="hidden">
+    <div class="card">
+      <div class="row">
+        <div class="fld"><label>YEAR</label><select id="trkYear"></select></div>
+        <div class="fld"><label>SHEET</label>
+          <div><button class="seg on" data-sheet="nhq">NHQ REMITTANCE</button> <button class="seg" data-sheet="cash">CASH ADVANCES</button></div>
+        </div>
+        <div class="fld cashOnly"><label>MONTH</label><select id="trkMonth"></select></div>
+        <div class="fld cashOnly"><label>SEARCH (name, check, description)</label><input type="text" id="trkSearch" style="width:260px"></div>
+        <button class="btn blue" id="dlBtn">DOWNLOAD EXCEL</button>
+      </div>
+      <div class="sum" id="summary"></div>
+      <div class="tblWrap"><table id="tbl"></table></div>
+      <div id="trkStatus" class="status hidden"></div>
+    </div>
+  </section>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, get, set, push, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const app = initializeApp({
   apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -39,22 +152,297 @@ const app = initializeApp({
 });
 const auth = getAuth(app);
 const db = getDatabase(app);
-const msg = document.getElementById("msg");
 
+/* ── constants ── */
+const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+const CATS = [["MHI","MHI"],["BPF","BPF"],["FC","FC"],["AMBULANCE","AMBULANCE/PICK UP"]];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const num = v => { const n = Number(String(v == null ? "" : v).replace(/,/g, "")); return isFinite(n) ? n : 0; };
+const r2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const money = n => num(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+const monthOf = s => isDate(s) ? Number(s.slice(5, 7)) : 0;
+const phToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const pad2 = n => String(n).padStart(2, "0");
+const fmtDate = s => isDate(s) ? s.slice(5,7) + "/" + s.slice(8,10) + "/" + s.slice(0,4) : "";
+function status(id, msg, bad){ const el = $(id); el.textContent = msg; el.className = "status" + (bad ? " err" : ""); el.classList.remove("hidden"); }
+
+/* ── state ── */
+const thisYear = Number(phToday().slice(0,4));
+let year = thisYear, type = "nhq", cat = "MHI", editKey = null, sheet = "nhq";
+let data = { nhq:{}, cash:{} };   /* data.nhq[year][mm][cat]  data.cash[year][key] */
+const loaded = {};
+
+/* ── selects ── */
+(function init(){
+  const ys = []; for(let y = thisYear + 1; y >= 2024; y--) ys.push(y);
+  const yOpts = ys.map(y => `<option${y===thisYear?" selected":""}>${y}</option>`).join("");
+  $("entryYear").innerHTML = yOpts; $("trkYear").innerHTML = yOpts;
+  $("nhqMonth").innerHTML = MONTHS.map((m,i) => `<option value="${i+1}"${i+1===new Date().getMonth()+1?" selected":""}>${m}</option>`).join("");
+  $("trkMonth").innerHTML = '<option value="">ALL MONTHS</option>' + MONTHS.map((m,i) => `<option value="${i+1}">${m}</option>`).join("");
+})();
+
+/* ── load a year from the database (only once per year, then kept in memory) ── */
+async function loadYear(y){
+  if(loaded[y]) return;
+  const [a, b] = await Promise.all([get(ref(db, "disbursement/nhq/" + y)), get(ref(db, "disbursement/cash/" + y))]);
+  data.nhq[y] = a.val() || {}; data.cash[y] = b.val() || {}; loaded[y] = true;
+}
+
+/* ── tabs / type ── */
+function showTab(entry){
+  $("panelEntry").classList.toggle("hidden", !entry); $("panelTrack").classList.toggle("hidden", entry);
+  $("tabEntry").classList.toggle("on", entry); $("tabTrack").classList.toggle("on", !entry);
+  if(!entry) renderTracking();
+}
+$("tabEntry").onclick = () => showTab(true);
+$("tabTrack").onclick = () => showTab(false);
+document.querySelectorAll("[data-type]").forEach(b => b.onclick = () => { type = b.dataset.type; setType(); });
+function setType(){
+  document.querySelectorAll("[data-type]").forEach(b => b.classList.toggle("on", b.dataset.type === type));
+  $("nhqBox").classList.toggle("hidden", type !== "nhq"); $("cashBox").classList.toggle("hidden", type !== "cash");
+  $("entryStatus").classList.add("hidden");
+}
+
+/* ── NHQ entry ── */
+function fillNhq(){
+  const mm = pad2($("nhqMonth").value);
+  const rec = (data.nhq[year] || {})[mm] || {};
+  const r = rec[cat] || {};
+  $("nToRemit").value = r.amountToRemit ?? ""; $("nRemitted").value = r.amountRemitted ?? "";
+  $("nDate").value = r.dateRemitted || ""; $("nCheck").value = r.check || ""; $("nOr").value = r.or || "";
+}
+document.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => {
+  cat = b.dataset.cat; document.querySelectorAll("[data-cat]").forEach(x => x.classList.toggle("on", x === b)); fillNhq();
+});
+$("nhqMonth").onchange = fillNhq;
+$("nhqSave").onclick = async () => {
+  const toRemit = num($("nToRemit").value), remitted = num($("nRemitted").value);
+  if(!$("nToRemit").value && !$("nRemitted").value) return status("entryStatus", "Enter the amount to be remitted or the amount remitted.", true);
+  if($("nDate").value && !isDate($("nDate").value)) return status("entryStatus", "Check the date remitted.", true);
+  const mm = pad2($("nhqMonth").value);
+  const rec = { amountToRemit:r2(toRemit), amountRemitted:r2(remitted), dateRemitted:$("nDate").value || "", check:$("nCheck").value.trim(), or:$("nOr").value.trim(), updatedAt:Date.now() };
+  try{
+    await set(ref(db, `disbursement/nhq/${year}/${mm}/${cat}`), rec);
+    ((data.nhq[year] = data.nhq[year] || {})[mm] = data.nhq[year][mm] || {})[cat] = rec;
+    status("entryStatus", `Saved ${cat} for ${MONTHS[Number(mm)-1]} ${year}.`);
+  }catch(err){ console.error(err); status("entryStatus", "Save failed: " + (err.message || err), true); }
+};
+$("nhqClear").onclick = async () => {
+  const mm = pad2($("nhqMonth").value);
+  if(!confirm(`Clear the ${cat} entry for ${MONTHS[Number(mm)-1]} ${year}?`)) return;
+  try{
+    await remove(ref(db, `disbursement/nhq/${year}/${mm}/${cat}`));
+    if(data.nhq[year] && data.nhq[year][mm]) delete data.nhq[year][mm][cat];
+    fillNhq(); status("entryStatus", "Entry cleared.");
+  }catch(err){ status("entryStatus", "Could not clear: " + (err.message || err), true); }
+};
+
+/* ── cash advance entry ── */
+function cashValues(){
+  return { date:$("cDate").value, check:$("cCheck").value.trim(), name:$("cName").value.trim().toUpperCase(), description:$("cDesc").value.trim().toUpperCase(),
+    amount:r2(num($("cAmount").value)), dateReleased:$("cReleased").value, amountLiquidated:r2(num($("cLiq").value)), dateLiquidated:$("cLiqDate").value,
+    refund:r2(num($("cRefund").value)), remarks:$("cRemarks").value.trim().toUpperCase(), updatedAt:Date.now() };
+}
+function clearCash(){ ["cDate","cCheck","cName","cDesc","cAmount","cReleased","cLiq","cLiqDate","cRefund","cRemarks"].forEach(i => $(i).value = ""); editKey = null; $("editNote").textContent = ""; }
+$("cashClear").onclick = clearCash;
+$("cashSave").onclick = async () => {
+  const v = cashValues();
+  if(!isDate(v.date)) return status("entryStatus", "Enter the date.", true);
+  if(!v.name) return status("entryStatus", "Enter the name.", true);
+  if(!$("cAmount").value) return status("entryStatus", "Enter the amount.", true);
+  const dates = [v.date, v.dateReleased, v.dateLiquidated].filter(d => d);
+  if(dates.some(d => !isDate(d))) return status("entryStatus", "Check the dates (use the date picker).", true);
+  try{
+    let key = editKey;
+    if(key){ await set(ref(db, `disbursement/cash/${year}/${key}`), v); }
+    else { const p = push(ref(db, `disbursement/cash/${year}`)); key = p.key; await set(p, v); }
+    (data.cash[year] = data.cash[year] || {})[key] = v;
+    clearCash();
+    status("entryStatus", "Saved. You can see it under TRACKING → CASH ADVANCES.");
+  }catch(err){ console.error(err); status("entryStatus", "Save failed: " + (err.message || err), true); }
+};
+window.editCash = key => {
+  const v = (data.cash[year] || {})[key]; if(!v) return;
+  type = "cash"; setType(); showTab(true);
+  $("cDate").value = v.date || ""; $("cCheck").value = v.check || ""; $("cName").value = v.name || ""; $("cDesc").value = v.description || "";
+  $("cAmount").value = v.amount ?? ""; $("cReleased").value = v.dateReleased || ""; $("cLiq").value = v.amountLiquidated ?? "";
+  $("cLiqDate").value = v.dateLiquidated || ""; $("cRefund").value = v.refund ?? ""; $("cRemarks").value = v.remarks || "";
+  editKey = key; $("editNote").textContent = "Editing an existing entry — press SAVE to update it.";
+};
+window.deleteCash = async key => {
+  const v = (data.cash[year] || {})[key]; if(!v || !confirm(`Delete ${v.name || "this entry"} (${money(v.amount)})?`)) return;
+  try{ await remove(ref(db, `disbursement/cash/${year}/${key}`)); delete data.cash[year][key]; renderTracking(); }
+  catch(err){ status("trkStatus", "Could not delete: " + (err.message || err), true); }
+};
+
+/* ── tracking ── */
+document.querySelectorAll("[data-sheet]").forEach(b => b.onclick = () => { sheet = b.dataset.sheet; setSheet(); renderTracking(); });
+function setSheet(){
+  document.querySelectorAll("[data-sheet]").forEach(b => b.classList.toggle("on", b.dataset.sheet === sheet));
+  document.querySelectorAll(".cashOnly").forEach(e => e.classList.toggle("hidden", sheet !== "cash"));
+}
+$("trkYear").onchange = async () => { year = Number($("trkYear").value); await loadYear(year); renderTracking(); };
+$("trkMonth").onchange = renderTracking; $("trkSearch").oninput = renderTracking;
+
+function nhqRows(){
+  const rows = [];
+  for(let m = 1; m <= 12; m++){
+    const mm = pad2(m), rec = (data.nhq[year] || {})[mm] || {};
+    rows.push({ m, cells: CATS.map(([k]) => rec[k] || {}) });
+  }
+  return rows;
+}
+function cashList(){
+  const all = Object.keys(data.cash[year] || {}).map(k => ({ key:k, ...data.cash[year][k] }));
+  const mSel = Number($("trkMonth").value), q = $("trkSearch").value.trim().toUpperCase();
+  return all.filter(r => (!mSel || monthOf(r.date || r.dateReleased) === mSel) &&
+      (!q || [r.name, r.check, r.description, r.remarks].join(" ").toUpperCase().includes(q)))
+    .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.name).localeCompare(String(b.name)));
+}
+
+function renderTracking(){
+  if(sheet === "nhq") renderNhq(); else renderCash();
+}
+function renderNhq(){
+  const rows = nhqRows();
+  let head1 = '<tr><th rowspan="2">MONTH</th>' + CATS.map(([k,l]) => `<th colspan="5">${esc(l)}</th>`).join("") + "</tr>";
+  let head2 = "<tr>" + CATS.map(() => "<th>Amount to be remitted</th><th>Amount Remitted</th><th>Date Remitted</th><th>Check #</th><th>OR #</th>").join("") + "</tr>";
+  let body = rows.map(r => `<tr><td>${MONTHS[r.m-1]}</td>` + r.cells.map(c => `<td class="a">${c.amountToRemit != null ? money(c.amountToRemit) : ""}</td><td class="a">${c.amountRemitted != null ? money(c.amountRemitted) : ""}</td><td>${fmtDate(c.dateRemitted)}</td><td>${esc(c.check)}</td><td>${esc(c.or)}</td>`).join("") + "</tr>").join("");
+  const tot = CATS.map((_, i) => {
+    const sumA = rows.reduce((s,r) => s + num(r.cells[i].amountToRemit), 0), sumR = rows.reduce((s,r) => s + num(r.cells[i].amountRemitted), 0);
+    return `<td class="a">${money(sumA)}</td><td class="a">${money(sumR)}</td><td></td><td></td><td></td>`;
+  }).join("");
+  body += `<tr class="total"><td>TOTAL</td>${tot}</tr>`;
+  $("tbl").innerHTML = "<thead>" + head1 + head2 + "</thead><tbody>" + body + "</tbody>";
+  let toT = 0, remT = 0;
+  rows.forEach(r => r.cells.forEach(c => { toT += num(c.amountToRemit); remT += num(c.amountRemitted); }));
+  $("summary").innerHTML = `<span>Total to remit: <b>${money(toT)}</b></span><span>Total remitted: <b>${money(remT)}</b></span><span>Balance: <b class="hi">${money(toT - remT)}</b></span>`;
+  $("trkStatus").classList.add("hidden");
+}
+function renderCash(){
+  const list = cashList();
+  const head = '<thead><tr><th>DATE</th><th>CHECK #</th><th>NAME</th><th>DESCRIPTION</th><th>AMOUNT</th><th>DATE RELEASED</th><th>AMOUNT LIQUIDATED</th><th>DATE LIQUIDATED</th><th>REFUND (REIMBURSEMENT)</th><th>REMARKS / OR</th><th></th></tr></thead>';
+  let body = "", groups = {};
+  list.forEach(r => { const m = monthOf(r.date || r.dateReleased) || 0; (groups[m] = groups[m] || []).push(r); });
+  const order = Object.keys(groups).map(Number).sort((a,b)=>a-b);
+  let gT = { a:0, l:0, f:0 };
+  order.forEach(m => {
+    body += `<tr class="month"><td colspan="11">${MONTHS[m-1] || "NO DATE"}</td></tr>`;
+    let t = { a:0, l:0, f:0 };
+    groups[m].forEach(r => {
+      t.a += num(r.amount); t.l += num(r.amountLiquidated); t.f += num(r.refund);
+      body += `<tr><td>${fmtDate(r.date)}</td><td>${esc(r.check)}</td><td>${esc(r.name)}</td><td>${esc(r.description)}</td><td class="a">${money(r.amount)}</td><td>${fmtDate(r.dateReleased)}</td><td class="a">${money(r.amountLiquidated)}</td><td>${fmtDate(r.dateLiquidated)}</td><td class="a">${money(r.refund)}</td><td>${esc(r.remarks)}</td>
+        <td class="act"><button class="btn line" onclick="editCash('${r.key}')">EDIT</button><button class="btn line" onclick="deleteCash('${r.key}')">DELETE</button></td></tr>`;
+    });
+    body += `<tr class="total"><td>TOTAL</td><td></td><td></td><td></td><td class="a">${money(t.a)}</td><td></td><td class="a">${money(t.l)}</td><td></td><td class="a">${money(t.f)}</td><td></td><td></td></tr>`;
+    gT.a += t.a; gT.l += t.l; gT.f += t.f;
+  });
+  if(!list.length) body = '<tr><td colspan="11" class="empty">No cash advance entries for this period. Add them in ENTRY → CASH ADVANCE.</td></tr>';
+  $("tbl").innerHTML = head + "<tbody>" + body + "</tbody>";
+  $("summary").innerHTML = `<span>Entries: <b>${list.length}</b></span><span>Total amount: <b>${money(gT.a)}</b></span><span>Total liquidated: <b>${money(gT.l)}</b></span><span>Refunds: <b class="hi">${money(gT.f)}</b></span>`;
+  $("trkStatus").classList.add("hidden");
+}
+
+/* ── Excel (same layout as DISBURSEMENT_SCHEDULE.xlsx) ── */
+function loadExcelJS(){
+  if(window.ExcelJS) return Promise.resolve();
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"; s.onload = res; s.onerror = () => rej(new Error("Could not load the Excel library. Check your internet connection.")); document.head.appendChild(s); });
+}
+const RED = "FFB71C1C", BLUE = "FF1565C0", WHITE = "FFFFFFFF";
+const dateCell = s => isDate(s) ? new Date(Number(s.slice(0,4)), Number(s.slice(5,7)) - 1, Number(s.slice(8,10))) : null;
+function style(cell, o){
+  cell.font = { name:"Arial", size: o.size || 10, bold: !!o.bold, color: { argb: o.color || "FF000000" } };
+  cell.alignment = { horizontal: o.h || "left", vertical: "middle", wrapText: !!o.wrap };
+  if(o.fill) cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:o.fill } };
+  const b = { style:"thin", color:{ argb:"FFBFBFBF" } }; cell.border = { top:b, left:b, bottom:b, right:b };
+  if(o.nf) cell.numFmt = o.nf;
+}
+async function downloadExcel(){
+  status("trkStatus", "Preparing the Excel file…");
+  await loadYear(year);
+  await loadExcelJS();
+  const wb = new ExcelJS.Workbook(), money2 = "#,##0.00", dateF = "mm/dd/yyyy";
+
+  /* sheet 1: NHQ REMITTANCE */
+  const ws = wb.addWorksheet("NHQ REMITTANCE", { views:[{ state:"frozen", ySplit:4 }] });
+  ws.columns = [{ width:16 }].concat(Array(20).fill({ width:14 }));
+  ws.mergeCells("A1:U1"); const t1 = ws.getCell("A1"); t1.value = `NHQ REMITTANCES ${year}`;
+  style(t1, { size:14, bold:true, color:WHITE, fill:RED, h:"center" }); ws.getRow(1).height = 26;
+  ws.getCell("A3").value = "MONTH"; ws.mergeCells("A3:A4"); style(ws.getCell("A3"), { bold:true, color:WHITE, fill:RED, h:"center" });
+  CATS.forEach(([k,l], i) => {
+    const c0 = 2 + i*5, c1 = c0 + 4;
+    ws.mergeCells(3, c0, 3, c1); const h = ws.getCell(3, c0); h.value = l; style(h, { bold:true, color:WHITE, fill:RED, h:"center" });
+    ["Amount to be remitted","Amount Remitted","Date Remitted","Check #","OR #"].forEach((s, j) => { const c = ws.getCell(4, c0 + j); c.value = s; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
+  });
+  ws.getRow(4).height = 30;
+  for(let m = 1; m <= 12; m++){
+    const r = 4 + m, rec = (data.nhq[year] || {})[pad2(m)] || {};
+    style(ws.getCell(r, 1), { bold:true }); ws.getCell(r,1).value = MONTHS[m-1];
+    CATS.forEach(([k], i) => {
+      const x = rec[k] || {}, c0 = 2 + i*5;
+      const vals = [x.amountToRemit ?? null, x.amountRemitted ?? null, dateCell(x.dateRemitted), x.check || null, x.or || null];
+      vals.forEach((v, j) => { const c = ws.getCell(r, c0 + j); c.value = v; style(c, { nf: j < 2 ? money2 : (j === 2 ? dateF : undefined), h: j < 2 ? "right" : "center" }); });
+    });
+  }
+  const totR = 17; style(ws.getCell(totR,1), { bold:true, color:BLUE }); ws.getCell(totR,1).value = "TOTAL";
+  CATS.forEach((_, i) => {
+    const c0 = 2 + i*5;
+    [0,1].forEach(j => { const col = String.fromCharCode(64 + c0 + j); const c = ws.getCell(totR, c0 + j); c.value = { formula:`SUM(${col}5:${col}16)`, result:0 }; style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
+  });
+  ws.pageSetup = { orientation:"landscape", paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0 };
+
+  /* sheet 2: CASH ADVANCES */
+  const cs = wb.addWorksheet("CASH ADVANCES", { views:[{ state:"frozen", ySplit:3 }] });
+  cs.columns = [{ width:12 },{ width:12 },{ width:26 },{ width:36 },{ width:14 },{ width:14 },{ width:16 },{ width:14 },{ width:18 },{ width:22 }];
+  cs.mergeCells("A1:J1"); const c1 = cs.getCell("A1"); c1.value = `DISBURSEMENT SCHEDULE ${year}`; style(c1, { size:14, bold:true, color:WHITE, fill:RED, h:"center" }); cs.getRow(1).height = 26;
+  const heads = ["DATE","CHECK #","NAME","DESCRIPTION","AMOUNT","DATE RELEASED","AMOUNT LIQUIDATED","DATE LIQUIDATED","REFUND (REIMBURSEMENT)","REMARKS / OR"];
+  heads.forEach((h, i) => { const c = cs.getCell(3, i + 1); c.value = h; style(c, { bold:true, color:WHITE, fill:RED, h:"center", wrap:true }); });
+  cs.getRow(3).height = 30;
+  let row = 4;
+  const list = cashList();                     /* uses the current search / month filters on the screen */
+  const groups = {}; list.forEach(r => { const m = monthOf(r.date || r.dateReleased) || 0; (groups[m] = groups[m] || []).push(r); });
+  Object.keys(groups).map(Number).sort((a,b)=>a-b).forEach(m => {
+    cs.mergeCells(row, 1, row, 10); const h = cs.getCell(row, 1); h.value = MONTHS[m-1] || "NO DATE"; style(h, { bold:true, color:RED }); row++;
+    const first = row;
+    groups[m].forEach(r => {
+      const vals = [dateCell(r.date), r.check || "", r.name || "", r.description || "", num(r.amount), dateCell(r.dateReleased), num(r.amountLiquidated), dateCell(r.dateLiquidated), num(r.refund), r.remarks || ""];
+      vals.forEach((v, i) => { const c = cs.getCell(row, i + 1); c.value = v; style(c, { nf: [0,5,7].includes(i) ? dateF : ([4,6,8].includes(i) ? money2 : undefined), h: [4,6,8].includes(i) ? "right" : "left" }); });
+      row++;
+    });
+    const last = row - 1;
+    style(cs.getCell(row, 1), { bold:true, color:BLUE }); cs.getCell(row,1).value = "TOTAL";
+    [5,7,9].forEach(col => { const L = String.fromCharCode(64 + col); const c = cs.getCell(row, col); c.value = { formula:`SUM(${L}${first}:${L}${last})`, result:0 }; style(c, { bold:true, color:BLUE, nf:money2, h:"right" }); });
+    row += 2;
+  });
+  cs.pageSetup = { orientation:"landscape", paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0 };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a"); a.href = url; a.download = `DISBURSEMENT-${year}.xlsx`; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  status("trkStatus", `Downloaded DISBURSEMENT-${year}.xlsx`);
+}
+$("dlBtn").onclick = async () => { $("dlBtn").disabled = true; try{ await downloadExcel(); }catch(err){ console.error(err); status("trkStatus", err.message || String(err), true); } finally{ $("dlBtn").disabled = false; } };
+
+/* ── start ── */
 onAuthStateChanged(auth, async user => {
   if(!user){ location.href = "index.html"; return; }
   try{
     const role = (await get(ref(db, "userRoles/" + user.uid + "/role"))).val();
-    if(role === "finance"){
-      msg.className = "msg ok";
-      msg.textContent = "Disbursement is ready. The form will be set up next.";
-    } else {
-      msg.textContent = "Disbursement is for the finance account only.";
+    if(role !== "finance"){
+      document.body.innerHTML = '<div class="wrap"><div class="card">Disbursement is for the finance account only.</div></div>';
+      return;
     }
   }catch(err){
-    console.error(err);
-    msg.textContent = "Could not check your access: " + (err.message || err);
+    status("entryStatus", "Could not check your access: " + (err.message || err), true); return;
   }
+  $("entryYear").value = String(year); $("trkYear").value = String(year);
+  $("entryYear").onchange = async () => { year = Number($("entryYear").value); $("trkYear").value = String(year); await loadYear(year); fillNhq(); };
+  await loadYear(year);
+  setType(); setSheet(); fillNhq();
 });
 </script>
 </body>
