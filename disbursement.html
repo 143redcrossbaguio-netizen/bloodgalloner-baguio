@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Disbursement</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>if(window.self!==window.top)document.documentElement.classList.add("embedded");</script>
+<style>
+body{margin:0;font-family:Arial;background:#f4f4f4;color:#222}
+header{background:#e65100;color:white;text-align:center;padding:15px}
+header h2{margin:0}
+.embedded header{display:none}
+.card{max-width:760px;margin:30px auto;background:white;padding:28px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.1);line-height:1.5}
+.embedded .card{margin-top:12px}
+.msg{padding:14px;border-radius:8px;background:#fff3e0;color:#bf360c}
+.ok{background:#e8f5e9;color:#1b5e20}
+</style>
+</head>
+<body>
+<header><h2>Disbursement</h2></header>
+<div class="card">
+  <div id="msg" class="msg">Checking your access…</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const app = initializeApp({
+  apiKey:"AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain:"galloners-club.firebaseapp.com",
+  databaseURL:"https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"galloners-club",
+  storageBucket:"galloners-club.firebasestorage.app",
+  messagingSenderId:"213049860421",
+  appId:"1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId:"G-XYXJH9JNXJ"
+});
+const auth = getAuth(app);
+const db = getDatabase(app);
+const msg = document.getElementById("msg");
+
+onAuthStateChanged(auth, async user => {
+  if(!user){ location.href = "index.html"; return; }
+  try{
+    const role = (await get(ref(db, "userRoles/" + user.uid + "/role"))).val();
+    if(role === "finance"){
+      msg.className = "msg ok";
+      msg.textContent = "Disbursement is ready. The form will be set up next.";
+    } else {
+      msg.textContent = "Disbursement is for the finance account only.";
+    }
+  }catch(err){
+    console.error(err);
+    msg.textContent = "Could not check your access: " + (err.message || err);
+  }
+});
+</script>
+</body>
+</html>
