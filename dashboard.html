@@ -839,6 +839,23 @@
                     <button id="btn-category-limits" class="sub-btn blue" onclick="openModule('settings.html','Category Limits','Galloner, Bronze, Silver and Gold levels')">Category Limits</button>
                 </div>
 
+                <button id="nav-finance" class="nav-btn" onclick="toggleSection('finance')">
+                    <span class="nav-left">
+                        <span class="nav-icon">💰</span>
+                        <span class="nav-text">
+                            <span class="nav-label">Finance</span>
+                            <span class="nav-hint">DCR entry, DCR tracking, posted documents, disbursement</span>
+                        </span>
+                    </span>
+                    <span class="nav-arrow">▼</span>
+                </button>
+                <div id="section-finance" class="submenu">
+                    <button id="btn-dcr" class="sub-btn green" onclick="openModule('dcr.html','DCR Entry','Daily Collection Report entry')">DCR Entry</button>
+                    <button id="btn-dcr-tracking" class="sub-btn green" onclick="openModule('dcr-tracking.html','DCR Tracking','Saved Daily Collection Reports - view, print, download Excel')">DCR Tracking</button>
+                    <button id="nav-posted-documents" class="sub-btn purple" onclick="openModule('posted-documents.html','Posted Documents','Blood Augmentation billing statements (SOAs)')">Posted Documents</button>
+                    <button id="btn-disbursement" class="sub-btn orange hidden-role" onclick="openModule('disbursement.html','Disbursement','')">Disbursement</button>
+                </div>
+
                 <div class="sidebar-title">Other Tools</div>
                 <button id="nav-tools" class="nav-btn utility-nav" onclick="toggleSection('tools')">
                     <span class="nav-left">
@@ -851,9 +868,6 @@
                     <span class="nav-arrow">▼</span>
                 </button>
                 <div id="section-tools" class="submenu utility-submenu">
-                    <button id="nav-posted-documents" class="sub-btn purple" onclick="openModule('posted-documents.html','Posted Documents','Blood Augmentation billing statements (SOAs)')">Posted Documents</button>
-                    <button id="btn-dcr" class="sub-btn green hidden-role" onclick="openModule('dcr.html','DCR Entry','Daily Collection Report entry')">DCR Entry</button>
-                    <button id="btn-dcr-tracking" class="sub-btn green hidden-role" onclick="openModule('dcr-tracking.html','DCR Tracking','Saved Daily Collection Reports - view, print, download Excel')">DCR Tracking</button>
                     <button id="nav-partner" class="sub-btn blue" onclick="openModule('partner-organization.html','Partner Organization','')">Partner Organization</button>
                     <button id="nav-bulk-import" class="sub-btn green" onclick="openModule('donor-import.html','Donor Database - Bulk Import','')">Bulk Import</button>
                     <button id="nav-donor-cleanup" class="sub-btn orange" onclick="openModule('donor-import-cleanup.html','Donor Database - Donor Cleanup','')">Donor Cleanup</button>
@@ -892,7 +906,7 @@
                         <div class="welcome-subtitle">Baguio City Chapter</div>
 
                         <div class="welcome-grid">
-                            <div class="welcome-mini" onclick="quickOpen('donor-database-entry.html','Donor Database - Data Input','donor-database','btn-donor-db-entry')">
+                            <div id="card-donor-records" class="welcome-mini" onclick="quickOpen('donor-database-entry.html','Donor Database - Data Input','donor-database','btn-donor-db-entry')">
                                 <div class="welcome-mini-icon">🩸</div>
                                 <div class="welcome-mini-title">Donor Records</div>
                                 <div class="welcome-mini-sub">Fast access to donor input, tracking, and statistics.</div>
@@ -902,17 +916,17 @@
                                 <div class="welcome-mini-title">Blood Releasing</div>
                                 <div class="welcome-mini-sub">Clean workflow for issue, monitoring, and facility use.</div>
                             </div>
-                            <div class="welcome-mini" onclick="quickOpen('monthly-report-generator.html','Generate Monthly Report','tools','btn-monthly-report')">
+                            <div id="card-monthly-report" class="welcome-mini" onclick="quickOpen('monthly-report-generator.html','Generate Monthly Report','tools','btn-monthly-report')">
                                 <div class="welcome-mini-icon">📊</div>
                                 <div class="welcome-mini-title">Monthly Report</div>
                                 <div class="welcome-mini-sub">Choose month and year, or generate this month only.</div>
                             </div>
-                            <div class="welcome-mini" onclick="quickOpen('backup-viewer.html','Backup Viewer','tools','btn-backup-viewer')">
+                            <div id="card-system-control" class="welcome-mini" onclick="quickOpen('backup-viewer.html','Backup Viewer','tools','btn-backup-viewer')">
                                 <div class="welcome-mini-icon">🗂️</div>
                                 <div class="welcome-mini-title">System Control</div>
                                 <div class="welcome-mini-sub">Manage imports, backups, and administration securely.</div>
                             </div>
-                            <div class="welcome-mini" onclick="quickOpen('posted-documents.html','Posted Documents','tools','nav-posted-documents')">
+                            <div class="welcome-mini" onclick="quickOpen('posted-documents.html','Posted Documents','finance','nav-posted-documents')">
                                 <div class="welcome-mini-icon">📄</div>
                                 <div class="welcome-mini-title">Posted Documents</div>
                                 <div class="welcome-mini-sub">Browse and print all posted SOA billing statements.</div>
@@ -951,7 +965,7 @@
     const db = getDatabase(app);
     const firestore = getFirestore(app);
 
-    const sections = ["donor-database", "releasing", "galloner", "tools"];
+    const sections = ["donor-database", "releasing", "galloner", "finance", "tools"];
     document.getElementById("moduleFrame").addEventListener("load", () => {
         const bar = document.getElementById("frameBusy");
         if (bar) bar.classList.remove("on");
@@ -992,12 +1006,7 @@
         applyRoleAccess(currentUserRole);
         showWelcomeHome();
 
-        // DCR Entry / DCR Tracking are for master accounts only: the database rules only let masters read this path
-        try {
-            await get(ref(db, "dcrSettings/signers"));
-            showElement("btn-dcr");
-            showElement("btn-dcr-tracking");
-        } catch (error) { /* not a master account: the DCR buttons stay hidden */ }
+        applyGroupAccess(currentUserRole);
     });
 
     function clearActiveSubs() {
@@ -1062,6 +1071,48 @@
     function showModuleFrame() {
         welcomePanel.classList.add("hidden-view");
         frame.classList.remove("hidden-view");
+    }
+
+    const FINANCE_MODULES = [
+        "donor-database-tracking.html", "donor-database-statistics.html",
+        "releasing.html", "releasing-entry.html", "releasing-tracking.html", "releasing-statistics.html", "facility-manager.html",
+        "donor-entry.html", "tracking.html", "awardees.html", "settings.html",
+        "dcr.html", "dcr-tracking.html", "posted-documents.html", "disbursement.html"
+    ];
+    const LIMITED_MODULES = [
+        "donor-database-entry.html", "donor-database-tracking.html", "donor-database-deferrals.html",
+        "donor-entry.html", "tracking.html", "awardees.html"
+    ];
+    // masters: everything except Disbursement. finance: only FINANCE_MODULES. limited encoders: LIMITED_MODULES.
+    function canOpenModule(url) {
+        if (currentUserRole === "limitedEncoder") return LIMITED_MODULES.includes(url);
+        if (currentUserRole === "finance") return FINANCE_MODULES.includes(url);
+        return url !== "disbursement.html";
+    }
+    // shows the Finance group and hides what each account must not see
+    function applyGroupAccess(role) {
+        if (role === "limitedEncoder") {
+            hideElement("nav-finance");
+            hideElement("section-finance");
+            return;
+        }
+        showElement("nav-finance");
+        showElement("section-finance");
+        showElement("btn-dcr");
+        showElement("btn-dcr-tracking");
+        showElement("nav-posted-documents");
+        if (role === "finance") {
+            hideElement("nav-tools");
+            hideElement("section-tools");
+            hideElement("btn-donor-db-entry");
+            hideElement("btn-donor-db-deferrals");
+            hideElement("card-donor-records");
+            hideElement("card-monthly-report");
+            hideElement("card-system-control");
+            showElement("btn-disbursement");
+        } else {
+            hideElement("btn-disbursement");
+        }
     }
 
     function applyRoleAccess(role) {
@@ -1134,6 +1185,10 @@
     };
 
     window.openModule = function(url, title, subtitle) {
+        if (!canOpenModule(url)) {
+            alert("You do not have access to this module.");
+            return;
+        }
         if (currentUserRole === "limitedEncoder") {
             const allowedModules = [
                 "donor-database-entry.html",
@@ -1189,6 +1244,10 @@
     };
 
     window.quickOpen = function(url, title, sectionName, subBtnId) {
+        if (!canOpenModule(url)) {
+            alert("You do not have access to this module.");
+            return;
+        }
         // Permission check for limitedEncoder users
         if (currentUserRole === "limitedEncoder") {
             const allowedModules = [
