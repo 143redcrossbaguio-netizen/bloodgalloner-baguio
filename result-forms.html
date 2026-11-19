@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Result Forms</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+
+<style>
+*{box-sizing:border-box;}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f4f5f7;color:#1f2937;}
+header{background:#b30000;color:#fff;text-align:center;padding:16px 15px;}
+header h2{margin:0;font-size:24px;letter-spacing:.5px;}
+header p{margin:4px 0 0;font-size:13px;opacity:.9;}
+
+#loadingScreen{position:fixed;inset:0;background:rgba(255,255,255,.96);display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;}
+.loaderBox{background:#fff;border-radius:12px;padding:24px 30px;box-shadow:0 4px 18px rgba(0,0,0,.12);text-align:center;min-width:240px;}
+.spinner{width:42px;height:42px;border:4px solid #ffcdd2;border-top:4px solid #b30000;border-radius:50%;margin:0 auto 14px;animation:spin 1s linear infinite;}
+.loadingText{font-size:15px;color:#444;font-weight:bold;}
+@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+.hidden{display:none !important;}
+
+.wrap{max-width:1060px;margin:18px auto;padding:0 14px;}
+.card{background:#fff;border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,.1);padding:18px;margin-bottom:16px;}
+.card h3{margin:0 0 12px;font-size:16px;color:#b30000;letter-spacing:.3px;}
+.card h3 small{font-weight:400;color:#667085;font-size:12px;letter-spacing:0;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.f label{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;}
+.wrap input[type=text],.wrap input[type=date],.wrap input[type=number],.wrap select,.ov input[type=text],.ov input[type=number],.ov select{font:inherit;font-size:14px;padding:9px 10px;border:1px solid #c9ced6;border-radius:8px;background:#fff;min-width:0;width:100%;}
+.wrap input:focus,.wrap select:focus,.ov input:focus,.ov select:focus{outline:2px solid #1565c0;border-color:#1565c0;}
+.btn{border:none;border-radius:8px;padding:10px 16px;font-weight:700;font-size:13px;letter-spacing:.3px;cursor:pointer;color:#fff;background:#1565c0;white-space:nowrap;}
+.btn.red{background:#b30000;}.btn.grey{background:#607d8b;}.btn.green{background:#2e7d32;}.btn.dark{background:#444;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn.sm{padding:6px 10px;font-size:12px;}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:9px 4px;cursor:pointer;user-select:none;}
+.chk input{width:18px;height:18px;margin:0;}
+.chk small{font-weight:400;color:#667085;}
+.status{font-size:12.5px;min-height:18px;margin-top:8px;}
+.ok{color:#2e7d32;}.warn{color:#c62828;}.muted{color:#667085;}
+.linkbtn{background:none;border:none;color:#1565c0;text-decoration:underline;cursor:pointer;font-size:12px;padding:0;}
+
+.rrow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:10px;margin-bottom:8px;background:#f8f9fb;border:1px solid #e3e7ee;border-radius:10px;}
+.rrow .rInfo{flex:1 1 100%;font-size:12px;color:#667085;}
+.rrow .rInfo.bad{color:#c62828;font-weight:600;}
+
+.tblWrap{margin-top:12px;max-height:420px;overflow:auto;border:1px solid #e3e7ee;border-radius:10px;}
+table.lst{border-collapse:collapse;width:100%;font-size:13px;}
+table.lst th{position:sticky;top:0;background:#f1f3f7;text-align:left;padding:8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#555;z-index:1;}
+table.lst td{padding:5px 8px;border-top:1px solid #eef0f4;vertical-align:middle;}
+table.lst tr.sel td{background:#fff4f4;}
+table.lst tr{cursor:pointer;}
+table.lst td select,table.lst td input{padding:5px 6px !important;font-size:12.5px !important;}
+table.lst td.ser{font-weight:700;white-space:nowrap;}
+table.lst input.miss{border-color:#c62828 !important;background:#fff5f5;}
+
+.pvHead{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+.tab{border:1px solid #c9ced6;background:#fff;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer;color:#444;}
+.tab.on{background:#b30000;border-color:#b30000;color:#fff;}
+.pvBox{background:#e9ecef;border-radius:10px;padding:14px;overflow:auto;text-align:center;}
+.pvWrap{display:inline-block;position:relative;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.25);text-align:left;overflow:hidden;}
+.pvScale{transform-origin:0 0;}
+.sheet.pv::after{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #bbb;}
+
+/* ===== overlay windows ===== */
+.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;overflow:auto;}
+.ov.show{display:block;}
+.box{background:#fff;max-width:780px;margin:24px auto;padding:20px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);}
+.box.narrow{max-width:460px;margin-top:70px;}
+.box h3{margin:0 0 4px;color:#b30000;}
+.box h4{margin:18px 0 6px;font-size:13px;color:#1a1450;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #e3e7ee;padding-bottom:4px;}
+.box .hint{font-size:12px;color:#667085;line-height:1.45;margin:2px 0 8px;}
+.box table{width:100%;border-collapse:collapse;font-size:13px;}
+.box th{text-align:left;font-size:11px;text-transform:uppercase;color:#555;padding:4px 4px;}
+.box td{padding:3px 4px;vertical-align:middle;}
+.box .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;justify-content:flex-end;}
+.box pre{background:#f4f5f7;border-radius:8px;padding:8px;font-size:11.5px;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:6px 0 0;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;}
+.paperOpt{display:flex;align-items:center;gap:12px;border:2px solid #d5dae3;border-radius:10px;padding:12px 14px;margin-top:10px;cursor:pointer;}
+.paperOpt.on{border-color:#b30000;background:#fff4f4;}
+.paperOpt input{width:18px;height:18px;margin:0;}
+.paperOpt b{display:block;font-size:15px;}
+.paperOpt span{font-size:12px;color:#667085;}
+#mCanvas{width:100%;height:150px;border:1px dashed #888;border-radius:6px;background:#fff;touch-action:none;cursor:crosshair;margin-top:6px;}
+.mItem{display:flex;align-items:center;gap:10px;border-bottom:1px solid #eee;padding:6px 0;}
+.mItem img{height:38px;max-width:120px;object-fit:contain;border:1px solid #eee;background:#fff;}
+.mItem .mName{flex:1;font-weight:700;font-size:13px;}
+
+/* ===== the result form itself (same look on screen and on paper) ===== */
+.sheet{position:relative;background:#fff;overflow:hidden;margin:0 auto;break-after:page;page-break-after:always;}
+.sheet:last-child{break-after:auto;page-break-after:auto;}
+.slot{height:50%;display:flex;align-items:center;justify-content:center;}
+.rform{width:700px;font-family:Arial,Helvetica,sans-serif;color:#1f3864;font-size:13px;line-height:1.25;}
+.rf-head{display:grid;grid-template-columns:21.7% 78.3%;align-items:center;}
+.rf-head img{width:66px;height:66px;display:block;margin-left:22px;}
+.rf-org{font-size:12px;font-weight:700;line-height:1.35;}
+.rf-grid{display:grid;grid-template-columns:21.7% 33.1% 20.7% 24.5%;align-items:end;}
+.rf-info{margin-top:12px;row-gap:3px;}
+.rf-lbl{font-weight:700;font-style:italic;font-size:13.3px;}
+.rf-lbl.r{text-align:right;padding-right:6px;}
+.rf-val{font-weight:700;font-size:13.3px;color:#002060;border-bottom:3px solid #002060;height:21px;padding-left:1px;white-space:nowrap;overflow:hidden;}
+.rf-val.sm{font-size:12px;}
+.rf-dt{font-weight:700;font-style:italic;font-size:13px;color:#002060;padding-left:4px;white-space:nowrap;}
+table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:fixed;}
+.rf-tests th{font-style:italic;font-weight:700;font-size:13.3px;text-align:center;padding:1px 0;}
+.rf-tests th:first-child{text-align:left;}
+.rf-tests td{font-style:italic;padding:0;height:17.5px;overflow:hidden;white-space:nowrap;}
+.rf-tests td.tn{font-size:13.3px;}
+.rf-tests td.tb{font-size:10.7px;text-align:center;}
+.rf-tests td.tm{font-size:12px;text-align:center;}
+.rf-tests td.tr{font-size:13.3px;text-align:center;}
+.rf-note{font-weight:700;font-style:italic;font-size:13.3px;margin-top:2px;min-height:18px;}
+.rf-dates{margin-top:16px;}
+.rf-sign{display:grid;grid-template-columns:54.8% 45.2%;margin-top:14px;}
+.rf-sign .sg{height:46px;display:flex;align-items:flex-end;justify-content:center;position:relative;z-index:2;}
+.rf-sign .sg img{max-height:46px;max-width:72%;object-fit:contain;margin-bottom:-7px;}
+.rf-sign .sn{text-align:center;font-weight:700;font-size:12px;height:17px;color:#1f3864;}
+.rf-sign .sl{text-align:center;font-weight:700;font-style:italic;font-size:13.3px;height:18px;}
+
+#printArea{display:none;}
+@media print{
+  html,body{background:#fff !important;margin:0 !important;padding:0 !important;}
+  body>*:not(#printArea){display:none !important;}
+  #printArea{display:block !important;}
+  #printArea .sheet{margin:0;}
+}
+@media (max-width:640px){
+  header h2{font-size:20px;}
+  .grid2{grid-template-columns:1fr;}
+  .card{padding:14px;}
+}
+</style>
+<meta name="theme-color" content="#b30000">
+<link rel="stylesheet" href="prc-theme.css">
+</head>
+
+<body>
+
+<div id="loadingScreen">
+  <div class="loaderBox">
+    <div class="spinner"></div>
+    <div class="loadingText">Checking access...</div>
+  </div>
+</div>
+
+<header>
+  <h2>Result Forms</h2>
+  <p>Philippine Red Cross &ndash; Blood Services</p>
+</header>
+
+<div class="wrap hidden" id="mainWrap">
+
+  <!-- toolbar -->
+  <div class="card">
+    <div class="row">
+      <div class="f" style="flex:2 1 260px"><label>Medical technologist (signs the forms)</label><select id="medSel"></select></div>
+      <label class="chk"><input type="checkbox" id="incSig" checked> Print e-signature</label>
+      <button class="btn grey" id="btnMed" type="button">&#9997; MEDTECH &amp; E-SIGNATURE</button>
+      <button class="btn dark" id="btnSet" type="button">&#9881; TEST SETTINGS</button>
+    </div>
+  </div>
+
+  <!-- single serial -->
+  <div class="card">
+    <h3>Single serial <small>&ndash; scan or type the serial number, then pick the component</small></h3>
+    <div class="row">
+      <div class="f" style="flex:2 1 230px"><label>Serial number</label><input type="text" id="sSerial" placeholder="Scan or type serial number" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+      <div class="f" style="flex:1 1 190px"><label>Component</label><select id="sComp"></select></div>
+      <div class="f" style="flex:1 1 130px"><label>Blood type</label><select id="sBt"></select></div>
+      <div class="f" style="flex:1 1 150px"><label>Date of extraction</label><input type="date" id="sExt"></div>
+      <div class="f" style="flex:1 1 150px"><label>Date of expiry</label><input type="date" id="sExp"></div>
+      <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
+      <button class="btn red" id="sPrint" type="button">PRINT</button>
+    </div>
+    <div class="status" id="sStatus"></div>
+  </div>
+
+  <!-- ranges -->
+  <div class="card">
+    <h3>Serial ranges <small>&ndash; print a list. Use several rows when some serials are skipped or have no result form</small></h3>
+    <div id="rangeRows"></div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn grey" id="addRange" type="button">+ ADD RANGE</button>
+      <button class="btn grey" id="clearRanges" type="button">CLEAR ALL</button>
+      <span id="rangeTotal" class="muted" style="font-size:13px;padding:0 6px"></span>
+      <span style="flex:1"></span>
+      <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
+      <button class="btn red" id="lPrint" type="button">PRINT LIST</button>
+    </div>
+    <div class="status" id="lStatus"></div>
+    <div class="tblWrap hidden" id="listWrap"></div>
+    <div class="status muted" id="skipNote"></div>
+  </div>
+
+  <!-- preview -->
+  <div class="card">
+    <h3>Preview <small>&ndash; this is exactly what will print (each serial = 2 copies, one sheet)</small></h3>
+    <div class="pvHead">
+      <button class="tab on" id="tabSingle" type="button">Single serial</button>
+      <button class="tab" id="tabList" type="button">Range list</button>
+      <span style="flex:1"></span>
+      <button class="btn grey sm" id="pvPrev" type="button">&#8249; PREV</button>
+      <span id="pvInfo" class="muted" style="font-size:12.5px;min-width:150px;text-align:center"></span>
+      <button class="btn grey sm" id="pvNext" type="button">NEXT &#8250;</button>
+    </div>
+    <div class="pvBox" id="pvBox"></div>
+  </div>
+
+</div>
+
+<!-- print area (filled only while printing) -->
+<div id="printArea"></div>
+<style id="pageStyle"></style>
+
+<!-- paper size -->
+<div class="ov" id="paperOv">
+  <div class="box narrow">
+    <h3>&#128424; Print</h3>
+    <div class="hint" id="paperInfo"></div>
+    <div id="paperOpts"></div>
+    <div class="btnrow">
+      <button class="btn dark" id="paperCancel" type="button">CANCEL</button>
+      <button class="btn red" id="paperGo" type="button">PRINT</button>
+    </div>
+  </div>
+</div>
+
+<!-- medtech manager -->
+<div class="ov" id="medOv">
+  <div class="box" style="max-width:560px">
+    <h3>&#9997; Medical technologists &amp; e-signatures</h3>
+    <div class="hint">Type the name exactly as it should print above &ldquo;Name &amp; Signature of Medical Technologist&rdquo; (name, credentials and license number).</div>
+    <label style="font-size:12px;font-weight:700">PRINTED NAME LINE</label>
+    <input type="text" id="mName" placeholder="e.g. Mary Ann D. Pedregosa, CSR-BS/RMT Lic. No. 34376" autocomplete="off">
+    <label style="font-size:12px;font-weight:700;display:block;margin-top:10px">SIGNATURE <span style="font-weight:400;color:#666">(draw with mouse / finger, or upload an image &ndash; optional)</span></label>
+    <canvas id="mCanvas" width="560" height="190"></canvas>
+    <div class="row" style="margin-top:8px">
+      <button class="btn grey sm" id="mClear" type="button">CLEAR</button>
+      <input type="file" id="mFile" accept="image/*" style="font-size:12px;width:auto">
+    </div>
+    <div class="row" style="margin-top:8px" id="mCopyRow">
+      <div class="f" style="flex:1 1 240px"><label>Or use a saved staff e-signature</label><select id="mCopySel"></select></div>
+    </div>
+    <div class="status warn" id="mMsg"></div>
+    <div class="btnrow" style="justify-content:flex-start;margin-top:8px">
+      <button class="btn" id="mSave" type="button">SAVE</button>
+      <button class="btn grey" id="mCancelEdit" type="button">NEW / CANCEL EDIT</button>
+    </div>
+    <div id="mList" style="margin-top:14px;border-top:1px solid #ddd;padding-top:8px"></div>
+    <div class="btnrow"><button class="btn dark" id="medClose" type="button">CLOSE</button></div>
+  </div>
+</div>
+
+<!-- test settings -->
+<div class="ov" id="setOv">
+  <div class="box">
+    <h3>&#9881; Test settings</h3>
+    <div class="hint">Change these when a new test kit or version is adopted. Saved in the system and used by every computer.</div>
+    <div id="setBody"></div>
+    <div class="btnrow">
+      <button class="btn dark" id="setCancel" type="button">CANCEL</button>
+      <button class="btn green" id="setSave" type="button">SAVE SETTINGS</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ═════════ Firebase (same project as the other pages) ═════════ */
+var firebaseConfig = {
+  apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
+  authDomain: "galloners-club.firebaseapp.com",
+  databaseURL: "https://galloners-club-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "galloners-club",
+  storageBucket: "galloners-club.appspot.com",
+  messagingSenderId: "213049860421",
+  appId: "1:213049860421:web:4156aaa52b945f48711e2c",
+  measurementId: "G-XYXJH9JNXJ"
+};
+if(!firebase.apps.length){ firebase.initializeApp(firebaseConfig); }
+var auth = firebase.auth();
+var db = firebase.database();
+var fs = firebase.firestore();
+
+var LOGO = "data:image/jpeg;base64,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";
+var PATH_SIG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKIAAAAzCAYAAAAUyNP9AAAGoklEQVR42u2cZ6wUVRTHf/t8CigCT0djLKMIFmx8sYNEo8+KSkywjMGuJGLssdegPkkUSBQ7REw8CZpoLJCIGDWARlE/QKIS5YFHY+NYiBARbB/e3eQ6zuwru7O7+u7/y84tc8uZ3+0zWyIoqEGK4qQE3A3cXgrmCGoQhK8DxznnnABiUCMg/Kt8bSolgJZglqA6Q7jaXWoZQoDWYJqgOgF4JXAesAew3lR298PD0BxUDwgXAcc650JTOSEdJwzNQUVDONeD8KQsCEOPGFQ0hD8Bw5zzGFN5Ky9uADGoCAD3BT7xvHY0lbWV7gkgBtUSwHnAmZ7Xa6ZyYk/uDXPEoFpBOCkF4QU9hTCAGFQrCCcCz3hed5rK3N6kEYbmoGohbAU2O+f7pnJYX9IJPWJQNRC+6UHY0VcIQ48Y1FcAxwKLPa9TTeXVatIMPWJQbyF8OAXh8dVCCOGsudke8vXAEOBVYBOwylR+aZKybQNcAUzxvM80lddrkX4YmpsHwu2AHzKCfgW2NZU/Gli2J4FLfD//zZlaKAzNTSJT+TEnaBDwewMhnFA0hKFHbM6e8XSgja4z2hmN7BmjOJkPnOx5jTeV+UXkFUBsbih3AL73vO4zlVvrlPdtwFTP62xTmVdUfmFozn4Ig6M4ae8pLFGcDClouF7rhuaybqlT/Y9MQTilSAhDj/jvB3C8mw9NrDQfiuJkBnB1Bjilgsq1FDjSg+KRAm0wHnjF87rSVB4q2vZh+6bL+BcDT3UTZwhwKfBAAxYyY7wPjsYCjxRkhx/d/LSsMabyTj3q2Po/gmlvug7e846ZLjGV2al7zgEkFe8PYIusL85SugfoBObUuapbFGA7gHQ9DzGVD+pVqZb/AYA3OVhWVoAQv8eL4mRUFCePZUDYbiqVGucLwHmmUjKV24E1XlhHnar8ZwFp/pxyx/WEsCl7RNc6jwPeNpXNFeLdD9yYEfQVsM5UDnDxNgIDvN6tE9jTi7/JVAZ0U6y1dJ0ivJXyv9cbPm8p0CZXeM6NNU77KmBo0fPc/wyI7gjpRaDda6VtOXEnpyB821SOzkk6DZkP4UBT+a2b+VkppwwHAUc459c1tsVnwMic4HdqmM/BwMxGQ9g0IObMw9ZUgONxNyccbCqTK6R7YU7QCFPprFCkmcCTpvJxhTjveeXZpcYmqZTeE1GcTANmmMrUKvNZ5n43m8pWjWQgr7Xv43qS0cAEYBRwhql8WmMAvwR29bxuc4sAgEGmsrHGgC83ldE1bjwdtR6Wu+kR0411S2CWqXT0sfzrTGVYozujUmpu9hzeHlqGfjOVgTUwdDqfV0zltKz/RKkijy+A2DmXmMpRNQTlLuBOCtxni+LkeeADU5lWYeWepSXAh8DNpvJrztnxdGB4ufc1la+bAsQoThLg2QrxNgIDK2zw+l9vGbBT3ploFCednhFWA0eYyndRnNwI3O/87+jrsBPFyYHAcs9rjqlcXPBU4lBTWVbQtGUmcJVzDjeVNe48+iLgtB4kIcBlprIhipObgfu8sGGmsq4ZpmelvFMCp+tMZXrK+NuaynrPUC8Dp6buO8VUFqQMujWwwfNabCrjMh7uV6ayWx8f2jWutRcGYQ6InaYyooB8BtL1sgPk7OtFcTLFNeDB9G6TvKlO1VqB+RkgHmQqK7zK+qBtA6yP4mRVagXq62pgQYUH124qi7xwf+K/WxX1md4IQxcBoVP5y7iVeft6pjILmJWCcwwwDjgX2L+Xi6HGgGgqi6I42ZmuL/OHusqtSMXb5F0Pj+LkW8/9EXCDqbzhQdfujotWOIOUdbqpvJxRjkPd76Qq67PZTd4/L9hunwF7AWeZynMFDckjvXn0mF42jKXAUqAj4/uSsc0wJ8zcvjGVb7z/KMnSUO/6Xe/6JlOZlnNPWwrCkaayKsPgfm+y1PMfbiqre/kA6rIFYSp71yEb/8WLH6oo65IoTnYHzgc+dJDSlCD2QOnz1G9MZece3vuoqVxeIXx7f67lVu/9+u0gt7lf3hJ6sAYNR/nna11Np5YeGOVpNy/0K9ZTCC/tBkJM5f0M7/eabTJdZy0rLz5M5fr+UOGWbiDcz3XpvVltrXS/D5jKU31Ywd1hKofTf19JG0LXAUK/UqkX2xQzTOVagup13PmzqbT1l3q3dHP64fdaAcLiIVzo2butP9W9Nccgs7t7XT6o0E3ySf2t/nmr5ou862EBk7pqgqm8FMzgWmcUJzsGSwQFBQUFBQUFBQUFBQUFBQUFBdEPtwfTb/TzN4CufxAE8m0FAAAAAElFTkSuQmCC";
+
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(m){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]; }); };
+var pad = function(n){ return String(n).padStart(2,"0"); };
+var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+/* ═════════ constants & defaults ═════════ */
+var COMPS = { WB:"Whole Blood", PRBC:"Packed Red Blood Cell", PC:"Platelet Concentrate", FFP:"Fresh Frozen Plasma", CRYO:"Cryoprecipitate" };
+var COMP_ORDER = ["WB","PRBC","PC","FFP","CRYO"];
+var BTS = ["O Positive","A Positive","B Positive","AB Positive","O Negative","A Negative","B Negative","AB Negative"];
+var PAPERS = {
+  short:{ name:"Short bond", dim:"8.5 × 11 in", size:"8.5in 11in", w:816, h:1054 },
+  long: { name:"Long bond",  dim:"8.5 × 13 in", size:"8.5in 13in", w:816, h:1246 },
+  a4:   { name:"A4",         dim:"210 × 297 mm", size:"A4",        w:793, h:1120 }
+};
+var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+var MAX_PER_ROW = 500;
+
+var DEFAULTS = {
+  prefix: "PRC2600-",
+  dateFormat: "long",
+  /* shelf life: days, and whether the extraction day itself counts as day 1 */
+  shelf: {
+    WB:  { days:35,  first:true  },
+    PRBC:{ days:35,  first:true  },
+    PC:  { days:5,   first:true  },
+    FFP: { days:365, first:false },
+    CRYO:{ days:365, first:false }
+  },
+  tests: [
+    { key:"syph",  label:"Syphilis",         brand:"ARCHITECT Syphilis TP",          method:"CMIA",  result:"NEGATIVE" },
+    { key:"hbsag", label:"HBsAg",            brand:"ARCHITECT HBsAg Qualitative II", method:"CMIA",  result:"NONREACTIVE" },
+    { key:"hcv",   label:"HCV Ag-Ab",        brand:"ARCHITECT Anti-HCV II",          method:"CMIA",  result:"NONREACTIVE" },
+    { key:"hiv",   label:"HIV 1 & 2 Ag-Ab", brand:"ARCHITECT HIV Ag/Ab Combo",      method:"CMIA",  result:"NONREACTIVE" },
+    { key:"mal",   label:"Malarial Antigen", brand:"SD BIOSENSOR Malaria Antigen",   method:"ELISA", result:"NEGATIVE" }
+  ],
+  brands: ["ARCHITECT Syphilis TP","ARCHITECT HBsAg Qualitative II","ARCHITECT Anti-HCV II","ARCHITECT HIV Ag/Ab Combo","TREPSURE","Monolisa HBs Ag ULTRA","Monolisa HCV Ag-Ab ULTRA V2","Genscreen ULTRA HIV Ag-Ab","SD BIOSENSOR Malaria Antigen"],
+  /* a method listed here WITH a meaning is explained in the footnote of the form */
+  methodNames: { CMIA:"Chemiluminescent Microparticle Immunoassay", ELISA:"" },
+  pathologist: { name:"MELINDA M. FLORES, MD, FPSP", title:"Chapter Pathologist", image:"" },
+  /* where the extraction date is read from (donor tracking). Editable in Test settings. */
+  lookup: { collection:"donorDatabase", serialField:"serialNumber", dateField:"donationDate", bloodField:"bloodType" }
+};
+var MEDTECH_SEED = [
+  "Gideon Nick A. Negradas, RMT Lic. No.0100565",
+  "April Joy G. Roque, RMT Lic. No. 101146",
+  "Frances Prescilla S. Khayad, RMT Lic. No. 47258",
+  "Czarina Therese B. Lenon, RMT Lic. No. 74412",
+  "Terre, Jennelyn",
+  "Cherish Ruth P. Culat, RMT Lic. No. 0136756",
+  "Mary Ann D. Pedregosa, CSR-BS/RMT Lic. No. 34376",
+  "Honasan E. Ohelen, RMT, Lic. No.0125167"
+];
+
+function merge(d, s){
+  if(Array.isArray(d)){
+    if(s && typeof s === "object"){ var a = Array.isArray(s) ? s : Object.keys(s).map(function(k){ return s[k]; }); return a.length ? clone(a) : clone(d); }
+    return clone(d);
+  }
+  if(d && typeof d === "object"){
+    var o = {}, sObj = (s && typeof s === "object") ? s : {};
+    Object.keys(d).concat(Object.keys(sObj)).forEach(function(k){
+      if(o.hasOwnProperty(k)) return;
+      o[k] = (k in d) ? merge(d[k], sObj[k]) : sObj[k];
+    });
+    return o;
+  }
+  return (s === undefined || s === null) ? d : s;
+}
+
+/* ═════════ state ═════════ */
+var settings = clone(DEFAULTS);
+var medtechs = {};
+var staffSigs = {};
+var selMed = lsGet("rf_medtech") || "";
+var incSig = lsGet("rf_incsig") !== "0";
+var paper = lsGet("rf_paper") || "short";
+if(!PAPERS[paper]) paper = "short";
+var useDate = false;
+
+var single = { serial:"", comp:"", bt:"", ext:"", exp:"", extManual:false, expManual:false, state:"" };
+var ranges = [];
+var rangeSeq = 0;
+var OV = {};              /* per-serial edits in the list: { serial: {bt, ext, exp} } */
+var SKIP = {};            /* serials removed from the list */
+var listBase = [];        /* serials generated from the ranges */
+var CACHE = new Map();    /* tracking lookups: serial -> {ext, bt} | null */
+var INFLIGHT = new Set();
+var ERRS = {};            /* serial -> error text */
+var previewMode = "single";
+var previewIdx = 0;
+
+/* ═════════ dates ═════════ */
+function todayISO(){
+  return new Intl.DateTimeFormat("en-CA",{ timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date());
+}
+function fmtDate(iso){
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if(!m) return "";
+  var y = +m[1], mo = +m[2], d = +m[3], f = settings.dateFormat;
+  if(f === "num") return pad(mo) + "/" + pad(d) + "/" + y;
+  if(f === "short") return MONTHS[mo-1].slice(0,3) + " " + d + ", " + y;
+  return MONTHS[mo-1] + " " + d + ", " + y;
+}
+function addDaysISO(iso, n){
+  var p = iso.split("-").map(Number);
+  var t = new Date(Date.UTC(p[0], p[1]-1, p[2]) + n * 86400000);
+  return t.getUTCFullYear() + "-" + pad(t.getUTCMonth()+1) + "-" + pad(t.getUTCDate());
+}
+function calcExpiry(ext, comp){
+  if(!ext || !comp) return "";
+  var c = settings.shelf[comp];
+  var days = c ? Number(c.days) : 0;
+  if(!days) return "";
+  return addDaysISO(ext, days - (c.first ? 1 : 0));
+}
+function toISO(v){
+  if(v === undefined || v === null || v === "") return "";
+  if(typeof v === "object" && typeof v.toDate === "function") v = v.toDate();
+  if(typeof v === "number") v = new Date(v);
+  if(v instanceof Date){
+    if(isNaN(v)) return "";
+    return new Intl.DateTimeFormat("en-CA",{ timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit" }).format(v);
+  }
+  var s = String(v).trim(), m;
+  if((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]);
+  if((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s))) return m[3] + "-" + pad(+m[1]) + "-" + pad(+m[2]);
+  var d = new Date(s + " 12:00");
+  if(!isNaN(d)) return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+  return "";
+}
+
+/* ═════════ serial helpers ═════════ */
+function parseSerial(s){
+  s = String(s || "").toUpperCase().replace(/\s+/g,"");
+  var m = /^(.*?)(\d+)$/.exec(s);
+  return m ? { prefix:m[1], digits:m[2] } : null;
+}
+function resolveSerial(raw){
+  var p = parseSerial(raw);
+  if(!p) return null;
+  if(!p.prefix) p.prefix = settings.prefix;
+  return p;
+}
+function normSerial(raw){
+  var s = String(raw || "").toUpperCase().replace(/[\s\u0000-\u001f]+/g,"");
+  if(/^\d+$/.test(s)) s = settings.prefix + s;
+  return s;
+}
+function isCompleteSerial(s){ return /\d{6,}$/.test(s || ""); }
+function digitsOf(s){ var m = /(\d+)$/.exec(s || ""); return m ? m[1] : ""; }
+
+function parseExcept(text, prefix, width){
+  var set = {};
+  String(text || "").split(/[\s,;]+/).forEach(function(tok){
+    if(!tok) return;
+    var p = parseSerial(tok);
+    if(!p) return;
+    if(p.prefix && p.prefix !== prefix) return;
+    set[String(Number(p.digits)).padStart(width,"0")] = true;
+  });
+  return set;
+}
+function expandRange(r){
+  var from = String(r.from || "").trim();
+  if(!from) return { empty:true };
+  var a = resolveSerial(from);
+  if(!a) return { err:"The first serial is not valid." };
+  var toRaw = String(r.to || "").trim();
+  var n1 = Number(a.digits), w = a.digits.length, n2 = n1;
+  if(a.digits.length > 15) return { err:"Serial is too long." };
+  if(toRaw){
+    var tp = parseSerial(toRaw);
+    if(!tp) return { err:"The \"To\" serial is not valid." };
+    var bd = tp.digits;
+    if(!tp.prefix){
+      if(bd.length < a.digits.length) bd = a.digits.slice(0, a.digits.length - bd.length) + bd;   /* shorthand: 26005567 → 80 */
+    }else if(tp.prefix !== a.prefix){
+      return { err:"\"From\" and \"To\" have different prefixes." };
+    }
+    n2 = Number(bd);
+  }
+  if(n2 < n1) return { err:"\"To\" is lower than \"From\"." };
+  var count = n2 - n1 + 1;
+  if(count > MAX_PER_ROW) return { err:"Too many serials in one row (" + count + "). Maximum is " + MAX_PER_ROW + "." };
+  var exc = parseExcept(r.exc, a.prefix, w), list = [];
+  for(var i = n1; i <= n2; i++){
+    var d = String(i).padStart(w,"0");
+    if(exc[d]) continue;
+    list.push(a.prefix + d);
+  }
+  return { list:list, skipped:count - list.length, from:a.prefix + a.digits, to:a.prefix + String(n2).padStart(w,"0"), count:count };
+}
+
+function normBT(v){
+  if(!v) return "";
+  var s = String(v).toUpperCase().replace(/[^A-Z+\-]/g,"");
+  var grp = /^(AB|A|B|O)/.exec(s);
+  if(!grp) return "";
+  var rest = s.slice(grp[1].length), sign = "";
+  if(/POS|\+/.test(rest)) sign = "Positive";
+  else if(/NEG|-/.test(rest)) sign = "Negative";
+  if(!sign) return "";
+  var name = grp[1] + " " + sign;
+  return BTS.indexOf(name) >= 0 ? name : "";
+}
+
+/* ═════════ tracking lookup (isolated – this is the only place that reads donor data) ═════════ */
+async function queryChunk(chunk){
+  var L = settings.lookup, variants = [];
+  chunk.forEach(function(s){ [s, digitsOf(s)].forEach(function(v){ if(v && variants.indexOf(v) < 0) variants.push(v); }); });
+  var snap = await fs.collection(L.collection).where(L.serialField, "in", variants).get();
+  snap.forEach(function(doc){
+    var raw = String(doc.get(L.serialField) == null ? "" : doc.get(L.serialField)).toUpperCase().replace(/\s+/g,"");
+    var hit = chunk.filter(function(s){ return s === raw || digitsOf(s) === raw; })[0];
+    if(!hit || (CACHE.get(hit))) return;
+    CACHE.set(hit, {
+      ext: toISO(doc.get(L.dateField)),
+      bt: L.bloodField ? normBT(doc.get(L.bloodField)) : ""
+    });
+  });
+}
+async function fetchTracking(serials){
+  var need = serials.filter(function(s){ return !CACHE.has(s) && !INFLIGHT.has(s); });
+  if(!need.length) return;
+  need.forEach(function(s){ INFLIGHT.add(s); delete ERRS[s]; });
+  var L = settings.lookup;
+  if(!L.collection || !L.serialField || !L.dateField){
+    need.forEach(function(s){ INFLIGHT.delete(s); CACHE.set(s, null); });
+    return;
+  }
+  var chunks = [];
+  for(var i = 0; i < need.length; i += 5) chunks.push(need.slice(i, i + 5));
+  var idx = 0;
+  async function worker(){
+    while(idx < chunks.length){
+      var c = chunks[idx++];
+      try{ await queryChunk(c); }
+      catch(e){ console.error("Tracking lookup error:", e); c.forEach(function(s){ ERRS[s] = (e && e.message) || "error"; }); }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  need.forEach(function(s){
+    INFLIGHT.delete(s);
+    if(!CACHE.has(s) && !ERRS[s]) CACHE.set(s, null);
+  });
+}
+
+/* ═════════ items ═════════ */
+function resolveListItem(it){
+  var ov = OV[it.serial] || {};
+  var c = CACHE.get(it.serial);
+  var ext = ov.ext !== undefined ? ov.ext : ((c && c.ext) || "");
+  var bt = ov.bt !== undefined ? ov.bt : (it.bt || (c && c.bt) || "");
+  var exp = ov.exp !== undefined ? ov.exp : calcExpiry(ext, it.comp);
+  var state = "";
+  if(!it.comp) state = "nocomp";
+  else if(ov.ext !== undefined) state = "manual";
+  else if(INFLIGHT.has(it.serial)) state = "wait";
+  else if(ERRS[it.serial]) state = "err";
+  else if(c && c.ext) state = "ok";
+  else if(c === null || (c && !c.ext)) state = "none";
+  else state = "idle";
+  return { serial:it.serial, comp:it.comp, bt:bt, ext:ext, exp:exp, state:state };
+}
+function visibleBase(){ return listBase.filter(function(it){ return !SKIP[it.serial]; }); }
+function listResolved(){ return visibleBase().map(resolveListItem); }
+function singleItem(){ return { serial:single.serial, comp:single.comp, bt:single.bt, ext:single.ext, exp:single.exp, state:single.state }; }
+
+/* ═════════ the form ═════════ */
+function noteText(){
+  var seen = [], out = [];
+  settings.tests.forEach(function(t){
+    var m = String(t.method || "").trim();
+    if(m && seen.indexOf(m) < 0){
+      seen.push(m);
+      var meaning = (settings.methodNames[m] || "").trim();
+      if(meaning) out.push(m + " stands for " + meaning);
+    }
+  });
+  return out.length ? "***Note: " + out.join("; ") : "";
+}
+function currentMedtech(){ return selMed && medtechs[selMed] ? medtechs[selMed] : null; }
+
+function formHTML(it){
+  var S = settings;
+  var dateTxt = useDate ? fmtDate(todayISO()) : "";
+  var med = currentMedtech();
+  var medLine = med ? med.label : "";
+  var medSig = (incSig && med && med.image) ? '<img src="' + esc(med.image) + '" alt="">' : "";
+  var pathSig = S.pathologist.image || PATH_SIG;
+  var compLabel = it.comp ? COMPS[it.comp] : "";
+  var rows = S.tests.map(function(t){
+    return '<tr><td class="tn">' + esc(t.label) + '</td><td class="tb">' + esc(t.brand) + '</td><td class="tm">' + esc(t.method) + '</td><td class="tr">' + esc(t.result) + '</td></tr>';
+  }).join("");
+  return '<div class="rform">' +
+    '<div class="rf-head"><div><img src="' + LOGO + '" alt=""></div><div class="rf-org">PHILIPPINE RED CROSS<br>Baguio City Chapter<br>#39 Harrison Road, Baguio City<br>Tel. No. (074)661-1770 / 0908 885 2707<br>Email Add: bloodservices.redcrossbaguio@gmail.com/baguio@redcross.org.ph</div></div>' +
+    '<div class="rf-grid rf-info">' +
+      '<div class="rf-lbl">SERIAL NO:</div><div class="rf-val">' + esc(it.serial) + '</div><div class="rf-lbl r">DATE:</div><div class="rf-dt">' + esc(dateTxt) + '</div>' +
+      '<div class="rf-lbl">BLOOD TYPE:</div><div class="rf-val">' + esc(it.bt) + '</div><div></div><div></div>' +
+      '<div class="rf-lbl">BLOOD COMPONENT:</div><div class="rf-val sm">' + esc(compLabel) + '</div><div></div><div></div>' +
+    '</div>' +
+    '<table class="rf-tests"><colgroup><col style="width:21.7%"><col style="width:33.1%"><col style="width:20.7%"><col style="width:24.5%"></colgroup>' +
+      '<thead><tr><th>Test Done</th><th>Brand</th><th>Method</th><th>Result</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="rf-note">' + esc(noteText()) + '</div>' +
+    '<div class="rf-grid rf-dates">' +
+      '<div class="rf-lbl">Date of Extraction:</div><div class="rf-val">' + esc(fmtDate(it.ext)) + '</div>' +
+      '<div class="rf-lbl" style="padding-left:2px">Date of Expiry:</div><div class="rf-val">' + esc(fmtDate(it.exp)) + '</div>' +
+    '</div>' +
+    '<div class="rf-sign">' +
+      '<div class="sg">' + medSig + '</div><div class="sg"><img src="' + esc(pathSig) + '" alt=""></div>' +
+      '<div class="sn">' + esc(medLine) + '</div><div></div>' +
+      '<div class="sl">Name &amp; Signature of Medical Technologist</div><div class="sl">' + esc(S.pathologist.name) + '</div>' +
+      '<div></div><div class="sl">' + esc(S.pathologist.title) + '</div>' +
+    '</div>' +
+  '</div>';
+}
+function sheetHTML(it, cls){
+  var P = PAPERS[paper], f = formHTML(it);
+  return '<div class="sheet ' + (cls || "") + '" style="width:' + P.w + 'px;height:' + P.h + 'px"><div class="slot">' + f + '</div><div class="slot">' + f + '</div></div>';
+}
+
+/* ═════════ preview ═════════ */
+function previewItems(){
+  return previewMode === "single" ? [singleItem()] : listResolved();
+}
+function renderPreview(){
+  var items = previewItems();
+  var box = $("pvBox");
+  var n = items.length;
+  if(previewIdx >= n) previewIdx = Math.max(0, n - 1);
+  var it = n ? items[previewIdx] : { serial:"", comp:"", bt:"", ext:"", exp:"" };
+  var P = PAPERS[paper];
+  var avail = Math.max(280, box.clientWidth - 28);
+  var scale = Math.min(1, avail / P.w);
+  box.innerHTML = '<div class="pvWrap" style="width:' + Math.round(P.w * scale) + 'px;height:' + Math.round(P.h * scale) + 'px">' +
+    '<div class="pvScale" style="transform:scale(' + scale + ');width:' + P.w + 'px;height:' + P.h + 'px">' + sheetHTML(it, "pv") + '</div></div>';
+  $("tabSingle").classList.toggle("on", previewMode === "single");
+  $("tabList").classList.toggle("on", previewMode === "list");
+  $("pvPrev").disabled = previewMode !== "list" || previewIdx <= 0;
+  $("pvNext").disabled = previewMode !== "list" || previewIdx >= n - 1;
+  $("pvInfo").textContent = previewMode === "list"
+    ? (n ? "Sheet " + (previewIdx + 1) + " of " + n + (it.serial ? " · " + it.serial : "") : "No serials in the list yet")
+    : (it.serial ? it.serial : "Enter a serial number above");
+}
+
+/* ═════════ single serial ═════════ */
+function fillSelect(sel, opts, blank){
+  var cur = sel.value;
+  sel.innerHTML = (blank !== undefined ? '<option value="">' + esc(blank) + '</option>' : "") +
+    opts.map(function(o){ return '<option value="' + esc(o.v) + '">' + esc(o.t) + '</option>'; }).join("");
+  sel.value = cur;
+}
+function compOptions(){ return COMP_ORDER.map(function(k){ return { v:k, t:k + " – " + COMPS[k] }; }); }
+function btOptions(){ return BTS.map(function(b){ return { v:b, t:b }; }); }
+
+function singleStatus(){
+  var el = $("sStatus"), s = single.serial;
+  if(!s){ el.className = "status"; el.textContent = ""; return; }
+  if(!isCompleteSerial(s)){ el.className = "status muted"; el.textContent = ""; return; }
+  var c = CACHE.get(s);
+  if(INFLIGHT.has(s)){ el.className = "status muted"; el.textContent = "Checking tracking…"; return; }
+  if(ERRS[s]){ el.className = "status warn"; el.textContent = "⚠ Could not read tracking (" + ERRS[s] + "). Type the extraction date, or check Test settings → Tracking lookup."; return; }
+  if(single.extManual){ el.className = "status muted"; el.textContent = "Extraction date typed manually."; return; }
+  if(c && c.ext){ el.className = "status ok"; el.textContent = "✔ Found in tracking – extracted " + fmtDate(c.ext) + (c.bt ? " · " + c.bt : ""); return; }
+  if(c === null || c){ el.className = "status warn"; el.textContent = "⚠ Not found in tracking – type the extraction date."; return; }
+  el.className = "status"; el.textContent = "";
+}
+function syncSingleInputs(){
+  $("sExt").value = single.ext;
+  $("sExp").value = single.exp;
+  $("sBt").value = single.bt;
+  $("sExt").style.borderColor = (single.serial && single.comp && !single.ext) ? "#c62828" : "";
+}
+function recalcSingle(){
+  if(!single.expManual) single.exp = calcExpiry(single.ext, single.comp);
+  syncSingleInputs();
+  singleStatus();
+  previewMode = "single";
+  renderPreview();
+}
+var singleTimer = null;
+function onSingleSerial(){
+  var s = normSerial($("sSerial").value);
+  if(s !== single.serial){
+    single.serial = s;
+    single.ext = ""; single.exp = ""; single.extManual = false; single.expManual = false; single.bt = "";
+    var c = CACHE.get(s);
+    if(c){ single.ext = c.ext || ""; single.bt = c.bt || ""; }
+  }
+  recalcSingle();
+  clearTimeout(singleTimer);
+  if(isCompleteSerial(s) && !CACHE.has(s)){ singleTimer = setTimeout(doSingleLookup, 380); }
+}
+async function doSingleLookup(){
+  var s = single.serial;
+  if(!isCompleteSerial(s)) return;
+  singleStatus();
+  var p = fetchTracking([s]);
+  singleStatus();
+  await p;
+  if(single.serial !== s) return;
+  var c = CACHE.get(s);
+  if(c){
+    if(!single.extManual) single.ext = c.ext || "";
+    if(c.bt && !single.bt) single.bt = c.bt;
+  }
+  recalcSingle();
+}
+
+/* ═════════ ranges ═════════ */
+function newRange(){ return { id:"r" + (++rangeSeq), from:"", to:"", exc:"", comp:"", bt:"" }; }
+function rangeRowHTML(r){
+  return '<div class="rrow" data-id="' + r.id + '">' +
+    '<div class="f" style="flex:1.4 1 170px"><label>From</label><input type="text" class="rFrom" placeholder="PRC2600-26005567" value="' + esc(r.from) + '" autocomplete="off" spellcheck="false"></div>' +
+    '<div class="f" style="flex:1.4 1 170px"><label>To</label><input type="text" class="rTo" placeholder="PRC2600-26005580" value="' + esc(r.to) + '" autocomplete="off" spellcheck="false"></div>' +
+    '<div class="f" style="flex:1.2 1 150px"><label>Skip (optional)</label><input type="text" class="rExc" placeholder="e.g. 26005570, 26005575" value="' + esc(r.exc) + '" autocomplete="off" spellcheck="false"></div>' +
+    '<div class="f" style="flex:1.2 1 170px"><label>Component</label><select class="rComp"></select></div>' +
+    '<div class="f" style="flex:1 1 120px"><label>Blood type</label><select class="rBt"></select></div>' +
+    '<button class="btn grey rDel" type="button" title="Remove this row">&#10005;</button>' +
+    '<div class="rInfo"></div></div>';
+}
+function renderRangeRows(){
+  var host = $("rangeRows");
+  host.innerHTML = ranges.map(rangeRowHTML).join("");
+  ranges.forEach(function(r){
+    var row = host.querySelector('[data-id="' + r.id + '"]');
+    fillSelect(row.querySelector(".rComp"), compOptions(), "— component —");
+    fillSelect(row.querySelector(".rBt"), btOptions(), "— blood type —");
+    row.querySelector(".rComp").value = r.comp;
+    row.querySelector(".rBt").value = r.bt;
+  });
+  refreshList(false);
+}
+function buildListBase(){
+  var seen = {}, out = [], dups = 0;
+  ranges.forEach(function(r){
+    var res = expandRange(r);
+    r._res = res;
+    if(!res.list) return;
+    res.list.forEach(function(s){
+      if(seen[s]){ dups++; return; }
+      seen[s] = true;
+      out.push({ serial:s, comp:r.comp, bt:r.bt });
+    });
+  });
+  listBase = out;
+  return dups;
+}
+function renderRangeInfos(dups){
+  ranges.forEach(function(r){
+    var row = $("rangeRows").querySelector('[data-id="' + r.id + '"]');
+    if(!row) return;
+    var el = row.querySelector(".rInfo"), res = r._res || {};
+    el.className = "rInfo";
+    if(res.empty){ el.textContent = "Enter the first serial. Leave “To” empty for a single serial, or type just the last digits (e.g. 80)."; return; }
+    if(res.err){ el.className = "rInfo bad"; el.textContent = res.err; return; }
+    var t = res.from + (res.to !== res.from ? " → " + res.to : "") + " · " + res.list.length + " serial" + (res.list.length === 1 ? "" : "s") +
+      (res.skipped ? " (" + res.skipped + " skipped)" : "") + (r.comp ? "" : " · choose a component");
+    el.textContent = t;
+  });
+  $("lStatus").className = "status" + (dups ? " warn" : "");
+  $("lStatus").textContent = dups ? "⚠ " + dups + " serial(s) appear in more than one row – each is listed once." : "";
+}
+var listTimer = null;
+function refreshList(fetch){
+  var dups = buildListBase();
+  renderRangeInfos(dups);
+  renderListTable();
+  var n = visibleBase().length;
+  $("rangeTotal").textContent = n ? n + " serial" + (n === 1 ? "" : "s") + " → " + n + " sheet" + (n === 1 ? "" : "s") + " (2 copies each)" : "";
+  previewMode = "list";
+  if(previewIdx >= n) previewIdx = Math.max(0, n - 1);
+  renderPreview();
+  if(fetch) fetchList();
+}
+async function fetchList(){
+  var ss = visibleBase().map(function(i){ return i.serial; });
+  var p = fetchTracking(ss);
+  renderListTable();
+  await p;
+  renderListTable();
+  if(previewMode === "list") renderPreview();
+}
+function stateText(s){
+  return { ok:'<span class="ok">✔ tracking</span>', none:'<span class="warn">⚠ not in tracking</span>', manual:'<span class="muted">✎ edited</span>',
+           wait:'<span class="muted">checking…</span>', err:'<span class="warn">⚠ lookup error</span>', nocomp:'<span class="warn">choose component</span>', idle:'<span class="muted">—</span>' }[s] || "";
+}
+function renderListTable(){
+  var wrap = $("listWrap");
+  var items = listResolved();
+  var removed = Object.keys(SKIP).length;
+  $("skipNote").innerHTML = removed ? removed + " serial(s) removed from the list · <button class=\"linkbtn\" id=\"restoreSkips\" type=\"button\">restore</button>" : "";
+  if(!items.length){ wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
+  wrap.classList.remove("hidden");
+  var btOpts = '<option value="">—</option>' + BTS.map(function(b){ return '<option>' + b + '</option>'; }).join("");
+  wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
+    items.map(function(it, i){
+      var sel = btOpts.replace('<option>' + it.bt + '</option>', '<option selected>' + it.bt + '</option>');
+      return '<tr data-i="' + i + '" data-s="' + esc(it.serial) + '" class="' + (previewMode === "list" && i === previewIdx ? "sel" : "") + '">' +
+        '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td>' + esc(it.comp ? it.comp : "—") + '</td>' +
+        '<td><select class="tBt">' + sel + '</select></td>' +
+        '<td><input type="date" class="tExt' + (it.ext ? "" : " miss") + '" value="' + esc(it.ext) + '"></td>' +
+        '<td><input type="date" class="tExp" value="' + esc(it.exp) + '"></td>' +
+        '<td>' + stateText(it.state) + '</td><td><button class="btn grey sm tDel" type="button" title="Remove from list">&#10005;</button></td></tr>';
+    }).join("") + '</tbody></table>';
+}
+
+/* ═════════ printing ═════════ */
+var pendingPrint = null;
+function askPaper(items, go){
+  var n = items.length;
+  $("paperInfo").textContent = n + " serial" + (n === 1 ? "" : "s") + " → " + n + " sheet" + (n === 1 ? "" : "s") + ". Each sheet holds 2 half-page copies of the same serial.";
+  $("paperOpts").innerHTML = Object.keys(PAPERS).map(function(k){
+    var P = PAPERS[k];
+    return '<label class="paperOpt' + (k === paper ? " on" : "") + '"><input type="radio" name="paperSel" value="' + k + '"' + (k === paper ? " checked" : "") + '><div><b>' + P.name + '</b><span>' + P.dim + '</span></div></label>';
+  }).join("");
+  pendingPrint = go;
+  $("paperOv").classList.add("show");
+}
+function pickedPaper(){
+  var r = document.querySelector('input[name="paperSel"]:checked');
+  return r ? r.value : paper;
+}
+function printItems(items){
+  if(!items.length){ alert("Nothing to print yet. Enter a serial number first."); return; }
+  var noSerial = items.filter(function(i){ return !i.serial; }).length;
+  if(noSerial){ alert("Please enter the serial number first."); return; }
+  var noComp = items.filter(function(i){ return !i.comp; }).length;
+  if(noComp){ alert(noComp + " serial(s) have no component yet. Please choose a component."); return; }
+  var missExt = items.filter(function(i){ return !i.ext; }).length;
+  var missBt = items.filter(function(i){ return !i.bt; }).length;
+  if(missExt || missBt){
+    var parts = [];
+    if(missExt) parts.push(missExt + " without an extraction date");
+    if(missBt) parts.push(missBt + " without a blood type");
+    if(!confirm("Some forms are incomplete: " + parts.join(" and ") + ".\n\nPrint anyway? (those fields will be blank)")) return;
+  }
+  askPaper(items, function(){
+    $("printArea").innerHTML = items.map(function(it){ return sheetHTML(it, ""); }).join("");
+    $("pageStyle").textContent = "@page{size:" + PAPERS[paper].size + ";margin:0;}";
+    setTimeout(function(){ window.print(); }, 250);
+  });
+}
+window.addEventListener("afterprint", function(){ $("printArea").innerHTML = ""; });
+
+/* ═════════ settings window ═════════ */
+function openSettings(){
+  var S = settings;
+  var brandList = S.brands.slice();
+  S.tests.forEach(function(t){ if(t.brand && brandList.indexOf(t.brand) < 0) brandList.push(t.brand); });
+  var methodList = Object.keys(S.methodNames);
+  var h = '';
+  h += '<h4>Tests printed on the form</h4><div class="hint">Pick a saved brand or type a new one &ndash; new brands are remembered.</div>';
+  h += '<table><tr><th>Test</th><th>Brand / reagent</th><th>Method</th><th>Result</th></tr>';
+  S.tests.forEach(function(t, i){
+    h += '<tr data-t="' + i + '"><td style="font-weight:700;white-space:nowrap">' + esc(t.label) + '</td>' +
+      '<td><input type="text" class="tBrand" list="dlBrands" value="' + esc(t.brand) + '"></td>' +
+      '<td style="width:110px"><input type="text" class="tMethod" list="dlMethods" value="' + esc(t.method) + '"></td>' +
+      '<td style="width:150px"><input type="text" class="tResult" list="dlResults" value="' + esc(t.result) + '"></td></tr>';
+  });
+  h += '</table>';
+  h += '<datalist id="dlBrands">' + brandList.map(function(b){ return '<option value="' + esc(b) + '">'; }).join("") + '</datalist>';
+  h += '<datalist id="dlMethods">' + methodList.map(function(b){ return '<option value="' + esc(b) + '">'; }).join("") + '</datalist>';
+  h += '<datalist id="dlResults"><option value="NEGATIVE"><option value="NONREACTIVE"><option value="POSITIVE"><option value="REACTIVE"></datalist>';
+
+  h += '<h4>Method meanings</h4><div class="hint">A method with a meaning here is explained in the footnote of the form (e.g. &ldquo;CMIA stands for …&rdquo;). Leave the meaning empty to keep a method out of the footnote.</div>';
+  h += '<table id="mmTbl"><tr><th style="width:130px">Method</th><th>Meaning</th></tr>';
+  methodList.forEach(function(m){
+    h += '<tr><td><input type="text" class="mmName" value="' + esc(m) + '"></td><td><input type="text" class="mmMean" value="' + esc(S.methodNames[m]) + '"></td></tr>';
+  });
+  h += '<tr><td><input type="text" class="mmName" placeholder="new method"></td><td><input type="text" class="mmMean" placeholder="meaning (optional)"></td></tr></table>';
+
+  h += '<h4>Shelf life</h4><div class="hint">Expiry = extraction date + days. Tick the box when the extraction day itself counts as day 1 (expiry = extraction + days − 1).</div>';
+  h += '<table><tr><th>Component</th><th style="width:110px">Days</th><th>Extraction day = day 1</th></tr>';
+  COMP_ORDER.forEach(function(k){
+    var c = S.shelf[k] || { days:0, first:false };
+    h += '<tr data-k="' + k + '"><td style="font-weight:700">' + k + ' <span class="muted" style="font-weight:400">' + COMPS[k] + '</span></td>' +
+      '<td><input type="number" min="1" class="shDays" value="' + esc(c.days) + '"></td>' +
+      '<td><input type="checkbox" class="shFirst" style="width:18px;height:18px"' + (c.first ? " checked" : "") + '></td></tr>';
+  });
+  h += '</table>';
+
+  h += '<h4>Form</h4><div class="grid2">' +
+    '<div class="f"><label>Default serial prefix</label><input type="text" id="stPrefix" value="' + esc(S.prefix) + '"></div>' +
+    '<div class="f"><label>Date format</label><select id="stDate"><option value="long">November 20, 2026</option><option value="short">Nov 20, 2026</option><option value="num">11/20/2026</option></select></div>' +
+    '<div class="f"><label>Pathologist name</label><input type="text" id="stPathName" value="' + esc(S.pathologist.name) + '"></div>' +
+    '<div class="f"><label>Pathologist title</label><input type="text" id="stPathTitle" value="' + esc(S.pathologist.title) + '"></div>' +
+    '</div>' +
+    '<div class="row" style="margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">Pathologist signature:</span><img id="stPathImg" src="' + esc(S.pathologist.image || PATH_SIG) + '" alt="" style="height:34px;border:1px solid #eee;background:#fff"><input type="file" id="stPathFile" accept="image/*" style="width:auto;font-size:12px"></div>';
+
+  h += '<h4>Tracking lookup <small style="text-transform:none;font-weight:400;color:#667085">(where the extraction date is read from)</small></h4>' +
+    '<div class="hint">Names of the collection and fields in the donor database that hold the serial number and the date of extraction. Use TEST to check them.</div>' +
+    '<div class="grid2">' +
+    '<div class="f"><label>Collection</label><input type="text" id="lkCol" value="' + esc(S.lookup.collection) + '"></div>' +
+    '<div class="f"><label>Serial number field</label><input type="text" id="lkSer" value="' + esc(S.lookup.serialField) + '"></div>' +
+    '<div class="f"><label>Extraction / donation date field</label><input type="text" id="lkDate" value="' + esc(S.lookup.dateField) + '"></div>' +
+    '<div class="f"><label>Blood type field (optional)</label><input type="text" id="lkBlood" value="' + esc(S.lookup.bloodField) + '"></div>' +
+    '</div>' +
+    '<div class="row" style="margin-top:8px"><div class="f" style="flex:1 1 200px"><label>Test with a serial number</label><input type="text" id="lkTest" placeholder="PRC2600-26005567"></div><button class="btn grey" id="lkGo" type="button">TEST</button></div>' +
+    '<pre id="lkOut" class="hidden"></pre>';
+  $("setBody").innerHTML = h;
+  $("stDate").value = S.dateFormat;
+  $("setOv").classList.add("show");
+  $("lkGo").onclick = testLookup;
+  $("stPathFile").onchange = function(e){
+    var f = e.target.files[0]; if(!f) return;
+    imageToSig(f, 420, 150).then(function(url){ $("stPathImg").src = url; $("stPathImg").dataset.new = url; }).catch(function(){ alert("Could not read that image."); });
+  };
+}
+function stringifyDoc(v){
+  return JSON.stringify(v, function(k, val){
+    if(val && typeof val === "object" && typeof val.toDate === "function"){ try{ return "Timestamp(" + val.toDate().toISOString() + ")"; }catch(e){} }
+    return val;
+  }, 1);
+}
+async function testLookup(){
+  var out = $("lkOut"); out.classList.remove("hidden"); out.textContent = "Checking…";
+  var col = $("lkCol").value.trim(), sf = $("lkSer").value.trim();
+  var s = normSerial($("lkTest").value);
+  try{
+    if(!col){ out.textContent = "Type the collection name first."; return; }
+    if(sf && isCompleteSerial(s)){
+      var snap = await fs.collection(col).where(sf, "in", [s, digitsOf(s)]).limit(2).get();
+      if(!snap.empty){
+        out.textContent = "FOUND " + snap.size + " record(s) with " + sf + " = " + s + ".\nFields of the first record:\n" + stringifyDoc(snap.docs[0].data()).slice(0, 2500);
+        return;
+      }
+    }
+    var smp = await fs.collection(col).limit(1).get();
+    if(smp.empty){ out.textContent = "No records found in collection “" + col + "”. Check the collection name."; return; }
+    out.textContent = (sf && isCompleteSerial(s) ? "No record found with " + sf + " = " + s + ".\n" : "") +
+      "Fields in a sample record of “" + col + "”:\n" + Object.keys(smp.docs[0].data()).join(", ") + "\n\nSample:\n" + stringifyDoc(smp.docs[0].data()).slice(0, 2000);
+  }catch(e){ out.textContent = "Error: " + (e && e.message ? e.message : e); }
+}
+function saveSettings(){
+  if(!auth.currentUser){ alert("You are not logged in."); return; }
+  var S = clone(settings);
+  var tr = $("setBody").querySelectorAll("tr[data-t]");
+  tr.forEach(function(row){
+    var i = +row.dataset.t, t = S.tests[i];
+    t.brand = row.querySelector(".tBrand").value.trim();
+    t.method = row.querySelector(".tMethod").value.trim();
+    t.result = row.querySelector(".tResult").value.trim();
+    if(t.brand && S.brands.map(function(b){ return b.toLowerCase(); }).indexOf(t.brand.toLowerCase()) < 0) S.brands.push(t.brand);
+  });
+  var mm = {};
+  $("setBody").querySelectorAll("#mmTbl tr").forEach(function(row){
+    var n = row.querySelector(".mmName"); if(!n) return;
+    var name = n.value.trim().replace(/[.#$\[\]\/]/g, "");
+    if(name) mm[name] = row.querySelector(".mmMean").value.trim();
+  });
+  S.tests.forEach(function(t){ if(t.method && !(t.method in mm)) mm[t.method.replace(/[.#$\[\]\/]/g, "")] = ""; });
+  S.methodNames = mm;
+  $("setBody").querySelectorAll("tr[data-k]").forEach(function(row){
+    var d = Number(row.querySelector(".shDays").value);
+    if(!(d > 0)) d = DEFAULTS.shelf[row.dataset.k].days;
+    S.shelf[row.dataset.k] = { days:Math.round(d), first:row.querySelector(".shFirst").checked };
+  });
+  S.prefix = $("stPrefix").value.trim().toUpperCase();
+  S.dateFormat = $("stDate").value;
+  S.pathologist.name = $("stPathName").value.trim();
+  S.pathologist.title = $("stPathTitle").value.trim();
+  var ni = $("stPathImg").dataset.new; if(ni) S.pathologist.image = ni;
+  S.lookup = { collection:$("lkCol").value.trim(), serialField:$("lkSer").value.trim(), dateField:$("lkDate").value.trim(), bloodField:$("lkBlood").value.trim() };
+  db.ref("settings/resultForm").set(S).then(function(){
+    $("setOv").classList.remove("show");
+    CACHE.clear(); ERRS = {};
+  }).catch(function(e){ console.error(e); alert("Failed to save settings."); });
+}
+
+/* ═════════ signature helpers & medtech window ═════════ */
+function imageToSig(file, maxW, maxH){
+  return new Promise(function(resolve, reject){
+    var img = new Image();
+    img.onload = function(){
+      var k = Math.min(maxW / img.width, maxH / img.height, 1);
+      var c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      var x = c.getContext("2d"); x.drawImage(img, 0, 0, c.width, c.height);
+      var d = x.getImageData(0, 0, c.width, c.height), px = d.data;
+      for(var i = 0; i < px.length; i += 4){ if(px[i] > 225 && px[i+1] > 225 && px[i+2] > 225) px[i+3] = 0; }
+      x.putImageData(d, 0, 0);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+var mcv = $("mCanvas"), mctx = mcv.getContext("2d");
+var mDrawing = false, mDirty = false, mEditId = null, mKeepImage = "";
+mctx.lineWidth = 3; mctx.lineCap = "round"; mctx.lineJoin = "round"; mctx.strokeStyle = "#111";
+function mPos(e){ var r = mcv.getBoundingClientRect(); return { x:(e.clientX - r.left) * mcv.width / r.width, y:(e.clientY - r.top) * mcv.height / r.height }; }
+mcv.addEventListener("pointerdown", function(e){ mDrawing = true; mDirty = true; var p = mPos(e); mctx.beginPath(); mctx.moveTo(p.x, p.y); mctx.lineTo(p.x + .1, p.y + .1); mctx.stroke(); mcv.setPointerCapture(e.pointerId); });
+mcv.addEventListener("pointermove", function(e){ if(!mDrawing) return; var p = mPos(e); mctx.lineTo(p.x, p.y); mctx.stroke(); });
+["pointerup","pointercancel"].forEach(function(t){ mcv.addEventListener(t, function(){ mDrawing = false; }); });
+function mClearPad(){ mctx.clearRect(0, 0, mcv.width, mcv.height); mDirty = false; mKeepImage = ""; $("mFile").value = ""; }
+function mMsg(t){ $("mMsg").textContent = t || ""; }
+function drawDataURL(url){
+  var img = new Image();
+  img.onload = function(){
+    mctx.clearRect(0, 0, mcv.width, mcv.height);
+    var k = Math.min(mcv.width / img.width, mcv.height / img.height);
+    var w = img.width * k, h = img.height * k;
+    mctx.drawImage(img, (mcv.width - w) / 2, (mcv.height - h) / 2, w, h);
+    mDirty = true;
+  };
+  img.src = url;
+}
+function medSorted(){
+  return Object.keys(medtechs).map(function(id){ return { id:id, label:medtechs[id].label || "", image:medtechs[id].image || "" }; })
+    .sort(function(a, b){ return a.label.localeCompare(b.label); });
+}
+function renderMedSelect(){
+  var sel = $("medSel"), list = medSorted();
+  sel.innerHTML = '<option value="">— no medtech —</option>' + list.map(function(m){ return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join("");
+  if(selMed && !medtechs[selMed]) selMed = "";
+  sel.value = selMed;
+}
+function renderMedList(){
+  var list = medSorted(), host = $("mList");
+  if(!list.length){
+    host.innerHTML = '<div class="hint">No medical technologists saved yet.</div><button class="btn grey sm" id="mSeed" type="button">ADD THE NAMES FROM THE EXCEL LIST</button>';
+    return;
+  }
+  host.innerHTML = list.map(function(m){
+    return '<div class="mItem" data-id="' + esc(m.id) + '">' + (m.image ? '<img src="' + esc(m.image) + '" alt="">' : '<span class="muted" style="width:60px;font-size:11px">no e-sign</span>') +
+      '<div class="mName">' + esc(m.label) + '</div><button class="btn grey sm mEdit" type="button">EDIT</button><button class="btn red sm mDel" type="button">DELETE</button></div>';
+  }).join("");
+}
+function renderStaffSelect(){
+  var sel = $("mCopySel");
+  var ids = Object.keys(staffSigs).filter(function(k){ return staffSigs[k] && staffSigs[k].image; });
+  $("mCopyRow").classList.toggle("hidden", !ids.length);
+  sel.innerHTML = '<option value="">— choose —</option>' + ids.map(function(k){ return '<option value="' + esc(k) + '">' + esc(staffSigs[k].name || k) + '</option>'; }).join("");
+}
+function mReset(){ mEditId = null; $("mName").value = ""; mClearPad(); mMsg(""); $("mCopySel").value = ""; }
+function mSave(){
+  if(!auth.currentUser){ mMsg("You are not logged in."); return; }
+  var label = $("mName").value.trim().replace(/\s+/g, " ");
+  if(!label){ mMsg("Please type the printed name line."); $("mName").focus(); return; }
+  var image = mDirty ? mcv.toDataURL("image/png") : (mKeepImage || "");
+  if(image.length > 250000){ mMsg("That signature image is too large. Please draw it again or use a smaller image."); return; }
+  var id = mEditId;
+  if(!id){ var same = medSorted().filter(function(m){ return m.label.toLowerCase() === label.toLowerCase(); })[0]; if(same) id = same.id; }
+  if(!id) id = "mt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  db.ref("settings/resultFormMedtechs/" + id).set({ label:label, image:image, updatedAt:Date.now() })
+    .then(function(){ if(!selMed){ selMed = id; lsSet("rf_medtech", id); } mReset(); })
+    .catch(function(e){ console.error(e); mMsg("Failed to save."); });
+}
+
+/* ═════════ events ═════════ */
+function bindUI(){
+  fillSelect($("sComp"), compOptions(), "— component —");
+  fillSelect($("sBt"), btOptions(), "— blood type —");
+  document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
+
+  $("sSerial").addEventListener("input", onSingleSerial);
+  $("sSerial").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); $("sSerial").value = normSerial($("sSerial").value); onSingleSerial(); clearTimeout(singleTimer); if(isCompleteSerial(single.serial) && !CACHE.has(single.serial)) doSingleLookup(); $("sComp").focus(); }
+  });
+  $("sSerial").addEventListener("blur", function(){ var v = normSerial($("sSerial").value); if(v !== $("sSerial").value){ $("sSerial").value = v; onSingleSerial(); } });
+  $("sComp").addEventListener("change", function(){ single.comp = $("sComp").value; single.expManual = false; recalcSingle(); });
+  $("sBt").addEventListener("change", function(){ single.bt = $("sBt").value; recalcSingle(); });
+  $("sExt").addEventListener("change", function(){
+    var v = $("sExt").value;
+    single.ext = v; single.extManual = !!v; single.expManual = false;
+    if(!v){ var c = CACHE.get(single.serial); single.ext = (c && c.ext) || ""; }
+    recalcSingle();
+  });
+  $("sExp").addEventListener("change", function(){ var v = $("sExp").value; single.exp = v; single.expManual = !!v; recalcSingle(); });
+  $("sPrint").addEventListener("click", function(){ previewMode = "single"; printItems([singleItem()]); });
+
+  document.querySelectorAll(".useDate").forEach(function(cb){
+    cb.addEventListener("change", function(){
+      useDate = cb.checked;
+      document.querySelectorAll(".useDate").forEach(function(o){ o.checked = useDate; });
+      renderPreview();
+    });
+  });
+
+  ranges = [newRange()];
+  renderRangeRows();
+  $("addRange").addEventListener("click", function(){ ranges.push(newRange()); renderRangeRows(); var rows = $("rangeRows").querySelectorAll(".rFrom"); rows[rows.length - 1].focus(); });
+  $("clearRanges").addEventListener("click", function(){
+    if(visibleBase().length && !confirm("Clear all range rows?")) return;
+    ranges = [newRange()]; OV = {}; SKIP = {}; renderRangeRows();
+  });
+  var rr = $("rangeRows");
+  function rowOf(el){ var d = el.closest(".rrow"); return d ? ranges.filter(function(r){ return r.id === d.dataset.id; })[0] : null; }
+  rr.addEventListener("input", function(e){
+    var r = rowOf(e.target); if(!r) return;
+    if(e.target.classList.contains("rFrom")) r.from = e.target.value;
+    else if(e.target.classList.contains("rTo")) r.to = e.target.value;
+    else if(e.target.classList.contains("rExc")) r.exc = e.target.value;
+    else return;
+    clearTimeout(listTimer); listTimer = setTimeout(function(){ refreshList(false); }, 350);
+  });
+  rr.addEventListener("change", function(e){
+    var r = rowOf(e.target); if(!r) return;
+    if(e.target.classList.contains("rComp")) r.comp = e.target.value;
+    else if(e.target.classList.contains("rBt")) r.bt = e.target.value;
+    clearTimeout(listTimer);
+    refreshList(true);
+  });
+  rr.addEventListener("click", function(e){
+    if(!e.target.classList.contains("rDel")) return;
+    var r = rowOf(e.target); if(!r) return;
+    ranges = ranges.filter(function(x){ return x !== r; });
+    if(!ranges.length) ranges = [newRange()];
+    renderRangeRows(); fetchList();
+  });
+  $("lPrint").addEventListener("click", function(){ previewMode = "list"; printItems(listResolved()); });
+
+  var lw = $("listWrap");
+  lw.addEventListener("change", function(e){
+    var tr = e.target.closest("tr"); if(!tr) return;
+    var s = tr.dataset.s; OV[s] = OV[s] || {};
+    if(e.target.classList.contains("tBt")){ OV[s].bt = e.target.value; }
+    else if(e.target.classList.contains("tExt")){
+      if(e.target.value){ OV[s].ext = e.target.value; delete OV[s].exp; } else { delete OV[s].ext; delete OV[s].exp; }
+    }
+    else if(e.target.classList.contains("tExp")){ if(e.target.value) OV[s].exp = e.target.value; else delete OV[s].exp; }
+    previewMode = "list"; previewIdx = +tr.dataset.i;
+    renderListTable(); renderPreview();
+  });
+  lw.addEventListener("click", function(e){
+    var tr = e.target.closest("tr"); if(!tr || !tr.dataset.s) return;
+    if(e.target.classList.contains("tDel")){
+      SKIP[tr.dataset.s] = true;
+      refreshList(false);
+      return;
+    }
+    if(e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    previewMode = "list"; previewIdx = +tr.dataset.i;
+    renderListTable(); renderPreview();
+  });
+  $("skipNote").addEventListener("click", function(e){ if(e.target.id === "restoreSkips"){ SKIP = {}; refreshList(false); } });
+
+  $("tabSingle").addEventListener("click", function(){ previewMode = "single"; renderPreview(); });
+  $("tabList").addEventListener("click", function(){ previewMode = "list"; renderListTable(); renderPreview(); });
+  $("pvPrev").addEventListener("click", function(){ if(previewIdx > 0){ previewIdx--; renderListTable(); renderPreview(); } });
+  $("pvNext").addEventListener("click", function(){ previewIdx++; renderListTable(); renderPreview(); });
+  var rz = null;
+  window.addEventListener("resize", function(){ clearTimeout(rz); rz = setTimeout(renderPreview, 150); });
+
+  /* paper window */
+  $("paperOpts").addEventListener("change", function(){
+    document.querySelectorAll(".paperOpt").forEach(function(l){ l.classList.toggle("on", l.querySelector("input").checked); });
+  });
+  $("paperCancel").addEventListener("click", function(){ $("paperOv").classList.remove("show"); pendingPrint = null; });
+  $("paperGo").addEventListener("click", function(){
+    paper = pickedPaper(); lsSet("rf_paper", paper);
+    $("paperOv").classList.remove("show");
+    var go = pendingPrint; pendingPrint = null;
+    renderPreview();
+    if(go) go();
+  });
+
+  /* medtech */
+  $("medSel").addEventListener("change", function(){ selMed = $("medSel").value; lsSet("rf_medtech", selMed); renderPreview(); });
+  $("incSig").checked = incSig;
+  $("incSig").addEventListener("change", function(){ incSig = $("incSig").checked; lsSet("rf_incsig", incSig ? "1" : "0"); renderPreview(); });
+  $("btnMed").addEventListener("click", function(){ mReset(); renderMedList(); renderStaffSelect(); $("medOv").classList.add("show"); });
+  $("medClose").addEventListener("click", function(){ $("medOv").classList.remove("show"); });
+  $("mClear").addEventListener("click", function(){ mClearPad(); });
+  $("mFile").addEventListener("change", function(e){
+    var f = e.target.files[0]; if(!f) return;
+    imageToSig(f, 560, 190).then(function(url){ drawDataURL(url); }).catch(function(){ mMsg("Could not read that image."); });
+  });
+  $("mCopySel").addEventListener("change", function(){ var k = $("mCopySel").value; if(k && staffSigs[k]) drawDataURL(staffSigs[k].image); });
+  $("mSave").addEventListener("click", mSave);
+  $("mCancelEdit").addEventListener("click", mReset);
+  $("mList").addEventListener("click", function(e){
+    if(e.target.id === "mSeed"){
+      var upd = {};
+      MEDTECH_SEED.forEach(function(n, i){ upd["mt_seed" + (i + 1)] = { label:n, image:"", updatedAt:Date.now() }; });
+      db.ref("settings/resultFormMedtechs").update(upd).catch(function(){ mMsg("Failed to add the names."); });
+      return;
+    }
+    var item = e.target.closest(".mItem"); if(!item) return;
+    var id = item.dataset.id;
+    if(e.target.classList.contains("mEdit")){
+      mReset(); mEditId = id; $("mName").value = medtechs[id].label || "";
+      if(medtechs[id].image){ mKeepImage = medtechs[id].image; drawDataURL(medtechs[id].image); mDirty = false; }
+      mMsg("Editing – change the name and/or signature, then SAVE.");
+    }else if(e.target.classList.contains("mDel")){
+      if(!confirm("Delete " + (medtechs[id].label || "this medtech") + "?")) return;
+      db.ref("settings/resultFormMedtechs/" + id).remove().catch(function(){ mMsg("Failed to delete."); });
+    }
+  });
+
+  /* settings */
+  $("btnSet").addEventListener("click", openSettings);
+  $("setCancel").addEventListener("click", function(){ $("setOv").classList.remove("show"); });
+  $("setSave").addEventListener("click", saveSettings);
+  document.querySelectorAll(".ov").forEach(function(o){
+    o.addEventListener("mousedown", function(e){ if(e.target === o && o.id !== "setOv") o.classList.remove("show"); });
+  });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") document.querySelectorAll(".ov.show").forEach(function(o){ o.classList.remove("show"); }); });
+}
+
+/* ═════════ live data ═════════ */
+function startData(){
+  db.ref("settings/resultForm").on("value", function(snap){
+    settings = merge(DEFAULTS, snap.val());
+    document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
+    recalcSingle();
+    refreshList(false);
+    previewMode = $("tabList").classList.contains("on") ? "list" : "single";
+    renderPreview();
+  }, function(e){ console.error("Settings load error:", e); });
+  db.ref("settings/resultFormMedtechs").on("value", function(snap){
+    medtechs = snap.val() || {};
+    renderMedSelect(); renderPreview();
+    if($("medOv").classList.contains("show")) renderMedList();
+  }, function(e){ console.error("Medtech load error:", e); });
+  db.ref("settings/eSignatures").on("value", function(snap){ staffSigs = snap.val() || {}; renderStaffSelect(); }, function(){});
+}
+
+/* ═════════ access check (same rule as the Releasing page) ═════════ */
+var started = false;
+function showMain(){
+  $("loadingScreen").classList.add("hidden");
+  $("mainWrap").classList.remove("hidden");
+  if(!started){ started = true; bindUI(); renderMedSelect(); previewMode = "single"; renderPreview(); startData(); }
+}
+auth.onAuthStateChanged(function(user){
+  if(!user){ window.location.href = "index.html"; return; }
+  db.ref("userRoles/" + user.uid + "/role").once("value").then(function(snap){
+    var role = snap.exists() ? snap.val() : null;
+    if(role === "limitedEncoder"){ alert("Access denied."); window.location.href = "dashboard.html"; return; }
+    showMain();
+  }).catch(function(e){ console.error("Role check error:", e); showMain(); });
+});
+})();
+</script>
+
+<script src="prc-nav.js"></script>
+</body>
+</html>
