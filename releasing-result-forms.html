@@ -610,16 +610,17 @@ function resolveListItem(it){
   var c = CACHE.get(it.serial);
   var ext = ov.ext !== undefined ? ov.ext : ((c && c.ext) || "");
   var bt = ov.bt !== undefined ? ov.bt : (it.bt || (c && c.bt) || "");
-  var exp = ov.exp !== undefined ? ov.exp : calcExpiry(ext, it.comp);
+  var comp = ov.comp !== undefined ? ov.comp : it.comp;
+  var exp = ov.exp !== undefined ? ov.exp : calcExpiry(ext, comp);
   var state = "";
-  if(!it.comp) state = "nocomp";
+  if(!comp) state = "nocomp";
   else if(ov.ext !== undefined) state = "manual";
   else if(INFLIGHT.has(it.serial)) state = "wait";
   else if(ERRS[it.serial]) state = "err";
   else if(c && c.ext) state = (c.n > 1 ? "dup" : "ok");
   else if(c === null || (c && !c.ext)) state = "none";
   else state = "idle";
-  return { serial:it.serial, comp:it.comp, bt:bt, ext:ext, exp:exp, state:state };
+  return { serial:it.serial, comp:comp, bt:bt, ext:ext, exp:exp, state:state };
 }
 function visibleBase(){ return listBase.filter(function(it){ return !SKIP[it.serial]; }); }
 function listResolved(){ return visibleBase().map(resolveListItem); }
@@ -919,8 +920,9 @@ function renderListTable(){
   wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
     items.map(function(it, i){
       var sel = btOpts.replace('<option>' + it.bt + '</option>', '<option selected>' + it.bt + '</option>');
+      var csel = '<option value="">—</option>' + COMP_ORDER.map(function(k){ return '<option value="' + k + '"' + (k === it.comp ? " selected" : "") + '>' + k + ' – ' + COMPS[k] + '</option>'; }).join("");
       return '<tr data-i="' + i + '" data-s="' + esc(it.serial) + '" class="' + (previewMode === "list" && i === previewIdx ? "sel" : "") + '">' +
-        '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td>' + esc(it.comp ? it.comp : "—") + '</td>' +
+        '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td><select class="tComp">' + csel + '</select></td>' +
         '<td><select class="tBt">' + sel + '</select></td>' +
         '<td><input type="date" class="tExt' + (it.ext ? "" : " miss") + '" value="' + esc(it.ext) + '"></td>' +
         '<td><input type="date" class="tExp" value="' + esc(it.exp) + '"></td>' +
@@ -1286,6 +1288,7 @@ function bindUI(){
     var tr = e.target.closest("tr"); if(!tr) return;
     var s = tr.dataset.s; OV[s] = OV[s] || {};
     if(e.target.classList.contains("tBt")){ OV[s].bt = e.target.value; }
+    else if(e.target.classList.contains("tComp")){ OV[s].comp = e.target.value; delete OV[s].exp; }
     else if(e.target.classList.contains("tExt")){
       if(e.target.value){ OV[s].ext = e.target.value; delete OV[s].exp; } else { delete OV[s].ext; delete OV[s].exp; }
     }
