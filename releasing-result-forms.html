@@ -50,11 +50,13 @@ header p{margin:4px 0 0;font-size:13px;opacity:.9;}
 
 .srow{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;padding:6px 8px;margin-bottom:6px;background:#f8f9fb;border:1px solid #e3e7ee;border-radius:10px;}
 .srow.sel{border-color:#b30000;background:#fff7f7;}
+.srow input.sComp,.rrow input.rComp{text-transform:uppercase;}
+.wrap table.lst input.tComp{width:82px;text-transform:uppercase;}
 .srow .sn{width:22px;text-align:center;font-weight:700;color:#999;padding-bottom:10px;font-size:13px;}
 .srow:not(:first-child) .f label{display:none;}
 .srow .sInfo{flex:1 1 100%;font-size:12px;margin:0 0 0 30px;}
 .srow .sInfo:empty{display:none;}
-.srow .sInfo.ok{color:#2e7d32;}.srow .sInfo.warn{color:#c62828;}.srow .sInfo.muted{color:#667085;}
+.srow .sInfo span.ok{color:#2e7d32;}.srow .sInfo span.warn{color:#c62828;}.srow .sInfo span.muted{color:#667085;}
 
 .tblWrap{margin-top:12px;max-height:420px;overflow:auto;border:1px solid #e3e7ee;border-radius:10px;}
 table.lst{border-collapse:collapse;width:100%;font-size:13px;}
@@ -174,7 +176,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
 
   <!-- serial rows -->
   <div class="card">
-    <h3>Serial numbers <small>&ndash; scan or type each serial, then pick the component. Add a row for each serial (up to 20, like the Excel sheet)</small></h3>
+    <h3>Serial numbers <small>&ndash; scan or type each serial, then type or scan the component (WB, PRBC, PC, FFP, CRYO). Add a row for each serial (up to 20, like the Excel sheet)</small></h3>
     <div id="sRows"></div>
     <div class="row" style="margin-top:6px">
       <button class="btn grey" id="sAdd" type="button">+ ADD SERIAL</button>
@@ -182,6 +184,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
       <span id="sCount" class="muted" style="font-size:13px;padding:0 6px"></span>
       <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
+      <button class="btn green hidden" id="sSync" type="button">UPDATE DONOR DATABASE (0)</button>
       <button class="btn red" id="sPrint" type="button">PRINT</button>
     </div>
   </div>
@@ -196,6 +199,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
       <span id="rangeTotal" class="muted" style="font-size:13px;padding:0 6px"></span>
       <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
+      <button class="btn green hidden" id="lSync" type="button">UPDATE DONOR DATABASE (0)</button>
       <button class="btn red" id="lPrint" type="button">PRINT LIST</button>
     </div>
     <div class="status" id="lStatus"></div>
@@ -229,6 +233,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
     <h3>&#128424; Print</h3>
     <div class="hint" id="paperInfo"></div>
     <div id="paperOpts"></div>
+    <div id="paperBags"></div>
     <div class="btnrow">
       <button class="btn dark" id="paperCancel" type="button">CANCEL</button>
       <button class="btn red" id="paperGo" type="button">PRINT</button>
@@ -316,6 +321,14 @@ var PAPERS = {
 };
 var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 var MAX_PER_ROW = 500;
+var BAGS = ["SINGLE","DOUBLE","TRIPLE","QUADRUPLE"];
+var COMP_ALIASES = {
+  WB:  ["WB","WHOLEBLOOD","WHOLE"],
+  PRBC:["PRBC","RBC","PACKEDRBC","PACKEDREDBLOODCELL","PACKEDREDBLOODCELLS","PACKEDREDCELL","PACKEDREDCELLS"],
+  PC:  ["PC","PU","PLT","PLATELET","PLATELETS","PLATELETCONCENTRATE","PLATELETUNIT"],
+  FFP: ["FFP","PLASMA","FRESHFROZENPLASMA"],
+  CRYO:["CRYO","CRYOPRECIPITATE","CRYOPPT"]
+};
 
 var DEFAULTS = {
   prefix: "PRC2600-",
@@ -324,13 +337,23 @@ var DEFAULTS = {
   header: { l1:"PHILIPPINE RED CROSS", l2:"Baguio City Chapter", l3:"#39 Harrison Road, Baguio City", l4:"Tel. No. (074)661-1770 / 0908 885 2707", l5:"Email Add: bloodservices.redcrossbaguio@gmail.com/baguio@redcross.org.ph" },
   /* footnote: leave empty to build it automatically from the method meanings */
   note: "",
-  /* shelf life: days, and whether the extraction day itself counts as day 1 */
+  /* shelf life in days – the extraction day is day 0, so expiry = extraction date + days */
   shelf: {
-    WB:  { days:35,  first:true  },
-    PRBC:{ days:35,  first:true  },
-    PC:  { days:5,   first:true  },
-    FFP: { days:365, first:false },
-    CRYO:{ days:365, first:false }
+    WB:  { days:35 },
+    PRBC:{ days:35 },
+    PC:  { days:5 },
+    FFP: { days:365 },
+    CRYO:{ days:365 }
+  },
+  /* product codes on the component labels (typed or scanned). Cryo: scan its label into Test settings. */
+  compCodes: { WB:"E0009V00", PRBC:"E0150V00", PC:"E2801V00", FFP:"E0702V00", CRYO:"" },
+  /* blood bag types each component can be prepared from (checked against the donor record) */
+  bagRules: {
+    WB:  ["SINGLE"],
+    PRBC:["DOUBLE","TRIPLE","QUADRUPLE"],
+    PC:  ["TRIPLE","QUADRUPLE"],
+    FFP: ["DOUBLE","TRIPLE","QUADRUPLE"],
+    CRYO:["DOUBLE","TRIPLE","QUADRUPLE"]
   },
   tests: [
     { key:"syph",  label:"Syphilis",         brand:"ARCHITECT Syphilis TP",          method:"CMIA",  result:"NEGATIVE" },
@@ -421,7 +444,7 @@ function calcExpiry(ext, comp){
   var c = settings.shelf[comp];
   var days = c ? Number(c.days) : 0;
   if(!days) return "";
-  return addDaysISO(ext, days - (c.first ? 1 : 0));
+  return addDaysISO(ext, days);
 }
 var MONTH_TEXT = { jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12" };
 function parseDateFromText(text){
@@ -454,6 +477,53 @@ function toISO(raw){
   if(raw instanceof Date && !isNaN(raw.getTime())) return localISO(raw);
   if(typeof raw === "number"){ var d3 = new Date(raw); if(!isNaN(d3.getTime())) return localISO(d3); }
   return "";
+}
+
+/* ═════════ component: typed name or scanned label ═════════ */
+function resolveComponent(raw){
+  var t = String(raw == null ? "" : raw).toUpperCase().trim();
+  if(!t) return "";
+  var flat = t.replace(/[^A-Z0-9]+/g, ""), k, i;
+  for(k in COMP_ALIASES){ if(COMP_ALIASES[k].indexOf(flat) >= 0) return k; }
+  var bc = t.replace(/\s+/g, ""), codes = settings.compCodes || {};
+  for(i = 0; i < COMP_ORDER.length; i++){
+    k = COMP_ORDER[i];
+    var list = String(codes[k] || "").toUpperCase().split(/[,;\s]+/).filter(Boolean);
+    for(var j = 0; j < list.length; j++){
+      if(bc.indexOf(list[j]) >= 0) return k;
+      if(/^E\d{4}/.test(list[j]) && bc.indexOf(list[j].slice(0, 5)) >= 0) return k;
+    }
+  }
+  return "";
+}
+function normBag(v){
+  var s = String(v == null ? "" : v).trim().toUpperCase();
+  if(!s) return "";
+  if(s === "S" || s === "1" || s.indexOf("SINGLE") === 0) return "SINGLE";
+  if(s === "D" || s === "2" || s.indexOf("DOUBLE") === 0) return "DOUBLE";
+  if(s === "T" || s === "3" || s.indexOf("TRIPLE") === 0) return "TRIPLE";
+  if(s === "Q" || s === "4" || s === "QUAD" || s.indexOf("QUADRUPLE") === 0) return "QUADRUPLE";
+  return "";
+}
+/* the donor record's bag type checked against the component (two-way check) */
+function bagInfo(serial, comp, bag){
+  var c = CACHE.get(serial), o = { found:!!(c && c.id), bagDB:"", id:"", dirty:false, bad:false, dup:false };
+  if(!o.found) return o;
+  o.bagDB = c.bag || ""; o.id = c.id; o.dup = c.n > 1;
+  o.dirty = !!bag && bag !== o.bagDB && !o.dup;
+  var allowed = (settings.bagRules || {})[comp];
+  o.bad = !!(comp && bag && allowed && allowed.indexOf(bag) < 0);
+  return o;
+}
+function bagMsg(serial, comp, bag){
+  var bi = bagInfo(serial, comp, bag);
+  if(!bi.found) return { cls:"muted", text:"" };
+  if(bi.dup) return { cls:"warn", text:"⚠ Several donor records have this serial – fix the duplicates in Donor Tracking before changing the bag type." };
+  if(!bag) return { cls:"warn", text:"⚠ The donor record has no bag type – choose the bag that was used." };
+  if(bi.bad) return { cls:"warn", text:"⚠ " + comp + " cannot be prepared from a " + bag + " bag" + (bi.dirty ? "" : " (as the donor record says)") + " – choose the bag type that was really used." };
+  if(bi.dirty) return { cls:"ok", text:"↻ Donor record says " + (bi.bagDB || "no bag type") + " – will be changed to " + bag + "." };
+  if(comp) return { cls:"ok", text:"✔ " + bag + " bag matches " + comp + "." };
+  return { cls:"muted", text:"Bag type: " + bag };
 }
 
 /* ═════════ serial helpers ═════════ */
@@ -572,14 +642,14 @@ async function queryChunk(chunk){
     var raw = String(d[L.serialField] == null ? "" : d[L.serialField]).toUpperCase().replace(/\s+/g, "");
     var hit = chunk.filter(function(s){ return s === raw || digitsOf(s) === raw; })[0];
     if(!hit) return;
-    (found[hit] = found[hit] || []).push({ ext:resolveExtDate(d), bt:resolveBT(d) });
+    (found[hit] = found[hit] || []).push({ ext:resolveExtDate(d), bt:resolveBT(d), bag:normBag(d.bloodBagType), id:doc.id });
   });
   Object.keys(found).forEach(function(s){
     var list = found[s], withDate = list.filter(function(x){ return x.ext; }), exts = {};
     withDate.forEach(function(x){ exts[x.ext] = 1; });
     var pick = withDate[0] || list[0];
     var bt = (list.filter(function(x){ return x.bt; })[0] || {}).bt || "";
-    CACHE.set(s, { ext:pick.ext, bt:bt, n:list.length, conflict:Object.keys(exts).length > 1 });
+    CACHE.set(s, { ext:pick.ext, bt:bt, bag:pick.bag || "", id:pick.id, n:list.length, conflict:Object.keys(exts).length > 1 });
   });
 }
 async function fetchTracking(serials){
@@ -616,6 +686,8 @@ function resolveListItem(it){
   var bt = ov.bt !== undefined ? ov.bt : (it.bt || (c && c.bt) || "");
   var comp = ov.comp !== undefined ? ov.comp : it.comp;
   var exp = ov.exp !== undefined ? ov.exp : calcExpiry(ext, comp);
+  var bag = ov.bag !== undefined ? ov.bag : ((c && c.bag) || "");
+  var bi = bagInfo(it.serial, comp, bag);
   var state = "";
   if(!comp) state = "nocomp";
   else if(ov.ext !== undefined) state = "manual";
@@ -624,7 +696,7 @@ function resolveListItem(it){
   else if(c && c.ext) state = (c.n > 1 ? "dup" : "ok");
   else if(c === null || (c && !c.ext)) state = "none";
   else state = "idle";
-  return { serial:it.serial, comp:comp, bt:bt, ext:ext, exp:exp, state:state };
+  return { serial:it.serial, comp:comp, bt:bt, ext:ext, exp:exp, state:state, bag:bag, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty, bagBad:bi.bad, bagDup:bi.dup };
 }
 function visibleBase(){ return listBase.filter(function(it){ return !SKIP[it.serial]; }); }
 function listResolved(){ return visibleBase().map(resolveListItem); }
@@ -731,10 +803,13 @@ function medOptionsHTML(){
   return '<option value="">same as above</option>' + medSorted().map(function(m){ return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join("");
 }
 
-function newRow(prev){ return { id:"s" + (++rowSeq), serial:"", comp:prev ? prev.comp : "", bt:"", ext:"", exp:"", extManual:false, expManual:false, med:"" }; }
+function newRow(prev){ return { id:"s" + (++rowSeq), serial:"", comp:prev ? prev.comp : "", compBad:false, compAuto:false, bt:"", bag:"", bagDB:"", bagTouched:false, ext:"", exp:"", extManual:false, expManual:false, med:"" }; }
 function rowEl(r){ return $("sRows").querySelector('[data-id="' + r.id + '"]'); }
 function filledRows(){ return rows.filter(function(r){ return r.serial; }); }
-function rowItem(r){ return { serial:r.serial, comp:r.comp, bt:r.bt, ext:r.ext, exp:r.exp, med:r.med, state:"" }; }
+function rowItem(r){
+  var bi = bagInfo(r.serial, r.comp, r.bag);
+  return { serial:r.serial, comp:r.comp, bt:r.bt, ext:r.ext, exp:r.exp, med:r.med, state:"", bag:r.bag, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty, bagBad:bi.bad, bagDup:bi.dup };
+}
 function rowItems(){ return filledRows().map(rowItem); }
 function selectRowPreview(r){ var i = filledRows().indexOf(r); if(i >= 0) rowPvIdx = i; }
 
@@ -742,11 +817,12 @@ function rowHTML(r, n){
   return '<div class="srow" data-id="' + r.id + '">' +
     '<div class="sn">' + n + '</div>' +
     '<div class="f" style="flex:1.6 1 150px"><label>Serial number</label><input type="text" class="sSer" placeholder="Scan or type serial number" value="' + esc(r.serial) + '" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>' +
-    '<div class="f" style="flex:1.3 1 150px"><label>Component</label><select class="sComp"></select></div>' +
-    '<div class="f" style="flex:1 1 110px"><label>Blood type</label><select class="sBt"></select></div>' +
-    '<div class="f" style="flex:1 1 125px"><label>Date of extraction</label><input type="date" class="sExt"></div>' +
-    '<div class="f" style="flex:1 1 125px"><label>Date of expiry</label><input type="date" class="sExp"></div>' +
-    '<div class="f" style="flex:1.3 1 140px"><label>Medtech</label><select class="sMed"></select></div>' +
+    '<div class="f" style="flex:1 1 100px"><label>Component</label><input type="text" class="sComp" placeholder="WB, PRBC… / scan" autocomplete="off" spellcheck="false"></div>' +
+    '<div class="f" style="flex:1 1 105px"><label>Blood type</label><select class="sBt"></select></div>' +
+    '<div class="f" style="flex:1 1 98px"><label>Bag type</label><select class="sBag"></select></div>' +
+    '<div class="f" style="flex:1 1 118px"><label>Date of extraction</label><input type="date" class="sExt"></div>' +
+    '<div class="f" style="flex:1 1 118px"><label>Date of expiry</label><input type="date" class="sExp"></div>' +
+    '<div class="f" style="flex:1 1 120px"><label>Medtech</label><select class="sMed"></select></div>' +
     '<button class="btn grey sDel" type="button" title="Remove this row">&#10005;</button>' +
     '<div class="sInfo"></div></div>';
 }
@@ -754,13 +830,14 @@ function renderRows(){
   $("sRows").innerHTML = rows.map(function(r, i){ return rowHTML(r, i + 1); }).join("");
   rows.forEach(function(r){
     var el = rowEl(r);
-    fillSelect(el.querySelector(".sComp"), compOptions(), "— component —");
     fillSelect(el.querySelector(".sBt"), btOptions(), "— blood type —");
+    fillSelect(el.querySelector(".sBag"), BAGS.map(function(b){ return { v:b, t:b }; }), "— bag —");
     el.querySelector(".sMed").innerHTML = medOptionsHTML();
     syncRow(r);
   });
   $("sCount").textContent = rows.length + " / " + MAX_ROWS;
   $("sAdd").disabled = rows.length >= MAX_ROWS;
+  refreshSyncButtons();
 }
 function refreshMedSelects(){
   rows.forEach(function(r){
@@ -783,16 +860,37 @@ function rowStatus(r){
   if(c === null) return { cls:"warn", text:pre + "⚠ Not found in tracking – type the extraction date." };
   return { cls:"muted", text:pre };
 }
+function rowParts(r){
+  var parts = [], t = rowStatus(r);
+  if(t.text) parts.push(t);
+  if(r.compBad) parts.push({ cls:"warn", text:"⚠ Unknown component – type WB, PRBC, PC, FFP or CRYO, or scan the label." });
+  if(r.compAuto && r.comp === "WB") parts.push({ cls:"muted", text:"Component set to WB because the donor record has a single bag." });
+  var b = bagMsg(r.serial, r.comp, r.bag);
+  if(b.text) parts.push(b);
+  return parts;
+}
 function syncRow(r){
   var el = rowEl(r); if(!el) return;
-  el.querySelector(".sComp").value = r.comp;
+  var ci = el.querySelector(".sComp");
+  if(document.activeElement !== ci) ci.value = r.comp;
   el.querySelector(".sBt").value = r.bt;
+  el.querySelector(".sBag").value = r.bag;
+  var bi = bagInfo(r.serial, r.comp, r.bag);
+  el.querySelector(".sBag").style.borderColor = bi.bad ? "#c62828" : "";
+  ci.style.borderColor = r.compBad ? "#c62828" : "";
   el.querySelector(".sExt").value = r.ext;
   el.querySelector(".sExp").value = r.exp;
   el.querySelector(".sMed").value = r.med;
   el.querySelector(".sExt").style.borderColor = (r.serial && r.comp && !r.ext) ? "#c62828" : "";
-  var st = rowStatus(r), inf = el.querySelector(".sInfo");
-  inf.className = "sInfo " + st.cls; inf.textContent = st.text;
+  var inf = el.querySelector(".sInfo");
+  inf.innerHTML = rowParts(r).map(function(p){ return '<span class="' + p.cls + '">' + esc(p.text) + '</span>'; }).join(" &nbsp;·&nbsp; ");
+}
+function setRowComp(r, raw){
+  var c = resolveComponent(raw);
+  if(c !== r.comp){ r.expManual = false; r.compAuto = false; }
+  r.comp = c;
+  r.compBad = !!String(raw || "").trim() && !c;
+  return c;
 }
 function recalcRow(r, keepPreview){
   if(!r.expManual) r.exp = calcExpiry(r.ext, r.comp);
@@ -800,14 +898,16 @@ function recalcRow(r, keepPreview){
   rows.forEach(function(o){ if(o !== r && o.serial && o.serial === r.serial) syncRow(o); });
   if(!keepPreview){ previewMode = "single"; selectRowPreview(r); }
   renderPreview();
+  refreshSyncButtons();
 }
 function onRowSerial(r, raw){
   var s = normSerial(raw);
   if(s !== r.serial){
     r.serial = s;
     r.ext = ""; r.exp = ""; r.extManual = false; r.expManual = false; r.bt = "";
+    r.bag = ""; r.bagDB = ""; r.bagTouched = false; r.compAuto = false;
     var c = CACHE.get(s);
-    if(c){ r.ext = c.ext || ""; r.bt = c.bt || ""; }
+    if(c){ r.ext = c.ext || ""; r.bt = c.bt || ""; r.bag = c.bag || ""; r.bagDB = c.bag || ""; }
   }
   recalcRow(r);
   clearTimeout(rowTimers[r.id]);
@@ -824,6 +924,10 @@ async function doRowLookup(r){
   if(c){
     if(!r.extManual) r.ext = c.ext || "";
     if(c.bt && !r.bt) r.bt = c.bt;
+    r.bagDB = c.bag || "";
+    if(!r.bagTouched) r.bag = c.bag || "";
+    /* two-way check: a single bag can only give whole blood */
+    if(!r.comp && r.bag === "SINGLE"){ r.comp = "WB"; r.compAuto = true; r.expManual = false; }
   }
   recalcRow(r, true);
 }
@@ -841,13 +945,13 @@ function goNextRow(r){
 }
 
 /* ═════════ ranges ═════════ */
-function newRange(){ return { id:"r" + (++rangeSeq), from:"", to:"", exc:"", comp:"", bt:"" }; }
+function newRange(){ return { id:"r" + (++rangeSeq), from:"", to:"", exc:"", comp:"", compBad:false, bt:"" }; }
 function rangeRowHTML(r){
   return '<div class="rrow" data-id="' + r.id + '">' +
     '<div class="f" style="flex:1.4 1 170px"><label>From</label><input type="text" class="rFrom" placeholder="PRC2600-26005567" value="' + esc(r.from) + '" autocomplete="off" spellcheck="false"></div>' +
     '<div class="f" style="flex:1.4 1 170px"><label>To</label><input type="text" class="rTo" placeholder="PRC2600-26005580" value="' + esc(r.to) + '" autocomplete="off" spellcheck="false"></div>' +
     '<div class="f" style="flex:1.2 1 150px"><label>Skip (optional)</label><input type="text" class="rExc" placeholder="e.g. 26005570, 26005575" value="' + esc(r.exc) + '" autocomplete="off" spellcheck="false"></div>' +
-    '<div class="f" style="flex:1.2 1 170px"><label>Component</label><select class="rComp"></select></div>' +
+    '<div class="f" style="flex:1.2 1 150px"><label>Component</label><input type="text" class="rComp" placeholder="WB, PRBC… / scan" value="' + esc(r.comp) + '" autocomplete="off" spellcheck="false"></div>' +
     '<div class="f" style="flex:1 1 120px"><label>Blood type</label><select class="rBt"></select></div>' +
     '<button class="btn grey rDel" type="button" title="Remove this row">&#10005;</button>' +
     '<div class="rInfo"></div></div>';
@@ -857,9 +961,7 @@ function renderRangeRows(){
   host.innerHTML = ranges.map(rangeRowHTML).join("");
   ranges.forEach(function(r){
     var row = host.querySelector('[data-id="' + r.id + '"]');
-    fillSelect(row.querySelector(".rComp"), compOptions(), "— component —");
     fillSelect(row.querySelector(".rBt"), btOptions(), "— blood type —");
-    row.querySelector(".rComp").value = r.comp;
     row.querySelector(".rBt").value = r.bt;
   });
   refreshList(false);
@@ -888,7 +990,8 @@ function renderRangeInfos(dups){
     if(res.empty){ el.textContent = "Enter the first serial. Leave “To” empty for a single serial, or type just the last digits (e.g. 80)."; return; }
     if(res.err){ el.className = "rInfo bad"; el.textContent = res.err; return; }
     var t = res.from + (res.to !== res.from ? " → " + res.to : "") + " · " + res.list.length + " serial" + (res.list.length === 1 ? "" : "s") +
-      (res.skipped ? " (" + res.skipped + " skipped)" : "") + (r.comp ? "" : " · choose a component");
+      (res.skipped ? " (" + res.skipped + " skipped)" : "") + (r.compBad ? " · ⚠ unknown component – type WB, PRBC, PC, FFP or CRYO, or scan the label" : (r.comp ? "" : " · enter a component"));
+    if(r.compBad) el.className = "rInfo bad";
     el.textContent = t;
   });
   $("lStatus").className = "status" + (dups ? " warn" : "");
@@ -926,17 +1029,62 @@ function renderListTable(){
   if(!items.length){ wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
   wrap.classList.remove("hidden");
   var btOpts = '<option value="">—</option>' + BTS.map(function(b){ return '<option>' + b + '</option>'; }).join("");
-  wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
+  wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Bag</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
     items.map(function(it, i){
       var sel = btOpts.replace('<option>' + it.bt + '</option>', '<option selected>' + it.bt + '</option>');
-      var csel = '<option value="">—</option>' + COMP_ORDER.map(function(k){ return '<option value="' + k + '"' + (k === it.comp ? " selected" : "") + '>' + k + ' – ' + COMPS[k] + '</option>'; }).join("");
+      var bsel = '<option value="">—</option>' + BAGS.map(function(b){ return '<option' + (b === it.bag ? " selected" : "") + '>' + b + '</option>'; }).join("");
       return '<tr data-i="' + i + '" data-s="' + esc(it.serial) + '" class="' + (previewMode === "list" && i === previewIdx ? "sel" : "") + '">' +
-        '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td><select class="tComp">' + csel + '</select></td>' +
+        '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td><input type="text" class="tComp" value="' + esc(it.comp) + '" placeholder="—" autocomplete="off" spellcheck="false"></td>' +
         '<td><select class="tBt">' + sel + '</select></td>' +
+        '<td><select class="tBag' + (it.bagBad ? " miss" : "") + '">' + bsel + '</select></td>' +
         '<td><input type="date" class="tExt' + (it.ext ? "" : " miss") + '" value="' + esc(it.ext) + '"></td>' +
         '<td><input type="date" class="tExp" value="' + esc(it.exp) + '"></td>' +
-        '<td>' + stateText(it.state) + '</td><td><button class="btn grey sm tDel" type="button" title="Remove from list">&#10005;</button></td></tr>';
+        '<td>' + stateText(it.state) + (it.bagBad ? ' <span class="warn" title="This component cannot be prepared from this bag type">⚠ bag</span>' : (it.bagDirty ? ' <span class="ok" title="Donor record: ' + esc(it.bagDB || "no bag type") + ' → ' + esc(it.bag) + '">↻ bag</span>' : '')) + '</td><td><button class="btn grey sm tDel" type="button" title="Remove from list">&#10005;</button></td></tr>';
     }).join("") + '</tbody></table>';
+  refreshSyncButtons();
+}
+
+/* ═════════ donor database: bag type corrected from the result form ═════════ */
+async function syncBagChanges(list){
+  var done = 0, failed = [], L = settings.lookup;
+  for(var i = 0; i < list.length; i++){
+    var it = list[i];
+    try{
+      await fs.collection(L.collection).doc(it.bagId).update({
+        bloodBagType: it.bag,
+        bagTypeCorrection: {
+          from: it.bagDB || "", to: it.bag, component: it.comp || "", serial: it.serial,
+          by: (auth.currentUser && auth.currentUser.email) || "", at: firebase.firestore.FieldValue.serverTimestamp(), source: "result-forms"
+        }
+      });
+      var c = CACHE.get(it.serial); if(c) c.bag = it.bag;
+      done++;
+    }catch(e){ console.error("Donor update error:", e); failed.push(it.serial + ": " + ((e && e.message) || e)); }
+  }
+  return { done:done, failed:failed };
+}
+function afterSync(){
+  rows.forEach(function(r){ var c = CACHE.get(r.serial); if(c) r.bagDB = c.bag || ""; });
+  rows.forEach(syncRow);
+  renderListTable();
+  renderPreview();
+  refreshSyncButtons();
+}
+function refreshSyncButtons(){
+  var a = rowItems().filter(function(i){ return i.bagDirty; }).length;
+  var b = listResolved().filter(function(i){ return i.bagDirty; }).length;
+  $("sSync").classList.toggle("hidden", !a); $("sSync").textContent = "UPDATE DONOR DATABASE (" + a + ")";
+  $("lSync").classList.toggle("hidden", !b); $("lSync").textContent = "UPDATE DONOR DATABASE (" + b + ")";
+}
+async function syncClick(items){
+  var list = items.filter(function(i){ return i.bagDirty; });
+  if(!list.length) return;
+  var msg = "Update the bag type in the donor database for " + list.length + " serial(s)?\n\n" +
+    list.slice(0, 15).map(function(i){ return i.serial + ": " + (i.bagDB || "(blank)") + " → " + i.bag + " (" + i.comp + ")"; }).join("\n") + (list.length > 15 ? "\n…" : "");
+  if(!confirm(msg)) return;
+  var res = await syncBagChanges(list);
+  afterSync();
+  alert(res.done + " donor record(s) updated." + (res.failed.length ? "\n\nCould not update:\n" + res.failed.slice(0, 6).join("\n") : ""));
 }
 
 /* ═════════ printing ═════════ */
@@ -948,6 +1096,11 @@ function askPaper(items, go){
     var P = PAPERS[k];
     return '<label class="paperOpt' + (k === paper ? " on" : "") + '"><input type="radio" name="paperSel" value="' + k + '"' + (k === paper ? " checked" : "") + '><div><b>' + P.name + '</b><span>' + P.dim + '</span></div></label>';
   }).join("");
+  var dirty = items.filter(function(i){ return i.bagDirty; });
+  $("paperBags").innerHTML = dirty.length
+    ? '<label class="chk" style="padding:12px 0 2px"><input type="checkbox" id="paperSyncChk" checked> Also update the bag type in the donor database (' + dirty.length + ')</label><div class="hint">' +
+      dirty.slice(0, 6).map(function(i){ return esc(i.serial) + ': ' + esc(i.bagDB || "no bag type") + ' → ' + esc(i.bag); }).join("<br>") + (dirty.length > 6 ? "<br>…" : "") + '</div>'
+    : "";
   pendingPrint = go;
   $("paperOv").classList.add("show");
 }
@@ -964,13 +1117,20 @@ function printItems(items){
   if(noComp){ alert(noComp + " serial(s) have no component yet. Please choose a component."); return; }
   var missExt = items.filter(function(i){ return !i.ext; }).length;
   var missBt = items.filter(function(i){ return !i.bt; }).length;
-  if(missExt || missBt){
+  var badBag = items.filter(function(i){ return i.bagBad; }).length;
+  if(missExt || missBt || badBag){
     var parts = [];
     if(missExt) parts.push(missExt + " without an extraction date");
     if(missBt) parts.push(missBt + " without a blood type");
-    if(!confirm("Some forms are incomplete: " + parts.join(" and ") + ".\n\nPrint anyway? (those fields will be blank)")) return;
+    if(badBag) parts.push(badBag + " with a bag type that does not match the component");
+    if(!confirm("Some forms need checking: " + parts.join("; ") + ".\n\nPrint anyway?")) return;
   }
-  askPaper(items, function(){
+  askPaper(items, async function(doSync){
+    if(doSync){
+      var res = await syncBagChanges(items.filter(function(i){ return i.bagDirty; }));
+      afterSync();
+      if(res.failed.length && !confirm("Could not update " + res.failed.length + " donor record(s):\n" + res.failed.slice(0, 5).join("\n") + "\n\nPrint anyway?")) return;
+    }
     $("printArea").innerHTML = items.map(function(it){ return sheetHTML(it, ""); }).join("");
     $("pageStyle").textContent = "@page{size:" + PAPERS[paper].size + ";margin:0;}";
     setTimeout(function(){ window.print(); }, 250);
@@ -1008,13 +1168,30 @@ function openSettings(){
   h += '<h4>Footnote</h4><div class="hint">The note printed under the tests. Leave it empty to build it automatically from the method meanings above.</div>' +
     '<input type="text" id="stNote" placeholder="' + esc(autoNote()) + '" value="' + esc(S.note || "") + '">';
 
-  h += '<h4>Shelf life</h4><div class="hint">Expiry = extraction date + days. Tick the box when the extraction day itself counts as day 1 (expiry = extraction + days − 1).</div>';
-  h += '<table><tr><th>Component</th><th style="width:110px">Days</th><th>Extraction day = day 1</th></tr>';
+  h += '<h4>Shelf life</h4><div class="hint">The extraction day is day 0: expiry = extraction date + days (extracted Nov 14, 35 days → Dec 19).</div>';
+  h += '<table><tr><th>Component</th><th style="width:110px">Days</th></tr>';
   COMP_ORDER.forEach(function(k){
-    var c = S.shelf[k] || { days:0, first:false };
+    var c = S.shelf[k] || { days:0 };
     h += '<tr data-k="' + k + '"><td style="font-weight:700">' + k + ' <span class="muted" style="font-weight:400">' + COMPS[k] + '</span></td>' +
-      '<td><input type="number" min="1" class="shDays" value="' + esc(c.days) + '"></td>' +
-      '<td><input type="checkbox" class="shFirst" style="width:18px;height:18px"' + (c.first ? " checked" : "") + '></td></tr>';
+      '<td><input type="number" min="1" class="shDays" value="' + esc(c.days) + '"></td></tr>';
+  });
+  h += '</table>';
+
+  h += '<h4>Component labels (barcodes)</h4><div class="hint">Click a box and scan the component label, or type its product code (e.g. E0150V00). Typed names (WB, PRBC, PC, FFP, CRYO) always work. Several codes can be separated by commas.</div>';
+  h += '<table><tr><th style="width:230px">Component</th><th>Label code</th></tr>';
+  COMP_ORDER.forEach(function(k){
+    h += '<tr data-cc="' + k + '"><td style="font-weight:700">' + k + ' <span class="muted" style="font-weight:400">' + COMPS[k] + '</span></td>' +
+      '<td><input type="text" class="ccCode" value="' + esc((S.compCodes || {})[k] || "") + '" placeholder="scan or type the code" autocomplete="off" spellcheck="false"></td></tr>';
+  });
+  h += '</table>';
+
+  h += '<h4>Blood bag rules</h4><div class="hint">Which bag types each component can be prepared from. The donor record\'s bag type is checked against this when you enter a component, and corrected in the donor database from the result form.</div>';
+  h += '<table><tr><th>Component</th>' + BAGS.map(function(b){ return '<th style="text-align:center">' + b.charAt(0) + b.slice(1).toLowerCase() + '</th>'; }).join("") + '</tr>';
+  COMP_ORDER.forEach(function(k){
+    var al = (S.bagRules || {})[k] || [];
+    h += '<tr data-br="' + k + '"><td style="font-weight:700">' + k + '</td>' + BAGS.map(function(b){
+      return '<td style="text-align:center"><input type="checkbox" class="brChk" data-b="' + b + '" style="width:18px;height:18px"' + (al.indexOf(b) >= 0 ? " checked" : "") + '></td>';
+    }).join("") + '</tr>';
   });
   h += '</table>';
 
@@ -1075,7 +1252,7 @@ async function testLookup(){
       var snap = await fs.collection(col).where(sf, "in", [s, digitsOf(s)]).limit(2).get();
       if(!snap.empty){
         var dd = snap.docs[0].data();
-        out.textContent = "FOUND " + snap.size + " record(s) with " + sf + " = " + s + ".\nExtraction date read: " + (resolveExtDate(dd) || "(none)") + "\nBlood type read: " + (resolveBT(dd) || "(none)") + "\n\nFields of the first record:\n" + stringifyDoc(dd).slice(0, 2500);
+        out.textContent = "FOUND " + snap.size + " record(s) with " + sf + " = " + s + ".\nExtraction date read: " + (resolveExtDate(dd) || "(none)") + "\nBlood type read: " + (resolveBT(dd) || "(none)") + "\nBag type read: " + (normBag(dd.bloodBagType) || "(none)") + "\n\nFields of the first record:\n" + stringifyDoc(dd).slice(0, 2500);
         return;
       }
     }
@@ -1107,7 +1284,17 @@ function saveSettings(){
   $("setBody").querySelectorAll("tr[data-k]").forEach(function(row){
     var d = Number(row.querySelector(".shDays").value);
     if(!(d > 0)) d = DEFAULTS.shelf[row.dataset.k].days;
-    S.shelf[row.dataset.k] = { days:Math.round(d), first:row.querySelector(".shFirst").checked };
+    S.shelf[row.dataset.k] = { days:Math.round(d) };
+  });
+  S.compCodes = {};
+  $("setBody").querySelectorAll("tr[data-cc]").forEach(function(row){
+    S.compCodes[row.dataset.cc] = row.querySelector(".ccCode").value.trim().toUpperCase();
+  });
+  S.bagRules = {};
+  $("setBody").querySelectorAll("tr[data-br]").forEach(function(row){
+    var k = row.dataset.br, al = [];
+    row.querySelectorAll(".brChk").forEach(function(c){ if(c.checked) al.push(c.dataset.b); });
+    S.bagRules[k] = al.length ? al : DEFAULTS.bagRules[k].slice();
   });
   S.header = { l1:$("hdL1").value.trim(), l2:$("hdL2").value.trim(), l3:$("hdL3").value.trim(), l4:$("hdL4").value.trim(), l5:$("hdL5").value.trim() };
   S.note = $("stNote").value.trim();
@@ -1215,6 +1402,7 @@ function bindUI(){
   sr.addEventListener("input", function(e){
     var r = rOf(e.target); if(!r) return;
     if(e.target.classList.contains("sSer")) onRowSerial(r, e.target.value);
+    else if(e.target.classList.contains("sComp")){ setRowComp(r, e.target.value); recalcRow(r); }
   });
   sr.addEventListener("keydown", function(e){
     if(e.key !== "Enter") return;
@@ -1228,14 +1416,23 @@ function bindUI(){
       rowEl(r).querySelector(".sComp").focus();
     }else if(e.target.classList.contains("sComp")){
       e.preventDefault();
-      goNextRow(r);
+      var cc = setRowComp(r, e.target.value);
+      if(cc) e.target.value = cc;
+      recalcRow(r);
+      if(cc) goNextRow(r);
     }
   });
   sr.addEventListener("blur", function(e){
-    if(!e.target.classList || !e.target.classList.contains("sSer")) return;
+    if(!e.target.classList) return;
     var r = rOf(e.target); if(!r) return;
-    var v = normSerial(e.target.value);
-    if(v !== e.target.value){ e.target.value = v; onRowSerial(r, v); }
+    if(e.target.classList.contains("sSer")){
+      var v = normSerial(e.target.value);
+      if(v !== e.target.value){ e.target.value = v; onRowSerial(r, v); }
+    }else if(e.target.classList.contains("sComp")){
+      setRowComp(r, e.target.value);
+      if(r.comp) e.target.value = r.comp;
+      recalcRow(r, true);
+    }
   }, true);
   sr.addEventListener("focusin", function(e){
     var r = rOf(e.target); if(!r || !r.serial) return;
@@ -1244,8 +1441,9 @@ function bindUI(){
   sr.addEventListener("change", function(e){
     var r = rOf(e.target); if(!r) return;
     var cl = e.target.classList, v;
-    if(cl.contains("sComp")){ r.comp = e.target.value; r.expManual = false; }
+    if(cl.contains("sComp")){ setRowComp(r, e.target.value); }
     else if(cl.contains("sBt")){ r.bt = e.target.value; }
+    else if(cl.contains("sBag")){ r.bag = e.target.value; r.bagTouched = true; }
     else if(cl.contains("sExt")){
       v = e.target.value; r.ext = v; r.extManual = !!v; r.expManual = false;
       if(!v){ var cc = CACHE.get(r.serial); r.ext = (cc && cc.ext) || ""; }
@@ -1268,6 +1466,8 @@ function bindUI(){
     rows = [newRow()]; rowPvIdx = 0; renderRows(); previewMode = "single"; renderPreview();
   });
   $("sPrint").addEventListener("click", function(){ previewMode = "single"; printItems(rowItems()); });
+  $("sSync").addEventListener("click", function(){ syncClick(rowItems()); });
+  $("lSync").addEventListener("click", function(){ syncClick(listResolved()); });
 
   document.querySelectorAll(".useDate").forEach(function(cb){
     cb.addEventListener("change", function(){
@@ -1291,12 +1491,16 @@ function bindUI(){
     if(e.target.classList.contains("rFrom")) r.from = e.target.value;
     else if(e.target.classList.contains("rTo")) r.to = e.target.value;
     else if(e.target.classList.contains("rExc")) r.exc = e.target.value;
+    else if(e.target.classList.contains("rComp")){ r.comp = resolveComponent(e.target.value); r.compBad = !!e.target.value.trim() && !r.comp; }
     else return;
     clearTimeout(listTimer); listTimer = setTimeout(function(){ refreshList(false); }, 350);
   });
   rr.addEventListener("change", function(e){
     var r = rowOf(e.target); if(!r) return;
-    if(e.target.classList.contains("rComp")) r.comp = e.target.value;
+    if(e.target.classList.contains("rComp")){
+      r.comp = resolveComponent(e.target.value); r.compBad = !!e.target.value.trim() && !r.comp;
+      if(r.comp) e.target.value = r.comp;
+    }
     else if(e.target.classList.contains("rBt")) r.bt = e.target.value;
     clearTimeout(listTimer);
     refreshList(true);
@@ -1315,7 +1519,16 @@ function bindUI(){
     var tr = e.target.closest("tr"); if(!tr) return;
     var s = tr.dataset.s; OV[s] = OV[s] || {};
     if(e.target.classList.contains("tBt")){ OV[s].bt = e.target.value; }
-    else if(e.target.classList.contains("tComp")){ OV[s].comp = e.target.value; delete OV[s].exp; }
+    else if(e.target.classList.contains("tComp")){
+      var tc = resolveComponent(e.target.value);
+      if(e.target.value.trim() && !tc){
+        $("lStatus").className = "status warn";
+        $("lStatus").textContent = "⚠ Unknown component “" + e.target.value.trim() + "” for " + s + " – type WB, PRBC, PC, FFP or CRYO, or scan the label.";
+        renderListTable(); return;
+      }
+      OV[s].comp = tc; delete OV[s].exp;
+    }
+    else if(e.target.classList.contains("tBag")){ OV[s].bag = e.target.value; }
     else if(e.target.classList.contains("tExt")){
       if(e.target.value){ OV[s].ext = e.target.value; delete OV[s].exp; } else { delete OV[s].ext; delete OV[s].exp; }
     }
@@ -1353,7 +1566,8 @@ function bindUI(){
     $("paperOv").classList.remove("show");
     var go = pendingPrint; pendingPrint = null;
     renderPreview();
-    if(go) go();
+    var doSync = !!($("paperSyncChk") && $("paperSyncChk").checked);
+    if(go) go(doSync);
   });
 
   /* medtech */
@@ -1406,6 +1620,7 @@ function startData(){
     document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
     rows.forEach(function(r){ if(!r.expManual) r.exp = calcExpiry(r.ext, r.comp); syncRow(r); });
     refreshList(false);
+    refreshSyncButtons();
     previewMode = $("tabList").classList.contains("on") ? "list" : "single";
     renderPreview();
   }, function(e){ console.error("Settings load error:", e); });
