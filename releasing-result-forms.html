@@ -320,6 +320,10 @@ var MAX_PER_ROW = 500;
 var DEFAULTS = {
   prefix: "PRC2600-",
   dateFormat: "long",
+  /* lines printed at the top of the form */
+  header: { l1:"PHILIPPINE RED CROSS", l2:"Baguio City Chapter", l3:"#39 Harrison Road, Baguio City", l4:"Tel. No. (074)661-1770 / 0908 885 2707", l5:"Email Add: bloodservices.redcrossbaguio@gmail.com/baguio@redcross.org.ph" },
+  /* footnote: leave empty to build it automatically from the method meanings */
+  note: "",
   /* shelf life: days, and whether the extraction day itself counts as day 1 */
   shelf: {
     WB:  { days:35,  first:true  },
@@ -627,6 +631,7 @@ function listResolved(){ return visibleBase().map(resolveListItem); }
 
 /* ═════════ the form ═════════ */
 function noteText(){
+  if(settings.note && String(settings.note).trim()) return String(settings.note).trim();
   var seen = [], out = [];
   settings.tests.forEach(function(t){
     var m = String(t.method || "").trim();
@@ -640,6 +645,10 @@ function noteText(){
 }
 function currentMedtech(){ return selMed && medtechs[selMed] ? medtechs[selMed] : null; }
 
+function headerHTML(){
+  var H = settings.header || DEFAULTS.header;
+  return ["l1","l2","l3","l4","l5"].map(function(k){ return String(H[k] || "").trim(); }).filter(Boolean).map(esc).join("<br>");
+}
 function formHTML(it){
   var S = settings;
   var dateTxt = useDate ? fmtDate(todayISO()) : "";
@@ -652,7 +661,7 @@ function formHTML(it){
     return '<tr><td class="tn">' + esc(t.label) + '</td><td class="tb">' + esc(t.brand) + '</td><td class="tm">' + esc(t.method) + '</td><td class="tr">' + esc(t.result) + '</td></tr>';
   }).join("");
   return '<div class="rform">' +
-    '<div class="rf-head"><div><img src="' + LOGO + '" alt=""></div><div class="rf-org">PHILIPPINE RED CROSS<br>Baguio City Chapter<br>#39 Harrison Road, Baguio City<br>Tel. No. (074)661-1770 / 0908 885 2707<br>Email Add: bloodservices.redcrossbaguio@gmail.com/baguio@redcross.org.ph</div></div>' +
+    '<div class="rf-head"><div><img src="' + LOGO + '" alt=""></div><div class="rf-org">' + headerHTML() + '</div></div>' +
     '<div class="rf-grid rf-info">' +
       '<div class="rf-lbl">SERIAL NO:</div><div class="rf-val">' + esc(it.serial) + '</div><div class="rf-lbl r">DATE:</div><div class="rf-dt">' + esc(dateTxt) + '</div>' +
       '<div class="rf-lbl">BLOOD TYPE:</div><div class="rf-val">' + esc(it.bt) + '</div><div></div><div></div>' +
@@ -996,6 +1005,9 @@ function openSettings(){
   });
   h += '<tr><td><input type="text" class="mmName" placeholder="new method"></td><td><input type="text" class="mmMean" placeholder="meaning (optional)"></td></tr></table>';
 
+  h += '<h4>Footnote</h4><div class="hint">The note printed under the tests. Leave it empty to build it automatically from the method meanings above.</div>' +
+    '<input type="text" id="stNote" placeholder="' + esc(autoNote()) + '" value="' + esc(S.note || "") + '">';
+
   h += '<h4>Shelf life</h4><div class="hint">Expiry = extraction date + days. Tick the box when the extraction day itself counts as day 1 (expiry = extraction + days − 1).</div>';
   h += '<table><tr><th>Component</th><th style="width:110px">Days</th><th>Extraction day = day 1</th></tr>';
   COMP_ORDER.forEach(function(k){
@@ -1005,6 +1017,14 @@ function openSettings(){
       '<td><input type="checkbox" class="shFirst" style="width:18px;height:18px"' + (c.first ? " checked" : "") + '></td></tr>';
   });
   h += '</table>';
+
+  var H = S.header || DEFAULTS.header;
+  h += '<h4>Form header <small style="text-transform:none;font-weight:400;color:#667085">(change the address, contact number or email here)</small></h4>' +
+    '<div class="f"><label>Line 1 – organization</label><input type="text" id="hdL1" value="' + esc(H.l1) + '"></div>' +
+    '<div class="f" style="margin-top:6px"><label>Line 2 – chapter</label><input type="text" id="hdL2" value="' + esc(H.l2) + '"></div>' +
+    '<div class="f" style="margin-top:6px"><label>Line 3 – address</label><input type="text" id="hdL3" value="' + esc(H.l3) + '"></div>' +
+    '<div class="f" style="margin-top:6px"><label>Line 4 – contact numbers</label><input type="text" id="hdL4" value="' + esc(H.l4) + '"></div>' +
+    '<div class="f" style="margin-top:6px"><label>Line 5 – email</label><input type="text" id="hdL5" value="' + esc(H.l5) + '"></div>';
 
   h += '<h4>Form</h4><div class="grid2">' +
     '<div class="f"><label>Default serial prefix</label><input type="text" id="stPrefix" value="' + esc(S.prefix) + '"></div>' +
@@ -1033,6 +1053,11 @@ function openSettings(){
     imageToSig(f, 420, 150).then(function(url){ $("stPathImg").src = url; $("stPathImg").dataset.new = url; }).catch(function(){ alert("Could not read that image."); });
   };
   /* the “new method” row grows as you type */
+}
+function autoNote(){
+  var keep = settings.note; settings.note = "";
+  var t = noteText(); settings.note = keep;
+  return t;
 }
 function stringifyDoc(v){
   return JSON.stringify(v, function(k, val){
@@ -1084,6 +1109,8 @@ function saveSettings(){
     if(!(d > 0)) d = DEFAULTS.shelf[row.dataset.k].days;
     S.shelf[row.dataset.k] = { days:Math.round(d), first:row.querySelector(".shFirst").checked };
   });
+  S.header = { l1:$("hdL1").value.trim(), l2:$("hdL2").value.trim(), l3:$("hdL3").value.trim(), l4:$("hdL4").value.trim(), l5:$("hdL5").value.trim() };
+  S.note = $("stNote").value.trim();
   S.prefix = $("stPrefix").value.trim().toUpperCase();
   S.dateFormat = $("stDate").value;
   S.pathologist.name = $("stPathName").value.trim();
