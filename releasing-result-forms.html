@@ -48,6 +48,14 @@ header p{margin:4px 0 0;font-size:13px;opacity:.9;}
 .rrow .rInfo{flex:1 1 100%;font-size:12px;color:#667085;}
 .rrow .rInfo.bad{color:#c62828;font-weight:600;}
 
+.srow{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;padding:6px 8px;margin-bottom:6px;background:#f8f9fb;border:1px solid #e3e7ee;border-radius:10px;}
+.srow.sel{border-color:#b30000;background:#fff7f7;}
+.srow .sn{width:22px;text-align:center;font-weight:700;color:#999;padding-bottom:10px;font-size:13px;}
+.srow:not(:first-child) .f label{display:none;}
+.srow .sInfo{flex:1 1 100%;font-size:12px;margin:0 0 0 30px;}
+.srow .sInfo:empty{display:none;}
+.srow .sInfo.ok{color:#2e7d32;}.srow .sInfo.warn{color:#c62828;}.srow .sInfo.muted{color:#667085;}
+
 .tblWrap{margin-top:12px;max-height:420px;overflow:auto;border:1px solid #e3e7ee;border-radius:10px;}
 table.lst{border-collapse:collapse;width:100%;font-size:13px;}
 table.lst th{position:sticky;top:0;background:#f1f3f7;text-align:left;padding:8px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#555;z-index:1;}
@@ -164,19 +172,18 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
     </div>
   </div>
 
-  <!-- single serial -->
+  <!-- serial rows -->
   <div class="card">
-    <h3>Single serial <small>&ndash; scan or type the serial number, then pick the component</small></h3>
-    <div class="row">
-      <div class="f" style="flex:2 1 230px"><label>Serial number</label><input type="text" id="sSerial" placeholder="Scan or type serial number" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
-      <div class="f" style="flex:1 1 190px"><label>Component</label><select id="sComp"></select></div>
-      <div class="f" style="flex:1 1 130px"><label>Blood type</label><select id="sBt"></select></div>
-      <div class="f" style="flex:1 1 150px"><label>Date of extraction</label><input type="date" id="sExt"></div>
-      <div class="f" style="flex:1 1 150px"><label>Date of expiry</label><input type="date" id="sExp"></div>
+    <h3>Serial numbers <small>&ndash; scan or type each serial, then pick the component. Add a row for each serial (up to 20, like the Excel sheet)</small></h3>
+    <div id="sRows"></div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn grey" id="sAdd" type="button">+ ADD SERIAL</button>
+      <button class="btn grey" id="sClear" type="button">CLEAR ALL</button>
+      <span id="sCount" class="muted" style="font-size:13px;padding:0 6px"></span>
+      <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
       <button class="btn red" id="sPrint" type="button">PRINT</button>
     </div>
-    <div class="status" id="sStatus"></div>
   </div>
 
   <!-- ranges -->
@@ -200,7 +207,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
   <div class="card">
     <h3>Preview <small>&ndash; this is exactly what will print (each serial = 2 copies, one sheet)</small></h3>
     <div class="pvHead">
-      <button class="tab on" id="tabSingle" type="button">Single serial</button>
+      <button class="tab on" id="tabSingle" type="button">Serial numbers</button>
       <button class="tab" id="tabList" type="button">Range list</button>
       <span style="flex:1"></span>
       <button class="btn grey sm" id="pvPrev" type="button">&#8249; PREV</button>
@@ -333,7 +340,7 @@ var DEFAULTS = {
   methodNames: { CMIA:"Chemiluminescent Microparticle Immunoassay", ELISA:"" },
   pathologist: { name:"MELINDA M. FLORES, MD, FPSP", title:"Chapter Pathologist", image:"" },
   /* where the extraction date is read from (donor tracking). Editable in Test settings. */
-  lookup: { collection:"donorDatabase", serialField:"serialNumber", dateField:"donationDate", bloodField:"bloodType" }
+  lookup: { collection:"donorDatabase", serialField:"serialNumber", dateField:"entryDate", bloodField:"bloodType" }
 };
 var MEDTECH_SEED = [
   "Gideon Nick A. Negradas, RMT Lic. No.0100565",
@@ -372,7 +379,11 @@ var paper = lsGet("rf_paper") || "short";
 if(!PAPERS[paper]) paper = "short";
 var useDate = false;
 
-var single = { serial:"", comp:"", bt:"", ext:"", exp:"", extManual:false, expManual:false, state:"" };
+var rows = [];            /* the serial rows (up to 20) */
+var rowSeq = 0;
+var rowTimers = {};
+var MAX_ROWS = 20;
+var rowPvIdx = 0;
 var ranges = [];
 var rangeSeq = 0;
 var OV = {};              /* per-serial edits in the list: { serial: {bt, ext, exp} } */
@@ -382,7 +393,7 @@ var CACHE = new Map();    /* tracking lookups: serial -> {ext, bt} | null */
 var INFLIGHT = new Set();
 var ERRS = {};            /* serial -> error text */
 var previewMode = "single";
-var previewIdx = 0;
+var previewIdx = 0;          /* sheet shown in the range list preview */
 
 /* ═════════ dates ═════════ */
 function todayISO(){
@@ -408,19 +419,36 @@ function calcExpiry(ext, comp){
   if(!days) return "";
   return addDaysISO(ext, days - (c.first ? 1 : 0));
 }
-function toISO(v){
-  if(v === undefined || v === null || v === "") return "";
-  if(typeof v === "object" && typeof v.toDate === "function") v = v.toDate();
-  if(typeof v === "number") v = new Date(v);
-  if(v instanceof Date){
-    if(isNaN(v)) return "";
-    return new Intl.DateTimeFormat("en-CA",{ timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit" }).format(v);
+var MONTH_TEXT = { jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12" };
+function parseDateFromText(text){
+  var t = String(text || "").toLowerCase().trim(), m;
+  if(!t) return "";
+  if((m = /(\d{4})[-_ ](\d{1,2})[-_ ](\d{1,2})/.exec(t))) return m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]);
+  if((m = /(\d{1,2})[-_ ](\d{1,2})[-_ ](\d{4})/.exec(t))) return m[3] + "-" + pad(+m[1]) + "-" + pad(+m[2]);
+  if((m = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-_]*(\d{4})/.exec(t))) return m[2] + "-" + MONTH_TEXT[m[1]] + "-01";
+  if((m = /(\d{4})[\s\-_]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/.exec(t))) return m[1] + "-" + MONTH_TEXT[m[2]] + "-01";
+  return "";
+}
+function localISO(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+function toISO(raw){
+  if(raw === undefined || raw === null || raw === "") return "";
+  if(typeof raw === "string"){
+    var t = raw.trim(), m;
+    if(!t) return "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    if(/^\d{1,2}$/.test(t)) return "";   /* a bare day number is not a date by itself */
+    if((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(t))){
+      var y = Number(m[3]); if(m[3].length === 2) y = y < 50 ? 2000 + y : 1900 + y;
+      return y + "-" + pad(+m[1]) + "-" + pad(+m[2]);
+    }
+    var pt = parseDateFromText(t); if(pt) return pt;
+    var fd = new Date(t); if(!isNaN(fd.getTime())) return localISO(fd);
+    return "";
   }
-  var s = String(v).trim(), m;
-  if((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]);
-  if((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s))) return m[3] + "-" + pad(+m[1]) + "-" + pad(+m[2]);
-  var d = new Date(s + " 12:00");
-  if(!isNaN(d)) return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+  if(typeof raw.toDate === "function"){ var d1 = raw.toDate(); if(!isNaN(d1.getTime())) return localISO(d1); }
+  if(typeof raw === "object" && raw.seconds){ var d2 = new Date(raw.seconds * 1000); if(!isNaN(d2.getTime())) return localISO(d2); }
+  if(raw instanceof Date && !isNaN(raw.getTime())) return localISO(raw);
+  if(typeof raw === "number"){ var d3 = new Date(raw); if(!isNaN(d3.getTime())) return localISO(d3); }
   return "";
 }
 
@@ -500,18 +528,54 @@ function normBT(v){
 }
 
 /* ═════════ tracking lookup (isolated – this is the only place that reads donor data) ═════════ */
+var DATE_FIELDS = ["entryDate","donationDate","date","bleedingDate"];
+var BT_FIELDS = ["bloodType","blood_type","bloodtype","aboRh","abo_rh","aboRhType","bloodGroup","blood_group","bloodTypeRh","bloodTyping","typeAndRh","finalBloodType","labBloodType","bloodTypeResult"];
+/* extraction date of a donor record – same fields and rules the donor tracking page uses */
+function resolveExtDate(d){
+  var L = settings.lookup, fields = [], i;
+  [L.dateField].concat(DATE_FIELDS).forEach(function(f){ if(f && fields.indexOf(f) < 0) fields.push(f); });
+  for(i = 0; i < fields.length; i++){ var v = toISO(d[fields[i]]); if(v) return v; }
+  /* imported sheets can hold just the day number (e.g. "5"): use the month of the source sheet / file, or when the record was created */
+  for(i = 0; i < fields.length; i++){
+    var raw = d[fields[i]];
+    if(raw !== undefined && raw !== null && /^\d{1,2}$/.test(String(raw).trim())){
+      var im = d.importMeta || {};
+      var base = parseDateFromText(im.sourceSheet || "") || parseDateFromText(im.sourceFile || "") || toISO(d.createdAt);
+      var day = Number(String(raw).trim());
+      if(base){
+        var cand = base.slice(0, 7) + "-" + pad(day), t = new Date(cand + "T00:00:00");
+        if(!isNaN(t.getTime()) && t.getDate() === day) return cand;
+      }
+    }
+  }
+  return "";
+}
+function resolveBT(d){
+  var L = settings.lookup, fields = [];
+  [L.bloodField].concat(BT_FIELDS).forEach(function(f){ if(f && fields.indexOf(f) < 0) fields.push(f); });
+  for(var i = 0; i < fields.length; i++){ var n = normBT(d[fields[i]]); if(n) return n; }
+  return "";
+}
+function isDeletedRec(d){ return d.isDeleted === true || (typeof d.deletedBatchId === "string" && d.deletedBatchId.trim() !== ""); }
 async function queryChunk(chunk){
   var L = settings.lookup, variants = [];
   chunk.forEach(function(s){ [s, digitsOf(s)].forEach(function(v){ if(v && variants.indexOf(v) < 0) variants.push(v); }); });
   var snap = await fs.collection(L.collection).where(L.serialField, "in", variants).get();
+  var found = {};
   snap.forEach(function(doc){
-    var raw = String(doc.get(L.serialField) == null ? "" : doc.get(L.serialField)).toUpperCase().replace(/\s+/g,"");
+    var d = doc.data();
+    if(isDeletedRec(d)) return;
+    var raw = String(d[L.serialField] == null ? "" : d[L.serialField]).toUpperCase().replace(/\s+/g, "");
     var hit = chunk.filter(function(s){ return s === raw || digitsOf(s) === raw; })[0];
-    if(!hit || (CACHE.get(hit))) return;
-    CACHE.set(hit, {
-      ext: toISO(doc.get(L.dateField)),
-      bt: L.bloodField ? normBT(doc.get(L.bloodField)) : ""
-    });
+    if(!hit) return;
+    (found[hit] = found[hit] || []).push({ ext:resolveExtDate(d), bt:resolveBT(d) });
+  });
+  Object.keys(found).forEach(function(s){
+    var list = found[s], withDate = list.filter(function(x){ return x.ext; }), exts = {};
+    withDate.forEach(function(x){ exts[x.ext] = 1; });
+    var pick = withDate[0] || list[0];
+    var bt = (list.filter(function(x){ return x.bt; })[0] || {}).bt || "";
+    CACHE.set(s, { ext:pick.ext, bt:bt, n:list.length, conflict:Object.keys(exts).length > 1 });
   });
 }
 async function fetchTracking(serials){
@@ -552,14 +616,13 @@ function resolveListItem(it){
   else if(ov.ext !== undefined) state = "manual";
   else if(INFLIGHT.has(it.serial)) state = "wait";
   else if(ERRS[it.serial]) state = "err";
-  else if(c && c.ext) state = "ok";
+  else if(c && c.ext) state = (c.n > 1 ? "dup" : "ok");
   else if(c === null || (c && !c.ext)) state = "none";
   else state = "idle";
   return { serial:it.serial, comp:it.comp, bt:bt, ext:ext, exp:exp, state:state };
 }
 function visibleBase(){ return listBase.filter(function(it){ return !SKIP[it.serial]; }); }
 function listResolved(){ return visibleBase().map(resolveListItem); }
-function singleItem(){ return { serial:single.serial, comp:single.comp, bt:single.bt, ext:single.ext, exp:single.exp, state:single.state }; }
 
 /* ═════════ the form ═════════ */
 function noteText(){
@@ -579,7 +642,7 @@ function currentMedtech(){ return selMed && medtechs[selMed] ? medtechs[selMed] 
 function formHTML(it){
   var S = settings;
   var dateTxt = useDate ? fmtDate(todayISO()) : "";
-  var med = currentMedtech();
+  var med = (it.med && medtechs[it.med]) ? medtechs[it.med] : currentMedtech();
   var medLine = med ? med.label : "";
   var medSig = (incSig && med && med.image) ? '<img src="' + esc(med.image) + '" alt="">' : "";
   var pathSig = S.pathologist.image || PATH_SIG;
@@ -616,14 +679,19 @@ function sheetHTML(it, cls){
 
 /* ═════════ preview ═════════ */
 function previewItems(){
-  return previewMode === "single" ? [singleItem()] : listResolved();
+  return previewMode === "single" ? rowItems() : listResolved();
 }
+function getIdx(){ return previewMode === "single" ? rowPvIdx : previewIdx; }
+function setIdx(i){ if(previewMode === "single") rowPvIdx = i; else previewIdx = i; }
 function renderPreview(){
   var items = previewItems();
   var box = $("pvBox");
   var n = items.length;
-  if(previewIdx >= n) previewIdx = Math.max(0, n - 1);
-  var it = n ? items[previewIdx] : { serial:"", comp:"", bt:"", ext:"", exp:"" };
+  var idx = getIdx();
+  if(idx >= n) idx = Math.max(0, n - 1);
+  if(idx < 0) idx = 0;
+  setIdx(idx);
+  var it = n ? items[idx] : { serial:"", comp:"", bt:"", ext:"", exp:"" };
   var P = PAPERS[paper];
   var avail = Math.max(280, box.clientWidth - 28);
   var scale = Math.min(1, avail / P.w);
@@ -631,14 +699,16 @@ function renderPreview(){
     '<div class="pvScale" style="transform:scale(' + scale + ');width:' + P.w + 'px;height:' + P.h + 'px">' + sheetHTML(it, "pv") + '</div></div>';
   $("tabSingle").classList.toggle("on", previewMode === "single");
   $("tabList").classList.toggle("on", previewMode === "list");
-  $("pvPrev").disabled = previewMode !== "list" || previewIdx <= 0;
-  $("pvNext").disabled = previewMode !== "list" || previewIdx >= n - 1;
-  $("pvInfo").textContent = previewMode === "list"
-    ? (n ? "Sheet " + (previewIdx + 1) + " of " + n + (it.serial ? " · " + it.serial : "") : "No serials in the list yet")
-    : (it.serial ? it.serial : "Enter a serial number above");
+  $("pvPrev").disabled = idx <= 0;
+  $("pvNext").disabled = idx >= n - 1;
+  $("pvInfo").textContent = n
+    ? "Sheet " + (idx + 1) + " of " + n + (it.serial ? " · " + it.serial : "")
+    : (previewMode === "list" ? "No serials in the list yet" : "Enter a serial number above");
+  var sel = filledRows()[idx];
+  document.querySelectorAll(".srow").forEach(function(el){ el.classList.toggle("sel", previewMode === "single" && !!sel && el.dataset.id === sel.id); });
 }
 
-/* ═════════ single serial ═════════ */
+/* ═════════ serial rows (up to 20, like the Excel sheet) ═════════ */
 function fillSelect(sel, opts, blank){
   var cur = sel.value;
   sel.innerHTML = (blank !== undefined ? '<option value="">' + esc(blank) + '</option>' : "") +
@@ -647,59 +717,117 @@ function fillSelect(sel, opts, blank){
 }
 function compOptions(){ return COMP_ORDER.map(function(k){ return { v:k, t:k + " – " + COMPS[k] }; }); }
 function btOptions(){ return BTS.map(function(b){ return { v:b, t:b }; }); }
+function medOptionsHTML(){
+  return '<option value="">same as above</option>' + medSorted().map(function(m){ return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join("");
+}
 
-function singleStatus(){
-  var el = $("sStatus"), s = single.serial;
-  if(!s){ el.className = "status"; el.textContent = ""; return; }
-  if(!isCompleteSerial(s)){ el.className = "status muted"; el.textContent = ""; return; }
+function newRow(prev){ return { id:"s" + (++rowSeq), serial:"", comp:prev ? prev.comp : "", bt:"", ext:"", exp:"", extManual:false, expManual:false, med:"" }; }
+function rowEl(r){ return $("sRows").querySelector('[data-id="' + r.id + '"]'); }
+function filledRows(){ return rows.filter(function(r){ return r.serial; }); }
+function rowItem(r){ return { serial:r.serial, comp:r.comp, bt:r.bt, ext:r.ext, exp:r.exp, med:r.med, state:"" }; }
+function rowItems(){ return filledRows().map(rowItem); }
+function selectRowPreview(r){ var i = filledRows().indexOf(r); if(i >= 0) rowPvIdx = i; }
+
+function rowHTML(r, n){
+  return '<div class="srow" data-id="' + r.id + '">' +
+    '<div class="sn">' + n + '</div>' +
+    '<div class="f" style="flex:1.6 1 150px"><label>Serial number</label><input type="text" class="sSer" placeholder="Scan or type serial number" value="' + esc(r.serial) + '" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>' +
+    '<div class="f" style="flex:1.3 1 150px"><label>Component</label><select class="sComp"></select></div>' +
+    '<div class="f" style="flex:1 1 110px"><label>Blood type</label><select class="sBt"></select></div>' +
+    '<div class="f" style="flex:1 1 125px"><label>Date of extraction</label><input type="date" class="sExt"></div>' +
+    '<div class="f" style="flex:1 1 125px"><label>Date of expiry</label><input type="date" class="sExp"></div>' +
+    '<div class="f" style="flex:1.3 1 140px"><label>Medtech</label><select class="sMed"></select></div>' +
+    '<button class="btn grey sDel" type="button" title="Remove this row">&#10005;</button>' +
+    '<div class="sInfo"></div></div>';
+}
+function renderRows(){
+  $("sRows").innerHTML = rows.map(function(r, i){ return rowHTML(r, i + 1); }).join("");
+  rows.forEach(function(r){
+    var el = rowEl(r);
+    fillSelect(el.querySelector(".sComp"), compOptions(), "— component —");
+    fillSelect(el.querySelector(".sBt"), btOptions(), "— blood type —");
+    el.querySelector(".sMed").innerHTML = medOptionsHTML();
+    syncRow(r);
+  });
+  $("sCount").textContent = rows.length + " / " + MAX_ROWS;
+  $("sAdd").disabled = rows.length >= MAX_ROWS;
+}
+function refreshMedSelects(){
+  rows.forEach(function(r){
+    var el = rowEl(r); if(!el) return;
+    if(r.med && !medtechs[r.med]) r.med = "";
+    var s = el.querySelector(".sMed"); s.innerHTML = medOptionsHTML(); s.value = r.med;
+  });
+}
+function rowStatus(r){
+  var s = r.serial;
+  if(!s || !isCompleteSerial(s)) return { cls:"muted", text:"" };
+  var pre = rows.some(function(o){ return o !== r && o.serial === s; }) ? "⚠ This serial is also entered in another row. " : "";
   var c = CACHE.get(s);
-  if(INFLIGHT.has(s)){ el.className = "status muted"; el.textContent = "Checking tracking…"; return; }
-  if(ERRS[s]){ el.className = "status warn"; el.textContent = "⚠ Could not read tracking (" + ERRS[s] + "). Type the extraction date, or check Test settings → Tracking lookup."; return; }
-  if(single.extManual){ el.className = "status muted"; el.textContent = "Extraction date typed manually."; return; }
-  if(c && c.ext){ el.className = "status ok"; el.textContent = "✔ Found in tracking – extracted " + fmtDate(c.ext) + (c.bt ? " · " + c.bt : ""); return; }
-  if(c === null || c){ el.className = "status warn"; el.textContent = "⚠ Not found in tracking – type the extraction date."; return; }
-  el.className = "status"; el.textContent = "";
+  if(INFLIGHT.has(s)) return { cls:"muted", text:pre + "Checking tracking…" };
+  if(ERRS[s]) return { cls:"warn", text:pre + "⚠ Could not read tracking (" + ERRS[s] + "). Type the extraction date, or check Test settings → Tracking lookup." };
+  if(c && c.conflict) return { cls:"warn", text:pre + "⚠ " + c.n + " records in tracking have this serial with different dates – please check the extraction date." };
+  if(r.extManual) return { cls:"muted", text:pre + "Extraction date typed manually." };
+  if(c && c.ext) return { cls:c.n > 1 ? "warn" : "ok", text:pre + "✔ Found in tracking – extracted " + fmtDate(c.ext) + (c.bt ? " · " + c.bt : "") + (c.n > 1 ? " (⚠ " + c.n + " records have this serial)" : "") };
+  if(c) return { cls:"warn", text:pre + "⚠ Found in tracking but it has no extraction date – type it." };
+  if(c === null) return { cls:"warn", text:pre + "⚠ Not found in tracking – type the extraction date." };
+  return { cls:"muted", text:pre };
 }
-function syncSingleInputs(){
-  $("sExt").value = single.ext;
-  $("sExp").value = single.exp;
-  $("sBt").value = single.bt;
-  $("sExt").style.borderColor = (single.serial && single.comp && !single.ext) ? "#c62828" : "";
+function syncRow(r){
+  var el = rowEl(r); if(!el) return;
+  el.querySelector(".sComp").value = r.comp;
+  el.querySelector(".sBt").value = r.bt;
+  el.querySelector(".sExt").value = r.ext;
+  el.querySelector(".sExp").value = r.exp;
+  el.querySelector(".sMed").value = r.med;
+  el.querySelector(".sExt").style.borderColor = (r.serial && r.comp && !r.ext) ? "#c62828" : "";
+  var st = rowStatus(r), inf = el.querySelector(".sInfo");
+  inf.className = "sInfo " + st.cls; inf.textContent = st.text;
 }
-function recalcSingle(){
-  if(!single.expManual) single.exp = calcExpiry(single.ext, single.comp);
-  syncSingleInputs();
-  singleStatus();
-  previewMode = "single";
+function recalcRow(r, keepPreview){
+  if(!r.expManual) r.exp = calcExpiry(r.ext, r.comp);
+  syncRow(r);
+  rows.forEach(function(o){ if(o !== r && o.serial && o.serial === r.serial) syncRow(o); });
+  if(!keepPreview){ previewMode = "single"; selectRowPreview(r); }
   renderPreview();
 }
-var singleTimer = null;
-function onSingleSerial(){
-  var s = normSerial($("sSerial").value);
-  if(s !== single.serial){
-    single.serial = s;
-    single.ext = ""; single.exp = ""; single.extManual = false; single.expManual = false; single.bt = "";
+function onRowSerial(r, raw){
+  var s = normSerial(raw);
+  if(s !== r.serial){
+    r.serial = s;
+    r.ext = ""; r.exp = ""; r.extManual = false; r.expManual = false; r.bt = "";
     var c = CACHE.get(s);
-    if(c){ single.ext = c.ext || ""; single.bt = c.bt || ""; }
+    if(c){ r.ext = c.ext || ""; r.bt = c.bt || ""; }
   }
-  recalcSingle();
-  clearTimeout(singleTimer);
-  if(isCompleteSerial(s) && !CACHE.has(s)){ singleTimer = setTimeout(doSingleLookup, 380); }
+  recalcRow(r);
+  clearTimeout(rowTimers[r.id]);
+  if(isCompleteSerial(s) && !CACHE.has(s)){ rowTimers[r.id] = setTimeout(function(){ doRowLookup(r); }, 380); }
 }
-async function doSingleLookup(){
-  var s = single.serial;
+async function doRowLookup(r){
+  var s = r.serial;
   if(!isCompleteSerial(s)) return;
-  singleStatus();
   var p = fetchTracking([s]);
-  singleStatus();
+  syncRow(r);
   await p;
-  if(single.serial !== s) return;
+  if(r.serial !== s || rows.indexOf(r) < 0) return;
   var c = CACHE.get(s);
   if(c){
-    if(!single.extManual) single.ext = c.ext || "";
-    if(c.bt && !single.bt) single.bt = c.bt;
+    if(!r.extManual) r.ext = c.ext || "";
+    if(c.bt && !r.bt) r.bt = c.bt;
   }
-  recalcSingle();
+  recalcRow(r, true);
+}
+function addRow(){
+  if(rows.length >= MAX_ROWS) return;
+  rows.push(newRow(rows[rows.length - 1]));
+  renderRows();
+  var last = rows[rows.length - 1];
+  rowEl(last).querySelector(".sSer").focus();
+}
+function goNextRow(r){
+  var i = rows.indexOf(r);
+  if(i < rows.length - 1) rowEl(rows[i + 1]).querySelector(".sSer").focus();
+  else addRow();
 }
 
 /* ═════════ ranges ═════════ */
@@ -778,7 +906,7 @@ async function fetchList(){
 }
 function stateText(s){
   return { ok:'<span class="ok">✔ tracking</span>', none:'<span class="warn">⚠ not in tracking</span>', manual:'<span class="muted">✎ edited</span>',
-           wait:'<span class="muted">checking…</span>', err:'<span class="warn">⚠ lookup error</span>', nocomp:'<span class="warn">choose component</span>', idle:'<span class="muted">—</span>' }[s] || "";
+           dup:'<span class="warn">⚠ duplicate in tracking</span>', wait:'<span class="muted">checking…</span>', err:'<span class="warn">⚠ lookup error</span>', nocomp:'<span class="warn">choose component</span>', idle:'<span class="muted">—</span>' }[s] || "";
 }
 function renderListTable(){
   var wrap = $("listWrap");
@@ -818,8 +946,9 @@ function pickedPaper(){
 }
 function printItems(items){
   if(!items.length){ alert("Nothing to print yet. Enter a serial number first."); return; }
-  var noSerial = items.filter(function(i){ return !i.serial; }).length;
-  if(noSerial){ alert("Please enter the serial number first."); return; }
+  var seenS = {}, dupS = [];
+  items.forEach(function(i){ if(seenS[i.serial] && dupS.indexOf(i.serial) < 0) dupS.push(i.serial); seenS[i.serial] = true; });
+  if(dupS.length && !confirm("These serial numbers are entered more than once: " + dupS.slice(0, 5).join(", ") + (dupS.length > 5 ? "…" : "") + "\n\nPrint anyway?")) return;
   var noComp = items.filter(function(i){ return !i.comp; }).length;
   if(noComp){ alert(noComp + " serial(s) have no component yet. Please choose a component."); return; }
   var missExt = items.filter(function(i){ return !i.ext; }).length;
@@ -884,11 +1013,11 @@ function openSettings(){
     '<div class="row" style="margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">Pathologist signature:</span><img id="stPathImg" src="' + esc(S.pathologist.image || PATH_SIG) + '" alt="" style="height:34px;border:1px solid #eee;background:#fff"><input type="file" id="stPathFile" accept="image/*" style="width:auto;font-size:12px"></div>';
 
   h += '<h4>Tracking lookup <small style="text-transform:none;font-weight:400;color:#667085">(where the extraction date is read from)</small></h4>' +
-    '<div class="hint">Names of the collection and fields in the donor database that hold the serial number and the date of extraction. Use TEST to check them.</div>' +
+    '<div class="hint">The donor tracking collection (donorDatabase) and the fields holding the serial number and the entry / donation date. These are the same records shown in Donor Database &ndash; Tracking. Use TEST to check them.</div>' +
     '<div class="grid2">' +
     '<div class="f"><label>Collection</label><input type="text" id="lkCol" value="' + esc(S.lookup.collection) + '"></div>' +
     '<div class="f"><label>Serial number field</label><input type="text" id="lkSer" value="' + esc(S.lookup.serialField) + '"></div>' +
-    '<div class="f"><label>Extraction / donation date field</label><input type="text" id="lkDate" value="' + esc(S.lookup.dateField) + '"></div>' +
+    '<div class="f"><label>Entry / donation date field</label><input type="text" id="lkDate" value="' + esc(S.lookup.dateField) + '"></div>' +
     '<div class="f"><label>Blood type field (optional)</label><input type="text" id="lkBlood" value="' + esc(S.lookup.bloodField) + '"></div>' +
     '</div>' +
     '<div class="row" style="margin-top:8px"><div class="f" style="flex:1 1 200px"><label>Test with a serial number</label><input type="text" id="lkTest" placeholder="PRC2600-26005567"></div><button class="btn grey" id="lkGo" type="button">TEST</button></div>' +
@@ -901,6 +1030,7 @@ function openSettings(){
     var f = e.target.files[0]; if(!f) return;
     imageToSig(f, 420, 150).then(function(url){ $("stPathImg").src = url; $("stPathImg").dataset.new = url; }).catch(function(){ alert("Could not read that image."); });
   };
+  /* the “new method” row grows as you type */
 }
 function stringifyDoc(v){
   return JSON.stringify(v, function(k, val){
@@ -917,7 +1047,8 @@ async function testLookup(){
     if(sf && isCompleteSerial(s)){
       var snap = await fs.collection(col).where(sf, "in", [s, digitsOf(s)]).limit(2).get();
       if(!snap.empty){
-        out.textContent = "FOUND " + snap.size + " record(s) with " + sf + " = " + s + ".\nFields of the first record:\n" + stringifyDoc(snap.docs[0].data()).slice(0, 2500);
+        var dd = snap.docs[0].data();
+        out.textContent = "FOUND " + snap.size + " record(s) with " + sf + " = " + s + ".\nExtraction date read: " + (resolveExtDate(dd) || "(none)") + "\nBlood type read: " + (resolveBT(dd) || "(none)") + "\n\nFields of the first record:\n" + stringifyDoc(dd).slice(0, 2500);
         return;
       }
     }
@@ -1010,6 +1141,7 @@ function renderMedSelect(){
   sel.innerHTML = '<option value="">— no medtech —</option>' + list.map(function(m){ return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join("");
   if(selMed && !medtechs[selMed]) selMed = "";
   sel.value = selMed;
+  refreshMedSelects();
 }
 function renderMedList(){
   var list = medSorted(), host = $("mList");
@@ -1045,25 +1177,68 @@ function mSave(){
 
 /* ═════════ events ═════════ */
 function bindUI(){
-  fillSelect($("sComp"), compOptions(), "— component —");
-  fillSelect($("sBt"), btOptions(), "— blood type —");
   document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
 
-  $("sSerial").addEventListener("input", onSingleSerial);
-  $("sSerial").addEventListener("keydown", function(e){
-    if(e.key === "Enter"){ e.preventDefault(); $("sSerial").value = normSerial($("sSerial").value); onSingleSerial(); clearTimeout(singleTimer); if(isCompleteSerial(single.serial) && !CACHE.has(single.serial)) doSingleLookup(); $("sComp").focus(); }
+  rows = [newRow()];
+  renderRows();
+  var sr = $("sRows");
+  function rOf(el){ var d = el.closest(".srow"); return d ? rows.filter(function(r){ return r.id === d.dataset.id; })[0] : null; }
+  sr.addEventListener("input", function(e){
+    var r = rOf(e.target); if(!r) return;
+    if(e.target.classList.contains("sSer")) onRowSerial(r, e.target.value);
   });
-  $("sSerial").addEventListener("blur", function(){ var v = normSerial($("sSerial").value); if(v !== $("sSerial").value){ $("sSerial").value = v; onSingleSerial(); } });
-  $("sComp").addEventListener("change", function(){ single.comp = $("sComp").value; single.expManual = false; recalcSingle(); });
-  $("sBt").addEventListener("change", function(){ single.bt = $("sBt").value; recalcSingle(); });
-  $("sExt").addEventListener("change", function(){
-    var v = $("sExt").value;
-    single.ext = v; single.extManual = !!v; single.expManual = false;
-    if(!v){ var c = CACHE.get(single.serial); single.ext = (c && c.ext) || ""; }
-    recalcSingle();
+  sr.addEventListener("keydown", function(e){
+    if(e.key !== "Enter") return;
+    var r = rOf(e.target); if(!r) return;
+    if(e.target.classList.contains("sSer")){
+      e.preventDefault();
+      e.target.value = normSerial(e.target.value);
+      onRowSerial(r, e.target.value);
+      clearTimeout(rowTimers[r.id]);
+      if(isCompleteSerial(r.serial) && !CACHE.has(r.serial)) doRowLookup(r);
+      rowEl(r).querySelector(".sComp").focus();
+    }else if(e.target.classList.contains("sComp")){
+      e.preventDefault();
+      goNextRow(r);
+    }
   });
-  $("sExp").addEventListener("change", function(){ var v = $("sExp").value; single.exp = v; single.expManual = !!v; recalcSingle(); });
-  $("sPrint").addEventListener("click", function(){ previewMode = "single"; printItems([singleItem()]); });
+  sr.addEventListener("blur", function(e){
+    if(!e.target.classList || !e.target.classList.contains("sSer")) return;
+    var r = rOf(e.target); if(!r) return;
+    var v = normSerial(e.target.value);
+    if(v !== e.target.value){ e.target.value = v; onRowSerial(r, v); }
+  }, true);
+  sr.addEventListener("focusin", function(e){
+    var r = rOf(e.target); if(!r || !r.serial) return;
+    if(previewMode !== "single" || filledRows()[rowPvIdx] !== r){ previewMode = "single"; selectRowPreview(r); renderPreview(); }
+  });
+  sr.addEventListener("change", function(e){
+    var r = rOf(e.target); if(!r) return;
+    var cl = e.target.classList, v;
+    if(cl.contains("sComp")){ r.comp = e.target.value; r.expManual = false; }
+    else if(cl.contains("sBt")){ r.bt = e.target.value; }
+    else if(cl.contains("sExt")){
+      v = e.target.value; r.ext = v; r.extManual = !!v; r.expManual = false;
+      if(!v){ var cc = CACHE.get(r.serial); r.ext = (cc && cc.ext) || ""; }
+    }
+    else if(cl.contains("sExp")){ v = e.target.value; r.exp = v; r.expManual = !!v; }
+    else if(cl.contains("sMed")){ r.med = e.target.value; }
+    else return;
+    recalcRow(r);
+  });
+  sr.addEventListener("click", function(e){
+    if(!e.target.classList.contains("sDel")) return;
+    var r = rOf(e.target); if(!r) return;
+    rows = rows.filter(function(x){ return x !== r; });
+    if(!rows.length) rows = [newRow()];
+    renderRows(); previewMode = "single"; renderPreview();
+  });
+  $("sAdd").addEventListener("click", addRow);
+  $("sClear").addEventListener("click", function(){
+    if(filledRows().length && !confirm("Clear all serial rows?")) return;
+    rows = [newRow()]; rowPvIdx = 0; renderRows(); previewMode = "single"; renderPreview();
+  });
+  $("sPrint").addEventListener("click", function(){ previewMode = "single"; printItems(rowItems()); });
 
   document.querySelectorAll(".useDate").forEach(function(cb){
     cb.addEventListener("change", function(){
@@ -1133,8 +1308,8 @@ function bindUI(){
 
   $("tabSingle").addEventListener("click", function(){ previewMode = "single"; renderPreview(); });
   $("tabList").addEventListener("click", function(){ previewMode = "list"; renderListTable(); renderPreview(); });
-  $("pvPrev").addEventListener("click", function(){ if(previewIdx > 0){ previewIdx--; renderListTable(); renderPreview(); } });
-  $("pvNext").addEventListener("click", function(){ previewIdx++; renderListTable(); renderPreview(); });
+  $("pvPrev").addEventListener("click", function(){ if(getIdx() > 0){ setIdx(getIdx() - 1); if(previewMode === "list") renderListTable(); renderPreview(); } });
+  $("pvNext").addEventListener("click", function(){ setIdx(getIdx() + 1); if(previewMode === "list") renderListTable(); renderPreview(); });
   var rz = null;
   window.addEventListener("resize", function(){ clearTimeout(rz); rz = setTimeout(renderPreview, 150); });
 
@@ -1199,7 +1374,7 @@ function startData(){
   db.ref("settings/resultForm").on("value", function(snap){
     settings = merge(DEFAULTS, snap.val());
     document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
-    recalcSingle();
+    rows.forEach(function(r){ if(!r.expManual) r.exp = calcExpiry(r.ext, r.comp); syncRow(r); });
     refreshList(false);
     previewMode = $("tabList").classList.contains("on") ? "list" : "single";
     renderPreview();
