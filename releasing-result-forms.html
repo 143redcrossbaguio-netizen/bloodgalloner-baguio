@@ -184,7 +184,6 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
       <span id="sCount" class="muted" style="font-size:13px;padding:0 6px"></span>
       <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
-      <button class="btn green hidden" id="sSync" type="button">UPDATE DONOR DATABASE (0)</button>
       <button class="btn red" id="sPrint" type="button">PRINT</button>
     </div>
   </div>
@@ -199,7 +198,6 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
       <span id="rangeTotal" class="muted" style="font-size:13px;padding:0 6px"></span>
       <span style="flex:1"></span>
       <label class="chk"><input type="checkbox" class="useDate"> Add today's date <small class="todayTxt"></small></label>
-      <button class="btn green hidden" id="lSync" type="button">UPDATE DONOR DATABASE (0)</button>
       <button class="btn red" id="lPrint" type="button">PRINT LIST</button>
     </div>
     <div class="status" id="lStatus"></div>
@@ -233,7 +231,6 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
     <h3>&#128424; Print</h3>
     <div class="hint" id="paperInfo"></div>
     <div id="paperOpts"></div>
-    <div id="paperBags"></div>
     <div class="btnrow">
       <button class="btn dark" id="paperCancel" type="button">CANCEL</button>
       <button class="btn red" id="paperGo" type="button">PRINT</button>
@@ -347,6 +344,8 @@ var DEFAULTS = {
   },
   /* product codes on the component labels (typed or scanned). Cryo: scan its label into Test settings. */
   compCodes: { WB:"E0009V00", PRBC:"E0150V00", PC:"E2801V00", FFP:"E0702V00", CRYO:"" },
+  /* bag type written to the donor record when its bag cannot make the component */
+  bagFix: { WB:"SINGLE", PRBC:"TRIPLE", PC:"TRIPLE", FFP:"TRIPLE", CRYO:"TRIPLE" },
   /* blood bag types each component can be prepared from (checked against the donor record) */
   bagRules: {
     WB:  ["SINGLE"],
@@ -506,24 +505,24 @@ function normBag(v){
   return "";
 }
 /* the donor record's bag type checked against the component (two-way check) */
-function bagInfo(serial, comp, bag){
-  var c = CACHE.get(serial), o = { found:!!(c && c.id), bagDB:"", id:"", dirty:false, bad:false, dup:false };
+function bagInfo(serial, comp){
+  var c = CACHE.get(serial), o = { found:!!(c && c.id), bagDB:"", id:"", dirty:false, dup:false, to:"" };
   if(!o.found) return o;
   o.bagDB = c.bag || ""; o.id = c.id; o.dup = c.n > 1;
-  o.dirty = !!bag && bag !== o.bagDB && !o.dup;
   var allowed = (settings.bagRules || {})[comp];
-  o.bad = !!(comp && bag && allowed && allowed.indexOf(bag) < 0);
+  if(comp && allowed && !o.dup && allowed.indexOf(o.bagDB) < 0){
+    o.dirty = true;
+    o.to = ((settings.bagFix || {})[comp]) || allowed[0] || "";
+    if(allowed.indexOf(o.to) < 0) o.to = allowed[0] || "";
+  }
   return o;
 }
-function bagMsg(serial, comp, bag){
-  var bi = bagInfo(serial, comp, bag);
-  if(!bi.found) return { cls:"muted", text:"" };
-  if(bi.dup) return { cls:"warn", text:"⚠ Several donor records have this serial – fix the duplicates in Donor Tracking before changing the bag type." };
-  if(!bag) return { cls:"warn", text:"⚠ The donor record has no bag type – choose the bag that was used." };
-  if(bi.bad) return { cls:"warn", text:"⚠ " + comp + " cannot be prepared from a " + bag + " bag" + (bi.dirty ? "" : " (as the donor record says)") + " – choose the bag type that was really used." };
-  if(bi.dirty) return { cls:"ok", text:"↻ Donor record says " + (bi.bagDB || "no bag type") + " – will be changed to " + bag + "." };
-  if(comp) return { cls:"ok", text:"✔ " + bag + " bag matches " + comp + "." };
-  return { cls:"muted", text:"Bag type: " + bag };
+function bagMsg(serial, comp){
+  var bi = bagInfo(serial, comp);
+  if(!bi.found || !comp) return { cls:"muted", text:"" };
+  if(bi.dup) return { cls:"warn", text:"⚠ Several donor records have this serial – the bag type cannot be checked." };
+  if(bi.dirty) return { cls:"ok", text:"↻ Donor record says " + (bi.bagDB || "no bag type") + " – will be corrected to " + bi.to + " when you print." };
+  return { cls:"muted", text:"" };
 }
 
 /* ═════════ serial helpers ═════════ */
@@ -686,8 +685,7 @@ function resolveListItem(it){
   var bt = ov.bt !== undefined ? ov.bt : (it.bt || (c && c.bt) || "");
   var comp = ov.comp !== undefined ? ov.comp : it.comp;
   var exp = ov.exp !== undefined ? ov.exp : calcExpiry(ext, comp);
-  var bag = ov.bag !== undefined ? ov.bag : ((c && c.bag) || "");
-  var bi = bagInfo(it.serial, comp, bag);
+  var bi = bagInfo(it.serial, comp);
   var state = "";
   if(!comp) state = "nocomp";
   else if(ov.ext !== undefined) state = "manual";
@@ -696,7 +694,7 @@ function resolveListItem(it){
   else if(c && c.ext) state = (c.n > 1 ? "dup" : "ok");
   else if(c === null || (c && !c.ext)) state = "none";
   else state = "idle";
-  return { serial:it.serial, comp:comp, bt:bt, ext:ext, exp:exp, state:state, bag:bag, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty, bagBad:bi.bad, bagDup:bi.dup };
+  return { serial:it.serial, comp:comp, bt:bt, ext:ext, exp:exp, state:state, bag:bi.to, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty };
 }
 function visibleBase(){ return listBase.filter(function(it){ return !SKIP[it.serial]; }); }
 function listResolved(){ return visibleBase().map(resolveListItem); }
@@ -803,12 +801,12 @@ function medOptionsHTML(){
   return '<option value="">same as above</option>' + medSorted().map(function(m){ return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join("");
 }
 
-function newRow(prev){ return { id:"s" + (++rowSeq), serial:"", comp:prev ? prev.comp : "", compBad:false, compAuto:false, bt:"", bag:"", bagDB:"", bagTouched:false, ext:"", exp:"", extManual:false, expManual:false, med:"" }; }
+function newRow(prev){ return { id:"s" + (++rowSeq), serial:"", comp:prev ? prev.comp : "", compBad:false, bt:"", ext:"", exp:"", extManual:false, expManual:false, med:"" }; }
 function rowEl(r){ return $("sRows").querySelector('[data-id="' + r.id + '"]'); }
 function filledRows(){ return rows.filter(function(r){ return r.serial; }); }
 function rowItem(r){
-  var bi = bagInfo(r.serial, r.comp, r.bag);
-  return { serial:r.serial, comp:r.comp, bt:r.bt, ext:r.ext, exp:r.exp, med:r.med, state:"", bag:r.bag, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty, bagBad:bi.bad, bagDup:bi.dup };
+  var bi = bagInfo(r.serial, r.comp);
+  return { serial:r.serial, comp:r.comp, bt:r.bt, ext:r.ext, exp:r.exp, med:r.med, state:"", bag:bi.to, bagDB:bi.bagDB, bagId:bi.id, bagDirty:bi.dirty };
 }
 function rowItems(){ return filledRows().map(rowItem); }
 function selectRowPreview(r){ var i = filledRows().indexOf(r); if(i >= 0) rowPvIdx = i; }
@@ -819,7 +817,6 @@ function rowHTML(r, n){
     '<div class="f" style="flex:1.6 1 150px"><label>Serial number</label><input type="text" class="sSer" placeholder="Scan or type serial number" value="' + esc(r.serial) + '" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>' +
     '<div class="f" style="flex:1 1 100px"><label>Component</label><input type="text" class="sComp" placeholder="WB, PRBC… / scan" autocomplete="off" spellcheck="false"></div>' +
     '<div class="f" style="flex:1 1 105px"><label>Blood type</label><select class="sBt"></select></div>' +
-    '<div class="f" style="flex:1 1 98px"><label>Bag type</label><select class="sBag"></select></div>' +
     '<div class="f" style="flex:1 1 118px"><label>Date of extraction</label><input type="date" class="sExt"></div>' +
     '<div class="f" style="flex:1 1 118px"><label>Date of expiry</label><input type="date" class="sExp"></div>' +
     '<div class="f" style="flex:1 1 120px"><label>Medtech</label><select class="sMed"></select></div>' +
@@ -831,13 +828,11 @@ function renderRows(){
   rows.forEach(function(r){
     var el = rowEl(r);
     fillSelect(el.querySelector(".sBt"), btOptions(), "— blood type —");
-    fillSelect(el.querySelector(".sBag"), BAGS.map(function(b){ return { v:b, t:b }; }), "— bag —");
     el.querySelector(".sMed").innerHTML = medOptionsHTML();
     syncRow(r);
   });
   $("sCount").textContent = rows.length + " / " + MAX_ROWS;
   $("sAdd").disabled = rows.length >= MAX_ROWS;
-  refreshSyncButtons();
 }
 function refreshMedSelects(){
   rows.forEach(function(r){
@@ -864,8 +859,7 @@ function rowParts(r){
   var parts = [], t = rowStatus(r);
   if(t.text) parts.push(t);
   if(r.compBad) parts.push({ cls:"warn", text:"⚠ Unknown component – type WB, PRBC, PC, FFP or CRYO, or scan the label." });
-  if(r.compAuto && r.comp === "WB") parts.push({ cls:"muted", text:"Component set to WB because the donor record has a single bag." });
-  var b = bagMsg(r.serial, r.comp, r.bag);
+  var b = bagMsg(r.serial, r.comp);
   if(b.text) parts.push(b);
   return parts;
 }
@@ -874,9 +868,6 @@ function syncRow(r){
   var ci = el.querySelector(".sComp");
   if(document.activeElement !== ci) ci.value = r.comp;
   el.querySelector(".sBt").value = r.bt;
-  el.querySelector(".sBag").value = r.bag;
-  var bi = bagInfo(r.serial, r.comp, r.bag);
-  el.querySelector(".sBag").style.borderColor = bi.bad ? "#c62828" : "";
   ci.style.borderColor = r.compBad ? "#c62828" : "";
   el.querySelector(".sExt").value = r.ext;
   el.querySelector(".sExp").value = r.exp;
@@ -887,7 +878,7 @@ function syncRow(r){
 }
 function setRowComp(r, raw){
   var c = resolveComponent(raw);
-  if(c !== r.comp){ r.expManual = false; r.compAuto = false; }
+  if(c !== r.comp){ r.expManual = false; }
   r.comp = c;
   r.compBad = !!String(raw || "").trim() && !c;
   return c;
@@ -898,16 +889,14 @@ function recalcRow(r, keepPreview){
   rows.forEach(function(o){ if(o !== r && o.serial && o.serial === r.serial) syncRow(o); });
   if(!keepPreview){ previewMode = "single"; selectRowPreview(r); }
   renderPreview();
-  refreshSyncButtons();
 }
 function onRowSerial(r, raw){
   var s = normSerial(raw);
   if(s !== r.serial){
     r.serial = s;
     r.ext = ""; r.exp = ""; r.extManual = false; r.expManual = false; r.bt = "";
-    r.bag = ""; r.bagDB = ""; r.bagTouched = false; r.compAuto = false;
     var c = CACHE.get(s);
-    if(c){ r.ext = c.ext || ""; r.bt = c.bt || ""; r.bag = c.bag || ""; r.bagDB = c.bag || ""; }
+    if(c){ r.ext = c.ext || ""; r.bt = c.bt || ""; }
   }
   recalcRow(r);
   clearTimeout(rowTimers[r.id]);
@@ -924,10 +913,6 @@ async function doRowLookup(r){
   if(c){
     if(!r.extManual) r.ext = c.ext || "";
     if(c.bt && !r.bt) r.bt = c.bt;
-    r.bagDB = c.bag || "";
-    if(!r.bagTouched) r.bag = c.bag || "";
-    /* two-way check: a single bag can only give whole blood */
-    if(!r.comp && r.bag === "SINGLE"){ r.comp = "WB"; r.compAuto = true; r.expManual = false; }
   }
   recalcRow(r, true);
 }
@@ -1029,19 +1014,16 @@ function renderListTable(){
   if(!items.length){ wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
   wrap.classList.remove("hidden");
   var btOpts = '<option value="">—</option>' + BTS.map(function(b){ return '<option>' + b + '</option>'; }).join("");
-  wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Bag</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
+  wrap.innerHTML = '<table class="lst"><thead><tr><th>#</th><th>Serial</th><th>Component</th><th>Blood type</th><th>Extraction</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody>' +
     items.map(function(it, i){
       var sel = btOpts.replace('<option>' + it.bt + '</option>', '<option selected>' + it.bt + '</option>');
-      var bsel = '<option value="">—</option>' + BAGS.map(function(b){ return '<option' + (b === it.bag ? " selected" : "") + '>' + b + '</option>'; }).join("");
       return '<tr data-i="' + i + '" data-s="' + esc(it.serial) + '" class="' + (previewMode === "list" && i === previewIdx ? "sel" : "") + '">' +
         '<td>' + (i + 1) + '</td><td class="ser">' + esc(it.serial) + '</td><td><input type="text" class="tComp" value="' + esc(it.comp) + '" placeholder="—" autocomplete="off" spellcheck="false"></td>' +
         '<td><select class="tBt">' + sel + '</select></td>' +
-        '<td><select class="tBag' + (it.bagBad ? " miss" : "") + '">' + bsel + '</select></td>' +
         '<td><input type="date" class="tExt' + (it.ext ? "" : " miss") + '" value="' + esc(it.ext) + '"></td>' +
         '<td><input type="date" class="tExp" value="' + esc(it.exp) + '"></td>' +
-        '<td>' + stateText(it.state) + (it.bagBad ? ' <span class="warn" title="This component cannot be prepared from this bag type">⚠ bag</span>' : (it.bagDirty ? ' <span class="ok" title="Donor record: ' + esc(it.bagDB || "no bag type") + ' → ' + esc(it.bag) + '">↻ bag</span>' : '')) + '</td><td><button class="btn grey sm tDel" type="button" title="Remove from list">&#10005;</button></td></tr>';
+        '<td>' + stateText(it.state) + (it.bagDirty ? ' <span class="ok" title="Donor record: ' + esc(it.bagDB || "no bag type") + ' → ' + esc(it.bag) + '">↻ bag</span>' : '') + '</td><td><button class="btn grey sm tDel" type="button" title="Remove from list">&#10005;</button></td></tr>';
     }).join("") + '</tbody></table>';
-  refreshSyncButtons();
 }
 
 /* ═════════ donor database: bag type corrected from the result form ═════════ */
@@ -1068,24 +1050,8 @@ function afterSync(){
   rows.forEach(syncRow);
   renderListTable();
   renderPreview();
-  refreshSyncButtons();
 }
-function refreshSyncButtons(){
-  var a = rowItems().filter(function(i){ return i.bagDirty; }).length;
-  var b = listResolved().filter(function(i){ return i.bagDirty; }).length;
-  $("sSync").classList.toggle("hidden", !a); $("sSync").textContent = "UPDATE DONOR DATABASE (" + a + ")";
-  $("lSync").classList.toggle("hidden", !b); $("lSync").textContent = "UPDATE DONOR DATABASE (" + b + ")";
-}
-async function syncClick(items){
-  var list = items.filter(function(i){ return i.bagDirty; });
-  if(!list.length) return;
-  var msg = "Update the bag type in the donor database for " + list.length + " serial(s)?\n\n" +
-    list.slice(0, 15).map(function(i){ return i.serial + ": " + (i.bagDB || "(blank)") + " → " + i.bag + " (" + i.comp + ")"; }).join("\n") + (list.length > 15 ? "\n…" : "");
-  if(!confirm(msg)) return;
-  var res = await syncBagChanges(list);
-  afterSync();
-  alert(res.done + " donor record(s) updated." + (res.failed.length ? "\n\nCould not update:\n" + res.failed.slice(0, 6).join("\n") : ""));
-}
+
 
 /* ═════════ printing ═════════ */
 var pendingPrint = null;
@@ -1096,11 +1062,6 @@ function askPaper(items, go){
     var P = PAPERS[k];
     return '<label class="paperOpt' + (k === paper ? " on" : "") + '"><input type="radio" name="paperSel" value="' + k + '"' + (k === paper ? " checked" : "") + '><div><b>' + P.name + '</b><span>' + P.dim + '</span></div></label>';
   }).join("");
-  var dirty = items.filter(function(i){ return i.bagDirty; });
-  $("paperBags").innerHTML = dirty.length
-    ? '<label class="chk" style="padding:12px 0 2px"><input type="checkbox" id="paperSyncChk" checked> Also update the bag type in the donor database (' + dirty.length + ')</label><div class="hint">' +
-      dirty.slice(0, 6).map(function(i){ return esc(i.serial) + ': ' + esc(i.bagDB || "no bag type") + ' → ' + esc(i.bag); }).join("<br>") + (dirty.length > 6 ? "<br>…" : "") + '</div>'
-    : "";
   pendingPrint = go;
   $("paperOv").classList.add("show");
 }
@@ -1117,19 +1078,21 @@ function printItems(items){
   if(noComp){ alert(noComp + " serial(s) have no component yet. Please choose a component."); return; }
   var missExt = items.filter(function(i){ return !i.ext; }).length;
   var missBt = items.filter(function(i){ return !i.bt; }).length;
-  var badBag = items.filter(function(i){ return i.bagBad; }).length;
-  if(missExt || missBt || badBag){
+  if(missExt || missBt){
     var parts = [];
     if(missExt) parts.push(missExt + " without an extraction date");
     if(missBt) parts.push(missBt + " without a blood type");
-    if(badBag) parts.push(badBag + " with a bag type that does not match the component");
     if(!confirm("Some forms need checking: " + parts.join("; ") + ".\n\nPrint anyway?")) return;
   }
-  askPaper(items, async function(doSync){
-    if(doSync){
-      var res = await syncBagChanges(items.filter(function(i){ return i.bagDirty; }));
+  askPaper(items, async function(){
+    var fixList = items.filter(function(i){ return i.bagDirty; }), seen = {};
+    fixList = fixList.filter(function(i){ if(seen[i.serial]) return false; seen[i.serial] = 1; return true; });
+    if(fixList.length){
+      var res = await syncBagChanges(fixList);
       afterSync();
-      if(res.failed.length && !confirm("Could not update " + res.failed.length + " donor record(s):\n" + res.failed.slice(0, 5).join("\n") + "\n\nPrint anyway?")) return;
+      alert("Donor database updated: " + res.done + " record(s) corrected.\n\n" +
+        fixList.slice(0, 10).map(function(i){ return i.serial + ": " + (i.bagDB || "no bag type") + " → " + i.bag + " (" + i.comp + ")"; }).join("\n") + (fixList.length > 10 ? "\n…" : "") +
+        (res.failed.length ? "\n\nCould NOT update:\n" + res.failed.slice(0, 5).join("\n") : ""));
     }
     $("printArea").innerHTML = items.map(function(it){ return sheetHTML(it, ""); }).join("");
     $("pageStyle").textContent = "@page{size:" + PAPERS[paper].size + ";margin:0;}";
@@ -1185,13 +1148,13 @@ function openSettings(){
   });
   h += '</table>';
 
-  h += '<h4>Blood bag rules</h4><div class="hint">Which bag types each component can be prepared from. The donor record\'s bag type is checked against this when you enter a component, and corrected in the donor database from the result form.</div>';
-  h += '<table><tr><th>Component</th>' + BAGS.map(function(b){ return '<th style="text-align:center">' + b.charAt(0) + b.slice(1).toLowerCase() + '</th>'; }).join("") + '</tr>';
+  h += '<h4>Blood bag rules</h4><div class="hint">Which bag types each component can be prepared from. If the donor record has a bag type outside this list, it is corrected automatically to the “set to” type when you print, and you get a small alert.</div>';
+  h += '<table><tr><th>Component</th>' + BAGS.map(function(b){ return '<th style="text-align:center">' + b.charAt(0) + b.slice(1).toLowerCase() + '</th>'; }).join("") + '<th>If wrong, set to</th></tr>';
   COMP_ORDER.forEach(function(k){
     var al = (S.bagRules || {})[k] || [];
     h += '<tr data-br="' + k + '"><td style="font-weight:700">' + k + '</td>' + BAGS.map(function(b){
       return '<td style="text-align:center"><input type="checkbox" class="brChk" data-b="' + b + '" style="width:18px;height:18px"' + (al.indexOf(b) >= 0 ? " checked" : "") + '></td>';
-    }).join("") + '</tr>';
+    }).join("") + '<td><select class="brFix">' + BAGS.map(function(b){ return '<option' + (((S.bagFix || {})[k] || DEFAULTS.bagFix[k]) === b ? " selected" : "") + '>' + b + '</option>'; }).join("") + '</select></td></tr>';
   });
   h += '</table>';
 
@@ -1290,11 +1253,13 @@ function saveSettings(){
   $("setBody").querySelectorAll("tr[data-cc]").forEach(function(row){
     S.compCodes[row.dataset.cc] = row.querySelector(".ccCode").value.trim().toUpperCase();
   });
-  S.bagRules = {};
+  S.bagRules = {}; S.bagFix = {};
   $("setBody").querySelectorAll("tr[data-br]").forEach(function(row){
     var k = row.dataset.br, al = [];
     row.querySelectorAll(".brChk").forEach(function(c){ if(c.checked) al.push(c.dataset.b); });
     S.bagRules[k] = al.length ? al : DEFAULTS.bagRules[k].slice();
+    var fx = row.querySelector(".brFix").value;
+    S.bagFix[k] = S.bagRules[k].indexOf(fx) >= 0 ? fx : S.bagRules[k][0];
   });
   S.header = { l1:$("hdL1").value.trim(), l2:$("hdL2").value.trim(), l3:$("hdL3").value.trim(), l4:$("hdL4").value.trim(), l5:$("hdL5").value.trim() };
   S.note = $("stNote").value.trim();
@@ -1443,7 +1408,6 @@ function bindUI(){
     var cl = e.target.classList, v;
     if(cl.contains("sComp")){ setRowComp(r, e.target.value); }
     else if(cl.contains("sBt")){ r.bt = e.target.value; }
-    else if(cl.contains("sBag")){ r.bag = e.target.value; r.bagTouched = true; }
     else if(cl.contains("sExt")){
       v = e.target.value; r.ext = v; r.extManual = !!v; r.expManual = false;
       if(!v){ var cc = CACHE.get(r.serial); r.ext = (cc && cc.ext) || ""; }
@@ -1466,8 +1430,6 @@ function bindUI(){
     rows = [newRow()]; rowPvIdx = 0; renderRows(); previewMode = "single"; renderPreview();
   });
   $("sPrint").addEventListener("click", function(){ previewMode = "single"; printItems(rowItems()); });
-  $("sSync").addEventListener("click", function(){ syncClick(rowItems()); });
-  $("lSync").addEventListener("click", function(){ syncClick(listResolved()); });
 
   document.querySelectorAll(".useDate").forEach(function(cb){
     cb.addEventListener("change", function(){
@@ -1528,7 +1490,6 @@ function bindUI(){
       }
       OV[s].comp = tc; delete OV[s].exp;
     }
-    else if(e.target.classList.contains("tBag")){ OV[s].bag = e.target.value; }
     else if(e.target.classList.contains("tExt")){
       if(e.target.value){ OV[s].ext = e.target.value; delete OV[s].exp; } else { delete OV[s].ext; delete OV[s].exp; }
     }
@@ -1566,8 +1527,7 @@ function bindUI(){
     $("paperOv").classList.remove("show");
     var go = pendingPrint; pendingPrint = null;
     renderPreview();
-    var doSync = !!($("paperSyncChk") && $("paperSyncChk").checked);
-    if(go) go(doSync);
+    if(go) go();
   });
 
   /* medtech */
@@ -1620,7 +1580,6 @@ function startData(){
     document.querySelectorAll(".todayTxt").forEach(function(el){ el.textContent = "(" + fmtDate(todayISO()) + ")"; });
     rows.forEach(function(r){ if(!r.expManual) r.exp = calcExpiry(r.ext, r.comp); syncRow(r); });
     refreshList(false);
-    refreshSyncButtons();
     previewMode = $("tabList").classList.contains("on") ? "list" : "single";
     renderPreview();
   }, function(e){ console.error("Settings load error:", e); });
