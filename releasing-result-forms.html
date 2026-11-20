@@ -125,10 +125,12 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
 .rf-tests td.tr{font-size:13.3px;text-align:center;}
 .rf-note{font-weight:700;font-style:italic;font-size:13.3px;margin-top:2px;min-height:18px;}
 .rf-dates{margin-top:16px;}
+.rf-dates .rf-val{text-align:center;padding-left:0;}
 .rf-sign{display:grid;grid-template-columns:54.8% 45.2%;margin-top:14px;}
 .rf-sign .sg{height:46px;display:flex;align-items:flex-end;justify-content:center;position:relative;z-index:2;}
 .rf-sign .sg img{max-height:46px;max-width:72%;object-fit:contain;margin-bottom:-7px;}
 .rf-sign .sn{text-align:center;font-weight:700;font-size:12px;height:17px;color:#1f3864;}
+.rf-sign .sg img.psig{max-height:34px;max-width:56%;margin-bottom:-10px;}
 .rf-sign .sl{text-align:center;font-weight:700;font-style:italic;font-size:13.3px;height:18px;}
 
 #printArea{display:none;}
@@ -207,7 +209,7 @@ table.rf-tests{width:100%;border-collapse:collapse;margin-top:12px;table-layout:
 
   <!-- preview -->
   <div class="card">
-    <h3>Preview <small>&ndash; this is exactly what will print (each serial = 2 copies, one sheet)</small></h3>
+    <h3>Preview <small>&ndash; this is exactly what will print (2 serials per sheet – a single serial prints up and down)</small></h3>
     <div class="pvHead">
       <button class="tab on" id="tabSingle" type="button">Serial numbers</button>
       <button class="tab" id="tabList" type="button">Range list</button>
@@ -745,17 +747,18 @@ function formHTML(it){
       '<div class="rf-lbl" style="padding-left:2px">Date of Expiry:</div><div class="rf-val">' + esc(fmtDate(it.exp)) + '</div>' +
     '</div>' +
     '<div class="rf-sign">' +
-      '<div class="sg">' + medSig + '</div><div class="sg"><img src="' + esc(pathSig) + '" alt=""></div>' +
+      '<div class="sg">' + medSig + '</div><div class="sg"><img class="psig" src="' + esc(pathSig) + '" alt=""></div>' +
       '<div class="sn">' + esc(medLine) + '</div><div></div>' +
       '<div class="sl">Name &amp; Signature of Medical Technologist</div><div class="sl">' + esc(S.pathologist.name) + '</div>' +
       '<div></div><div class="sl">' + esc(S.pathologist.title) + '</div>' +
     '</div>' +
   '</div>';
 }
-function sheetHTML(it, cls){
-  var P = PAPERS[paper], f = formHTML(it);
-  return '<div class="sheet ' + (cls || "") + '" style="width:' + P.w + 'px;height:' + P.h + 'px"><div class="slot">' + f + '</div><div class="slot">' + f + '</div></div>';
+function sheetHTML(a, b, cls){
+  var P = PAPERS[paper], fa = formHTML(a), fb = b ? formHTML(b) : fa;
+  return '<div class="sheet ' + (cls || "") + '" style="width:' + P.w + 'px;height:' + P.h + 'px"><div class="slot">' + fa + '</div><div class="slot">' + fb + '</div></div>';
 }
+function sheetCount(n){ return Math.ceil(n / 2); }
 
 /* ═════════ preview ═════════ */
 function previewItems(){
@@ -771,18 +774,20 @@ function renderPreview(){
   if(idx >= n) idx = Math.max(0, n - 1);
   if(idx < 0) idx = 0;
   setIdx(idx);
-  var it = n ? items[idx] : { serial:"", comp:"", bt:"", ext:"", exp:"" };
+  var page = Math.floor(idx / 2), pages = sheetCount(n);
+  var it = n ? items[page * 2] : { serial:"", comp:"", bt:"", ext:"", exp:"" };
+  var it2 = n && items[page * 2 + 1] ? items[page * 2 + 1] : null;
   var P = PAPERS[paper];
   var avail = Math.max(280, box.clientWidth - 28);
   var scale = Math.min(1, avail / P.w);
   box.innerHTML = '<div class="pvWrap" style="width:' + Math.round(P.w * scale) + 'px;height:' + Math.round(P.h * scale) + 'px">' +
-    '<div class="pvScale" style="transform:scale(' + scale + ');width:' + P.w + 'px;height:' + P.h + 'px">' + sheetHTML(it, "pv") + '</div></div>';
+    '<div class="pvScale" style="transform:scale(' + scale + ');width:' + P.w + 'px;height:' + P.h + 'px">' + sheetHTML(it, it2, "pv") + '</div></div>';
   $("tabSingle").classList.toggle("on", previewMode === "single");
   $("tabList").classList.toggle("on", previewMode === "list");
-  $("pvPrev").disabled = idx <= 0;
-  $("pvNext").disabled = idx >= n - 1;
+  $("pvPrev").disabled = page <= 0;
+  $("pvNext").disabled = page >= pages - 1;
   $("pvInfo").textContent = n
-    ? "Sheet " + (idx + 1) + " of " + n + (it.serial ? " · " + it.serial : "")
+    ? "Sheet " + (page + 1) + " of " + pages + (it.serial ? " · " + it.serial + (it2 ? " + " + it2.serial : " (up & down)") : "")
     : (previewMode === "list" ? "No serials in the list yet" : "Enter a serial number above");
   var sel = filledRows()[idx];
   document.querySelectorAll(".srow").forEach(function(el){ el.classList.toggle("sel", previewMode === "single" && !!sel && el.dataset.id === sel.id); });
@@ -988,7 +993,7 @@ function refreshList(fetch){
   renderRangeInfos(dups);
   renderListTable();
   var n = visibleBase().length;
-  $("rangeTotal").textContent = n ? n + " serial" + (n === 1 ? "" : "s") + " → " + n + " sheet" + (n === 1 ? "" : "s") + " (2 copies each)" : "";
+  $("rangeTotal").textContent = n ? n + " serial" + (n === 1 ? "" : "s") + " → " + sheetCount(n) + " sheet" + (sheetCount(n) === 1 ? "" : "s") + " (2 serials per sheet)" : "";
   previewMode = "list";
   if(previewIdx >= n) previewIdx = Math.max(0, n - 1);
   renderPreview();
@@ -1057,7 +1062,7 @@ function afterSync(){
 var pendingPrint = null;
 function askPaper(items, go){
   var n = items.length;
-  $("paperInfo").textContent = n + " serial" + (n === 1 ? "" : "s") + " → " + n + " sheet" + (n === 1 ? "" : "s") + ". Each sheet holds 2 half-page copies of the same serial.";
+  $("paperInfo").textContent = n + " serial" + (n === 1 ? "" : "s") + " → " + sheetCount(n) + " sheet" + (sheetCount(n) === 1 ? "" : "s") + ". Each sheet holds 2 half-page forms: 2 different serials, or one serial up and down when only one is left.";
   $("paperOpts").innerHTML = Object.keys(PAPERS).map(function(k){
     var P = PAPERS[k];
     return '<label class="paperOpt' + (k === paper ? " on" : "") + '"><input type="radio" name="paperSel" value="' + k + '"' + (k === paper ? " checked" : "") + '><div><b>' + P.name + '</b><span>' + P.dim + '</span></div></label>';
@@ -1094,7 +1099,9 @@ function printItems(items){
         fixList.slice(0, 10).map(function(i){ return i.serial + ": " + (i.bagDB || "no bag type") + " → " + i.bag + " (" + i.comp + ")"; }).join("\n") + (fixList.length > 10 ? "\n…" : "") +
         (res.failed.length ? "\n\nCould NOT update:\n" + res.failed.slice(0, 5).join("\n") : ""));
     }
-    $("printArea").innerHTML = items.map(function(it){ return sheetHTML(it, ""); }).join("");
+    var pg = [];
+    for(var q = 0; q < items.length; q += 2) pg.push(sheetHTML(items[q], items[q + 1] || null, ""));
+    $("printArea").innerHTML = pg.join("");
     $("pageStyle").textContent = "@page{size:" + PAPERS[paper].size + ";margin:0;}";
     setTimeout(function(){ window.print(); }, 250);
   });
@@ -1477,6 +1484,16 @@ function bindUI(){
   $("lPrint").addEventListener("click", function(){ previewMode = "list"; printItems(listResolved()); });
 
   var lw = $("listWrap");
+  lw.addEventListener("keydown", function(e){
+    if(e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("tComp")) return;
+    e.preventDefault();
+    var tr = e.target.closest("tr"); if(!tr) return;
+    var raw = e.target.value, i = +tr.dataset.i, ok = !raw.trim() || !!resolveComponent(raw);
+    e.target.blur();   /* commits the value (the list redraws) */
+    if(!ok) return;
+    var nx = lw.querySelectorAll("input.tComp")[i + 1];
+    if(nx){ nx.focus(); nx.select(); }
+  });
   lw.addEventListener("change", function(e){
     var tr = e.target.closest("tr"); if(!tr) return;
     var s = tr.dataset.s; OV[s] = OV[s] || {};
@@ -1512,8 +1529,8 @@ function bindUI(){
 
   $("tabSingle").addEventListener("click", function(){ previewMode = "single"; renderPreview(); });
   $("tabList").addEventListener("click", function(){ previewMode = "list"; renderListTable(); renderPreview(); });
-  $("pvPrev").addEventListener("click", function(){ if(getIdx() > 0){ setIdx(getIdx() - 1); if(previewMode === "list") renderListTable(); renderPreview(); } });
-  $("pvNext").addEventListener("click", function(){ setIdx(getIdx() + 1); if(previewMode === "list") renderListTable(); renderPreview(); });
+  $("pvPrev").addEventListener("click", function(){ if(getIdx() > 1){ setIdx(Math.floor(getIdx() / 2) * 2 - 2); if(previewMode === "list") renderListTable(); renderPreview(); } });
+  $("pvNext").addEventListener("click", function(){ setIdx(Math.floor(getIdx() / 2) * 2 + 2); if(previewMode === "list") renderListTable(); renderPreview(); });
   var rz = null;
   window.addEventListener("resize", function(){ clearTimeout(rz); rz = setTimeout(renderPreview, 150); });
 
