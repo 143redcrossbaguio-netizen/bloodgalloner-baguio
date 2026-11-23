@@ -210,6 +210,7 @@ tr.editing input{padding:4px;font-size:12px}
         </div>
         <button class="btn blue" id="dlSel" disabled>DOWNLOAD SELECTED</button>
         <button class="btn" id="dlAll">DOWNLOAD ALL</button>
+        <button class="btn blue hidden" id="dlSum">DOWNLOAD SUMMARY</button>
         <button class="btn line" id="prtBtn">PRINT</button>
       </div>
       <div class="hint" id="trkHint"></div>
@@ -498,9 +499,9 @@ function renderTracking(){
   if(sheet === "nhq") renderNhq(q); else renderCash(q);
   const cash = sheet === "cash";
   $("setBtn").classList.toggle("hidden", !cash); $("prtBtn").classList.toggle("hidden", !cash);
-  $("dlAll").textContent = cash ? "DOWNLOAD ALL SHOWN" : "DOWNLOAD ALL";
-  $("trkHint").textContent = cash ? "Download and Print use what is shown (year, month, dates, search). Tick rows to use only those." : "";
-  $("dlSel").disabled = selCount() === 0;
+  $("dlSum").classList.toggle("hidden", !cash);
+  $("trkHint").textContent = cash ? "DOWNLOAD SUMMARY and PRINT use what is shown (year, month, dates, search). Tick rows to use only those." : "";
+  $("dlSel").disabled = sel.size === 0;
 }
 
 /* inline edit rows */
@@ -638,7 +639,7 @@ $("view").addEventListener("click", e => {
 });
 $("view").addEventListener("change", e => {
   const t = e.target;
-  if(t.dataset.sel){ t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); $("dlSel").disabled = selCount() === 0; }
+  if(t.dataset.sel){ t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); $("dlSel").disabled = sel.size === 0; }
   if(t.dataset.selall){
     const kind = t.dataset.selall, q = $("search").value.trim().toUpperCase();
     listOf(kind, q).forEach(r => { const k = kind + "|" + r.key; t.checked ? sel.add(k) : sel.delete(k); });
@@ -877,7 +878,6 @@ function cashSheet(wb, rows, logo){
   return { cs, row: row + 1, lastCol: 10 };
 }
 async function downloadExcel(mode){
-  if(sheet === "cash") return downloadSummary(mode);
   const pick = kind => { const src = data[kind][year] || {};
     return Object.keys(src).filter(k => mode === "all" || sel.has(kind + "|" + k)).map(k => ({ key:k, ...src[k] }))
       .filter(r => (r.kind || kind) === kind)
@@ -965,6 +965,7 @@ function printHtml(rows){
     <tr class="nm"><td>${esc(c.prepared.name)}</td><td>${esc(c.approved1.name)}</td><td>${esc(c.approved2.name)}</td></tr>
     <tr class="last"><td>${esc(c.prepared.title)}</td><td>${esc(c.approved1.title)}</td><td>${esc(c.approved2.title)}</td></tr></table></div>`;
 }
+$("dlSum").onclick = async () => { $("dlSum").disabled = true; try{ await downloadSummary(selCount() ? "sel" : "all"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlSum").disabled = false; } };
 $("prtBtn").onclick = async () => {
   const rows = selCount() ? summaryRows("sel") : summaryRows("all");
   if(!rows.length) return trkSay("Nothing to print. No disbursement records match the filters.", true);
@@ -1060,7 +1061,7 @@ async function downloadSummary(mode){
   trkSay(`Downloaded ${name} (${rows.length} record${rows.length === 1 ? "" : "s"})`);
 }
 
-$("dlSel").onclick = async () => { $("dlSel").disabled = true; try{ await downloadExcel("sel"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlSel").disabled = selCount() === 0; } };
+$("dlSel").onclick = async () => { $("dlSel").disabled = true; try{ await downloadExcel("sel"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlSel").disabled = sel.size === 0; } };
 $("dlAll").onclick = async () => { $("dlAll").disabled = true; try{ await downloadExcel("all"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlAll").disabled = false; } };
 
 /* ── start: only the finance account gets in ── */
