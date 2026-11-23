@@ -351,6 +351,15 @@ let year = thisYear, type = "nhq", cat = "MHI", sheet = "nhq", catFilter = "ALL"
 let data = { nhq:{}, cash:{} }, loaded = {}, signers = { prepared:{}, approved:{} }, signersLoaded = false;
 const sel = new Set();
 const LS_KEY = "disbursementSummarySettings";
+/* disbursement rows: highest check # first (numeric aware); records without a check # go last */
+const byDate = (a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key));
+const byCheckDesc = (a,b) => {
+  const x = String(a.check || "").trim(), y = String(b.check || "").trim();
+  if(!x && !y) return byDate(a,b);
+  if(!x) return 1; if(!y) return -1;
+  return y.localeCompare(x, undefined, { numeric:true }) || byDate(a,b);
+};
+const sorter = kind => kind === "cash" ? byCheckDesc : byDate;
 const selCount = () => [...sel].filter(k => k.startsWith(sheet + "|")).length;
 
 /* ── database ── */
@@ -470,7 +479,7 @@ function listOf(kind, q){
     .filter(r => (r.kind || kind) === kind && (!m || monthOf(r.date || r.dateRemitted) === m)
       && (!from || (r.date || r.dateRemitted || "") >= from) && (!to || (r.date || r.dateRemitted || "") <= to)
       && (kind !== "nhq" || catFilter === "ALL" || r.cat === catFilter) && matchQ(textOf(kind, r), q))
-    .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key)));
+    .sort(sorter(kind));
 }
 function textOf(kind, r){
   return kind === "nhq"
@@ -881,7 +890,7 @@ async function downloadExcel(mode){
   const pick = kind => { const src = data[kind][year] || {};
     return Object.keys(src).filter(k => mode === "all" || sel.has(kind + "|" + k)).map(k => ({ key:k, ...src[k] }))
       .filter(r => (r.kind || kind) === kind)
-      .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key))); };
+      .sort(sorter(kind)); };
   const nRows = pick("nhq"), cRows = pick("cash");
   if(!nRows.length && !cRows.length) return trkSay("No records selected. Tick the records you want first.", true);
   trkSay("Preparing the Excel file…");
@@ -914,8 +923,7 @@ const particulars = r => r.cancelled ? [r.description, CXL].filter(Boolean).join
 function summaryRows(mode){
   if(mode === "sel"){
     const src = data.cash[year] || {};
-    return Object.keys(src).filter(k => sel.has("cash|" + k)).map(k => ({ key:k, ...src[k] })).filter(r => (r.kind || "cash") === "cash")
-      .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key)));
+    return Object.keys(src).filter(k => sel.has("cash|" + k)).map(k => ({ key:k, ...src[k] })).filter(r => (r.kind || "cash") === "cash").sort(byCheckDesc);
   }
   return listOf("cash", $("search").value.trim().toUpperCase());
 }
