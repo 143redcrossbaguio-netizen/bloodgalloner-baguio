@@ -82,6 +82,42 @@ tr.editing input{padding:4px;font-size:12px}
 .mbox{background:var(--white);border-radius:10px;padding:18px;width:min(640px,94vw)}
 #padCanvas{width:100%;height:240px;border:1px solid #9a9a9a;border-radius:6px;touch-action:none;cursor:crosshair}
 .mbox .btns{display:flex;gap:8px;margin-top:12px}
+
+.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hd .btn.sm{margin-top:2px}
+.hint{color:var(--muted);font-size:12px;margin:-4px 0 10px}
+#setModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:50}
+#setModal.on{display:flex}
+#setModal .mbox{width:min(720px,94vw);max-height:92vh;overflow-y:auto}
+.setH{font-size:12px;font-weight:bold;color:var(--red);margin:14px 0 8px;letter-spacing:.03em}
+.setG{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.setG .full{grid-column:1/-1}
+#printArea{display:none}
+@page{size:A4 portrait;margin:14mm}
+@media print{
+  html,body{height:auto !important;overflow:visible !important;background:#fff !important}
+  .app,#padModal,#setModal{display:none !important}
+  #printArea{display:block !important;font-family:Calibri,Arial,Helvetica,sans-serif;color:#000;font-size:11pt}
+  #printArea .ph{text-align:center;font-size:12pt;line-height:1.4}
+  #printArea .pt{margin-top:14px}
+  #printArea table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5pt}
+  #printArea th,#printArea td{border:1px solid #000;padding:3px 6px;white-space:normal;overflow:visible;text-overflow:clip;vertical-align:middle;color:#000}
+  #printArea th{background:#fff;color:#000;font-size:10.5pt;text-transform:none;letter-spacing:0}
+  #printArea table.ps{margin-top:12px}
+  #printArea .ps thead{display:table-header-group}
+  #printArea .ps tr{page-break-inside:avoid}
+  #printArea td.c{text-align:center}
+  #printArea td.a{text-align:right}
+  #printArea tr.x td{font-style:italic}
+  #printArea tr.tot td{font-weight:bold;border-top:1px solid #000;border-bottom:3px double #000}
+  #printArea .sgn{margin-top:26px;page-break-inside:avoid}
+  #printArea table.pg td{text-align:center;border-top:0;border-bottom:0}
+  #printArea table.pg tr.lbl td{border:1px solid #000;text-align:left}
+  #printArea table.pg tr.sp td{height:62px;vertical-align:middle}
+  #printArea table.pg tr.sp img{max-height:56px;max-width:90%}
+  #printArea table.pg tr.nm td{font-weight:bold}
+  #printArea table.pg tr.last td{border-bottom:1px solid #000}
+}
 </style>
 </head>
 <body>
@@ -155,7 +191,7 @@ tr.editing input{padding:4px;font-size:12px}
 
     <!-- ───────────── TRACKING ───────────── -->
     <section id="track" class="hidden">
-      <h2>Tracking</h2>
+      <div class="hd"><h2>Tracking</h2><button class="btn sm line hidden" id="setBtn" title="Edit header details and signatories">&#9881; SETTINGS</button></div>
       <div class="sub">Tick the records you want, then download them. Use CANCELLED CHEQUE to mark a check without deleting the record.</div>
 
       <div class="segs">
@@ -166,12 +202,17 @@ tr.editing input{padding:4px;font-size:12px}
       <div class="bar">
         <div class="fld grow"><label>Live search</label><input type="text" id="search" placeholder="Type a name, check #, OR #, amount, date…"></div>
         <div class="fld"><label>Month</label><select id="trkMonth"></select></div>
+        <div class="fld"><label>From date</label><input type="date" id="trkFrom"></div>
+        <div class="fld"><label>To date</label><input type="date" id="trkTo"></div>
+        <button class="btn line" id="trkClear">CLEAR DATES</button>
         <div class="fld" id="catWrap"><label>Category</label>
           <div><button class="seg on" data-cf="ALL">ALL</button> <button class="seg" data-cf="MHI">MHI</button> <button class="seg" data-cf="BPF">BPF</button> <button class="seg" data-cf="FC">FC</button> <button class="seg" data-cf="AMBULANCE">AMBULANCE/PICK UP</button></div>
         </div>
         <button class="btn blue" id="dlSel" disabled>DOWNLOAD SELECTED</button>
         <button class="btn" id="dlAll">DOWNLOAD ALL</button>
+        <button class="btn line" id="prtBtn">PRINT</button>
       </div>
+      <div class="hint" id="trkHint"></div>
 
       <div class="chips" id="chips"></div>
       <div id="view"></div>
@@ -227,6 +268,43 @@ tr.editing input{padding:4px;font-size:12px}
   </div>
 </div>
 
+<div id="setModal">
+  <div class="mbox">
+    <h3 style="margin:0 0 4px 0;color:var(--red)">Summary settings</h3>
+    <div style="font-size:12px;color:var(--muted)">Used for the DISBURSEMENT Excel download and the printout. The date on the sheet is always the date of download.</div>
+    <div class="setH">HEADER DETAILS</div>
+    <div class="setG">
+      <div class="fld"><label>Organization</label><input type="text" id="sOrg"></div>
+      <div class="fld"><label>Chapter</label><input type="text" id="sChap"></div>
+      <div class="fld"><label>Address</label><input type="text" id="sAddr"></div>
+      <div class="fld"><label>Contact</label><input type="text" id="sTel"></div>
+      <div class="fld full"><label>Title</label><input type="text" id="sTitle"></div>
+    </div>
+    <div class="setH">PREPARED BY</div>
+    <div class="setG">
+      <div class="fld"><label>Name</label><input type="text" id="sPName"></div>
+      <div class="fld"><label>Position</label><input type="text" id="sPTitle"></div>
+    </div>
+    <div class="setH">APPROVED BY (1)</div>
+    <div class="setG">
+      <div class="fld"><label>Name</label><input type="text" id="sA1Name"></div>
+      <div class="fld"><label>Position</label><input type="text" id="sA1Title"></div>
+    </div>
+    <div class="setH">APPROVED BY (2)</div>
+    <div class="setG">
+      <div class="fld"><label>Name</label><input type="text" id="sA2Name"></div>
+      <div class="fld"><label>Position</label><input type="text" id="sA2Title"></div>
+    </div>
+    <div class="btns">
+      <button class="btn" id="setSave">SAVE</button>
+      <button class="btn line" id="setReset">RESET TO DEFAULT</button>
+      <button class="btn line" id="setCancel">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -271,6 +349,8 @@ const thisYear = Number(phToday().slice(0,4));
 let year = thisYear, type = "nhq", cat = "MHI", sheet = "nhq", catFilter = "ALL", editing = null;
 let data = { nhq:{}, cash:{} }, loaded = {}, signers = { prepared:{}, approved:{} }, signersLoaded = false;
 const sel = new Set();
+const LS_KEY = "disbursementSummarySettings";
+const selCount = () => [...sel].filter(k => k.startsWith(sheet + "|")).length;
 
 /* ── database ── */
 /* older NHQ entries were stored per month (nhq/year/MM/CATEGORY). They are converted once into per-record entries. */
@@ -299,6 +379,7 @@ async function loadYear(y){
 async function loadSigners(){
   if(signersLoaded) return;
   signers = (await get(ref(db, "disbursement/signers"))).val() || { prepared:{}, approved:{} };
+  if(!signers.summary){ try{ const l = localStorage.getItem(LS_KEY); if(l) signers.summary = JSON.parse(l); }catch(e){} }
   signersLoaded = true;
 }
 /* writes a record; if its date moved to another year, the old copy is removed */
@@ -383,9 +464,10 @@ $("cashGoTrack").onclick = () => { sheet = "cash"; showPage("track"); };
 
 /* ── tracking: lists (each tab reads only its own type) ── */
 function listOf(kind, q){
-  const m = Number($("trkMonth").value), src = data[kind][year] || {};
+  const m = Number($("trkMonth").value), from = $("trkFrom").value, to = $("trkTo").value, src = data[kind][year] || {};
   return Object.keys(src).map(k => ({ key:k, ...src[k] }))
     .filter(r => (r.kind || kind) === kind && (!m || monthOf(r.date || r.dateRemitted) === m)
+      && (!from || (r.date || r.dateRemitted || "") >= from) && (!to || (r.date || r.dateRemitted || "") <= to)
       && (kind !== "nhq" || catFilter === "ALL" || r.cat === catFilter) && matchQ(textOf(kind, r), q))
     .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key)));
 }
@@ -414,7 +496,11 @@ function renderTracking(){
   $("catWrap").classList.toggle("hidden", sheet !== "nhq");
   $("search").placeholder = sheet === "nhq" ? "Type a category, check #, OR #, amount, date…" : "Type a name, check #, description, amount, date…";
   if(sheet === "nhq") renderNhq(q); else renderCash(q);
-  $("dlSel").disabled = sel.size === 0;
+  const cash = sheet === "cash";
+  $("setBtn").classList.toggle("hidden", !cash); $("prtBtn").classList.toggle("hidden", !cash);
+  $("dlAll").textContent = cash ? "DOWNLOAD ALL SHOWN" : "DOWNLOAD ALL";
+  $("trkHint").textContent = cash ? "Download and Print use what is shown (year, month, dates, search). Tick rows to use only those." : "";
+  $("dlSel").disabled = selCount() === 0;
 }
 
 /* inline edit rows */
@@ -552,7 +638,7 @@ $("view").addEventListener("click", e => {
 });
 $("view").addEventListener("change", e => {
   const t = e.target;
-  if(t.dataset.sel){ t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); $("dlSel").disabled = sel.size === 0; }
+  if(t.dataset.sel){ t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); $("dlSel").disabled = selCount() === 0; }
   if(t.dataset.selall){
     const kind = t.dataset.selall, q = $("search").value.trim().toUpperCase();
     listOf(kind, q).forEach(r => { const k = kind + "|" + r.key; t.checked ? sel.add(k) : sel.delete(k); });
@@ -563,6 +649,17 @@ document.querySelectorAll("[data-sheet]").forEach(b => b.onclick = () => { sheet
 document.querySelectorAll("[data-cf]").forEach(b => b.onclick = () => { catFilter = b.dataset.cf; renderTracking(); });
 $("search").oninput = renderTracking;
 $("trkMonth").onchange = renderTracking;
+async function dateChanged(e){
+  const v = e.target.value;
+  if(isDate(v)){
+    const y = Number(v.slice(0,4));
+    if(y !== year && [...$("year").options].some(o => Number(o.value) === y)){ year = y; $("year").value = String(y); sel.clear(); editing = null; await loadYear(y); }
+  }
+  renderTracking();
+}
+$("trkFrom").onchange = dateChanged;
+$("trkTo").onchange = dateChanged;
+$("trkClear").onclick = () => { $("trkFrom").value = ""; $("trkTo").value = ""; renderTracking(); };
 
 /* ── signatories ── */
 function renderSigners(){
@@ -593,7 +690,7 @@ document.querySelectorAll(".sigBox").forEach(box => {
 $("sigSave").onclick = async () => {
   readSignerInputs();
   try{
-    await set(ref(db, "disbursement/signers"), { prepared:signers.prepared, approved:signers.approved });
+    await set(ref(db, "disbursement/signers"), { prepared:signers.prepared, approved:signers.approved, ...(signers.summary ? { summary:signers.summary } : {}) });
     $("sigSaved").textContent = "Saved"; renderSigners();
   }catch(err){ trkSay("Could not save signatories: " + (err.message || err), true); }
 };
@@ -780,6 +877,7 @@ function cashSheet(wb, rows, logo){
   return { cs, row: row + 1, lastCol: 10 };
 }
 async function downloadExcel(mode){
+  if(sheet === "cash") return downloadSummary(mode);
   const pick = kind => { const src = data[kind][year] || {};
     return Object.keys(src).filter(k => mode === "all" || sel.has(kind + "|" + k)).map(k => ({ key:k, ...src[k] }))
       .filter(r => (r.kind || kind) === kind)
@@ -798,7 +896,171 @@ async function downloadExcel(mode){
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
   trkSay(`Downloaded DISBURSEMENT-${year}.xlsx (${mode === "all" ? "all records" : sel.size + " selected"})`);
 }
-$("dlSel").onclick = async () => { $("dlSel").disabled = true; try{ await downloadExcel("sel"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlSel").disabled = sel.size === 0; } };
+/* ── DISBURSEMENT SUMMARY: Excel + print, same layout as the DISBURSEMENT SUMMARY workbook ── */
+const SUM_DEF = {
+  org:"PHILIPPINE RED CROSS", chapter:"Baguio City Chapter", address:"39 Harrison Rd. Baguio City", contact:"Tel/Fax (074) 442-4036", title:"DISBURSEMENTS SUMMARY",
+  prepared:{ name:"GWENDOLEEN T. BUENAVISTA", title:"Bookkeeper" },
+  approved1:{ name:"ANASTACIA B. TAMAYO", title:"Chapter Administrator" },
+  approved2:{ name:"ERDOLFO V. BALAJADIA", title:"BOD, Chairman" }
+};
+function cfg(){
+  const s = signers.summary || {}, d = SUM_DEF, g = k => s[k] != null ? s[k] : d[k];
+  const p = k => ({ name: s[k] && s[k].name != null ? s[k].name : d[k].name, title: s[k] && s[k].title != null ? s[k].title : d[k].title });
+  return { org:g("org"), chapter:g("chapter"), address:g("address"), contact:g("contact"), title:g("title"), prepared:p("prepared"), approved1:p("approved1"), approved2:p("approved2") };
+}
+/* the date on the sheet is always the date of download / print */
+function longDate(){ const t = phToday(); return MONTHS[Number(t.slice(5,7)) - 1] + " " + Number(t.slice(8,10)) + ", " + t.slice(0,4); }
+const particulars = r => r.cancelled ? [r.description, CXL].filter(Boolean).join(" - ") : (r.description || "");
+function summaryRows(mode){
+  if(mode === "sel"){
+    const src = data.cash[year] || {};
+    return Object.keys(src).filter(k => sel.has("cash|" + k)).map(k => ({ key:k, ...src[k] })).filter(r => (r.kind || "cash") === "cash")
+      .sort((a,b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.key).localeCompare(String(b.key)));
+  }
+  return listOf("cash", $("search").value.trim().toUpperCase());
+}
+const sumTotal = rows => r2(rows.reduce((t, r) => t + (r.cancelled ? 0 : num(r.amount)), 0));
+
+/* settings window */
+const SET_MAP = [["sOrg","org"],["sChap","chapter"],["sAddr","address"],["sTel","contact"],["sTitle","title"]];
+function fillSettings(c){
+  SET_MAP.forEach(([id, k]) => { $(id).value = c[k]; });
+  $("sPName").value = c.prepared.name; $("sPTitle").value = c.prepared.title;
+  $("sA1Name").value = c.approved1.name; $("sA1Title").value = c.approved1.title;
+  $("sA2Name").value = c.approved2.name; $("sA2Title").value = c.approved2.title;
+}
+$("setBtn").onclick = async () => { try{ await loadSigners(); }catch(e){} fillSettings(cfg()); $("setModal").classList.add("on"); };
+$("setCancel").onclick = () => $("setModal").classList.remove("on");
+$("setReset").onclick = () => fillSettings(SUM_DEF);
+$("setSave").onclick = async () => {
+  const v = id => $(id).value.trim(), nm = id => v(id).toUpperCase();
+  const s = { org:v("sOrg"), chapter:v("sChap"), address:v("sAddr"), contact:v("sTel"), title:v("sTitle"),
+    prepared:{ name:nm("sPName"), title:v("sPTitle") }, approved1:{ name:nm("sA1Name"), title:v("sA1Title") }, approved2:{ name:nm("sA2Name"), title:v("sA2Title") } };
+  signers.summary = s;
+  $("setModal").classList.remove("on");
+  try{ await set(ref(db, "disbursement/signers/summary"), s); try{ localStorage.removeItem(LS_KEY); }catch(e){} trkSay("Settings saved."); }
+  catch(err){
+    console.error(err);
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); trkSay("Settings saved on this device only (could not save online: " + (err.message || err) + ")", true); }
+    catch(e){ trkSay("Could not save settings: " + (err.message || err), true); }
+  }
+};
+
+/* print */
+function printHtml(rows){
+  const c = cfg();
+  const body = rows.map(r => { const cx = !!r.cancelled;
+    return `<tr class="${cx ? "x" : ""}"><td class="c">${esc(r.check)}</td><td>${esc(r.name)}</td><td>${esc(particulars(r))}</td><td class="a">${cx ? "-" : money(r.amount)}</td></tr>`; }).join("");
+  const sg = role => signers[role] && signers[role].sig ? `<img src="${signers[role].sig}" alt="">` : "";
+  const head = [c.org, c.chapter, c.address, c.contact].map(t => `<div class="ph">${esc(t) || "&nbsp;"}</div>`).join("");
+  return `${head}<div class="ph pt">${esc(c.title)}</div><div class="ph">${esc(longDate())}</div>
+    <table class="ps"><colgroup><col style="width:14%"><col style="width:27%"><col style="width:41%"><col style="width:18%"></colgroup>
+    <thead><tr><th>Check No.</th><th>Payee</th><th>Particulars</th><th>Amount</th></tr></thead>
+    <tbody>${body}
+    <tr><td></td><td></td><td class="c">*** nothing follows***</td><td></td></tr>
+    <tr class="tot"><td class="c">Total</td><td></td><td></td><td class="a">${money(sumTotal(rows))}</td></tr></tbody></table>
+    <div class="sgn"><table class="pg"><colgroup><col style="width:38%"><col style="width:38%"><col style="width:24%"></colgroup>
+    <tr class="lbl"><td>Prepared by:</td><td colspan="2">Approved by:</td></tr>
+    <tr class="sp"><td>${sg("prepared")}</td><td>${sg("approved")}</td><td></td></tr>
+    <tr class="nm"><td>${esc(c.prepared.name)}</td><td>${esc(c.approved1.name)}</td><td>${esc(c.approved2.name)}</td></tr>
+    <tr class="last"><td>${esc(c.prepared.title)}</td><td>${esc(c.approved1.title)}</td><td>${esc(c.approved2.title)}</td></tr></table></div>`;
+}
+$("prtBtn").onclick = async () => {
+  const rows = selCount() ? summaryRows("sel") : summaryRows("all");
+  if(!rows.length) return trkSay("Nothing to print. No disbursement records match the filters.", true);
+  try{ await loadSigners(); }catch(e){}
+  $("printArea").innerHTML = printHtml(rows);
+  trkSay(`Printing ${rows.length} record${rows.length === 1 ? "" : "s"}…`);
+  setTimeout(() => window.print(), 250);
+};
+
+/* Excel: same layout as DISBURSEMENT SUMMARY (Check No. / Payee / Particulars / Amount, total, prepared by / approved by) */
+const ACCT = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-';
+const BLK = { style:"thin", color:{ argb:"FF000000" } }, DBL = { style:"double", color:{ argb:"FF000000" } };
+function cellFmt(cell, o){
+  o = o || {};
+  cell.font = { name:"Calibri", size:o.size || 11, bold:!!o.bold, italic:!!o.italic };
+  cell.alignment = { horizontal:o.h || "left", vertical:"middle", wrapText:!!o.wrap };
+  if(o.nf) cell.numFmt = o.nf;
+}
+function boxCells(ws, r1, c1, r2, c2, bottom){
+  for(let r = r1; r <= r2; r++) for(let c = c1; c <= c2; c++){
+    const cell = ws.getCell(r, c), b = { ...(cell.border || {}) };
+    if(r === r1) b.top = BLK;
+    if(r === r2) b.bottom = bottom || BLK;
+    if(c === c1) b.left = BLK;
+    if(c === c2) b.right = BLK;
+    cell.border = b;
+  }
+}
+async function buildSummary(wb, rows){
+  const c = cfg(), ws = wb.addWorksheet("Sheet1");
+  ws.columns = [{ width:3 },{ width:14 },{ width:30 },{ width:46 },{ width:26 }];
+  ws.pageSetup = { paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0, horizontalCentered:true,
+    margins:{ left:0.7, right:0.7, top:0.75, bottom:0.75, header:0.3, footer:0.3 } };
+  [[2, c.org], [3, c.chapter], [4, c.address], [5, c.contact], [7, c.title], [8, longDate()]].forEach(([r, t]) => {
+    ws.mergeCells(r, 2, r, 5); const cell = ws.getCell(r, 2); cell.value = t; cellFmt(cell, { size:12, h:"center" }); ws.getRow(r).height = 16;
+  });
+  ["Check No.", "Payee", "Particulars", "Amount"].forEach((h, i) => { const cell = ws.getCell(10, 2 + i); cell.value = h; cellFmt(cell, { bold:true, h:"center" }); boxCells(ws, 10, 2 + i, 10, 2 + i); });
+  const first = 11; let r = first, total = 0;
+  rows.forEach(rec => {
+    const cx = !!rec.cancelled, chk = String(rec.check || "").trim();
+    const vals = [/^[1-9]\d{0,14}$/.test(chk) ? Number(chk) : chk, rec.name || "", particulars(rec), cx ? null : num(rec.amount)];
+    vals.forEach((v, i) => {
+      const cell = ws.getCell(r, 2 + i); cell.value = v;
+      cellFmt(cell, { h:i === 0 ? "center" : (i === 3 ? "right" : "left"), wrap:i === 1 || i === 2, nf:i === 3 ? ACCT : undefined, italic:cx });
+      boxCells(ws, r, 2 + i, r, 2 + i);
+    });
+    if(!cx) total += num(rec.amount);
+    r++;
+  });
+  for(let col = 2; col <= 5; col++){ const cell = ws.getCell(r, col); cellFmt(cell, { h:"center" }); boxCells(ws, r, col, r, col); }
+  ws.getCell(r, 4).value = "*** nothing follows***";
+  const last = r; r++;
+  boxCells(ws, r, 2, r, 5, DBL);
+  const tl = ws.getCell(r, 2); tl.value = "Total"; cellFmt(tl, { bold:true, h:"center" });
+  for(const col of [3, 4]) cellFmt(ws.getCell(r, col), { bold:true });
+  const tc = ws.getCell(r, 5); tc.value = { formula:`SUM(E${first}:E${last})`, result:r2(total) }; cellFmt(tc, { bold:true, h:"right", nf:ACCT });
+  ws.getRow(r).height = 16;
+
+  /* prepared by / approved by */
+  const s = r + 3;
+  ws.mergeCells(s, 2, s, 3); ws.mergeCells(s, 4, s, 5);
+  ws.mergeCells(s + 1, 2, s + 2, 3); ws.mergeCells(s + 1, 4, s + 2, 4); ws.mergeCells(s + 1, 5, s + 2, 5);
+  ws.mergeCells(s + 3, 2, s + 3, 3); ws.mergeCells(s + 4, 2, s + 4, 3);
+  [[2, "Prepared by:"], [4, "Approved by:"]].forEach(([col, t]) => { const cell = ws.getCell(s, col); cell.value = t; cellFmt(cell, { h:"left" }); });
+  [[2, c.prepared], [4, c.approved1], [5, c.approved2]].forEach(([col, p]) => {
+    const a = ws.getCell(s + 3, col); a.value = p.name; cellFmt(a, { bold:true, h:"center" });
+    const b = ws.getCell(s + 4, col); b.value = p.title; cellFmt(b, { h:"center" });
+  });
+  ws.getRow(s + 1).height = 24; ws.getRow(s + 2).height = 24; ws.getRow(s + 3).height = 16; ws.getRow(s + 4).height = 16;
+  boxCells(ws, s, 2, s, 3); boxCells(ws, s, 4, s, 5);
+  boxCells(ws, s + 1, 2, s + 4, 3); boxCells(ws, s + 1, 4, s + 4, 4); boxCells(ws, s + 1, 5, s + 4, 5);
+  /* e-signatures set in the Signatories box below: PREPARED BY above the prepared name, APPROVED BY above the first approver */
+  const px = ch => ch * 7 + 5;
+  for(const [role, colIdx, chars] of [["prepared", 2, 30], ["approved", 3, 46]]){
+    const sig = signers[role] && signers[role].sig; if(!sig) continue;
+    const sz = await new Promise(res => { const i = new Image(); i.onload = () => res({ w:i.width, h:i.height }); i.onerror = () => res({ w:3, h:1 }); i.src = sig; });
+    const k = Math.min(200 / sz.w, 58 / sz.h, 1.6), w = Math.max(1, Math.round(sz.w * k)), h = Math.max(1, Math.round(sz.h * k));
+    ws.addImage(wb.addImage({ base64:sig.split(",").pop(), extension:"png" }), { tl:{ col:colIdx + Math.max(0, (px(chars) - w) / 2 / px(chars)), row:s + 0.15 }, ext:{ width:w, height:h } });
+  }
+  return ws;
+}
+async function downloadSummary(mode){
+  const rows = summaryRows(mode);
+  if(!rows.length) return trkSay(mode === "sel" ? "No records selected. Tick the records you want first." : "No disbursement records match the filters.", true);
+  trkSay("Preparing the Excel file…");
+  await loadSigners(); await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  await buildSummary(wb, rows);
+  const buf = await wb.xlsx.writeBuffer(), name = `DISBURSEMENTS-SUMMARY-${phToday()}.xlsx`;
+  const url = URL.createObjectURL(new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  trkSay(`Downloaded ${name} (${rows.length} record${rows.length === 1 ? "" : "s"})`);
+}
+
+$("dlSel").onclick = async () => { $("dlSel").disabled = true; try{ await downloadExcel("sel"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlSel").disabled = selCount() === 0; } };
 $("dlAll").onclick = async () => { $("dlAll").disabled = true; try{ await downloadExcel("all"); }catch(err){ console.error(err); trkSay(err.message || String(err), true); } finally{ $("dlAll").disabled = false; } };
 
 /* ── start: only the finance account gets in ── */
