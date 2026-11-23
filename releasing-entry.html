@@ -488,7 +488,6 @@ button{
 </header>
 
 <div class="augmentationTopBar">
-    <button class="augmentationToggle" onclick="toggleAugmentation()">BLOOD AUGMENTATION</button>
     <button class="augmentationToggle hubbingToggle" onclick="toggleHubbing()">SAMPLE HUBBING</button>
 </div>
 
@@ -642,76 +641,6 @@ button{
 <button class="save" id="saveBtn">SAVE</button>
 <button class="back" onclick="goBack()">BACK TO RELEASING</button>
 
-</div>
-
-<!-- BLOOD AUGMENTATION PANEL -->
-<div id="augmentationPanel" class="augmentationPanel">
-    <div class="augmentationHeader">BLOOD AUGMENTATION</div>
-
-    <label>DATE</label>
-    <input type="date" id="augDate" required>
-
-    <label>FACILITY</label>
-    <div class="fac-wrap" id="facWrapAug">
-      <span class="fac-ghost" id="facGhostAug" aria-hidden="true"></span>
-      <input type="text" id="augFacility" placeholder="Type facility name or acronym (e.g. NDCH, WPDH)" required autocomplete="off">
-      <div class="fac-dropdown" id="facDropAug"></div>
-    </div>
-    <div class="fac-resolved" id="facResolvedAug"></div>
-
-    <label>BOX CONTAINER</label>
-    <input type="number" id="augBoxContainerQty" placeholder="Qty">
-
-    <div id="augmentationBloodTypeContainer"></div>
-
-    <button class="addBtn" type="button" onclick="addAugmentationBloodType()">+ ADD BLOOD TYPE</button>
-
-    <label style="margin-top:15px;">AMOUNT PAID</label>
-    <div class="row">
-        <input type="number" id="augAmountPaid" readonly>
-        <button type="button" class="discountBtn smallBtn" id="augDiscountBtn" onclick="toggleAugDiscount()">DISCOUNT</button>
-    </div>
-
-    <div id="augDiscountSection" style="display:none;"></div>
-
-    <label style="margin-top:12px;">FREIGHT / TRANSPORT FEE <span style="font-weight:normal;color:#666;font-size:12px;">(optional &ndash; printed on the statement when filled in)</span></label>
-    <input type="number" id="augFreight" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
-
-    <label style="margin-top:12px;">MISCELLANEOUS CHARGE <span style="font-weight:normal;color:#666;font-size:12px;">(optional &ndash; printed on the statement when filled in)</span></label>
-    <input type="text" id="augMiscLabel" placeholder="Description (optional, e.g. Handling fee) &ndash; prints as &quot;Miscellaneous&quot; if blank">
-    <input type="number" id="augMisc" min="0" step="0.01" inputmode="decimal" placeholder="0.00 (leave blank if none)">
-    <div id="augPayable" class="discSummary"></div>
-
-    <label style="margin-top:12px;">ADDRESS (type manually)</label>
-    <input type="text" id="augAddress" placeholder="Customer address">
-
-    <label>REMARKS</label>
-    <input type="text" id="augRemarks" placeholder="Optional">
-
-    <label style="margin-top:14px;">STATEMENT OF ACCOUNT (auto-filled)</label>
-    <div id="orgEditorMount"></div>
-    <div class="soaWrap"><div id="soaPreview"></div></div>
-
-    <label style="margin-top:14px;">NOTE (printed just before the signatories)</label>
-    <textarea id="augNote" rows="3" placeholder="Optional note to appear on the printed statement" style="width:100%;padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:inherit;font-size:14px;resize:vertical;"></textarea>
-
-    <button class="facilityBtn" id="augSaveBtn" type="button" onclick="saveAugmentation()">SAVE BLOOD AUGMENTATION</button>
-
-    <div id="soaPostSave" class="soaBox" style="display:none;">
-      <b>✔ Saved to Releasing Tracking</b> — Invoice <b id="soaSavedInv"></b>
-      <label style="margin-top:10px;">PRINTED / PREPARED BY</label>
-      <input type="text" id="soaPrintedBy" placeholder="Name of person printing">
-      <label>E-SIGNATURE OF PREPARER (optional)</label>
-      <select id="soaPrintedBySig"><option value="">— no e-signature —</option></select>
-      <label>APPROVED BY</label>
-      <input type="text" id="soaApprovedBy" placeholder="Name of approver">
-      <label>E-SIGNATURE OF APPROVER (optional)</label>
-      <select id="soaApprovedBySig"><option value="">— no e-signature —</option></select>
-      <button type="button" class="esigLink" onclick="ESIG.openManager()">✍ Add / manage staff e-signatures</button>
-      <button class="facilityBtn" type="button" onclick="printSavedSoa()">🖨 PRINT STATEMENT</button>
-      <button class="back" type="button" onclick="newAugEntry()">NEW ENTRY</button>
-    </div>
-    <button class="back" type="button" onclick="toggleAugmentation()">CLOSE</button>
 </div>
 
 <div id="hubbingPanel" class="augmentationPanel">
@@ -1220,7 +1149,6 @@ const editId = urlParams.get("id");
 
 let authReady = false;
 let currentReleasingPriceSnapshot = null;
-let currentAugmentationPriceSnapshot = null;
 let allReleasingEntries = [];
 let selectedLoadedId = editId || null;
 let waivedActive = false;
@@ -1272,11 +1200,6 @@ function setTodayDate(){
   const mainDate = document.getElementById("date");
   if(mainDate && !selectedLoadedId && (!mainDate.value || (previousToday && mainDate.value === previousToday))){
     mainDate.value = today;
-  }
-
-  const augDate = document.getElementById("augDate");
-  if(augDate && (!augDate.value || (previousToday && augDate.value === previousToday))){
-    augDate.value = today;
   }
 
   currentPhilippinesDateString = today;
@@ -1548,7 +1471,6 @@ function loadFacilities(){
       // still build alias map from built-ins even if Firebase has no facilities yet
       _buildAliasMap([], []);
       _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
-      _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
     _setupFacAutocomplete("hubSource", "facGhostHub", "facDropHub", "facResolvedHub");
       return;
     }
@@ -1578,7 +1500,6 @@ function loadFacilities(){
 
     // Setup autocomplete for both fields (works on any device that opens the site)
     _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
-    _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
     _setupFacAutocomplete("hubSource", "facGhostHub", "facDropHub", "facResolvedHub");
 
   }, (error) => {
@@ -1586,7 +1507,6 @@ function loadFacilities(){
     // still setup with built-ins only
     _buildAliasMap([], []);
     _setupFacAutocomplete("facility",    "facGhostMain","facDropMain","facResolvedMain");
-    _setupFacAutocomplete("augFacility", "facGhostAug", "facDropAug", "facResolvedAug");
     _setupFacAutocomplete("hubSource", "facGhostHub", "facDropHub", "facResolvedHub");
   });
 }
@@ -1618,7 +1538,6 @@ async function loadComponentPrices(){
     }
 
     computeIssuedTotal();
-    computeAugmentationTotal();
   }catch(error){
     console.error("Price load error:", error);
     componentPrices = {
@@ -2326,64 +2245,6 @@ function validateMainRequiredFields(){
   return true;
 }
 
-function validateAugmentationRequiredFields(){
-  if(!requireFieldById("augDate", "Augmentation date")) return false;
-  if(!requireFieldById("augFacility", "Augmentation facility")) return false;
-
-  const cards = Array.from(document.querySelectorAll(".augmentationCard"));
-  if(!cards.length){
-    alert("Please add at least one blood type for blood augmentation.");
-    return false;
-  }
-
-  for(let index = 0; index < cards.length; index++){
-    const bloodTypeElement = cards[index].querySelector(".augBloodType");
-    if(!bloodTypeElement || isBlankValue(bloodTypeElement.value)){
-      return alertAndFocus(bloodTypeElement, "Augmentation blood type is required.");
-    }
-
-    const requestRows = Array.from(cards[index].querySelectorAll(".augRequestRow"));
-    if(!requestRows.length){
-      alert("At least one augmentation requested row is required.");
-      return false;
-    }
-
-    for(let reqIndex = 0; reqIndex < requestRows.length; reqIndex++){
-      const qtyElement = requestRows[reqIndex].querySelector(".augRequestQty");
-      if(!qtyElement || isBlankValue(qtyElement.value)){
-        return alertAndFocus(qtyElement, "Augmentation requested quantity is required.");
-      }
-    }
-
-    const issuedRows = Array.from(cards[index].querySelectorAll(".augIssuedRow"));
-    if(!issuedRows.length){
-      alert("At least one augmentation issued row is required.");
-      return false;
-    }
-
-    for(let issuedIndex = 0; issuedIndex < issuedRows.length; issuedIndex++){
-      const qtyElement = issuedRows[issuedIndex].querySelector(".augIssuedQty");
-      if(!qtyElement || isBlankValue(qtyElement.value)){
-        return alertAndFocus(qtyElement, "Augmentation issued quantity is required.");
-      }
-    }
-  }
-
-  if(!requireDiscountBox(DISC_AUG)) return false;
-
-  const freightEl = document.getElementById("augFreight");
-  if(freightEl.value.trim() !== "" && !(Number(freightEl.value) >= 0)){
-    return alertAndFocus(freightEl, "Freight / transport fee must be 0 or more.");
-  }
-
-  const miscEl = document.getElementById("augMisc");
-  if(miscEl.value.trim() !== "" && !(Number(miscEl.value) >= 0)){
-    return alertAndFocus(miscEl, "Miscellaneous charge must be 0 or more.");
-  }
-
-  return true;
-}
-
 saveBtn.addEventListener("click", async () => {
   if (!auth.currentUser) {
     alert("You are not logged in.");
@@ -2483,250 +2344,6 @@ saveBtn.addEventListener("click", async () => {
   }
 });
 
-window.toggleAugmentation = function(){
-  document.getElementById("augmentationPanel").classList.toggle("open");
-};
-
-window.toggleAugDiscount = function(){
-  DISC_AUG.toggle();
-};
-
-function computeAugmentationTotal(){
-  let total = 0;
-
-  document.querySelectorAll(".augIssuedRow").forEach(row => {
-    const type = row.querySelector(".augIssuedType").value;
-    const qty = Number(row.querySelector(".augIssuedQty").value) || 0;
-
-    if(componentPrices[type]){
-      total += componentPrices[type] * qty;
-    }
-  });
-
-  const augBoxContainerQty = Number(document.getElementById("augBoxContainerQty").value) || 0;
-  total += componentPrices.BOXCONTAINER * augBoxContainerQty;
-
-  document.getElementById("augAmountPaid").value = total.toFixed(2);
-  DISC_AUG.refresh();
-  updateAugPayable();
-}
-
-/* Discount panel for blood augmentation */
-const DISC_AUG = DiscountBox.create({
-  mount: document.getElementById("augDiscountSection"),
-  ids: { price:"augDiscountPrice", percent:"augDiscountPercent", less:"augDiscountLess", amount:"augDiscount" },
-  getTotal: () => Number(document.getElementById("augAmountPaid").value) || 0,
-  button: document.getElementById("augDiscountBtn")
-});
-
-/* Shows: blood total - discount + freight = total payable */
-function updateAugPayable(){
-  const box = document.getElementById("augPayable");
-  if(!box) return;
-  const gross = Number(document.getElementById("augAmountPaid").value) || 0;
-  const disc = Number(document.getElementById("augDiscount").value) || 0;
-  const freight = Math.max(0, Number(document.getElementById("augFreight").value) || 0);
-  const misc = Math.max(0, Number(document.getElementById("augMisc").value) || 0);
-  if(gross <= 0 && freight <= 0 && misc <= 0){ box.style.display = "none"; box.innerHTML = ""; return; }
-  const m = SOA.money;
-  let parts = `Blood total <b>\u20B1${m(gross)}</b>`;
-  if(disc > 0) parts += ` &minus; Discount <b>\u20B1${m(disc)}</b>`;
-  if(freight > 0) parts += ` + Freight <b>\u20B1${m(freight)}</b>`;
-  if(misc > 0) parts += ` + Miscellaneous <b>\u20B1${m(misc)}</b>`;
-  box.innerHTML = parts + `<br>TOTAL PAYABLE: <b style="font-size:15px;">\u20B1${m(gross - disc + freight + misc)}</b>`;
-  box.style.display = "block";
-}
-
-window.addAugmentationBloodType = function(){
-  const container = document.getElementById("augmentationBloodTypeContainer");
-
-  const card = document.createElement("div");
-  card.className = "augmentationCard";
-  card.innerHTML = `
-    <div class="row">
-      <div style="flex:1">
-        <label>BLOOD TYPE</label>
-        <select class="augBloodType" required>
-          <option value="">Select</option>
-          <option>A+</option>
-          <option>A-</option>
-          <option>B+</option>
-          <option>B-</option>
-          <option>AB+</option>
-          <option>AB-</option>
-          <option>O+</option>
-          <option>O-</option>
-        </select>
-      </div>
-      <div>
-        <button type="button" class="removeBtn" onclick="this.closest('.augmentationCard').remove(); computeAugmentationTotal();">-</button>
-      </div>
-    </div>
-
-    <div class="innerBox">
-      <label>REQUESTED</label>
-      <div class="augRequestContainer">
-        <div class="row augRequestRow">
-          <select class="augRequestType">
-            <option>WB</option>
-            <option>PRBC</option>
-            <option>PC</option>
-            <option>FFP</option>
-            <option>CRYO</option>
-          </select>
-          <input type="number" class="augRequestQty" placeholder="Qty" required>
-          <button type="button" class="addBtn" onclick="addAugRequest(this)">+</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="innerBox">
-      <label>ISSUED</label>
-      <div class="augIssuedContainer">
-        <div class="row augIssuedRow">
-          <select class="augIssuedType">
-            <option>WB</option>
-            <option>PRBC</option>
-            <option>PC</option>
-            <option>FFP</option>
-            <option>CRYO</option>
-          </select>
-          <input type="number" class="augIssuedQty" placeholder="Qty" required>
-          <button type="button" class="addBtn" onclick="addAugIssued(this)">+</button>
-        </div>
-      </div>
-    </div>
-  `;
-  container.appendChild(card);
-};
-
-window.addAugRequest = function(button){
-  const container = button.closest(".innerBox").querySelector(".augRequestContainer");
-  const row = document.createElement("div");
-  row.className = "row augRequestRow";
-  row.innerHTML = `
-    <select class="augRequestType">
-      <option>WB</option>
-      <option>PRBC</option>
-      <option>PC</option>
-      <option>FFP</option>
-      <option>CRYO</option>
-    </select>
-    <input type="number" class="augRequestQty" placeholder="Qty" required>
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove()">-</button>
-  `;
-  container.appendChild(row);
-};
-
-window.addAugIssued = function(button){
-  const container = button.closest(".innerBox").querySelector(".augIssuedContainer");
-  const row = document.createElement("div");
-  row.className = "row augIssuedRow";
-  row.innerHTML = `
-    <select class="augIssuedType">
-      <option>WB</option>
-      <option>PRBC</option>
-      <option>PC</option>
-      <option>FFP</option>
-      <option>CRYO</option>
-    </select>
-    <input type="number" class="augIssuedQty" placeholder="Qty" required>
-    <button type="button" class="removeBtn" onclick="this.parentElement.remove(); computeAugmentationTotal();">-</button>
-  `;
-  container.appendChild(row);
-};
-
-window.saveAugmentation = async function(){
-  if (!auth.currentUser) {
-    alert("You are not logged in.");
-    window.location.href = "index.html";
-    return;
-  }
-
-  if(lastSavedAug){ alert("Already saved. Print it or click NEW ENTRY."); return; }
-  if(!validateAugmentationRequiredFields()) return;
-  if(document.getElementById("augAddress").value.trim()===""){
-    alert("Address is required for the statement.");
-    document.getElementById("augAddress").focus();
-    return;
-  }
-
-  const augFacilityValue = document.getElementById("augFacility").value.trim();
-  if(augFacilityValue === ""){
-    alert("Facility is required.");
-    document.getElementById("augFacility").focus();
-    return;
-  }
-
-  const cards = document.querySelectorAll(".augmentationCard");
-  const bloodTypes = [];
-
-  cards.forEach(card => {
-    const bloodType = card.querySelector(".augBloodType").value;
-
-    const requests = [];
-    card.querySelectorAll(".augRequestRow").forEach(row => {
-      const type = row.querySelector(".augRequestType").value;
-      const qty = row.querySelector(".augRequestQty").value;
-      if(qty !== ""){
-        requests.push({ type, qty });
-      }
-    });
-
-    const issued = [];
-    card.querySelectorAll(".augIssuedRow").forEach(row => {
-      const type = row.querySelector(".augIssuedType").value;
-      const qty = row.querySelector(".augIssuedQty").value;
-      if(qty !== ""){
-        issued.push({ type, qty });
-      }
-    });
-
-    if(bloodType !== ""){
-      bloodTypes.push({
-        bloodType,
-        requests,
-        issued
-      });
-    }
-  });
-
-  const priceSnapshotToSave = currentAugmentationPriceSnapshot || buildPriceSnapshot();
-
-  const augmentationData = {
-    date: document.getElementById("augDate").value,
-    facility: normalizeFacility(augFacilityValue),
-    boxContainerQty: document.getElementById("augBoxContainerQty").value || 0,
-    bloodTypes: bloodTypes,
-    amountPaid: document.getElementById("augAmountPaid").value,
-    discount: document.getElementById("augDiscount").value || 0,
-    freight: Math.max(0, Number(document.getElementById("augFreight").value) || 0),
-    misc: Math.max(0, Number(document.getElementById("augMisc").value) || 0),
-    miscLabel: document.getElementById("augMiscLabel").value.trim(),
-    priceSnapshot: priceSnapshotToSave,
-    address: SOA.remember("address", document.getElementById("augAddress").value),
-    remarks: document.getElementById("augRemarks").value.trim(),
-    note: document.getElementById("augNote").value.trim()
-  };
-
-  try{
-    const invYear = (augmentationData.date || getPhilippinesDateString()).slice(0,4);
-    const tx = await runTransaction(ref(db, "settings/soaCounter/" + invYear), c => (Number(c) || 0) + 1);
-    augmentationData.invoiceNo = `INV-${invYear}-${String(tx.snapshot.val()).padStart(5,"0")}`;
-    const newRef = await push(ref(db, "bloodAugmentation"), augmentationData);
-    lastSavedAug = { id: newRef.key, ...augmentationData };
-    nextInvoiceNo = augmentationData.invoiceNo;
-    document.getElementById("soaSavedInv").textContent = nextInvoiceNo;
-    document.getElementById("soaPostSave").style.display = "block";
-    document.getElementById("augSaveBtn").disabled = true;
-    renderSoaPreview();
-    document.getElementById("soaPostSave").scrollIntoView({behavior:"smooth"});
-  }catch(error){
-    console.error("Augmentation save error:", error);
-    alert("Failed to save blood augmentation");
-  }
-};
-
 document.addEventListener("input", function(e){
   if(
     e.target.classList.contains("issuedQty") ||
@@ -2744,14 +2361,6 @@ document.addEventListener("input", function(e){
     e.target.classList.contains("waivedUnit")
   ){
     computeIssuedTotal();
-  }
-
-  if(
-    e.target.classList.contains("augIssuedQty") ||
-    e.target.classList.contains("augIssuedType") ||
-    e.target.id === "augBoxContainerQty"
-  ){
-    computeAugmentationTotal();
   }
 
 });
@@ -2806,103 +2415,11 @@ onAuthStateChanged(auth, async (user) => {
   await loadComponentPrices();
   await loadEditEntry();
   computeIssuedTotal();
-  computeAugmentationTotal();
 });
 
 /* ───────── SOA (Statement of Account) glue ───────── */
 const $ = id => document.getElementById(id);
-let lastSavedAug = null;
-let nextInvoiceNo = "";
-SOA.attach($("augAddress"), "address");
-SOA.mountOrgEditor($("orgEditorMount"));
-document.addEventListener("soaOrgChanged", renderSoaPreview);
-SOA.attach($("soaPrintedBy"), "printedBy");
-SOA.attach($("soaApprovedBy"), "approvedBy");
 const sigOf = id => (window.ESIG ? window.ESIG.imageFor(id) : "");
-window.addEventListener("load", () => {
-  ESIG.attachSelect($("soaPrintedBySig"), $("soaPrintedBy"), () => renderSoaPreview());
-  ESIG.attachSelect($("soaApprovedBySig"), $("soaApprovedBy"), () => renderSoaPreview());
-});
-
-function augYear(){ return ($("augDate").value || getPhilippinesDateString()).slice(0,4); }
-
-async function refreshInvoiceNo(){
-  if(lastSavedAug) return;
-  const y = augYear();
-  try{
-    const snap = await get(ref(db, "settings/soaCounter/" + y));
-    nextInvoiceNo = `INV-${y}-${String((Number(snap.val()) || 0) + 1).padStart(5,"0")}`;
-  }catch(e){ nextInvoiceNo = `INV-${y}-#####`; }
-  renderSoaPreview();
-}
-
-function collectAugForSoa(){
-  const bloodTypes = [];
-  document.querySelectorAll(".augmentationCard").forEach(card => {
-    const bloodType = card.querySelector(".augBloodType").value;
-    const requests = [], issued = [];
-    card.querySelectorAll(".augRequestRow").forEach(r => { const q = r.querySelector(".augRequestQty").value; if(q !== "") requests.push({type:r.querySelector(".augRequestType").value, qty:q}); });
-    card.querySelectorAll(".augIssuedRow").forEach(r => { const q = r.querySelector(".augIssuedQty").value; if(q !== "") issued.push({type:r.querySelector(".augIssuedType").value, qty:q}); });
-    if(bloodType) bloodTypes.push({bloodType, requests, issued});
-  });
-  return {
-    date: $("augDate").value, facility: $("augFacility").value.trim(),
-    boxContainerQty: $("augBoxContainerQty").value || 0, bloodTypes,
-    discount: $("augDiscount").value || 0, freight: Math.max(0, Number($("augFreight").value) || 0), misc: Math.max(0, Number($("augMisc").value) || 0), miscLabel: $("augMiscLabel").value.trim(), invoiceNo: nextInvoiceNo,
-    address: $("augAddress").value.trim(), remarks: $("augRemarks").value.trim(), note: $("augNote").value.trim(),
-    printedBy: $("soaPrintedBy").value.trim(), approvedBy: $("soaApprovedBy").value.trim(),
-    printedBySig: sigOf($("soaPrintedBySig").value), approvedBySig: sigOf($("soaApprovedBySig").value)
-  };
-}
-
-function renderSoaPreview(){
-  const prices = (lastSavedAug && lastSavedAug.priceSnapshot) || currentAugmentationPriceSnapshot || buildPriceSnapshot();
-  $("soaPreview").innerHTML = SOA.build(collectAugForSoa(), prices);
-}
-
-const augPanel = $("augmentationPanel");
-["input","change"].forEach(ev => augPanel.addEventListener(ev, () => { computeAugmentationTotal(); renderSoaPreview(); }));
-augPanel.addEventListener("click", () => setTimeout(renderSoaPreview, 0));
-$("augDate").addEventListener("change", refreshInvoiceNo);
-
-const _toggleAug = window.toggleAugmentation;
-window.toggleAugmentation = function(){
-  _toggleAug();
-  if(augPanel.classList.contains("open")) refreshInvoiceNo();
-};
-
-window.printSavedSoa = async function(){
-  if(!lastSavedAug) return;
-  const by = SOA.remember("printedBy", $("soaPrintedBy").value);
-  const ap = SOA.remember("approvedBy", $("soaApprovedBy").value);
-  if(!by){ alert("Please type the name of the person printing."); $("soaPrintedBy").focus(); return; }
-  lastSavedAug.printedBy = by; lastSavedAug.approvedBy = ap;
-  const pSigId = $("soaPrintedBySig").value, aSigId = $("soaApprovedBySig").value;
-  lastSavedAug.printedBySig = sigOf(pSigId); lastSavedAug.approvedBySig = sigOf(aSigId);
-  try{
-    const tx = await runTransaction(ref(db, "bloodAugmentation/" + lastSavedAug.id + "/printCount"), c => (Number(c) || 0) + 1);
-    lastSavedAug.printCount = tx.snapshot.val();
-    await update(ref(db, "bloodAugmentation/" + lastSavedAug.id), { printedBy: by, approvedBy: ap,
-      printedBySig: lastSavedAug.printedBySig || null, approvedBySig: lastSavedAug.approvedBySig || null,
-      printedBySigId: pSigId || null, approvedBySigId: aSigId || null });
-  }catch(e){ console.error("Could not store print names:", e); }
-  SOA.print(SOA.build(lastSavedAug, lastSavedAug.priceSnapshot));
-};
-
-window.newAugEntry = function(){
-  lastSavedAug = null;
-  currentAugmentationPriceSnapshot = null;
-  $("augDate").value = getPhilippinesDateString();
-  ["augFacility","augBoxContainerQty","augAmountPaid","augDiscountPrice","augDiscountPercent","augDiscountLess","augDiscount","augFreight","augMisc","augMiscLabel","augAddress","augRemarks","augNote","soaPrintedBy","soaApprovedBy"].forEach(id => $(id).value = "");
-  $("augmentationBloodTypeContainer").innerHTML = "";
-  DISC_AUG.clear();
-  $("augDiscountSection").style.display = "none";
-  updateAugPayable();
-  $("soaPostSave").style.display = "none";
-  ESIG.setValue($("soaPrintedBySig"), ""); ESIG.setValue($("soaApprovedBySig"), "");
-  $("augSaveBtn").disabled = false;
-  refreshInvoiceNo();
-};
 
 /* ═════════════════════ SAMPLE HUBBING ═════════════════════ */
 const hubPanel = $("hubbingPanel");
@@ -2993,8 +2510,6 @@ $("hubDate").addEventListener("change", refreshHubInvoiceNo);
 
 window.toggleHubbing = function(){
   const opening = !hubPanel.classList.contains("open");
-  const aug = $("augmentationPanel");
-  if(opening && aug.classList.contains("open")) window.toggleAugmentation();
   hubPanel.classList.toggle("open");
   if(opening){
     if(!$("hubDate").value) $("hubDate").value = getPhilippinesDateString();
@@ -3002,12 +2517,6 @@ window.toggleHubbing = function(){
     refreshHubInvoiceNo();
   }
 };
-const _toggleAug2 = window.toggleAugmentation;
-window.toggleAugmentation = function(){
-  if(!$("augmentationPanel").classList.contains("open") && hubPanel.classList.contains("open")) hubPanel.classList.remove("open");
-  _toggleAug2();
-};
-
 window.saveHubbing = async function(){
   if(lastSavedHub){ hubMsg("Already saved. Print it or click NEW ENTRY.", false); return; }
   hubMsg("");
@@ -3088,7 +2597,6 @@ window.newHubEntry = function(){
 };
 renderHubPreview();
 /* ═════════════════════ end SAMPLE HUBBING ═════════════════════ */
-renderSoaPreview();
 </script>
 
 
