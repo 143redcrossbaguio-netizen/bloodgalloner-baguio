@@ -796,9 +796,6 @@ function populateMonthFilter(){
     if(current && monthFilter.value !== current) monthFilter.value = current;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// FACILITY ALIAS NORMALIZATION ENGINE
-// ═══════════════════════════════════════════════════════════════════════
 const FACILITY_ALIASES = [
     { canonical:"BAGUIO GENERAL HOSPITAL AND MEDICAL CENTER",
       aliases:["BGHMC","BGH","BAGUIO GENERAL","BAGUIO GEN","BAGUIO GENERAL HOSPITAL",
@@ -812,7 +809,16 @@ const FACILITY_ALIASES = [
                "REGION1 MEDICAL CENTER","R.1.M.C","REGION 1MC"] },
     { canonical:"SAINT LOUIS UNIVERSITY HOSPITAL",
       aliases:["SLUH","SLU HOSPITAL","SLU HOSP","SAINT LOUIS UNIV HOSPITAL",
-               "ST LOUIS UNIVERSITY HOSPITAL","ST. LOUIS UNIVERSITY HOSPITAL","SLU","S.L.U.H"] },
+               "ST LOUIS UNIVERSITY HOSPITAL","ST. LOUIS UNIVERSITY HOSPITAL","SLU","S.L.U.H",
+               "SAINT LOUIS UNIVERSITY SACRED HEART MEDICAL CENTER",
+               "SAINT LOUIS UNIVERSITY SACRED HEART HOSPITAL",
+               "SAINT LOUIS UNIVERSITY HOSPITAL SACRED HEART",
+               "SLU SACRED HEART MEDICAL CENTER","SLU SACRED HEART"] },
+    { canonical:"BLESSED FAMILY HOSPITAL",
+      aliases:["BLESSED FAMILY DOCTORS HOSPITAL",
+               "BLESSED FAMILY DOCTORS GENERAL HOSPITAL",
+               "BLESSED FAMILY GENERAL HOSPITAL",
+               "BLESSED FAMILY HOSP"] },
     { canonical:"BENGUET GENERAL HOSPITAL",
       aliases:["BGH BENGUET","BENGUET GEN HOSP","BENGUET GENERAL","BGH-BENGUET","B.G.H BENGUET"] },
     { canonical:"PINES CITY DOCTORS HOSPITAL",
@@ -845,41 +851,72 @@ const FACILITY_ALIASES = [
       aliases:["LCP","LUNG CENTER","L.C.P","LUNG CENTER PHILS"] },
 ];
 
-const _ALIAS_MAP = {};
+// Normalize punctuation and spacing, but preserve word boundaries separately
+// for safe matching of longer facility-name variants.
+function _normKey(value){
+    return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function _facilityTokens(value){
+    return String(value ?? "")
+        .toUpperCase()
+        .replace(/&/g, " AND ")
+        .replace(/[^A-Z0-9]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+}
+
+const _ALIAS_MAP = new Map();
+const _FACILITY_MATCHERS = [];
+
 FACILITY_ALIASES.forEach(entry => {
-    const canon = entry.canonical.toUpperCase().trim();
-    _ALIAS_MAP[canon] = canon;
-    _ALIAS_MAP[_normKey(canon)] = canon;
-    entry.aliases.forEach(alias => {
-        const a = alias.toUpperCase().trim();
-        _ALIAS_MAP[a] = canon;
-        _ALIAS_MAP[_normKey(a)] = canon;
+    const canonical = entry.canonical.toUpperCase().trim();
+    [entry.canonical, ...entry.aliases].forEach(alias => {
+        const key = _normKey(alias);
+        if(!key) return;
+        _ALIAS_MAP.set(key, canonical);
+
+        const tokens = _facilityTokens(alias);
+        // Short abbreviations (e.g. SLU) are exact-match only. Longer names
+        // can also match when extra descriptors appear in the saved record.
+        if(tokens.length >= 3){
+            _FACILITY_MATCHERS.push({canonical, tokens, keyLength:key.length});
+        }
     });
 });
 
-function _normKey(s){
-    return String(s||"").toUpperCase().replace(/[\s.\-()&,\/]+/g,"");
-}
-
 function normalizeFacility(raw){
-    if(!raw) return "UNKNOWN FACILITY";
-    const upper = raw.toUpperCase().trim();
-    if(!upper) return "UNKNOWN FACILITY";
-    if(_ALIAS_MAP[upper]) return _ALIAS_MAP[upper];
-    const nk = _normKey(upper);
-    if(_ALIAS_MAP[nk]) return _ALIAS_MAP[nk];
-    for(const [alias, canon] of Object.entries(_ALIAS_MAP)){
-        if(alias.length < 3) continue;
-        if(upper.startsWith(alias) || alias.startsWith(upper)) return canon;
+    if(raw === null || raw === undefined || String(raw).trim() === ""){
+        return "UNKNOWN FACILITY";
     }
-    for(const entry of FACILITY_ALIASES){
-        const canon = entry.canonical.toUpperCase().trim();
-        for(const alias of [entry.canonical, ...entry.aliases]){
-            const aliasUp = alias.toUpperCase().trim();
-            if(aliasUp.length >= 4 && (upper.includes(aliasUp) || aliasUp.includes(upper))) return canon;
-        }
+
+    const original = String(raw).trim();
+    const key = _normKey(original);
+
+    // 1. Exact match after removing punctuation, spaces, and capitalization.
+    if(_ALIAS_MAP.has(key)) return _ALIAS_MAP.get(key);
+
+    // 2. Match all meaningful words from a known alias. This handles added
+    // descriptors such as "Medical Center" without relying on unsafe prefix
+    // matching (which can merge unrelated facilities).
+    const rawTokens = new Set(_facilityTokens(original));
+    const matches = _FACILITY_MATCHERS
+        .filter(rule => rule.tokens.every(token => rawTokens.has(token)))
+        .sort((a,b) => b.tokens.length - a.tokens.length || b.keyLength - a.keyLength);
+
+    if(matches.length){
+        const best = matches[0];
+        const tiedCanonicals = new Set(
+            matches.filter(rule => rule.tokens.length === best.tokens.length && rule.keyLength === best.keyLength)
+                  .map(rule => rule.canonical)
+        );
+        // If equally strong rules point to different facilities, do not guess.
+        if(tiedCanonicals.size === 1) return best.canonical;
     }
-    return upper;
+
+    // 3. Preserve unrecognized facility text instead of silently assigning it.
+    return original.toUpperCase().replace(/\s+/g, " ");
 }
 // ═══════════════════════════════════════════════════════════════════════
 // END FACILITY ALIAS NORMALIZATION ENGINE
