@@ -411,6 +411,21 @@ font-weight:bold;
 cursor:pointer;
 }
 
+.shipBtn{background:#78909c;color:#fff;}
+.shipBtn.has{background:#6a1b9a;}
+.sgRec{border:1px solid #d9d9d9;border-radius:10px;padding:12px 14px;margin-top:12px;background:#fff;}
+.sgRec h4{margin:14px 0 6px;font-size:13px;color:#1a1450;text-transform:uppercase;border-bottom:1px solid #e4e7ec;padding-bottom:3px;}
+.sgRec .sgHead{font-size:12px;color:#667085;}
+.sgKV{width:100%;border-collapse:collapse;font-size:13px;}
+.sgKV td{padding:3px 6px;vertical-align:top;border-bottom:1px solid #f0f2f5;}
+.sgKV td:first-child{width:200px;color:#475467;font-weight:700;}
+.sgTb{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px;}
+.sgTb th,.sgTb td{border:1px solid #cfd4dc;padding:4px 6px;text-align:center;}
+.sgTb th{background:#eef1f6;color:#1a1450 !important;font-weight:700;}
+.sgKV td{text-align:left !important;}
+.sgKV{margin:0;}
+.sgSum{font-size:12.5px;margin-top:6px;color:#344054;}
+.sgOther{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid #e4e7ec;border-radius:8px;padding:8px 10px;margin-top:6px;font-size:13px;}
 .augDetailsWrap{
 text-align:left;
 line-height:1.4;
@@ -609,6 +624,17 @@ flex-direction:column;
       <button type="button" class="saveBtn" onclick="printSoaView()">🖨 PRINT</button>
       <button type="button" class="editBtn" id="soaEditBtn" onclick="editSoaView()">✎ EDIT</button>
       <button type="button" class="closeBtn" onclick="closeSoaView()">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVED SHIPMENT / REQUEST VIEW -->
+<div id="augShipModal" class="modal">
+  <div class="modalContent" style="max-width:980px;">
+    <div id="augShipBody"></div>
+    <div class="modalActions">
+      <button type="button" class="saveBtn" id="augShipOpen" style="display:none">🖨 OPEN IN BLOOD AUGMENTATION (print / Excel)</button>
+      <button type="button" class="closeBtn" onclick="closeAugShip()">CLOSE</button>
     </div>
   </div>
 </div>
@@ -1699,7 +1725,7 @@ function renderDuplicateAugmentationGroup(group){
             <td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td>${buildMiscCell(entry)}</td>
             <td>${isAugPaid(entry) ? "YES" : "NO"}</td>
             <td>
-              <button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
+              ${augShipBtn(entry)}<button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button>
               <button class="actionBtn ${isAugPaid(entry) ? 'paidYesBtn' : 'paidNoBtn'}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">
                 PAID ${isAugPaid(entry) ? 'YES' : 'NO'}
               </button>
@@ -2089,8 +2115,86 @@ function loadReleasingData(){
   });
 }
 
+/* SAVED REQUEST / SHIPMENT RECORDS (made on the Blood Augmentation page) */
+let SHIPRECS = {}, shipListening = false, augShipRecId = "";
+function loadAugShipments(){
+  if(shipListening) return; shipListening = true;
+  onValue(ref(db,"settings/augShipments"), snap => {
+    SHIPRECS = snap.val() || {};
+    if(currentView === "augmentation"){ try{ renderCurrentView(); }catch(e){ console.error(e); } }
+  }, err => console.error("Saved shipment records:", err));
+}
+const sgNorm = s => String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9]/g, "");
+function augShipMatches(entry){
+  const out = [], inv = String(entry.invoiceNo || "");
+  Object.keys(SHIPRECS).forEach(id => {
+    const r = SHIPRECS[id]; if(!r || typeof r !== "object") return;
+    if(inv && r.invoiceNo){ if(r.invoiceNo === inv) out.push([id, r]); return; }
+    if(sgNorm(r.sTo) && sgNorm(r.sTo) === sgNorm(entry.facility) && String(r.sDate || "") === String(entry.date || "")) out.push([id, r]);
+  });
+  return out.sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+}
+function augShipBtn(entry){
+  const m = augShipMatches(entry), n = m.reduce((s, x) => s + (Number(x[1].count) || 0), 0);
+  return `<button class="actionBtn shipBtn${m.length ? " has" : ""}" data-action="view-aug-ship" data-id="${escHtml(entry.id)}" title="${m.length ? "View the saved Request Form and Shipment Record" : "No saved shipment record for this augmentation yet"}">SHIPMENT / REQUEST${m.length ? " (" + n + ")" : ""}</button>`;
+}
+function sgDate(s){ return s ? (window.SOA && SOA.fmtDate ? SOA.fmtDate(s) : s) : ""; }
+function sgRecHtml(id, r){
+  const F = r.F || {}, v = x => escHtml(x == null ? "" : x);
+  const arr = x => Array.isArray(x) ? x.filter(Boolean) : (x && typeof x === "object" ? Object.values(x).filter(Boolean) : []);
+  const req = arr(r.REQ).filter(q => q.bt || q.comp || q.qty), ship = arr(r.ship);
+  const saved = r.updatedAt ? new Date(r.updatedAt).toLocaleString([], { year:"numeric", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "";
+  const reasons = [F.reasonPatient ? "With patient" : "", F.reasonAug ? "Blood supply augmentation" : ""].filter(Boolean).join(", ");
+  const action = F.approved ? "Approved" : (F.disapproved ? "Disapproved" + (F.disReason ? " – " + F.disReason : "") : "");
+  const mode = F.mode === "air" ? "Air" + (F.airFlight ? " (flight " + F.airFlight + ")" : "") + (F.airline ? " – " + F.airline : "") : (F.mode === "land" ? "Land" + (F.landBus ? " (" + F.landBus + ")" : "") : "Pick up");
+  const kv = rows => '<table class="sgKV">' + rows.filter(x => x[1] !== "" && x[1] != null).map(x => '<tr><td>' + x[0] + '</td><td>' + v(x[1]) + '</td></tr>').join("") + '</table>';
+  const byComp = {}; ship.forEach(u => { const k = u.comp || "?"; byComp[k] = (byComp[k] || 0) + 1; });
+  const sum = Object.keys(byComp).map(k => byComp[k] + " " + k).join(", ");
+  return `<div class="sgRec">
+    <div class="sgHead">Saved ${v(saved)}${r.savedBy ? " by " + v(r.savedBy) : ""}${r.invoiceNo ? " • Invoice " + v(r.invoiceNo) : ""}</div>
+    <h4>Request form</h4>
+    ${kv([["Requesting BSF", F.reqBSF], ["Date of request", sgDate(F.reqDate)], ["Requested by", [F.reqBy, F.reqByTitle].filter(Boolean).join(" – ")], ["Reason", reasons], ["Action taken", action], ["Approved by", F.approvedBy], ["Mode of shipment", mode], ["Units to be shipped", F.unitsText], ["Shipment coordinated by", F.coordBy]])}
+    ${req.length ? '<table class="sgTb"><thead><tr><th>Blood type</th><th>Component</th><th>Units</th><th>Patient</th></tr></thead><tbody>' + req.map(q => '<tr><td>' + v(q.bt) + '</td><td>' + v(q.comp) + '</td><td>' + v(q.qty) + '</td><td>' + v(q.patient) + '</td></tr>').join("") + '</tbody></table>' : ""}
+    <h4>Shipment record</h4>
+    ${kv([["Date", sgDate(r.sDate || F.sDate)], ["Sent to", r.sTo || F.sTo], ["Via", F.sVia], ["Waybill #", F.waybill], ["Prepared by", r.preparedBy || F.preparedBy]])}
+    ${ship.length ? '<table class="sgTb"><thead><tr><th>No.</th><th>Serial no.</th><th>Blood type</th><th>Amount</th><th>Component</th><th>Extraction</th><th>Expiration</th></tr></thead><tbody>' + ship.map((u, i) => '<tr><td>' + (i + 1) + '</td><td>' + v(u.serial) + '</td><td>' + v(u.bt) + '</td><td>' + (u.amt ? v(u.amt) + ' ml' : "") + '</td><td>' + v(u.comp) + '</td><td>' + v(sgDate(u.ext)) + '</td><td>' + v(sgDate(u.exp)) + '</td></tr>').join("") + '</tbody></table><div class="sgSum"><b>' + ship.length + ' unit' + (ship.length === 1 ? "" : "s") + '</b>' + (sum ? " – " + v(sum) : "") + (F.remarks ? " • Remarks: " + v(F.remarks) : "") + '</div>' : '<div class="sgSum">No units listed.</div>'}
+  </div>`;
+}
+function showAugShip(entry, list, others){
+  const body = document.getElementById("augShipBody"), openBtn = document.getElementById("augShipOpen");
+  let h = `<h3 style="margin:0 0 2px;color:#1a1450">Request &amp; Shipment${entry ? " – " + escHtml(entry.facility || "") : ""}</h3><div style="font-size:12.5px;color:#667085">${entry ? escHtml(sgDate(entry.date)) + (entry.invoiceNo ? " • Invoice " + escHtml(entry.invoiceNo) : "") : ""}</div>`;
+  if(list.length) h += list.map(x => sgRecHtml(x[0], x[1])).join("");
+  else h += '<div class="emptyMessage" style="margin-top:12px">No Request Form / Shipment Record has been saved for this augmentation yet. Create it on the Blood Augmentation page (Request Form / Shipment Record, then SAVE or PRINT).</div>';
+  if(!list.length && others && others.length){
+    h += '<h4 style="margin:16px 0 4px;color:#1a1450">Other saved records for this facility</h4>' + others.map(x => `<div class="sgOther"><span>${escHtml(sgDate(x[1].sDate))} • ${Number(x[1].count) || 0} unit(s) • ${escHtml(String(x[1].serials || "").split(",").filter(Boolean).slice(0, 4).map(z => z.slice(-4)).join(", "))}</span><button type="button" class="actionBtn viewBtn" data-sgrec="${escHtml(x[0])}">VIEW</button></div>`).join("");
+  }
+  body.innerHTML = h;
+  augShipRecId = list.length ? list[0][0] : "";
+  openBtn.style.display = augShipRecId ? "" : "none";
+  document.getElementById("augShipModal").style.display = "block";
+}
+window.openAugShip = function(id){
+  const entry = allAugmentationEntries.find(e => e.id === id); if(!entry) return;
+  const m = augShipMatches(entry);
+  let others = [];
+  if(!m.length){
+    const ids = new Set(m.map(x => x[0]));
+    others = Object.keys(SHIPRECS).filter(k => SHIPRECS[k] && sgNorm(SHIPRECS[k].sTo) === sgNorm(entry.facility) && !ids.has(k)).map(k => [k, SHIPRECS[k]]).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0)).slice(0, 5);
+  }
+  showAugShip(entry, m, others);
+};
+window.closeAugShip = function(){ document.getElementById("augShipModal").style.display = "none"; };
+document.getElementById("augShipOpen").addEventListener("click", () => { if(augShipRecId) window.location.href = "releasing-blood-augmentation.html?rec=" + encodeURIComponent(augShipRecId); });
+document.addEventListener("click", e => {
+  const b = e.target.closest ? e.target.closest('[data-action="view-aug-ship"]') : null;
+  if(b){ window.openAugShip(b.dataset.id); return; }
+  const o = e.target.closest ? e.target.closest("[data-sgrec]") : null;
+  if(o && SHIPRECS[o.dataset.sgrec]) showAugShip(null, [[o.dataset.sgrec, SHIPRECS[o.dataset.sgrec]]], []);
+});
+
 /* LOAD AUGMENTATION */
 function loadAugmentationData(){
+  loadAugShipments();
   onValue(ref(db,"bloodAugmentation"), snapshot => {
     allAugmentationEntries = [];
 
@@ -2614,7 +2718,7 @@ function renderFlatAugmentationResults(entries){
     const ct=computeAugEntryTotal(entry);
     const ip=isAugPaid(entry);
     const r=document.createElement("tr");
-    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td>${buildMiscCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+    r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${augShipBtn(entry)}<button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
     tb.appendChild(r);
   });
   container.appendChild(t);
@@ -2743,7 +2847,7 @@ function renderAugmentationTable(){
       const ct=computeAugEntryTotal(entry);
       const ip=isAugPaid(entry);
       const r=document.createElement("tr");
-      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td>${buildMiscCell(entry)}</td><td><button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
+      r.innerHTML=`<td>${entry.date||""}</td><td>${entry.facility||""}</td><td>${entry.boxContainerQty||0}</td><td class="augDetailsWrap">${buildAugDetails(entry)}</td><td>${ct}</td><td>${buildAmountPaidCell(entry, ct)}</td><td>${buildDiscountCell(entry)}</td><td>${buildFreightCell(entry)}</td><td>${buildMiscCell(entry)}</td><td>${augShipBtn(entry)}<button class="actionBtn viewBtn" data-action="view-soa" data-id="${entry.id}">VIEW SOA</button><button class="actionBtn editBtn" data-action="edit-augmentation" data-id="${entry.id}">EDIT</button><button class="actionBtn ${ip?"paidYesBtn":"paidNoBtn"}" data-action="toggle-augmentation-paid" data-id="${entry.id}" title="${augPaidTitle(entry)}">PAID ${ip?"YES":"NO"}</button><button class="actionBtn deleteBtn" data-action="delete-augmentation" data-id="${entry.id}">DELETE</button></td>`;
       tb.appendChild(r);
     });
     dc.appendChild(t);
