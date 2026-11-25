@@ -488,6 +488,23 @@ max-width:none;
 display:block !important;
 }
 }
+
+.manageFacilitiesBtn{background:#5d4037;color:#fff;border:0;border-radius:5px;padding:7px 10px;font-size:12px;font-weight:bold;cursor:pointer}
+.facilityModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+.facilityModal.show{display:flex}
+.facilityModalPanel{background:#fff;width:min(760px,100%);max-height:88vh;overflow:auto;border-radius:12px;padding:18px;box-shadow:0 10px 35px rgba(0,0,0,.25)}
+.facilityModalHead{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:12px}
+.facilityModalHead h3{margin:0;color:#8e0000;font-size:18px}
+.facilityGroup{border:1px solid #ddd;border-radius:8px;padding:12px;margin:10px 0;background:#fafafa}
+.facilityGroup label{display:block;font-size:11px;font-weight:bold;margin:7px 0 4px;color:#555}
+.facilityGroup input,.facilityGroup textarea{box-sizing:border-box;width:100%;padding:8px;border:1px solid #ccc;border-radius:5px;font:13px Arial}
+.facilityGroup textarea{min-height:54px;resize:vertical}
+.facilityGroupActions{display:flex;justify-content:flex-end;margin-top:7px}
+.facilityModalActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid #eee;padding-top:12px;margin-top:14px}
+.facilityModalActions button,.facilityGroupActions button,.facilityModalHead button{border:0;border-radius:5px;padding:8px 12px;cursor:pointer;font-weight:bold}
+.facilitySave{background:#1677c8;color:white}.facilityAdd{background:#e8f3ff;color:#075a9e}.facilityDelete{background:#ffebee;color:#b71c1c}.facilityCancel{background:#eee;color:#333}
+.facilityHint{font-size:12px;line-height:1.5;color:#666;margin:6px 0 12px}
+@media(max-width:650px){.dashboardGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.facilityModalPanel{padding:13px}}
 </style>
 
 <meta name="theme-color" content="#c62828">
@@ -511,6 +528,7 @@ display:block !important;
 
 <button class="printBtn" onclick="window.print()">PRINT</button>
 <button class="exportBtn" onclick="exportCSV()">EXPORT CSV</button>
+<button class="manageFacilitiesBtn" onclick="openFacilityManager()">MANAGE FACILITIES</button>
 <button class="backBtn" onclick="goBack()">BACK</button>
 </div>
 
@@ -521,10 +539,23 @@ display:block !important;
 
 </div>
 
+<div id="facilityManagerModal" class="facilityModal" role="dialog" aria-modal="true" aria-labelledby="facilityManagerTitle">
+  <div class="facilityModalPanel">
+    <div class="facilityModalHead"><h3 id="facilityManagerTitle">Statistics Facility Manager</h3><button class="facilityCancel" onclick="closeFacilityManager()">✕</button></div>
+    <p class="facilityHint">Create one standard facility name, then place every alternate spelling or branch label that should be counted under it in the aliases box. This registry is used by Statistics only; it does not edit releasing records or other modules.</p>
+    <div id="facilityGroupsEditor"></div>
+    <div class="facilityModalActions">
+      <button class="facilityAdd" onclick="addFacilityGroup()">+ ADD FACILITY</button>
+      <button class="facilityCancel" onclick="closeFacilityManager()">CANCEL</button>
+      <button class="facilitySave" onclick="saveFacilityManager()">SAVE FACILITY LIST</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyByh0YJ11ZpbRV7EoDoLnqgFxe1r68efPI",
@@ -565,6 +596,9 @@ let expandedMainSections = new Set(["dashboard","patientServed","requestedBloodT
 let expandedYears = new Set();
 let expandedMonths = new Set();
 let pendingScrollRestore = null;
+let customFacilityAliases = [];
+let useManagedFacilityRegistry = false;
+let facilityManagerDraft = [];
 
 async function loadPrices(){
     try{
@@ -867,57 +901,124 @@ function _facilityTokens(value){
         .filter(Boolean);
 }
 
-const _ALIAS_MAP = new Map();
-const _FACILITY_MATCHERS = [];
+let _ALIAS_MAP = new Map();
+let _FACILITY_MATCHERS = [];
 
-FACILITY_ALIASES.forEach(entry => {
-    const canonical = entry.canonical.toUpperCase().trim();
-    [entry.canonical, ...entry.aliases].forEach(alias => {
-        const key = _normKey(alias);
-        if(!key) return;
-        _ALIAS_MAP.set(key, canonical);
+function _normKey(value){
+    return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
-        const tokens = _facilityTokens(alias);
-        // Short abbreviations (e.g. SLU) are exact-match only. Longer names
-        // can also match when extra descriptors appear in the saved record.
-        if(tokens.length >= 3){
-            _FACILITY_MATCHERS.push({canonical, tokens, keyLength:key.length});
-        }
+function _facilityTokens(value){
+    return String(value ?? "").toUpperCase().replace(/&/g, " AND ")
+        .replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+}
+
+function rebuildFacilityMatchers(){
+    _ALIAS_MAP = new Map();
+    _FACILITY_MATCHERS = [];
+    const combined = useManagedFacilityRegistry ? customFacilityAliases : FACILITY_ALIASES;
+    combined.forEach(entry => {
+        const canonical = String(entry.canonical || "").trim().toUpperCase();
+        if(!canonical) return;
+        [canonical, ...(Array.isArray(entry.aliases) ? entry.aliases : [])].forEach(alias => {
+            const key = _normKey(alias);
+            if(!key) return;
+            // Custom entries are later in the list and intentionally take precedence.
+            _ALIAS_MAP.set(key, canonical);
+            const tokens = _facilityTokens(alias);
+            if(tokens.length >= 3) _FACILITY_MATCHERS.push({canonical, tokens, keyLength:key.length});
+        });
     });
-});
+}
 
 function normalizeFacility(raw){
-    if(raw === null || raw === undefined || String(raw).trim() === ""){
-        return "UNKNOWN FACILITY";
-    }
-
+    if(raw === null || raw === undefined || String(raw).trim() === "") return "UNKNOWN FACILITY";
     const original = String(raw).trim();
     const key = _normKey(original);
-
-    // 1. Exact match after removing punctuation, spaces, and capitalization.
     if(_ALIAS_MAP.has(key)) return _ALIAS_MAP.get(key);
-
-    // 2. Match all meaningful words from a known alias. This handles added
-    // descriptors such as "Medical Center" without relying on unsafe prefix
-    // matching (which can merge unrelated facilities).
     const rawTokens = new Set(_facilityTokens(original));
-    const matches = _FACILITY_MATCHERS
-        .filter(rule => rule.tokens.every(token => rawTokens.has(token)))
+    const matches = _FACILITY_MATCHERS.filter(rule => rule.tokens.every(token => rawTokens.has(token)))
         .sort((a,b) => b.tokens.length - a.tokens.length || b.keyLength - a.keyLength);
-
     if(matches.length){
         const best = matches[0];
-        const tiedCanonicals = new Set(
-            matches.filter(rule => rule.tokens.length === best.tokens.length && rule.keyLength === best.keyLength)
-                  .map(rule => rule.canonical)
-        );
-        // If equally strong rules point to different facilities, do not guess.
-        if(tiedCanonicals.size === 1) return best.canonical;
+        const tied = new Set(matches.filter(rule => rule.tokens.length === best.tokens.length && rule.keyLength === best.keyLength).map(rule => rule.canonical));
+        if(tied.size === 1) return best.canonical;
     }
-
-    // 3. Preserve unrecognized facility text instead of silently assigning it.
     return original.toUpperCase().replace(/\s+/g, " ");
 }
+
+function facilityManagerEsc(value){
+    return String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+function renderFacilityManager(){
+    const host = document.getElementById("facilityGroupsEditor");
+    host.innerHTML = facilityManagerDraft.map((group,index) => `
+      <div class="facilityGroup" data-facility-group="${index}">
+        <label>STANDARD FACILITY NAME</label>
+        <input class="facilityCanonical" value="${facilityManagerEsc(group.canonical)}" placeholder="e.g. SAINT LOUIS UNIVERSITY HOSPITAL">
+        <label>ALTERNATE NAMES / ALIASES (one per line or separated by commas)</label>
+        <textarea class="facilityAliases" placeholder="e.g. SLU Hospital&#10;Saint Louis University Sacred Heart Medical Center">${facilityManagerEsc((group.aliases || []).join("\n"))}</textarea>
+        <div class="facilityGroupActions"><button class="facilityDelete" onclick="deleteFacilityGroup(${index})">REMOVE GROUP</button></div>
+      </div>`).join("");
+}
+
+window.openFacilityManager = function(){
+    const activeGroups = useManagedFacilityRegistry ? customFacilityAliases : FACILITY_ALIASES;
+    facilityManagerDraft = activeGroups.map(g => ({canonical:g.canonical, aliases:[...(g.aliases || [])]}));
+    renderFacilityManager();
+    document.getElementById("facilityManagerModal").classList.add("show");
+};
+window.closeFacilityManager = function(){ document.getElementById("facilityManagerModal").classList.remove("show"); };
+window.addFacilityGroup = function(){ facilityManagerDraft.push({canonical:"",aliases:[]}); renderFacilityManager(); };
+window.deleteFacilityGroup = function(index){ facilityManagerDraft.splice(index,1); renderFacilityManager(); };
+window.saveFacilityManager = async function(){
+    const host = document.getElementById("facilityGroupsEditor");
+    const groups = [...host.querySelectorAll(".facilityGroup")].map(card => {
+        const canonical = card.querySelector(".facilityCanonical").value.trim().toUpperCase();
+        const aliases = card.querySelector(".facilityAliases").value.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+        return {canonical, aliases:[...new Set(aliases.map(x => x.toUpperCase()).filter(x => x !== canonical))]};
+    }).filter(g => g.canonical);
+    const duplicateNames = new Set();
+    for(const group of groups){
+        for(const name of [group.canonical, ...group.aliases]){
+            const key = _normKey(name);
+            if(duplicateNames.has(key)){
+                alert(`The name "${name}" is assigned more than once. Please keep each facility name or alias in only one group.`);
+                return;
+            }
+            duplicateNames.add(key);
+        }
+    }
+    try{
+        // Dedicated Statistics-only settings path. Releasing records are never written here.
+        await set(ref(db, "settings/statisticsFacilityAliases"), groups);
+        customFacilityAliases = groups;
+        useManagedFacilityRegistry = true;
+        rebuildFacilityMatchers();
+        refreshAll();
+        closeFacilityManager();
+        alert("Facility list saved. Statistics have been regrouped using your updated facility names.");
+    }catch(error){
+        console.error("Could not save Statistics facility list:", error);
+        alert("Unable to save facility settings. Please check your access and try again.");
+    }
+};
+
+async function loadFacilityManagerSettings(){
+    try{
+        const snapshot = await get(ref(db, "settings/statisticsFacilityAliases"));
+        const saved = snapshot.val();
+        useManagedFacilityRegistry = Array.isArray(saved);
+        customFacilityAliases = useManagedFacilityRegistry ? saved.filter(g => g && g.canonical).map(g => ({canonical:String(g.canonical), aliases:Array.isArray(g.aliases) ? g.aliases.map(String) : []})) : [];
+    }catch(error){
+        console.error("Could not load Statistics facility settings:", error);
+        customFacilityAliases = [];
+    }
+    rebuildFacilityMatchers();
+}
+
+rebuildFacilityMatchers();
 // ═══════════════════════════════════════════════════════════════════════
 // END FACILITY ALIAS NORMALIZATION ENGINE
 // ═══════════════════════════════════════════════════════════════════════
@@ -1805,6 +1906,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     await loadPrices();
+    await loadFacilityManagerSettings();
 
     onValue(ref(db,"releasing"), snapshot => {
         allEntries = [];
